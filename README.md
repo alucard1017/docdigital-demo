@@ -9,6 +9,12 @@ El objetivo es evolucionar esta demo hasta una plataforma real de gestión de do
 - Historial de estados de firma.
 -Posibilidad de añadir nuevas funcionalidades sin depender de las apps viejas.
 
+## 🚀 Próximos pasos
+
+- Módulo de firmantes por documento: crear, listar y registrar la firma de cada participante.
+- Integración con firma electrónica colombiana (SNR / proveedores certificados).
+- Panel de seguimiento de estado del documento (Borrador → Enviado → Firmado).
+- Despliegue en la nube (Vercel u otro) para pruebas con usuarios reales.
 
 ## Tecnologías
 
