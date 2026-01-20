@@ -19,7 +19,10 @@ app.use('/uploads', express.static(path.join(__dirname, 'uploads')));
 // Rutas existentes
 app.use('/api/auth', authRoutes);
 app.use('/api/docs', docRoutes);
-app.use('/api/docs', signersRouter);
+
+// Signers router montado en dos paths
+app.use('/api/docs', signersRouter);  // para /api/docs/:id/signers, /api/docs/:id/sign
+app.use('/api/signers', signersRouter); // para /api/signers/:id/auth
 
 // Nueva ruta: enviar recordatorios de contratos pendientes
 app.post('/api/recordatorios/pendientes', async (req, res) => {

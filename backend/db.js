@@ -47,6 +47,18 @@ db.serialize(() => {
       FOREIGN KEY (document_id) REFERENCES documents(id)
     )
   `);
+
+  // Tabla de sesiones de firmantes (JWT)
+  db.run(`
+    CREATE TABLE IF NOT EXISTS signer_sessions (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      signer_id INTEGER NOT NULL,
+      token TEXT NOT NULL UNIQUE,
+      created_at TEXT DEFAULT CURRENT_TIMESTAMP,
+      expires_at TEXT NOT NULL,
+      FOREIGN KEY (signer_id) REFERENCES signers(id)
+    )
+  `);
 });
 
 // Exportar conexión
