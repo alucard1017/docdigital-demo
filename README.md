@@ -7,7 +7,7 @@ Plataforma de **firmas digitales** pensada como reemplazo de las aplicaciones in
 El objetivo es evolucionar esta demo hasta una plataforma real de gestión de documentos y firmas electrónicas, con:
 - Recordatorios automáticos por correo.
 - Historial de estados de firma.
-- Posibilidad de añadir nuevas funcionalidades sin depender de las apps viejas.
+-Posibilidad de añadir nuevas funcionalidades sin depender de las apps viejas.
 
 
 ## Tecnologías
