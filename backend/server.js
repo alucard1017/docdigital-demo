@@ -3,22 +3,29 @@ const express = require('express');
 const cors = require('cors');
 const path = require('path');
 
-const authRoutes = require('./routes/auth');
-const docRoutes = require('./routes/documents');
-const { sendReminderEmail } = require('./services/sendReminderEmails');
+console.log('=====================================');
+console.log('🚀 INICIANDO SERVER.JS');
+console.log('=====================================');
 
 const app = express();
 
+// MIDDLEWARES
 app.use(cors());
 app.use(express.json());
 app.use('/uploads', express.static(path.join(__dirname, 'uploads')));
 
-// Rutas existentes
-app.use('/api/auth', authRoutes);
-app.use('/api/docs', docRoutes);
+console.log('✓ Middlewares configurados');
 
-// ========== RUTA DE PRUEBA: test-auth ==========
+// RUTAS
+app.use('/api/auth', require('./routes/auth'));
+console.log('✓ Rutas /api/auth registradas');
+
+app.use('/api/docs', require('./routes/documents'));
+console.log('✓ Rutas /api/docs registradas');
+
+// RUTA DE PRUEBA
 app.get('/api/test-auth', (req, res) => {
+  console.log('📍 GET /api/test-auth llamado');
   const header = req.headers.authorization || '';
   const token = header.replace('Bearer ', '');
   res.json({ 
@@ -27,12 +34,12 @@ app.get('/api/test-auth', (req, res) => {
     header_completo: header 
   });
 });
+console.log('✓ Ruta /api/test-auth registrada');
 
-// Nueva ruta: enviar recordatorios de contratos pendientes
+// RECORDATORIOS
 app.post('/api/recordatorios/pendientes', async (req, res) => {
   try {
-    // TODO: luego conectaremos aquí con tu base de datos real (SQLite).
-    // De momento, documentos de ejemplo:
+    const { sendReminderEmail } = require('./services/sendReminderEmails');
     const documentosPendientes = [
       {
         id: 1,
@@ -49,7 +56,6 @@ app.post('/api/recordatorios/pendientes', async (req, res) => {
     ];
 
     let enviados = 0;
-
     for (const doc of documentosPendientes) {
       const ok = await sendReminderEmail(doc);
       if (ok) enviados++;
@@ -60,15 +66,22 @@ app.post('/api/recordatorios/pendientes', async (req, res) => {
       enviados,
     });
   } catch (error) {
-    console.error(error);
+    console.error('Error en recordatorios:', error);
     return res.status(500).json({ error: 'Error en el servidor al enviar recordatorios.' });
   }
 });
+console.log('✓ Ruta /api/recordatorios/pendientes registrada');
 
-// Ruta básica
+// RUTA RAÍZ
 app.get('/', (req, res) => {
   res.send('API de DocDigital funcionando');
 });
+console.log('✓ Ruta / registrada');
 
+// INICIAR SERVIDOR
 const PORT = process.env.PORT || 4000;
-app.listen(PORT, () => console.log('✓ API escuchando en puerto', PORT));
+app.listen(PORT, () => {
+  console.log('=====================================');
+  console.log('✅ API ESCUCHANDO EN PUERTO', PORT);
+  console.log('=====================================');
+});
