@@ -17,6 +17,17 @@ app.use('/uploads', express.static(path.join(__dirname, 'uploads')));
 app.use('/api/auth', authRoutes);
 app.use('/api/docs', docRoutes);
 
+// ========== RUTA DE PRUEBA: test-auth ==========
+app.get('/api/test-auth', (req, res) => {
+  const header = req.headers.authorization || '';
+  const token = header.replace('Bearer ', '');
+  res.json({ 
+    token_recibido: token ? 'sí' : 'no', 
+    token,
+    header_completo: header 
+  });
+});
+
 // Nueva ruta: enviar recordatorios de contratos pendientes
 app.post('/api/recordatorios/pendientes', async (req, res) => {
   try {
@@ -52,6 +63,11 @@ app.post('/api/recordatorios/pendientes', async (req, res) => {
     console.error(error);
     return res.status(500).json({ error: 'Error en el servidor al enviar recordatorios.' });
   }
+});
+
+// Ruta básica
+app.get('/', (req, res) => {
+  res.send('API de DocDigital funcionando');
 });
 
 const PORT = process.env.PORT || 4000;
