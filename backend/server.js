@@ -16,43 +16,47 @@ app.use('/uploads', express.static(path.join(__dirname, 'uploads')));
 
 console.log('✓ Middlewares configurados');
 
-// RUTAS
-app.use('/api/auth', require('./routes/auth'));
+// RUTAS PRINCIPALES
+const authRoutes = require('./routes/auth');
+const docRoutes = require('./routes/documents');
+
+app.use('/api/auth', authRoutes);
 console.log('✓ Rutas /api/auth registradas');
 
-app.use('/api/docs', require('./routes/documents'));
+app.use('/api/docs', docRoutes);
 console.log('✓ Rutas /api/docs registradas');
 
-// RUTA DE PRUEBA
+// RUTA DE PRUEBA TOKEN
 app.get('/api/test-auth', (req, res) => {
   console.log('📍 GET /api/test-auth llamado');
   const header = req.headers.authorization || '';
   const token = header.replace('Bearer ', '');
-  res.json({ 
-    token_recibido: token ? 'sí' : 'no', 
+  res.json({
+    token_recibido: token ? 'sí' : 'no',
     token,
-    header_completo: header 
+    header_completo: header
   });
 });
 console.log('✓ Ruta /api/test-auth registrada');
 
-// RECORDATORIOS
+// RECORDATORIOS (DEMO)
 app.post('/api/recordatorios/pendientes', async (req, res) => {
   try {
     const { sendReminderEmail } = require('./services/sendReminderEmails');
+
     const documentosPendientes = [
       {
         id: 1,
         signer_email: 'demo1@correo.com',
         nombre: 'Contrato de prueba 1',
-        estado: 'PENDIENTE',
+        estado: 'PENDIENTE'
       },
       {
         id: 2,
         signer_email: 'demo2@correo.com',
         nombre: 'Contrato de prueba 2',
-        estado: 'PENDIENTE',
-      },
+        estado: 'PENDIENTE'
+      }
     ];
 
     let enviados = 0;
@@ -63,11 +67,13 @@ app.post('/api/recordatorios/pendientes', async (req, res) => {
 
     return res.json({
       mensaje: 'Recordatorios procesados',
-      enviados,
+      enviados
     });
   } catch (error) {
     console.error('Error en recordatorios:', error);
-    return res.status(500).json({ error: 'Error en el servidor al enviar recordatorios.' });
+    return res
+      .status(500)
+      .json({ error: 'Error en el servidor al enviar recordatorios.' });
   }
 });
 console.log('✓ Ruta /api/recordatorios/pendientes registrada');
