@@ -14,3 +14,4 @@ jobs:
       - name: Hacer ping a Render
         run: |
           curl -sS https://TU-APP.onrender.com || echo "Falló el ping"
+
