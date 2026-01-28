@@ -4,10 +4,9 @@ import { Sidebar } from './components/Sidebar';
 import { DetailView } from './components/DetailView';
 import { ListHeader } from './components/ListHeader';
 import { DocumentRow } from './components/DocumentRow';
-import { DOC_STATUS } from './constants';
+import { DOC_STATUS, API_BASE_URL } from './constants';
 
-const API_URL = 'http://localhost:4000';
-
+const API_URL = API_BASE_URL;
 /**
  * FUNCIÓN DE FORMATEO DE RUN DETALLADA
  * Mantiene el orden y añade puntos y guion: 10.538.065-6
