@@ -1,14 +1,15 @@
-name: Ping Render API
+name: Ping periódico a Render
 
 on:
   schedule:
     - cron: "*/10 * * * *"  # cada 10 minutos
-  workflow_dispatch:
+  workflow_dispatch:        # para lanzarlo manualmente
 
 jobs:
-  ping:
+  ping-render:
     runs-on: ubuntu-latest
+
     steps:
-      - name: Hacer ping a API de Render
+      - name: Hacer ping a Render
         run: |
-          curl -sS https://docdigital-api.onrender.com/api/health || true
+          curl -sS https://TU-APP.onrender.com || echo "Fallo el ping"
