@@ -13,5 +13,6 @@ jobs:
     steps:
       - name: Hacer ping a Render
         run: |
-          curl -sS https://docdigital-demo.onrender.com/ || echo "Falló el ping"
+          curl -sS https://docdigital-demo.onrender.com || echo "Falló el ping"
+
 
