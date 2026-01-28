@@ -4,6 +4,7 @@ const multer = require('multer');
 const path = require('path');
 const db = require('../db');
 const { requireAuth } = require('./auth');
+const { sendReminderEmail } = require('../services/sendReminderEmails');
 
 const router = express.Router();
 
@@ -556,6 +557,44 @@ router.get('/:id/events', requireAuth, async (req, res) => {
     return res.json(eventsResult.rows);
   } catch (err) {
     console.error('Error obteniendo eventos:', err);
+    return res.status(500).json({ message: 'Error interno del servidor' });
+  }
+});
+
+/**
+ * POST /api/docs/:id/reminder
+ * Envía un correo de recordatorio para un documento
+ */
+router.post('/:id/reminder', requireAuth, async (req, res) => {
+  try {
+    const id = req.params.id;
+
+    const current = await db.query(
+      `SELECT id, title AS nombre, firmante_email AS signer_email
+       FROM documents
+       WHERE id = $1 AND owner_id = $2`,
+      [id, req.user.id]
+    );
+
+    if (current.rowCount === 0) {
+      return res.status(404).json({ message: 'Documento no encontrado' });
+    }
+
+    const doc = current.rows[0];
+
+    const ok = await sendReminderEmail({
+      id: doc.id,
+      nombre: doc.nombre,
+      signer_email: doc.signer_email
+    });
+
+    if (!ok) {
+      return res.status(500).json({ message: 'No se pudo enviar el recordatorio' });
+    }
+
+    return res.json({ message: 'Recordatorio enviado correctamente' });
+  } catch (err) {
+    console.error('Error enviando recordatorio:', err);
     return res.status(500).json({ message: 'Error interno del servidor' });
   }
 });
