@@ -1,4 +1,14 @@
-cd C:\Users\Usuario\Desktop\docdigital
-git add .github/workflows/ping-render.yml
-git commit -m "Ping periódico a Render"
-git push
+name: Ping Render API
+
+on:
+  schedule:
+    - cron: "*/10 * * * *"  # cada 10 minutos
+  workflow_dispatch:
+
+jobs:
+  ping:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Hacer ping a API de Render
+        run: |
+          curl -sS https://docdigital-api.onrender.com/api/health || true
