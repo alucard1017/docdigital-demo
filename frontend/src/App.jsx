@@ -4,9 +4,10 @@ import { Sidebar } from './components/Sidebar';
 import { DetailView } from './components/DetailView';
 import { ListHeader } from './components/ListHeader';
 import { DocumentRow } from './components/DocumentRow';
-import { DOC_STATUS, API_BASE_URL } from './constants';
+import { DOC_STATUS } from './constants';
 
-const API_URL = API_BASE_URL;
+const API_URL = 'https://docdigital-api.onrender.com';
+
 /**
  * FUNCIÓN DE FORMATEO DE RUN DETALLADA
  * Mantiene el orden y añade puntos y guion: 10.538.065-6
@@ -36,6 +37,7 @@ function App() {
   const [showPassword, setShowPassword] = useState(false);
   const [showHelp, setShowHelp] = useState(false);
   const [message, setMessage] = useState('');
+  const [isLoggingIn, setIsLoggingIn] = useState(false);
   const [view, setView] = useState('list'); // 'list' | 'upload' | 'detail'
 
   // Errores del formulario de subida
@@ -98,37 +100,41 @@ const [formErrors, setFormErrors] = useState({});
     cargarDocs();
   }, [token, view, sort]);
   /* ===============================
-     LOGIN
-     =============================== */
-  async function handleLogin(e) {
-    e.preventDefault();
-    setMessage('🚀 Iniciando sesión de forma segura...');
+   LOGIN
+   =============================== */
+async function handleLogin(e) {
+  e.preventDefault();
+  setIsLoggingIn(true);
+  setMessage('🚀 Conectando con el servidor seguro...');
 
-    const cleanRun = run.replace(/[^0-9kK]/g, '');
+  const cleanRun = run.replace(/[^0-9kK]/g, '');
 
-    try {
-      const res = await fetch(`${API_URL}/api/auth/login`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ run: cleanRun, password }),
-      });
+  try {
+    const res = await fetch(`${API_URL}/api/auth/login`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ run: cleanRun, password }),
+    });
 
-      const data = await res.json();
+    const data = await res.json();
 
-      if (!res.ok) {
-        throw new Error(data.message || 'Credenciales no válidas');
-      }
-
-      setToken(data.token);
-      setUser(data.user);
-      localStorage.setItem('token', data.token);
-      localStorage.setItem('user', JSON.stringify(data.user));
-      setMessage('✅ Acceso concedido');
-    } catch (err) {
-      setMessage('❌ Error: ' + err.message);
+    if (!res.ok) {
+      throw new Error(data.message || 'Credenciales no válidas');
     }
-  }
 
+    setToken(data.token);
+    setUser(data.user);
+    localStorage.setItem('token', data.token);
+    localStorage.setItem('user', JSON.stringify(data.user));
+    setMessage('✅ Acceso concedido');
+  } catch (err) {
+    setMessage(
+      '❌ Error de conexión, intenta nuevamente en unos segundos.'
+    );
+  } finally {
+    setIsLoggingIn(false);
+  }
+}
   /* ===============================
     CARGA DE DOCUMENTOS
    =============================== */
@@ -331,7 +337,6 @@ async function cargarDocs(sortParam = sort) {
             >
               ACCEDER AL PORTAL
             </button>
-
             <button
               type="button"
               style={{
