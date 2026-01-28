@@ -1,1 +1,15 @@
-const sqlite3=require('sqlite3').verbose();const db=new sqlite3.Database('./docdigital.db');db.serialize(()=>{db.run(`CREATE TABLE IF NOT EXISTS users (id INTEGER PRIMARY KEY AUTOINCREMENT,run TEXT UNIQUE,name TEXT,password_hash TEXT,plan TEXT DEFAULT 'free')`);db.run(`CREATE TABLE IF NOT EXISTS documents (id INTEGER PRIMARY KEY AUTOINCREMENT,owner_id INTEGER,title TEXT,description TEXT,file_path TEXT,status TEXT DEFAULT 'PENDIENTE',reject_reason TEXT,created_at TEXT,updated_at TEXT,FOREIGN KEY(owner_id) REFERENCES users(id))`);});module.exports=db;
+// db.js - conexión a PostgreSQL
+const { Pool } = require('pg');
+
+const pool = new Pool({
+  connectionString: process.env.DATABASE_URL,
+  ssl:
+    process.env.DB_SSL === 'true'
+      ? { rejectUnauthorized: false }
+      : false
+});
+
+// Wrapper para usar pool.query en todo el proyecto
+module.exports = {
+  query: (text, params) => pool.query(text, params)
+};
