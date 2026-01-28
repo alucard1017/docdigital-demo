@@ -9,13 +9,34 @@ console.log('=====================================');
 
 const app = express();
 
-// Middlewares
+/* ================================
+   MIDDLEWARES
+   ================================ */
 app.use(cors());
 app.use(express.json());
 app.use('/uploads', express.static(path.join(__dirname, 'uploads')));
 console.log('✓ Middlewares configurados');
 
-// Rutas principales
+/* ================================
+   RUTAS DE SALUD / PING
+   (sin autenticación)
+   ================================ */
+
+// Ruta para que el frontend “despierte” el backend en Render
+app.get('/api/health', (req, res) => {
+  res.json({ ok: true, timestamp: new Date().toISOString() });
+});
+console.log('✓ Ruta /api/health registrada');
+
+// Ruta raíz simple
+app.get('/', (req, res) => {
+  res.send('API de DocDigital funcionando');
+});
+console.log('✓ Ruta / registrada');
+
+/* ================================
+   RUTAS PRINCIPALES
+   ================================ */
 const authRoutes = require('./routes/auth');
 const docRoutes = require('./routes/documents');
 const { requireAuth, requireRole } = require('./routes/auth');
@@ -26,11 +47,15 @@ console.log('✓ Rutas /api/auth registradas');
 app.use('/api/docs', docRoutes);
 console.log('✓ Rutas /api/docs registradas');
 
+/* ================================
+   RUTAS DE PRUEBA / ADMIN
+   ================================ */
+
 // Ruta solo admin
 app.get('/api/admin/ping', requireAuth, requireRole('admin'), (req, res) => {
   return res.json({
     message: 'Solo admin puede ver esto',
-    user: req.user
+    user: req.user,
   });
 });
 console.log('✓ Ruta /api/admin/ping (solo admin) registrada');
@@ -43,12 +68,14 @@ app.get('/api/test-auth', (req, res) => {
   res.json({
     token_recibido: token ? 'sí' : 'no',
     token,
-    header_completo: header
+    header_completo: header,
   });
 });
 console.log('✓ Ruta /api/test-auth registrada');
 
-// Recordatorios (demo)
+/* ================================
+   RUTA DEMO RECORDATORIOS
+   ================================ */
 app.post('/api/recordatorios/pendientes', async (req, res) => {
   try {
     const { sendReminderEmail } = require('./services/sendReminderEmails');
@@ -58,14 +85,14 @@ app.post('/api/recordatorios/pendientes', async (req, res) => {
         id: 1,
         signer_email: 'demo1@correo.com',
         nombre: 'Contrato de prueba 1',
-        estado: 'PENDIENTE'
+        estado: 'PENDIENTE',
       },
       {
         id: 2,
         signer_email: 'demo2@correo.com',
         nombre: 'Contrato de prueba 2',
-        estado: 'PENDIENTE'
-      }
+        estado: 'PENDIENTE',
+      },
     ];
 
     let enviados = 0;
@@ -76,7 +103,7 @@ app.post('/api/recordatorios/pendientes', async (req, res) => {
 
     return res.json({
       mensaje: 'Recordatorios procesados',
-      enviados
+      enviados,
     });
   } catch (error) {
     console.error('Error en recordatorios:', error);
@@ -87,17 +114,15 @@ app.post('/api/recordatorios/pendientes', async (req, res) => {
 });
 console.log('✓ Ruta /api/recordatorios/pendientes registrada');
 
-// Ruta raíz
-app.get('/', (req, res) => {
-  res.send('API de DocDigital funcionando');
-});
-console.log('✓ Ruta / registrada');
-
-// Middleware global de errores
+/* ================================
+   MIDDLEWARE GLOBAL DE ERRORES
+   ================================ */
 const errorHandler = require('./middlewares/errorHandler');
 app.use(errorHandler);
 
-// Iniciar servidor
+/* ================================
+   INICIAR SERVIDOR
+   ================================ */
 const PORT = process.env.PORT || 4000;
 app.listen(PORT, () => {
   console.log('=====================================');

@@ -41,7 +41,8 @@ function App() {
   const [view, setView] = useState('list'); // 'list' | 'upload' | 'detail'
 
   // Errores del formulario de subida
-const [formErrors, setFormErrors] = useState({});
+  const [formErrors, setFormErrors] = useState({});
+
   // Sesión
   const [token, setToken] = useState(localStorage.getItem('token') || '');
   const [user, setUser] = useState(
@@ -50,7 +51,6 @@ const [formErrors, setFormErrors] = useState({});
   const [loadingDocs, setLoadingDocs] = useState(false);
   const [errorDocs, setErrorDocs] = useState('');
   const [docs, setDocs] = useState([]);
-  
 
   // Configuración de firma
   const [showVisador, setShowVisador] = useState(false);
@@ -68,6 +68,11 @@ const [formErrors, setFormErrors] = useState({});
   // Documento seleccionado para la vista detalle
   const [selectedDoc, setSelectedDoc] = useState(null);
   const [events, setEvents] = useState([]);
+
+  // Ping para despertar el backend en Render
+  useEffect(() => {
+    fetch(`${API_URL}/api/health`).catch(() => {});
+  }, []);
 
   // Cargar eventos del documento seleccionado
   useEffect(() => {
