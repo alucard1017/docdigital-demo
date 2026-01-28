@@ -1,0 +1,4 @@
+cd C:\Users\Usuario\Desktop\docdigital
+git add .github/workflows/ping-render.yml
+git commit -m "Ping periódico a Render"
+git push
