@@ -41,7 +41,7 @@ async function uploadPdfToS3(filePath, fileName) {
     console.log(`✅ PDF subido a S3: ${fileName}`);
     return `https://${BUCKET}.s3.amazonaws.com/${fileName}`;
   } catch (error) {
-    console.error('❌ Error al subir PDF a S3:', error.message);
+    console.error('❌ Error al subir PDF a S3 COMPLETO:', error);
     throw error;
   }
 }
