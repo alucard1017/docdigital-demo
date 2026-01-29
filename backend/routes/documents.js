@@ -6,7 +6,7 @@ const fs = require('fs');
 const db = require('../db');
 const { requireAuth } = require('./auth');
 const { sendSignatureInviteEmail } = require('../services/sendSignatureInviteEmail');
-const { uploadPdfToS3, downloadPdfFromS3, deletePdfFromS3, getSignedUrl } = require('../services/s3');
+const { uploadPdfToS3, getSignedUrl } = require('../services/s3');
 
 const router = express.Router();
 
@@ -71,6 +71,7 @@ router.get('/', requireAuth, async (req, res) => {
     const docs = result.rows.map((row) => ({
       ...row,
       requiresVisado: row.requires_visado === true,
+      // IMPORTANTE: file_url ya NO es /uploads, es la clave S3 guardada en file_path
       file_url: row.file_path
     }));
 
@@ -108,16 +109,22 @@ router.post('/', requireAuth, upload.single('file'), handleMulterError, async (r
       return res.status(400).json({ message: 'Faltan campos obligatorios' });
     }
 
-    // Subir archivo a S3
-    let s3FilePath = null;
+    // Subir archivo a S3: guardamos SOLO la clave (documentos/...)
+    let s3Key = null;
     try {
-      const fileName = `documentos/${req.user.id}/${Date.now()}-${req.file.originalname}`;
-      await uploadPdfToS3(req.file.path, fileName);
-      s3FilePath = fileName;
-      console.log(`✅ Archivo subido a S3: ${fileName}`);
+      s3Key = `documentos/${req.user.id}/${Date.now()}-${req.file.originalname}`;
+      await uploadPdfToS3(req.file.path, s3Key);
+      console.log(`✅ Archivo subido a S3: ${s3Key}`);
     } catch (s3Error) {
-      console.error('⚠️ Error subiendo a S3, usando archivo local:', s3Error.message);
-      s3FilePath = '/uploads/temporal/' + req.file.filename;
+      console.error('⚠️ Error subiendo a S3:', s3Error.message);
+      return res.status(500).json({ message: 'No se pudo subir el archivo a S3' });
+    } finally {
+      // Borrar siempre el archivo temporal
+      if (req.file && fs.existsSync(req.file.path)) {
+        fs.unlink(req.file.path, (err) => {
+          if (err) console.error('⚠️ Error eliminando archivo temporal:', err);
+        });
+      }
     }
 
     // Token de firma
@@ -143,7 +150,7 @@ router.post('/', requireAuth, upload.single('file'), handleMulterError, async (r
       )
       RETURNING *`,
       [
-        req.user.id, title, description, s3FilePath, 'PENDIENTE',
+        req.user.id, title, description, s3Key, 'PENDIENTE',
         destinatario_nombre, destinatario_email, destinatario_movil,
         visador_nombre, visador_email, visador_movil,
         firmante_nombre_completo, firmante_email, firmante_movil, firmante_run,
@@ -167,25 +174,52 @@ router.post('/', requireAuth, upload.single('file'), handleMulterError, async (r
       sign_url: `${frontBaseUrl}/?token=${signatureToken}`
     });
 
-    if (req.file && fs.existsSync(req.file.path)) {
-      fs.unlink(req.file.path, (err) => {
-        if (err) console.error('⚠️ Error eliminando archivo temporal:', err);
-      });
-    }
-
     return res.status(201).json({
       ...doc,
       requiresVisado: doc.requires_visado === true,
-      file_url: doc.file_path,
+      file_url: doc.file_path, // clave S3
       message: 'Documento creado y subido a S3'
     });
   } catch (err) {
     console.error('❌ Error creando documento:', err);
-    if (req.file && fs.existsSync(req.file.path)) {
-      fs.unlink(req.file.path, (err2) => {
-        if (err2) console.error('⚠️ Error limpiando temporal:', err2);
-      });
+    return res.status(500).json({ message: 'Error interno del servidor' });
+  }
+});
+
+/* ================================
+   GET: Ver PDF del documento (S3)
+   ================================ */
+router.get('/:id/pdf', requireAuth, async (req, res) => {
+  try {
+    const id = req.params.id;
+
+    const result = await db.query(
+      `SELECT id, owner_id, file_path 
+       FROM documents 
+       WHERE id = $1`,
+      [id]
+    );
+
+    if (result.rowCount === 0) {
+      return res.status(404).json({ message: 'Documento no encontrado' });
     }
+
+    const doc = result.rows[0];
+
+    // Por ahora solo el owner puede verlo
+    if (doc.owner_id !== req.user.id) {
+      return res.status(403).json({ message: 'No autorizado para ver este documento' });
+    }
+
+    if (!doc.file_path) {
+      return res.status(404).json({ message: 'Documento sin archivo asociado' });
+    }
+
+    // file_path contiene la clave S3: documentos/...
+    const signedUrl = getSignedUrl(doc.file_path, 3600);
+    return res.json({ url: signedUrl });
+  } catch (err) {
+    console.error('❌ Error obteniendo PDF:', err);
     return res.status(500).json({ message: 'Error interno del servidor' });
   }
 });

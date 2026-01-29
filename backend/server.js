@@ -33,10 +33,27 @@ console.log('✓ Variables de entorno validadas');
 /* ================================
    MIDDLEWARES
    ================================ */
+
+// Lista de orígenes permitidos
+const allowedOrigins = [
+  process.env.FRONTEND_URL,               // producción (Render)
+  'http://localhost:5173',                // Vite local
+  'http://localhost:3000'                 // por si usas otro puerto
+].filter(Boolean);
+
 app.use(cors({
-  origin: process.env.FRONTEND_URL || '*',
+  origin: function (origin, callback) {
+    // Permitir herramientas sin origin (Postman, curl, etc.)
+    if (!origin) return callback(null, true);
+    if (allowedOrigins.includes(origin)) {
+      return callback(null, true);
+    }
+    console.warn('❌ Origen no permitido por CORS:', origin);
+    return callback(new Error('Origen no permitido por CORS'));
+  },
   credentials: true
 }));
+
 app.use(express.json({ limit: '25mb' }));
 app.use(express.urlencoded({ limit: '25mb', extended: true }));
 
@@ -157,7 +174,7 @@ app.get('/api/test-auth', (req, res) => {
   const token = header.replace('Bearer ', '');
   res.json({
     token_recibido: token ? 'sí' : 'no',
-    token: token || 'ninguno',
+    token,
     header_completo: header || 'ninguno'
   });
 });
@@ -167,16 +184,11 @@ console.log('✓ Ruta GET /api/test-auth registrada');
    RUTA DEMO RECORDATORIOS
    ================================ */
 
-/**
- * POST /api/recordatorios/pendientes
- * Enviar recordatorios a firmantes pendientes
- */
 app.post('/api/recordatorios/pendientes', async (req, res) => {
   try {
     const { sendReminderEmail } = require('./services/sendReminderEmails');
     const db = require('./db');
 
-    // Obtener documentos pendientes de firma de los últimos 30 días
     const docResult = await db.query(
       `SELECT id, firmante_email, firmante_nombre, title, signature_token_expires_at
        FROM documents 
@@ -225,15 +237,10 @@ console.log('✓ Ruta POST /api/recordatorios/pendientes registrada');
    ESTADÍSTICAS (OPCIONAL)
    ================================ */
 
-/**
- * GET /api/stats
- * Estadísticas del servidor
- */
 app.get('/api/stats', requireAuth, async (req, res) => {
   try {
     const db = require('./db');
     
-    // Documentos del usuario
     const docsResult = await db.query(
       `SELECT 
         COUNT(*) as total,

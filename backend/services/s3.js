@@ -31,7 +31,7 @@ async function uploadPdfToS3(filePath, fileName) {
       Key: fileName,
       Body: fileContent,
       ContentType: 'application/pdf',
-      ACL: 'private' // Solo acceso privado
+      ACL: 'private'
     };
 
     const result = await s3.upload(params).promise();
@@ -46,9 +46,6 @@ async function uploadPdfToS3(filePath, fileName) {
 
 /**
  * Descargar un PDF de S3
- * @param {string} fileName - Nombre del archivo en S3
- * @param {string} savePath - Ruta donde guardar localmente
- * @returns {string} Ruta del archivo guardado
  */
 async function downloadPdfFromS3(fileName, savePath) {
   try {
@@ -59,7 +56,6 @@ async function downloadPdfFromS3(fileName, savePath) {
 
     const result = await s3.getObject(params).promise();
     
-    // Crear directorio si no existe
     const dir = path.dirname(savePath);
     if (!fs.existsSync(dir)) {
       fs.mkdirSync(dir, { recursive: true });
@@ -77,8 +73,6 @@ async function downloadPdfFromS3(fileName, savePath) {
 
 /**
  * Eliminar un PDF de S3
- * @param {string} fileName - Nombre del archivo en S3
- * @returns {boolean} true si se eliminó
  */
 async function deletePdfFromS3(fileName) {
   try {
@@ -99,9 +93,6 @@ async function deletePdfFromS3(fileName) {
 
 /**
  * Obtener URL firmada (temporal) para descargar desde S3
- * @param {string} fileName - Nombre del archivo en S3
- * @param {number} expiresIn - Segundos de expiración (default 1 hora)
- * @returns {string} URL firmada
  */
 function getSignedUrl(fileName, expiresIn = 3600) {
   try {
