@@ -1,5 +1,5 @@
 // src/constants.js
-export const API_BASE_URL = "https://docdigital-api.onrender.com";
+export const API_BASE_URL = import.meta.env.VITE_API_URL;
 
 export const DOC_STATUS = {
   PENDIENTE: "PENDIENTE",
