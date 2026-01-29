@@ -2,15 +2,36 @@ import React from "react";
 import { DocStatusBadge } from "./DocStatusBadge";
 import { DOC_STATUS } from "../constants";
 
+const API_URL = "https://docdigital-api.onrender.com";
+
 export function DocumentRow({ doc, onOpenDetail }) {
+  const handleVerPdf = () => {
+    if (!doc.file_url) {
+      alert("No se encontró la URL del contrato para este documento.");
+      return;
+    }
+
+    const url = doc.file_url.startsWith("http")
+      ? doc.file_url
+      : `${API_URL}${doc.file_url}`;
+
+    window.open(url, "_blank");
+  };
+
+  const handleVerRechazo = () => {
+    if (!doc.reject_reason) {
+      alert("Este documento no tiene motivo de rechazo.");
+      return;
+    }
+    alert("Motivo de rechazo:\n\n" + doc.reject_reason);
+  };
+
   return (
     <tr>
-      <td style={{ color: "#94a3b8", fontWeight: 600 }}>
-        #{doc.id}
-      </td>
+      <td style={{ color: "#94a3b8", fontWeight: 600 }}>#{doc.id}</td>
 
       <td style={{ fontWeight: 700, color: "#1e293b" }}>
-        {doc.title}
+        {doc.title || "Sin título"}
       </td>
 
       <td>
@@ -48,16 +69,24 @@ export function DocumentRow({ doc, onOpenDetail }) {
         >
           {doc.status === DOC_STATUS.RECHAZADO && doc.reject_reason && (
             <button
+              type="button"
               className="btn-main btn-secondary-danger"
-              onClick={() =>
-                alert("Motivo de rechazo:\n\n" + doc.reject_reason)
-              }
+              onClick={handleVerRechazo}
             >
-              Ver motivo
+              Ver rechazo
             </button>
           )}
 
           <button
+            type="button"
+            className="btn-main"
+            onClick={handleVerPdf}
+          >
+            Ver PDF
+          </button>
+
+          <button
+            type="button"
             className="btn-main btn-primary"
             onClick={() => onOpenDetail(doc)}
           >

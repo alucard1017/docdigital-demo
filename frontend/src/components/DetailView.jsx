@@ -1,9 +1,13 @@
-// src/components/DetailView.jsx
-import React from "react";
+import React, { useState, useEffect } from "react";
+import { Timeline } from "./Timeline";
 import { EventList } from "./EventList";
 import { DetailActions } from "./DetailActions";
 import { DetailHeader } from "./DetailHeader";
 import { DOC_STATUS } from "../constants";
+
+const API_URL = window.location.hostname === 'localhost' 
+  ? 'http://localhost:4000' 
+  : 'https://docdigital-api.onrender.com';
 
 export function DetailView({
   selectedDoc,
@@ -16,11 +20,37 @@ export function DetailView({
   setSelectedDoc,
   logout,
 }) {
+  const [timeline, setTimeline] = useState(null);
+  const [loadingTimeline, setLoadingTimeline] = useState(false);
+
+  useEffect(() => {
+    if (!selectedDoc) return;
+
+    const fetchTimeline = async () => {
+      try {
+        setLoadingTimeline(true);
+        const res = await fetch(`${API_URL}/api/docs/${selectedDoc.id}/timeline`);
+        const data = await res.json();
+        if (res.ok) {
+          setTimeline(data.timeline);
+        }
+      } catch (err) {
+        console.error('Error fetching timeline:', err);
+      } finally {
+        setLoadingTimeline(false);
+      }
+    };
+
+    fetchTimeline();
+    const interval = setInterval(fetchTimeline, 5000);
+    return () => clearInterval(interval);
+  }, [selectedDoc]);
+
   if (!selectedDoc) return null;
 
   return (
     <div className="dashboard-layout">
-      {/* Sidebar simple */}
+      {/* Sidebar */}
       <aside className="sidebar">
         <h2>Firma Express</h2>
 
@@ -60,6 +90,7 @@ export function DetailView({
         </header>
 
         <div className="content-body">
+          {/* Tarjeta principal con documento */}
           <div className="card-premium">
             <h1
               style={{
@@ -83,21 +114,22 @@ export function DetailView({
             </p>
 
             {/* Descripción */}
-            <div
-              style={{
-                marginBottom: 20,
-                padding: 12,
-                borderRadius: 12,
-                background: "#f9fafb",
-                fontSize: "0.9rem",
-                color: "#4b5563",
-              }}
-            >
-              <strong>Descripción:</strong>{" "}
-              {selectedDoc.description || "Sin descripción registrada."}
-            </div>
+            {selectedDoc.description && (
+              <div
+                style={{
+                  marginBottom: 20,
+                  padding: 12,
+                  borderRadius: 12,
+                  background: "#f9fafb",
+                  fontSize: "0.9rem",
+                  color: "#4b5563",
+                }}
+              >
+                <strong>Descripción:</strong> {selectedDoc.description}
+              </div>
+            )}
 
-            {/* Motivo de rechazo si aplica */}
+            {/* Motivo de rechazo */}
             {selectedDoc.status === DOC_STATUS.RECHAZADO &&
               selectedDoc.reject_reason && (
                 <div
@@ -111,12 +143,11 @@ export function DetailView({
                     border: "1px solid #fecaca",
                   }}
                 >
-                  <strong>Motivo de rechazo:</strong>{" "}
-                  {selectedDoc.reject_reason}
+                  <strong>Motivo de rechazo:</strong> {selectedDoc.reject_reason}
                 </div>
               )}
 
-            {/* Barra de descarga */}
+            {/* Botón descargar */}
             <div
               style={{
                 display: "flex",
@@ -125,12 +156,7 @@ export function DetailView({
                 marginBottom: 8,
               }}
             >
-              <span
-                style={{
-                  fontSize: "0.85rem",
-                  color: "#64748b",
-                }}
-              >
+              <span style={{ fontSize: "0.85rem", color: "#64748b" }}>
                 Visualización del documento original
               </span>
 
@@ -174,13 +200,35 @@ export function DetailView({
                   }}
                 />
               ) : (
+                <div style={{ padding: 24, color: "#e5e7eb" }}>
+                  No se encontró el archivo PDF para este documento.
+                </div>
+              )}
+            </div>
+
+            {/* TIMELINE - NUEVO */}
+            <div style={{ marginTop: 32, marginBottom: 32 }}>
+              {loadingTimeline ? (
                 <div
                   style={{
-                    padding: 24,
-                    color: "#e5e7eb",
+                    textAlign: "center",
+                    padding: "20px",
+                    color: "#94a3b8",
                   }}
                 >
-                  No se encontró el archivo PDF para este documento.
+                  Cargando progreso...
+                </div>
+              ) : timeline ? (
+                <Timeline timeline={timeline} />
+              ) : (
+                <div
+                  style={{
+                    textAlign: "center",
+                    padding: "20px",
+                    color: "#94a3b8",
+                  }}
+                >
+                  No hay datos de progreso disponibles
                 </div>
               )}
             </div>

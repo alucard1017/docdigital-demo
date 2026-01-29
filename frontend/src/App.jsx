@@ -6,7 +6,9 @@ import { ListHeader } from './components/ListHeader';
 import { DocumentRow } from './components/DocumentRow';
 import { DOC_STATUS } from './constants';
 
-const API_URL = 'https://docdigital-api.onrender.com';
+const API_URL = window.location.hostname === 'localhost' 
+  ? 'http://localhost:4000' 
+  : 'https://docdigital-api.onrender.com';
 
 /**
  * FUNCIÓN DE FORMATEO DE RUN DETALLADA
