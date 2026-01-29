@@ -216,7 +216,7 @@ router.get('/:id/pdf', requireAuth, async (req, res) => {
     }
 
     // file_path contiene la clave S3: documentos/...
-    const signedUrl = getSignedUrl(doc.file_path, 3600);
+    const signedUrl = await getSignedUrl(doc.file_path, 3600);
     return res.json({ url: signedUrl });
   } catch (err) {
     console.error('❌ Error obteniendo PDF:', err);

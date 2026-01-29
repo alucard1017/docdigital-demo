@@ -36,9 +36,9 @@ console.log('✓ Variables de entorno validadas');
 
 // Lista de orígenes permitidos
 const allowedOrigins = [
-  process.env.FRONTEND_URL,               // producción (Render)
-  'http://localhost:5173',                // Vite local
-  'http://localhost:3000'                 // por si usas otro puerto
+  process.env.FRONTEND_URL,        // producción (Render)
+  'http://localhost:5173',         // Vite local
+  'http://localhost:3000'          // otro puerto local
 ].filter(Boolean);
 
 app.use(cors({
@@ -183,7 +183,6 @@ console.log('✓ Ruta GET /api/test-auth registrada');
 /* ================================
    RUTA DEMO RECORDATORIOS
    ================================ */
-
 app.post('/api/recordatorios/pendientes', async (req, res) => {
   try {
     const { sendReminderEmail } = require('./services/sendReminderEmails');
@@ -236,7 +235,6 @@ console.log('✓ Ruta POST /api/recordatorios/pendientes registrada');
 /* ================================
    ESTADÍSTICAS (OPCIONAL)
    ================================ */
-
 app.get('/api/stats', requireAuth, async (req, res) => {
   try {
     const db = require('./db');

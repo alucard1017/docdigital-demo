@@ -1,74 +1,129 @@
-const AWS = require('aws-sdk');
+const { S3Client, PutObjectCommand, GetObjectCommand, DeleteObjectCommand } = require('@aws-sdk/client-s3');
+const { getSignedUrl } = require('@aws-sdk/s3-request-presigner');
 const fs = require('fs');
 const path = require('path');
 
-// Configurar las credenciales de AWS
-AWS.config.update({
-  accessKeyId: process.env.AWS_ACCESS_KEY_ID,
-  secretAccessKey: process.env.AWS_SECRET_ACCESS_KEY,
-  region: process.env.AWS_REGION || 'us-east-2'
+// Configurar cliente S3 con Signature v4 (automático en v3)
+const s3Client = new S3Client({
+  region: process.env.AWS_REGION || 'us-east-2',
+  credentials: {
+    accessKeyId: process.env.AWS_ACCESS_KEY_ID,
+    secretAccessKey: process.env.AWS_SECRET_ACCESS_KEY,
+  },
 });
 
-const s3 = new AWS.S3();
+const BUCKET = process.env.AWS_S3_BUCKET || 'firma-express-pdfs';
 
-// Función para subir un PDF a S3
+/**
+ * Subir un PDF a S3
+ * @param {string} filePath - Ruta local del archivo
+ * @param {string} fileName - Clave en S3 (ej: documentos/userId/archivo.pdf)
+ * @returns {string} URL pública del archivo
+ */
 async function uploadPdfToS3(filePath, fileName) {
   try {
+    if (!fs.existsSync(filePath)) {
+      throw new Error(`Archivo no encontrado: ${filePath}`);
+    }
+
     const fileContent = fs.readFileSync(filePath);
-    
+
     const params = {
-      Bucket: 'firma-express-pdfs',
-      Key: fileName, // Ruta del archivo en S3 ej: "documentos/2024/firma.pdf"
+      Bucket: BUCKET,
+      Key: fileName,
       Body: fileContent,
-      ContentType: 'application/pdf'
+      ContentType: 'application/pdf',
     };
 
-    const result = await s3.upload(params).promise();
-    
-    console.log('Archivo subido exitosamente a S3:');
-    console.log('URL:', result.Location);
-    
-    return result.Location;
+    const command = new PutObjectCommand(params);
+    const result = await s3Client.send(command);
+
+    console.log(`✅ PDF subido a S3: ${fileName}`);
+    return `https://${BUCKET}.s3.amazonaws.com/${fileName}`;
   } catch (error) {
-    console.error('Error al subir archivo a S3:', error);
+    console.error('❌ Error al subir PDF a S3:', error.message);
     throw error;
   }
 }
 
-// Función para descargar un PDF de S3
+/**
+ * Descargar un PDF de S3 a disco local
+ * @param {string} fileName - Clave en S3
+ * @param {string} savePath - Ruta donde guardar localmente
+ */
 async function downloadPdfFromS3(fileName, savePath) {
   try {
     const params = {
-      Bucket: 'firma-express-pdfs',
-      Key: fileName
+      Bucket: BUCKET,
+      Key: fileName,
     };
 
-    const result = await s3.getObject(params).promise();
-    
-    fs.writeFileSync(savePath, result.Body);
-    console.log('Archivo descargado exitosamente desde S3');
-    
+    const command = new GetObjectCommand(params);
+    const result = await s3Client.send(command);
+
+    const dir = path.dirname(savePath);
+    if (!fs.existsSync(dir)) {
+      fs.mkdirSync(dir, { recursive: true });
+    }
+
+    // Convertir stream a buffer
+    const chunks = [];
+    for await (const chunk of result.Body) {
+      chunks.push(chunk);
+    }
+    const buffer = Buffer.concat(chunks);
+
+    fs.writeFileSync(savePath, buffer);
+    console.log(`✅ PDF descargado desde S3: ${fileName}`);
+
     return savePath;
   } catch (error) {
-    console.error('Error al descargar archivo de S3:', error);
+    console.error('❌ Error al descargar PDF de S3:', error.message);
     throw error;
   }
 }
 
-// Función para eliminar un PDF de S3
+/**
+ * Eliminar un PDF de S3
+ * @param {string} fileName - Clave en S3
+ */
 async function deletePdfFromS3(fileName) {
   try {
     const params = {
-      Bucket: 'firma-express-pdfs',
-      Key: fileName
+      Bucket: BUCKET,
+      Key: fileName,
     };
 
-    await s3.deleteObject(params).promise();
-    console.log('Archivo eliminado exitosamente de S3');
-    
+    const command = new DeleteObjectCommand(params);
+    await s3Client.send(command);
+
+    console.log(`✅ PDF eliminado de S3: ${fileName}`);
     return true;
   } catch (error) {
-    console.error('Error al eliminar archivo de S3:', error);
+    console.error('❌ Error al eliminar PDF de S3:', error.message);
+    throw error;
+  }
+}
+
+/**
+ * Obtener URL firmada (temporal) para descargar/ver un PDF desde S3
+ * @param {string} fileName - Clave en S3
+ * @param {number} expiresIn - Segundos de expiración (default 1 hora = 3600s)
+ * @returns {string} URL firmada
+ */
+async function getSignedUrl(fileName, expiresIn = 3600) {
+  try {
+    const params = {
+      Bucket: BUCKET,
+      Key: fileName,
+    };
+
+    const command = new GetObjectCommand(params);
+    const url = await getSignedUrl(s3Client, command, { expiresIn });
+
+    return url;
+  } catch (error) {
+    console.error('❌ Error al generar URL firmada de S3:', error.message);
     throw error;
   }
 }
@@ -76,5 +131,6 @@ async function deletePdfFromS3(fileName) {
 module.exports = {
   uploadPdfToS3,
   downloadPdfFromS3,
-  deletePdfFromS3
+  deletePdfFromS3,
+  getSignedUrl,
 };
