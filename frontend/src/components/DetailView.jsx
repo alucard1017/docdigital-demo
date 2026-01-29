@@ -4,6 +4,7 @@ import { EventList } from "./EventList";
 import { DetailActions } from "./DetailActions";
 import { DetailHeader } from "./DetailHeader";
 import { DOC_STATUS } from "../constants";
+import { API_BASE_URL } from "../constants";
 
 const API_URL = API_BASE_URL;
 
