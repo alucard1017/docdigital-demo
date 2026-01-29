@@ -28,8 +28,8 @@ const storage = multer.diskStorage({
   }
 });
 
-const upload = multer({ 
-  storage, 
+const upload = multer({
+  storage,
   limits: { fileSize: 25 * 1024 * 1024 },
   fileFilter: (req, file, cb) => {
     if (file.mimetype === 'application/pdf') {
@@ -71,7 +71,7 @@ router.get('/', requireAuth, async (req, res) => {
     const docs = result.rows.map((row) => ({
       ...row,
       requiresVisado: row.requires_visado === true,
-      file_url: row.file_path // S3 URL o ruta local
+      file_url: row.file_path
     }));
 
     return res.json(docs);
@@ -103,7 +103,6 @@ router.post('/', requireAuth, upload.single('file'), handleMulterError, async (r
       requiresVisado
     } = req.body;
 
-    // Validaciones
     if (!req.file) return res.status(400).json({ message: 'El archivo PDF es obligatorio' });
     if (!title || !firmante_nombre_completo || !firmante_email || !firmante_run || !destinatario_nombre || !destinatario_email || !empresa_rut) {
       return res.status(400).json({ message: 'Faltan campos obligatorios' });
@@ -113,21 +112,19 @@ router.post('/', requireAuth, upload.single('file'), handleMulterError, async (r
     let s3FilePath = null;
     try {
       const fileName = `documentos/${req.user.id}/${Date.now()}-${req.file.originalname}`;
-      const s3Url = await uploadPdfToS3(req.file.path, fileName);
-      s3FilePath = fileName; // Guardar referencia en BD
-      
+      await uploadPdfToS3(req.file.path, fileName);
+      s3FilePath = fileName;
       console.log(`✅ Archivo subido a S3: ${fileName}`);
     } catch (s3Error) {
       console.error('⚠️ Error subiendo a S3, usando archivo local:', s3Error.message);
       s3FilePath = '/uploads/temporal/' + req.file.filename;
     }
 
-    // Generar token de firma
+    // Token de firma
     const signatureToken = crypto.randomUUID();
-    const signatureExpiresAt = new Date(Date.now() + 7 * 24 * 60 * 60 * 1000); // 7 días
+    const signatureExpiresAt = new Date(Date.now() + 7 * 24 * 60 * 60 * 1000);
     const requires_visado = requiresVisado === 'true';
 
-    // Insertar documento en BD
     const result = await db.query(
       `INSERT INTO documents (
         owner_id, title, description, file_path, status, 
@@ -136,8 +133,15 @@ router.post('/', requireAuth, upload.single('file'), handleMulterError, async (r
         firmante_nombre, firmante_email, firmante_movil, firmante_run, 
         empresa_rut, requires_visado, signature_token, signature_token_expires_at, 
         signature_status, created_at, updated_at
-      ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, $19, $20, NOW(), NOW()) 
-       RETURNING *`,
+      ) VALUES (
+        $1, $2, $3, $4, $5,
+        $6, $7, $8,
+        $9, $10, $11,
+        $12, $13, $14, $15,
+        $16, $17, $18, $19,
+        $20, NOW(), NOW()
+      )
+      RETURNING *`,
       [
         req.user.id, title, description, s3FilePath, 'PENDIENTE',
         destinatario_nombre, destinatario_email, destinatario_movil,
@@ -149,14 +153,12 @@ router.post('/', requireAuth, upload.single('file'), handleMulterError, async (r
 
     const doc = result.rows[0];
 
-    // Registrar evento
     await db.query(
       `INSERT INTO document_events (document_id, actor, action, details, from_status, to_status) 
        VALUES ($1, $2, $3, $4, $5, $6)`,
       [doc.id, req.user.name || 'Sistema', 'CREADO', `Documento "${title}" creado`, null, 'PENDIENTE']
     );
 
-    // Enviar email con enlace de firma
     const frontBaseUrl = process.env.FRONTEND_URL || 'https://docdigital-demo.onrender.com';
     await sendSignatureInviteEmail({
       signer_email: firmante_email,
@@ -165,7 +167,6 @@ router.post('/', requireAuth, upload.single('file'), handleMulterError, async (r
       sign_url: `${frontBaseUrl}/?token=${signatureToken}`
     });
 
-    // Limpiar archivo temporal
     if (req.file && fs.existsSync(req.file.path)) {
       fs.unlink(req.file.path, (err) => {
         if (err) console.error('⚠️ Error eliminando archivo temporal:', err);
@@ -180,14 +181,11 @@ router.post('/', requireAuth, upload.single('file'), handleMulterError, async (r
     });
   } catch (err) {
     console.error('❌ Error creando documento:', err);
-    
-    // Limpiar archivo temporal en caso de error
     if (req.file && fs.existsSync(req.file.path)) {
-      fs.unlink(req.file.path, (err) => {
-        if (err) console.error('⚠️ Error limpiando temporal:', err);
+      fs.unlink(req.file.path, (err2) => {
+        if (err2) console.error('⚠️ Error limpiando temporal:', err2);
       });
     }
-    
     return res.status(500).json({ message: 'Error interno del servidor' });
   }
 });
@@ -219,19 +217,21 @@ router.get('/:id/timeline', async (req, res) => {
     );
 
     const events = eventsRes.rows;
-    let currentStep = 'Pendiente', nextStep = '', progress = 0;
+    let currentStep = 'Pendiente';
+    let nextStep = '';
+    let progress = 0;
 
     if (doc.status === 'PENDIENTE') {
       if (doc.requires_visado) {
-        nextStep = `⏳ Esperando visación`;
+        nextStep = '⏳ Esperando visación';
         progress = 25;
       } else {
-        nextStep = `⏳ Esperando firma`;
+        nextStep = '⏳ Esperando firma';
         progress = 50;
       }
     } else if (doc.status === 'VISADO') {
       currentStep = 'Visado';
-      nextStep = `⏳ Esperando firma`;
+      nextStep = '⏳ Esperando firma';
       progress = 75;
     } else if (doc.status === 'FIRMADO') {
       currentStep = 'Firmado';
@@ -253,7 +253,7 @@ router.get('/:id/timeline', async (req, res) => {
       toStatus: evt.to_status
     }));
 
-    res.json({
+    return res.json({
       document: {
         id: doc.id,
         title: doc.title,
@@ -273,7 +273,7 @@ router.get('/:id/timeline', async (req, res) => {
     });
   } catch (err) {
     console.error('❌ Error obteniendo timeline:', err);
-    res.status(500).json({ message: 'Error interno del servidor' });
+    return res.status(500).json({ message: 'Error interno del servidor' });
   }
 });
 
@@ -353,4 +353,23 @@ router.post('/:id/visar', requireAuth, async (req, res) => {
     const doc = result.rows[0];
 
     await db.query(
-      `INSERT INTO document_events
+      `INSERT INTO document_events (document_id, actor, action, details, from_status, to_status) 
+       VALUES ($1, $2, $3, $4, $5, $6)`,
+      [doc.id, req.user.name || 'Sistema', 'VISADO', 'Documento visado por el propietario', docActual.status, 'VISADO']
+    );
+
+    return res.json({
+      ...doc,
+      file_url: doc.file_path,
+      message: 'Documento visado exitosamente'
+    });
+  } catch (err) {
+    console.error('❌ Error visando documento:', err);
+    return res.status(500).json({ message: 'Error interno del servidor' });
+  }
+});
+
+/* ================================
+   EXPORTAR ROUTER
+   ================================ */
+module.exports = router;
