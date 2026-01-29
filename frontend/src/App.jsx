@@ -288,31 +288,6 @@ function App() {
     window.location.reload();
   };
 
-  // 👉 PÉGALA AQUÍ
-  const borrarTodosPdf = async () => {
-    if (!window.confirm('⚠️ Esto borrará TODOS tus documentos y sus PDF. ¿Seguro?')) return;
-
-    try {
-      const res = await fetch(`${API_URL}/api/docs`, {
-        method: 'DELETE',
-        headers: {
-          Authorization: `Bearer ${token}`,
-        },
-      });
-
-      const data = await res.json();
-      if (!res.ok) {
-        throw new Error(data.message || 'No se pudieron eliminar los documentos');
-      }
-
-      setDocs([]);
-      setPage(1);
-      alert('✅ Se eliminaron todos los documentos y PDF');
-    } catch (err) {
-      alert('❌ ' + err.message);
-    }
-  };
-
   /* ===============================
      VISTA LOGIN
      =============================== */
@@ -804,16 +779,6 @@ function App() {
               </div>
             ) : (
               <>
-                <div style={{ marginBottom: 12, textAlign: 'right' }}>
-                  <button
-                    type="button"
-                    className="btn-main"
-                    onClick={borrarTodosPdf}
-                    style={{ background: '#fecaca', color: '#b91c1c' }}
-                  >
-                    Borrar TODOS los documentos
-                  </button>
-                </div>
               
                 {/* Tabla de documentos */}
                 <div className="table-wrapper">
