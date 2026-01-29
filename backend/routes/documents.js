@@ -2,9 +2,12 @@
 const express = require('express');
 const multer = require('multer');
 const path = require('path');
+const crypto = require('crypto');
+const fs = require('fs');
 const db = require('../db');
 const { requireAuth } = require('./auth');
 const { sendReminderEmail } = require('../services/sendReminderEmails');
+const { sendSignatureInviteEmail } = require('../services/sendSignatureInviteEmail');
 
 const router = express.Router();
 
@@ -72,8 +75,6 @@ router.get('/', requireAuth, async (req, res) => {
         break;
     }
 
-    console.log('SORT LLEGÓ:', sort, 'ORDER BY:', orderByClause);
-
     const query = `
       SELECT
         id,
@@ -91,6 +92,9 @@ router.get('/', requireAuth, async (req, res) => {
         firmante_nombre,
         firmante_email,
         firmante_movil,
+        firmante_run,
+        empresa_rut,
+        signature_status,
         requires_visado,
         reject_reason,
         created_at,
@@ -135,9 +139,11 @@ router.post(
         visador_nombre,
         visador_email,
         visador_movil,
-        firmante_nombre,
+        firmante_nombre_completo,
         firmante_email,
         firmante_movil,
+        firmante_run,
+        empresa_rut,
         requiresVisado
       } = req.body;
 
@@ -150,22 +156,28 @@ router.post(
           .json({ message: 'El archivo PDF es obligatorio' });
       }
 
-      // Validar campos esenciales
       if (
         !title ||
-        !firmante_nombre ||
+        !firmante_nombre_completo ||
         !firmante_email ||
+        !firmante_run ||
         !destinatario_nombre ||
-        !destinatario_email
+        !destinatario_email ||
+        !empresa_rut
       ) {
         return res.status(400).json({
           message:
-            'Faltan campos obligatorios: título, firmante y destinatario'
+            'Faltan campos obligatorios: título, representante legal y empresa'
         });
       }
 
       const filePath = '/uploads/' + req.file.filename;
       const requires_visado = requiresVisado === 'true';
+
+      const signatureToken = crypto.randomUUID();
+      const signatureExpiresAt = new Date(
+        Date.now() + 7 * 24 * 60 * 60 * 1000
+      ); // 7 días
 
       const insertQuery = `
         INSERT INTO documents (
@@ -183,7 +195,12 @@ router.post(
           firmante_nombre,
           firmante_email,
           firmante_movil,
+          firmante_run,
+          empresa_rut,
           requires_visado,
+          signature_token,
+          signature_token_expires_at,
+          signature_status,
           created_at,
           updated_at
         ) VALUES (
@@ -191,7 +208,8 @@ router.post(
           $6, $7, $8,
           $9, $10, $11,
           $12, $13, $14,
-          $15,
+          $15, $16, $17,
+          $18, $19, $20,
           NOW(), NOW()
         )
         RETURNING *;
@@ -209,16 +227,20 @@ router.post(
         visador_nombre,
         visador_email,
         visador_movil,
-        firmante_nombre,
+        firmante_nombre_completo,
         firmante_email,
         firmante_movil,
-        requires_visado
+        firmante_run,
+        empresa_rut,
+        requires_visado,
+        signatureToken,
+        signatureExpiresAt,
+        'PENDIENTE'
       ];
 
       const result = await db.query(insertQuery, insertValues);
       const doc = result.rows[0];
 
-      // Registrar evento de creación (id + actor)
       await db.query(
         `
         INSERT INTO document_events (
@@ -239,6 +261,17 @@ router.post(
         ]
       );
 
+      const frontBaseUrl =
+        process.env.FRONTEND_URL || 'https://docdigital-demo.onrender.com';
+      const signUrl = `${frontBaseUrl}/?token=${signatureToken}`;
+
+      await sendSignatureInviteEmail({
+        signer_email: firmante_email,
+        signer_name: firmante_nombre_completo,
+        document_title: title,
+        sign_url: signUrl
+      });
+
       return res.status(201).json({
         ...doc,
         requiresVisado: doc.requires_visado === true,
@@ -253,7 +286,6 @@ router.post(
 
 /**
  * POST /api/docs/:id/firmar
- * Marca un documento como FIRMADO
  */
 router.post('/:id/firmar', requireAuth, async (req, res) => {
   try {
@@ -300,7 +332,6 @@ router.post('/:id/firmar', requireAuth, async (req, res) => {
 
     const doc = result.rows[0];
 
-    // Registrar evento de firma
     await db.query(
       `
       INSERT INTO document_events (
@@ -338,7 +369,6 @@ router.post('/:id/firmar', requireAuth, async (req, res) => {
 
 /**
  * POST /api/docs/:id/visar
- * Marca un documento como VISADO
  */
 router.post('/:id/visar', requireAuth, async (req, res) => {
   try {
@@ -391,7 +421,6 @@ router.post('/:id/visar', requireAuth, async (req, res) => {
 
     const doc = result.rows[0];
 
-    // Registrar evento de visado
     await db.query(
       `
       INSERT INTO document_events (
@@ -429,7 +458,6 @@ router.post('/:id/visar', requireAuth, async (req, res) => {
 
 /**
  * POST /api/docs/:id/rechazar
- * Marca un documento como RECHAZADO con motivo
  */
 router.post('/:id/rechazar', requireAuth, async (req, res) => {
   try {
@@ -485,7 +513,6 @@ router.post('/:id/rechazar', requireAuth, async (req, res) => {
 
     const doc = result.rows[0];
 
-    // Registrar evento de rechazo
     await db.query(
       `
       INSERT INTO document_events (
@@ -525,7 +552,6 @@ router.post('/:id/rechazar', requireAuth, async (req, res) => {
 
 /**
  * GET /api/docs/:id/events
- * Devuelve el historial de eventos del documento
  */
 router.get('/:id/events', requireAuth, async (req, res) => {
   try {
@@ -563,7 +589,6 @@ router.get('/:id/events', requireAuth, async (req, res) => {
 
 /**
  * POST /api/docs/:id/reminder
- * Envía un correo de recordatorio para un documento
  */
 router.post('/:id/reminder', requireAuth, async (req, res) => {
   try {
@@ -596,6 +621,189 @@ router.post('/:id/reminder', requireAuth, async (req, res) => {
   } catch (err) {
     console.error('Error enviando recordatorio:', err);
     return res.status(500).json({ message: 'Error interno del servidor' });
+  }
+});
+
+/**
+ * GET /api/docs/public/sign/:token
+ */
+router.get('/public/sign/:token', async (req, res) => {
+  try {
+    const { token } = req.params;
+
+    const result = await db.query(
+      `
+      SELECT
+        id,
+        title,
+        file_path,
+        firmante_nombre,
+        firmante_email,
+        firmante_run,
+        empresa_rut,
+        destinatario_nombre,
+        destinatario_email,
+        signature_status,
+        signature_token_expires_at
+      FROM documents
+      WHERE signature_token = $1
+      `,
+      [token]
+    );
+
+    if (result.rowCount === 0) {
+      return res.status(404).json({ message: 'Enlace de firma no válido' });
+    }
+
+    const doc = result.rows[0];
+
+    if (
+      doc.signature_token_expires_at &&
+      new Date(doc.signature_token_expires_at) < new Date()
+    ) {
+      return res
+        .status(410)
+        .json({ message: 'El enlace de firma ha expirado' });
+    }
+
+    return res.json({
+      id: doc.id,
+      title: doc.title,
+      file_url: doc.file_path,
+      firmante_nombre: doc.firmante_nombre,
+      firmante_email: doc.firmante_email,
+      firmante_run: doc.firmante_run,
+      empresa_rut: doc.empresa_rut,
+      destinatario_nombre: doc.destinatario_nombre,
+      destinatario_email: doc.destinatario_email,
+      signature_status: doc.signature_status
+    });
+  } catch (err) {
+    console.error('Error obteniendo info pública de firma:', err);
+    return res.status(500).json({ message: 'Error interno del servidor' });
+  }
+});
+
+/**
+ * POST /api/docs/public/sign/:token/confirm
+ */
+router.post('/public/sign/:token/confirm', async (req, res) => {
+  try {
+    const { token } = req.params;
+
+    const current = await db.query(
+      `
+      SELECT
+        id,
+        status,
+        signature_status,
+        signature_token_expires_at
+      FROM documents
+      WHERE signature_token = $1
+      `,
+      [token]
+    );
+
+    if (current.rowCount === 0) {
+      return res.status(404).json({ message: 'Enlace de firma no válido' });
+    }
+
+    const docActual = current.rows[0];
+
+    if (
+      docActual.signature_token_expires_at &&
+      new Date(docActual.signature_token_expires_at) < new Date()
+    ) {
+      return res
+        .status(410)
+        .json({ message: 'El enlace de firma ha expirado' });
+    }
+
+    if (docActual.signature_status === 'FIRMADO') {
+      return res
+        .status(400)
+        .json({ message: 'El documento ya fue firmado por el representante' });
+    }
+
+    const updateQuery = `
+      UPDATE documents
+      SET
+        signature_status = 'FIRMADO',
+        status = 'FIRMADO',
+        updated_at = NOW()
+      WHERE signature_token = $1
+      RETURNING *;
+    `;
+
+    const result = await db.query(updateQuery, [token]);
+    const doc = result.rows[0];
+
+    await db.query(
+      `
+      INSERT INTO document_events (
+        document_id,
+        user_id,
+        actor,
+        action,
+        details,
+        from_status,
+        to_status
+      )
+      VALUES ($1, NULL, $2, $3, $4, $5, $6)
+      `,
+      [
+        doc.id,
+        'Representante Legal',
+        'FIRMADO_REPRESENTANTE',
+        'Documento firmado mediante enlace externo',
+        docActual.status,
+        'FIRMADO'
+      ]
+    );
+
+    return res.json({ message: 'Firma registrada correctamente' });
+  } catch (err) {
+    console.error('Error confirmando firma pública:', err);
+    return res.status(500).json({ message: 'Error interno del servidor' });
+  }
+});
+
+/**
+ * DELETE /api/docs
+ * Elimina TODOS los documentos del usuario autenticado
+ * y borra sus archivos PDF del disco
+ */
+router.delete('/', requireAuth, async (req, res) => {
+  try {
+    const docsResult = await db.query(
+      'SELECT file_path FROM documents WHERE owner_id = $1',
+      [req.user.id]
+    );
+
+    const docs = docsResult.rows;
+
+    for (const doc of docs) {
+      if (doc.file_path) {
+        const fullPath = path.join(__dirname, '..', doc.file_path);
+        fs.unlink(fullPath, (err) => {
+          if (err) console.error('Error borrando archivo:', err);
+        });
+      }
+    }
+
+    await db.query('DELETE FROM documents WHERE owner_id = $1', [
+      req.user.id
+    ]);
+
+    return res.json({
+      ok: true,
+      message: 'Se eliminaron documentos y archivos PDF'
+    });
+  } catch (err) {
+    console.error('Error eliminando documentos:', err);
+    return res
+      .status(500)
+      .json({ ok: false, message: 'Error al eliminar documentos' });
   }
 });
 
