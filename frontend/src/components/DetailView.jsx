@@ -5,9 +5,7 @@ import { DetailActions } from "./DetailActions";
 import { DetailHeader } from "./DetailHeader";
 import { DOC_STATUS } from "../constants";
 
-const API_URL = window.location.hostname === 'localhost' 
-  ? 'http://localhost:4000' 
-  : 'https://docdigital-api.onrender.com';
+const API_URL = API_BASE_URL;
 
 export function DetailView({
   selectedDoc,

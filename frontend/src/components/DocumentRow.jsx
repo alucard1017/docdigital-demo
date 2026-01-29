@@ -2,7 +2,7 @@ import React from "react";
 import { DocStatusBadge } from "./DocStatusBadge";
 import { DOC_STATUS } from "../constants";
 
-const API_URL = "https://docdigital-api.onrender.com";
+const API_URL = API_BASE_URL;
 
 export function DocumentRow({ doc, onOpenDetail }) {
   const handleVerPdf = () => {
