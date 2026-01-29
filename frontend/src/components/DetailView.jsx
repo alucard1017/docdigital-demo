@@ -263,7 +263,7 @@ export function DetailView({
 
             {/* Botones Firmar / Rechazar */}
             <DetailActions
-              puedeFirmar={peudeFirmar}
+              puedeFirmar={puedeFirmar}
               puedeRechazar={puedeRechazar}
               selectedDoc={selectedDoc}
               setView={setView}
