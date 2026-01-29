@@ -2,7 +2,9 @@
 import React from "react";
 
 export function EventList({ events }) {
-  if (!events || events.length === 0) {
+  const safeEvents = Array.isArray(events) ? events : [];
+
+  if (safeEvents.length === 0) {
     return (
       <p
         style={{
@@ -25,18 +27,13 @@ export function EventList({ events }) {
         color: "#4b5563",
       }}
     >
-      {events.map((ev) => (
-        <li key={ev.id} style={{ marginBottom: 6 }}>
-          <strong>{ev.action}</strong>{" "}
-          ·{" "}
-          {new Date(ev.created_at).toLocaleString("es-CO", {
-            day: "2-digit",
-            month: "2-digit",
-            year: "numeric",
-            hour: "2-digit",
-            minute: "2-digit",
-          })}
-          {ev.details && ` · ${ev.details}`}
+      {safeEvents.map((e) => (
+        <li
+          key={e.id || `${e.action}-${e.timestamp}`}
+          style={{ marginBottom: 6 }}
+        >
+          {/* ajusta este contenido a tu estructura real */}
+          <strong>{e.action}</strong> – {e.details} ({e.actor})
         </li>
       ))}
     </ul>

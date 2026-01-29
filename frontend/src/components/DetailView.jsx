@@ -52,6 +52,8 @@ export function DetailView({
 
   if (!selectedDoc) return null;
 
+  const safeEvents = Array.isArray(events) ? events : [];
+
   return (
     <div className="dashboard-layout">
       {/* Sidebar */}
@@ -258,7 +260,7 @@ export function DetailView({
                 Historial de acciones
               </h3>
 
-              <EventList events={events} />
+              <EventList events={safeEvents} />
             </div>
 
             {/* Botones Firmar / Rechazar */}
