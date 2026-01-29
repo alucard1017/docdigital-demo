@@ -1,10 +1,10 @@
+// src/components/DetailView.jsx
 import React, { useState, useEffect } from "react";
 import { Timeline } from "./Timeline";
 import { EventList } from "./EventList";
 import { DetailActions } from "./DetailActions";
 import { DetailHeader } from "./DetailHeader";
-import { DOC_STATUS } from "../constants";
-import { API_BASE_URL } from "../constants";
+import { DOC_STATUS, API_BASE_URL } from "../constants";
 
 const API_URL = API_BASE_URL;
 
@@ -28,13 +28,18 @@ export function DetailView({
     const fetchTimeline = async () => {
       try {
         setLoadingTimeline(true);
-        const res = await fetch(`${API_URL}/api/docs/${selectedDoc.id}/timeline`);
+        const res = await fetch(
+          `${API_URL}/api/docs/${selectedDoc.id}/timeline`
+        );
         const data = await res.json();
-        if (res.ok) {
+        if (res.ok && data && data.timeline) {
           setTimeline(data.timeline);
+        } else {
+          setTimeline(null);
         }
       } catch (err) {
-        console.error('Error fetching timeline:', err);
+        console.error("Error fetching timeline:", err);
+        setTimeline(null);
       } finally {
         setLoadingTimeline(false);
       }
@@ -81,7 +86,8 @@ export function DetailView({
               fontSize: "0.9rem",
             }}
           >
-            Revisión de Documento #{selectedDoc.id} - Estado {selectedDoc.status}
+            Revisión de Documento #{selectedDoc.id} - Estado{" "}
+            {selectedDoc.status}
           </span>
           <span style={{ fontWeight: 700, fontSize: "1.1rem" }}>
             Hola, <span style={{ color: "var(--primary)" }}>Alucard</span>
@@ -142,7 +148,8 @@ export function DetailView({
                     border: "1px solid #fecaca",
                   }}
                 >
-                  <strong>Motivo de rechazo:</strong> {selectedDoc.reject_reason}
+                  <strong>Motivo de rechazo:</strong>{" "}
+                  {selectedDoc.reject_reason}
                 </div>
               )}
 
@@ -205,7 +212,7 @@ export function DetailView({
               )}
             </div>
 
-            {/* TIMELINE - NUEVO */}
+            {/* TIMELINE */}
             <div style={{ marginTop: 32, marginBottom: 32 }}>
               {loadingTimeline ? (
                 <div
@@ -256,7 +263,7 @@ export function DetailView({
 
             {/* Botones Firmar / Rechazar */}
             <DetailActions
-              puedeFirmar={puedeFirmar}
+              puedeFirmar={peudeFirmar}
               puedeRechazar={puedeRechazar}
               selectedDoc={selectedDoc}
               setView={setView}

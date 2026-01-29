@@ -119,7 +119,7 @@ function App() {
       if (!token || !selectedDoc) return;
       try {
         const res = await fetch(
-          `${API_URL}/api/docs/${selectedDoc.id}/events`,
+          `${API_URL}/api/docs/${selectedDoc.id}/timeline`,
           {
             headers: { Authorization: `Bearer ${token}` },
           }
