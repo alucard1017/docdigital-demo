@@ -69,10 +69,48 @@ function App() {
   const [selectedDoc, setSelectedDoc] = useState(null);
   const [events, setEvents] = useState([]);
 
+  // Firma pública por token
+  const [publicSignDoc, setPublicSignDoc] = useState(null);
+  const [publicSignError, setPublicSignError] = useState('');
+  const [publicSignLoading, setPublicSignLoading] = useState(false);
+  const [publicSignToken, setPublicSignToken] = useState('');
+
+  async function cargarFirmaPublica(token) {
+    try {
+      setPublicSignLoading(true);
+      setPublicSignError('');
+      const res = await fetch(`${API_URL}/api/docs/public/sign/${token}`);
+      const data = await res.json();
+
+      if (!res.ok) {
+        throw new Error(data.message || 'No se pudo cargar el documento');
+        }
+
+        setPublicSignDoc(data);
+      } catch (err) {
+        setPublicSignError(err.message);
+        setPublicSignDoc(null);
+      } finally {
+        setPublicSignLoading(false);
+      }
+    }      
+
   // Ping para despertar el backend en Render
   useEffect(() => {
     fetch(`${API_URL}/api/health`).catch(() => {});
   }, []);
+
+  // Detectar ?token= en la URL
+  useEffect(() => {
+    const params = new URLSearchParams(window.location.search);
+    const tokenUrl = params.get('token');
+
+    if (tokenUrl) {
+      setView('public-sign');
+      setPublicSignToken(tokenUrl);
+      cargarFirmaPublica(tokenUrl);
+    }
+  }, []);    
 
   // Cargar eventos del documento seleccionado
   useEffect(() => {
@@ -98,87 +136,92 @@ function App() {
       setEvents([]);
     }
   }, [token, selectedDoc, view]);
+
   // Cargar documentos automáticamente cuando haya token y vista lista
   useEffect(() => {
     if (!token) return;
     if (view !== 'list') return;
     cargarDocs();
   }, [token, view, sort]);
+
   /* ===============================
-   LOGIN
-   =============================== */
-async function handleLogin(e) {
-  e.preventDefault();
-  setIsLoggingIn(true);
-  setMessage('🚀 Conectando con el servidor seguro...');
+    LOGIN
+    =============================== */
+  async function handleLogin(e) {
+    e.preventDefault();
+    setIsLoggingIn(true);
+    setMessage('🚀 Conectando con el servidor seguro...');
 
-  const cleanRun = run.replace(/[^0-9kK]/g, '');
+    const cleanRun = run.replace(/[^0-9kK]/g, '');
 
-  try {
-    const res = await fetch(`${API_URL}/api/auth/login`, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ run: cleanRun, password }),
-    });
+    try {
+      const res = await fetch(`${API_URL}/api/auth/login`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ run: cleanRun, password }),
+      });
 
-    const data = await res.json();
+      const data = await res.json();
 
-    if (!res.ok) {
-      throw new Error(data.message || 'Credenciales no válidas');
+      if (!res.ok) {
+        throw new Error(data.message || 'Credenciales no válidas');
+      }
+
+      setToken(data.token);
+      setUser(data.user);
+      localStorage.setItem('token', data.token);
+      localStorage.setItem('user', JSON.stringify(data.user));
+      setMessage('✅ Acceso concedido');
+    } catch (err) {
+      setMessage(
+        '❌ Error de conexión, intenta nuevamente en unos segundos.'
+      );
+    } finally {
+      setIsLoggingIn(false);
     }
-
-    setToken(data.token);
-    setUser(data.user);
-    localStorage.setItem('token', data.token);
-    localStorage.setItem('user', JSON.stringify(data.user));
-    setMessage('✅ Acceso concedido');
-  } catch (err) {
-    setMessage(
-      '❌ Error de conexión, intenta nuevamente en unos segundos.'
-    );
-  } finally {
-    setIsLoggingIn(false);
   }
-}
+
   /* ===============================
     CARGA DE DOCUMENTOS
-   =============================== */
-async function cargarDocs(sortParam = sort) {
-  if (!token) return;
-  setLoadingDocs(true);
-  setErrorDocs('');
+    =============================== */
+  async function cargarDocs(sortParam = sort) {
+    if (!token) return;
+    setLoadingDocs(true);
+    setErrorDocs('');
 
-  try {
-    const res = await fetch(
-      `${API_URL}/api/docs?sort=${encodeURIComponent(sortParam)}`,
-      {
-        headers: { Authorization: `Bearer ${token}` },
+    try {
+      const res = await fetch(
+        `${API_URL}/api/docs?sort=${encodeURIComponent(sortParam)}`,
+        {
+          headers: { Authorization: `Bearer ${token}` },
+        }
+      );
+
+      if (res.status === 401) {
+        localStorage.removeItem('token');
+        localStorage.removeItem('user');
+        setToken('');
+        setUser(null);
+        return;
       }
-    );
 
-    if (res.status === 401) {
-      localStorage.removeItem('token');
-      localStorage.removeItem('user');
-      setToken('');
-      setUser(null);
-      return;
+      if (!res.ok) {
+        console.error('Error al cargar documentos:', res.status);
+        setErrorDocs(
+          'No se pudieron cargar los documentos. Intenta nuevamente.'
+        );
+        return;
+      }
+
+      const data = await res.json();
+      setDocs(data);
+    } catch (err) {
+      console.error('Fallo al cargar documentos:', err);
+      setErrorDocs('Error de conexión con el servidor.');
+    } finally {
+      setLoadingDocs(false);
     }
-
-    if (!res.ok) {
-      console.error('Error al cargar documentos:', res.status);
-      setErrorDocs('No se pudieron cargar los documentos. Intenta nuevamente.');
-      return;
-    }
-
-    const data = await res.json();
-    setDocs(data);
-  } catch (err) {
-    console.error('Fallo al cargar documentos:', err);
-    setErrorDocs('Error de conexión con el servidor.');
-  } finally {
-    setLoadingDocs(false);
   }
-}
 
   /* ===============================
      ACCIONES: FIRMAR / VISAR / VER
@@ -243,6 +286,31 @@ async function cargarDocs(sortParam = sort) {
     setToken(null);
     setUser(null);
     window.location.reload();
+  };
+
+  // 👉 PÉGALA AQUÍ
+  const borrarTodosPdf = async () => {
+    if (!window.confirm('⚠️ Esto borrará TODOS tus documentos y sus PDF. ¿Seguro?')) return;
+
+    try {
+      const res = await fetch(`${API_URL}/api/docs`, {
+        method: 'DELETE',
+        headers: {
+          Authorization: `Bearer ${token}`,
+        },
+      });
+
+      const data = await res.json();
+      if (!res.ok) {
+        throw new Error(data.message || 'No se pudieron eliminar los documentos');
+      }
+
+      setDocs([]);
+      setPage(1);
+      alert('✅ Se eliminaron todos los documentos y PDF');
+    } catch (err) {
+      alert('❌ ' + err.message);
+    }
   };
 
   /* ===============================
@@ -339,8 +407,9 @@ async function cargarDocs(sortParam = sort) {
             <button
               className="btn-main btn-primary"
               style={{ width: '100%', fontSize: '1.1rem' }}
+              disabled={isLoggingIn}
             >
-              ACCEDER AL PORTAL
+              {isLoggingIn ? 'Conectando…' : 'ACCEDER AL PORTAL'}
             </button>
             <button
               type="button"
@@ -386,7 +455,134 @@ async function cargarDocs(sortParam = sort) {
       </div>
     );
   }
+  // ===============================
+  // VISTA FIRMA PÚBLICA POR TOKEN
+  // ===============================
+  if (view === 'public-sign') {
+    const pdfUrl = publicSignDoc?.file_url?.startsWith('http')
+      ? publicSignDoc.file_url
+      : publicSignDoc
+      ? `${API_URL}${publicSignDoc.file_url}`
+      : '';
+    
+    return (
+      <div className="login-bg">
+        <div className="login-card" style={{ maxWidth: 800 }}>
+          <h1
+            style={{
+              textAlign: 'center',
+              color: '#1e3a8a',
+              marginBottom: 10,
+              fontSize: '2rem',
+              fontWeight: 800,
+            }}
+          >
+            Firma de Documento
+          </h1>
 
+          {publicSignLoading && (
+            <p style={{ textAlign: 'center', marginTop: 20 }}>
+              Cargando información del documento…
+            </p>
+          )}
+
+          {publicSignError && (
+            <p
+            style={{
+              textAlign: 'center',
+              marginTop: 20,
+              color: '#b91c1c',
+              fontWeight: 600,
+            }}
+          >
+            {publicSignError}
+          </p>
+        )}
+
+        {publicSignDoc && !publicSignLoading && !publicSignError && (
+          <>
+          <p
+          style={{
+            textAlign: 'center',
+            color: '#64748b',
+            marginBottom: 20,
+          }}
+        >
+          Documento: <strong>{publicSignDoc.title}</strong>
+          <br />
+          Empresa:{' '}
+          <strong>{publicSignDoc.destinatario_nombre}</strong> (RUT{' '}
+          {publicSignDoc.empresa_rut})
+        </p>
+
+        <div style={{ textAlign: 'center', marginBottom: 20 }}>
+          <a
+          href={pdfUrl}
+          target="_blank"
+          rel="noopener noreferrer"
+          className="btn-main btn-primary"
+          style={{ textDecoration: 'none' }}
+        >
+          Ver documento en PDF
+        </a>
+        </div>
+
+            <p
+              style={{
+                fontSize: '0.9rem',
+                color: '#64748b',
+                marginBottom: 20,
+              }}
+            >
+              Representante legal:{' '}
+              <strong>{publicSignDoc.firmante_nombre}</strong> (RUN{' '}
+              {publicSignDoc.firmante_run})
+            </p>
+
+            {publicSignDoc.signature_status === 'FIRMADO' ? (
+              <p
+                style={{
+                  textAlign: 'center',
+                  color: '#16a34a',
+                  fontWeight: 700,
+                  marginTop: 10,
+                }}
+              >
+                Este documento ya fue firmado.
+              </p>
+            ) : (
+              <button
+                className="btn-main btn-primary"
+                style={{ width: '100%', marginTop: 10 }}
+                onClick={async () => {
+                  try {
+                    const res = await fetch(
+                      `${API_URL}/api/docs/public/sign/${publicSignToken}/confirm`,
+                      { method: 'POST' }
+                    );
+                    const data = await res.json();
+                    if (!res.ok) {
+                      throw new Error(
+                        data.message || 'No se pudo registrar la firma'
+                      );
+                    }
+                    alert('✅ Firma registrada correctamente');
+                    cargarFirmaPublica(publicSignToken);
+                  } catch (err) {
+                    alert('❌ ' + err.message);
+                  }
+                }}
+              >
+                FIRMAR DOCUMENTO
+              </button>
+            )}
+          </>
+        )}
+      </div>
+    </div>
+  );
+}
+                       
   /* ===============================
      VISTA DETALLE DE DOCUMENTO
      =============================== */
@@ -396,14 +592,14 @@ async function cargarDocs(sortParam = sort) {
       : `${API_URL}${selectedDoc.file_url || ''}`;
 
     const puedeFirmar = ![
-  DOC_STATUS.FIRMADO,
-  DOC_STATUS.RECHAZADO,
-].includes(selectedDoc.status);
+      DOC_STATUS.FIRMADO,
+      DOC_STATUS.RECHAZADO,
+    ].includes(selectedDoc.status);
 
-const puedeRechazar = ![
-  DOC_STATUS.FIRMADO,
-  DOC_STATUS.RECHAZADO,
-].includes(selectedDoc.status);
+    const puedeRechazar = ![
+      DOC_STATUS.FIRMADO,
+      DOC_STATUS.RECHAZADO,
+    ].includes(selectedDoc.status);
 
     return (
       <DetailView
@@ -452,19 +648,19 @@ const puedeRechazar = ![
   });
 
   // Conteos globales por estado (independientes de filtros/búsqueda)
-const pendientes = docs.filter(
-  (d) => d.status === DOC_STATUS.PENDIENTE
-).length;
-const visados = docs.filter(
-  (d) => d.status === DOC_STATUS.VISADO
-).length;
-const firmados = docs.filter(
-  (d) => d.status === DOC_STATUS.FIRMADO
-).length;
-const rechazados = docs.filter(
-  (d) => d.status === DOC_STATUS.RECHAZADO
-).length;
-const totalFiltrado = docsFiltrados.length;
+  const pendientes = docs.filter(
+    (d) => d.status === DOC_STATUS.PENDIENTE
+  ).length;
+  const visados = docs.filter(
+    (d) => d.status === DOC_STATUS.VISADO
+  ).length;
+  const firmados = docs.filter(
+    (d) => d.status === DOC_STATUS.FIRMADO
+  ).length;
+  const rechazados = docs.filter(
+    (d) => d.status === DOC_STATUS.RECHAZADO
+  ).length;
+  const totalFiltrado = docsFiltrados.length;
 
   // Paginación calculada a partir del filtro
   const totalPaginas = Math.ceil(docsFiltrados.length / pageSize);
@@ -476,6 +672,8 @@ const totalFiltrado = docsFiltrados.length;
   /* ===============================
      VISTA DASHBOARD (LIST + UPLOAD)
      =============================== */
+     console.log('DEBUG SIMPLE');
+     
   return (
     <div className="dashboard-layout">
       <Sidebar
@@ -504,81 +702,148 @@ const totalFiltrado = docsFiltrados.length;
           onSync={cargarDocs}
         />
 
+        {console.log('DEBUG ESTADO:', {
+          view,
+          loadingDocs,
+          errorDocs,
+          docsPaginadosLength: docsPaginados.length,
+          })}
+
         {view === 'list' ? (
           <div>
             {loadingDocs ? (
               // LOADER
-              <div style={{ padding: 40, textAlign: 'center', color: '#64748b' }}>
+              <div
+                style={{
+                  padding: 40,
+                  textAlign: 'center',
+                  color: '#64748b',
+                }}
+              >
                 <div style={{ marginBottom: 12, fontWeight: 600 }}>
                   Cargando tu bandeja de documentos…
                 </div>
-                <p style={{ fontSize: '0.9rem', color: '#9ca3af', marginTop: 4 }}>
+                <p
+                  style={{
+                    fontSize: '0.9rem',
+                    color: '#9ca3af',
+                    marginTop: 4,
+                  }}
+                >
                   Esto puede tardar unos segundos.
                 </p>
                 <div className="spinner" />
               </div>
             ) : errorDocs ? (
               // ERROR BONITO
-              <div style={{ padding: 40, textAlign: 'center', color: '#b91c1c' }}>
+              <div
+                style={{
+                  padding: 40,
+                  textAlign: 'center',
+                  color: '#b91c1c',
+                }}
+              >
                 <p style={{ marginBottom: 8, fontWeight: 700 }}>
                   Ocurrió un problema al cargar la bandeja.
                 </p>
-                <p style={{ marginBottom: 16, fontSize: '0.9rem' }}>
-                  {errorDocs || 'Por favor, revisa tu conexión e inténtalo nuevamente.'}
+                <p
+                  style={{ marginBottom: 16, fontSize: '0.9rem' }}
+                >
+                  {errorDocs ||
+                    'Por favor, revisa tu conexión e inténtalo nuevamente.'}
                 </p>
-                <button className="btn-main btn-primary" onClick={cargarDocs}>
+                <button
+                  className="btn-main btn-primary"
+                  onClick={cargarDocs}
+                >
                   Reintentar carga
                 </button>
               </div>
             ) : docsPaginados.length === 0 ? (
               // ESTADO VACÍO
-              <div style={{ padding: 40, textAlign: 'center', color: '#64748b' }}>
+              <div
+                style={{
+                  padding: 40,
+                  textAlign: 'center',
+                  color: '#64748b',
+                }}
+              >
                 <h3 style={{ marginBottom: 8 }}>
                   No encontramos documentos para mostrar.
                 </h3>
-                <p style={{ marginBottom: 4, fontSize: '0.9rem', color: '#94a3b8' }}>
-                  Puede que no existan documentos con los filtros actuales.
+                <p
+                  style={{
+                    marginBottom: 4,
+                    fontSize: '0.9rem',
+                    color: '#94a3b8',
+                  }}
+                >
+                  Puede que no existan documentos con los filtros
+                  actuales.
                 </p>
-                <p style={{ marginBottom: 16, fontSize: '0.9rem', color: '#94a3b8' }}>
-                  Ajusta los filtros o crea un nuevo flujo de firma digital.
+                <p
+                  style={{
+                    marginBottom: 16,
+                    fontSize: '0.9rem',
+                    color: '#94a3b8',
+                  }}
+                >
+                  Ajusta los filtros o crea un nuevo flujo de firma
+                  digital.
                 </p>
                 <button
                   className="btn-main"
                   onClick={() => setView('upload')}
-                  style={{ background: '#e2e8f0', color: '#1e293b' }}
+                  style={{
+                    background: '#e2e8f0',
+                    color: '#1e293b',
+                  }}
                 >
                   Crear nuevo documento
                 </button>
               </div>
             ) : (
               <>
+                <div style={{ marginBottom: 12, textAlign: 'right' }}>
+                  <button
+                    type="button"
+                    className="btn-main"
+                    onClick={borrarTodosPdf}
+                    style={{ background: '#fecaca', color: '#b91c1c' }}
+                  >
+                    Borrar TODOS los documentos
+                  </button>
+                </div>
+              
                 {/* Tabla de documentos */}
-                <table className="doc-table">
-                  <thead>
-                    <tr>
-                      <th>N° de contrato</th>
-                      <th>Título del Documento</th>
-                      <th>Fecha de creación</th>
-                      <th style={{ textAlign: 'center' }}>
-                        Estado Actual
-                      </th>
-                      <th>Firmante Final</th>
-                      <th style={{ textAlign: 'center' }}>Acciones</th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {docsPaginados.map((d) => (
-                      <DocumentRow
-                        key={d.id}
-                        doc={d}
-                        onOpenDetail={(doc) => {
-                          setSelectedDoc(doc);
-                          setView('detail');
-                        }}
-                      />
-                    ))}
-                  </tbody>
-                </table>
+                <div className="table-wrapper">
+                  <table className="doc-table">
+                    <thead>
+                      <tr>
+                        <th>N° de contrato</th>
+                        <th>Título del Documento</th>
+                        <th>Fecha de creación</th>
+                        <th style={{ textAlign: 'center' }}>
+                          Estado Actual
+                        </th>
+                        <th>Firmante Final</th>
+                        <th style={{ textAlign: 'center' }}>Acciones</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {docsPaginados.map((d) => (
+                        <DocumentRow
+                          key={d.id}
+                          doc={d}
+                          onOpenDetail={(doc) => {
+                            setSelectedDoc(doc);
+                            setView('detail');
+                          }}
+                        />
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
 
                 {/* Paginación */}
                 <div
@@ -656,28 +921,101 @@ const totalFiltrado = docsFiltrados.length;
                 const formData = new FormData(form);
 
                 const title = form.title.value.trim();
-                const firmanteNombre = form.firmante_nombre.value.trim();
-                const firmanteEmail = form.firmante_email.value.trim();
-                const destinatarioNombre = form.destinatario_nombre.value.trim();
-                const destinatarioEmail = form.destinatario_email.value.trim();
+
+                // Campos del firmante
+                const firmanteNombre1 =
+                  form.firmante_nombre1.value.trim();
+                const firmanteNombre2 =
+                  (form.firmante_nombre2?.value || '').trim();
+                const firmanteApellido1 =
+                  form.firmante_apellido1.value.trim();
+                const firmanteApellido2 =
+                  (form.firmante_apellido2?.value || '').trim();
+                const firmanteEmail =
+                  form.firmante_email.value.trim();
+                const firmanteRun =
+                  form.firmante_run.value.trim();
+                const firmanteMovil =
+                  form.firmante_movil.value.trim();
+
+                // Campos del destinatario / empresa
+                const destinatarioNombre =
+                  form.destinatario_nombre?.value.trim() || '';
+                const destinatarioEmail =
+                  form.destinatario_email.value.trim();
+                const empresaRut =
+                  form.empresa_rut.value.trim();
+
                 const file = form.file.files[0];
 
                 const newErrors = {};
 
-                if (!title) newErrors.title = 'Este campo es obligatorio.';
-                if (!file) newErrors.file = 'Adjunta un archivo PDF.';
+                if (!title)
+                  newErrors.title = 'Este campo es obligatorio.';
+                if (!file)
+                  newErrors.file = 'Adjunta un archivo PDF.';
 
-                if (!firmanteNombre) newErrors.firmante_nombre = 'Este campo es obligatorio.';
-                if (!firmanteEmail) newErrors.firmante_email = 'Ingresa un correo válido.';
-                if (!destinatarioNombre) newErrors.destinatario_nombre = 'Este campo es obligatorio.';
-                if (!destinatarioEmail) newErrors.destinatario_email = 'Ingresa un correo válido.';
+                // Validación mínimos del firmante
+                if (!firmanteNombre1)
+                  newErrors.firmante_nombre1 =
+                    'Este campo es obligatorio.';
+                if (!firmanteApellido1)
+                  newErrors.firmante_apellido1 =
+                    'Este campo es obligatorio.';
+                if (!firmanteEmail)
+                  newErrors.firmante_email =
+                    'Ingresa un correo válido.';
+                if (!firmanteRun)
+                  newErrors.firmante_run =
+                    'RUN / RUT es obligatorio.';
+                if (!firmanteMovil)
+                  newErrors.firmante_movil =
+                    'El teléfono es obligatorio.';
+
+                // Validación mínimos del destinatario / empresa
+                if (!destinatarioNombre)
+                  newErrors.destinatario_nombre =
+                    'Este campo es obligatorio.';
+                if (!destinatarioEmail)
+                  newErrors.destinatario_email =
+                    'Ingresa un correo válido.';
+                if (!empresaRut)
+                  newErrors.empresa_rut =
+                    'El RUT de la empresa es obligatorio.';
 
                 if (Object.keys(newErrors).length > 0) {
                   setFormErrors(newErrors);
                   return;
                 }
 
-                formData.append('requiresVisado', showVisador ? 'true' : 'false');
+                // Opcional: construir nombres completos y agregarlos al formData
+                const firmanteNombreCompleto = [
+                  firmanteNombre1,
+                  firmanteNombre2,
+                  firmanteApellido1,
+                  firmanteApellido2,
+                ]
+                  .filter(Boolean)
+                  .join(' ');
+
+                formData.append(
+                  'firmante_nombre_completo',
+                  firmanteNombreCompleto
+                );
+                formData.append('firmante_run', firmanteRun);
+                formData.append(
+                  'firmante_movil',
+                  firmanteMovil
+                );
+                formData.append(
+                  'empresa_rut',
+                  empresaRut
+                );
+
+                formData.append(
+                  'requiresVisado',
+                  showVisador ? 'true' : 'false'
+                );
 
                 try {
                   const res = await fetch(
@@ -700,8 +1038,8 @@ const totalFiltrado = docsFiltrados.length;
                 } catch (err) {
                   alert(err.message);
                 }
-             }}
-          >
+              }}
+            >
               <div
                 style={{
                   display: 'grid',
@@ -728,7 +1066,13 @@ const totalFiltrado = docsFiltrados.length;
                     placeholder="Ej: Contrato de Arriendo"
                   />
                   {formErrors.title && (
-                    <p style={{ color: '#b91c1c', fontSize: '0.8rem', marginTop: 4 }}>
+                    <p
+                      style={{
+                        color: '#b91c1c',
+                        fontSize: '0.8rem',
+                        marginTop: 4,
+                      }}
+                    >
                       {formErrors.title}
                     </p>
                   )}
@@ -750,7 +1094,18 @@ const totalFiltrado = docsFiltrados.length;
                     accept=".pdf"
                     required
                     style={{ fontSize: '0.85rem' }}
-                  /> 
+                  />
+                  {formErrors.file && (
+                    <p
+                      style={{
+                        color: '#b91c1c',
+                        fontSize: '0.8rem',
+                        marginTop: 4,
+                      }}
+                    >
+                      {formErrors.file}
+                    </p>
+                  )}
                 </div>
               </div>
 
@@ -846,20 +1201,57 @@ const totalFiltrado = docsFiltrados.length;
                   gap: 24,
                 }}
               >
+                {/* FIRMANTE FINAL */}
                 <div className="card-mini" style={{ marginTop: 0 }}>
                   <h4>✍️ Firmante Final (Responsable)</h4>
                   <div className="card-content">
                     <input
-                      name="firmante_nombre"
+                      name="firmante_nombre1"
                       className="input-field"
                       required
-                      placeholder="Nombre completo *"
+                      placeholder="Primer nombre *"
                     />
-                    {formErrors.firmante_nombre && (
-                      <p style={{ color: '#b91c1c', fontSize: '0.8rem', marginTop: 4 }}>
-                        {formErrors.firmante_nombre}
+                    {formErrors.firmante_nombre1 && (
+                      <p
+                        style={{
+                          color: '#b91c1c',
+                          fontSize: '0.8rem',
+                          marginTop: 4,
+                        }}
+                      >
+                        {formErrors.firmante_nombre1}
                       </p>
                     )}
+
+                    <input
+                      name="firmante_nombre2"
+                      className="input-field"
+                      placeholder="Segundo nombre"
+                    />
+
+                    <input
+                      name="firmante_apellido1"
+                      className="input-field"
+                      required
+                      placeholder="Primer apellido *"
+                    />
+                    {formErrors.firmante_apellido1 && (
+                      <p
+                        style={{
+                          color: '#b91c1c',
+                          fontSize: '0.8rem',
+                          marginTop: 4,
+                        }}
+                      >
+                        {formErrors.firmante_apellido1}
+                      </p>
+                    )}
+
+                    <input
+                      name="firmante_apellido2"
+                      className="input-field"
+                      placeholder="Segundo apellido"
+                    />
 
                     <input
                       name="firmante_email"
@@ -869,13 +1261,56 @@ const totalFiltrado = docsFiltrados.length;
                       placeholder="Email corporativo *"
                     />
                     {formErrors.firmante_email && (
-                      <p style={{ color: '#b91c1c', fontSize: '0.8rem', marginTop: 4 }}>
+                      <p
+                        style={{
+                          color: '#b91c1c',
+                          fontSize: '0.8rem',
+                          marginTop: 4,
+                        }}
+                      >
                         {formErrors.firmante_email}
-                       </p>
+                      </p>
+                    )}
+
+                    <input
+                      name="firmante_run"
+                      className="input-field"
+                      required
+                      placeholder="RUN / RUT del representante *"
+                    />
+                    {formErrors.firmante_run && (
+                      <p
+                        style={{
+                          color: '#b91c1c',
+                          fontSize: '0.8rem',
+                          marginTop: 4,
+                        }}
+                      >
+                        {formErrors.firmante_run}
+                      </p>
+                    )}
+
+                    <input
+                      name="firmante_movil"
+                      className="input-field"
+                      required
+                      placeholder="Teléfono móvil del representante *"
+                    />
+                    {formErrors.firmante_movil && (
+                      <p
+                        style={{
+                          color: '#b91c1c',
+                          fontSize: '0.8rem',
+                          marginTop: 4,
+                        }}
+                      >
+                        {formErrors.firmante_movil}
+                      </p>
                     )}
                   </div>
                 </div>
 
+                {/* DESTINATARIO / EMPRESA */}
                 <div className="card-mini" style={{ marginTop: 0 }}>
                   <h4>🏢 Destinatario / Empresa</h4>
                   <div className="card-content">
@@ -886,8 +1321,32 @@ const totalFiltrado = docsFiltrados.length;
                       placeholder="Razón Social *"
                     />
                     {formErrors.destinatario_nombre && (
-                      <p style={{ color: '#b91c1c', fontSize: '0.8rem', marginTop: 4 }}>
+                      <p
+                        style={{
+                          color: '#b91c1c',
+                          fontSize: '0.8rem',
+                          marginTop: 4,
+                        }}
+                      >
                         {formErrors.destinatario_nombre}
+                      </p>
+                    )}
+
+                    <input
+                      name="empresa_rut"
+                      className="input-field"
+                      required
+                      placeholder="RUT de la empresa *"
+                    />
+                    {formErrors.empresa_rut && (
+                      <p
+                        style={{
+                          color: '#b91c1c',
+                          fontSize: '0.8rem',
+                          marginTop: 4,
+                        }}
+                      >
+                        {formErrors.empresa_rut}
                       </p>
                     )}
 
@@ -899,7 +1358,13 @@ const totalFiltrado = docsFiltrados.length;
                       placeholder="Email de contacto *"
                     />
                     {formErrors.destinatario_email && (
-                      <p style={{ color: '#b91c1c', fontSize: '0.8rem', marginTop: 4 }}>
+                      <p
+                        style={{
+                          color: '#b91c1c',
+                          fontSize: '0.8rem',
+                          marginTop: 4,
+                        }}
+                      >
                         {formErrors.destinatario_email}
                       </p>
                     )}
@@ -941,8 +1406,7 @@ const totalFiltrado = docsFiltrados.length;
                     className="card-content"
                     style={{
                       display: 'grid',
-                      gridTemplateColumns:
-                        '1fr 1fr 1fr',
+                      gridTemplateColumns: '1fr 1fr 1fr',
                       gap: 20,
                     }}
                   >
