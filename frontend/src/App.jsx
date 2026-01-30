@@ -1291,7 +1291,7 @@ function App() {
                       required
                       placeholder="RUN / RUT del representante *"
                       value={firmanteRunValue}
-                      onChange={(e) => setFirmanteRunValue(e.target.value.replace(/[^0-9kK]/g, ''))}
+                     onChange={(e) => setFirmanteRunValue(formatRun(e.target.value))}
                     />
                     {formErrors.firmante_run && (
                       <p
