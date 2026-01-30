@@ -18,6 +18,8 @@ function formatRun(value) {
   if (!clean) return '';
   const MAX_LEN = 10;
   if (clean.length > MAX_LEN) clean = clean.slice(0, MAX_LEN);
+  if (clean.length < 2) return clean;
+  
   const body = clean.slice(0, -1);
   const dv = clean.slice(-1);
   const formattedBody = body.replace(/\B(?=(\d{3})+(?!\d))/g, '.');
