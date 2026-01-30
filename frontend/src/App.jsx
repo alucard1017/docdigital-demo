@@ -932,7 +932,7 @@ function App() {
                   (form.firmante_apellido2?.value || '').trim();
                 const firmanteEmail =
                   form.firmante_email.value.trim();
-                const firmanteRun = firmanteRunValue;
+                const firmanteRun = form.firmante_run.value.trim();
                 const firmanteMovil =
                   form.firmante_movil.value.trim();
 
@@ -941,7 +941,7 @@ function App() {
                   form.destinatario_nombre?.value.trim() || '';
                 const destinatarioEmail =
                   form.destinatario_email.value.trim();
-                const empresaRut = empresaRutValue;
+                const empresaRut = form.empresa_rut.value.trim();
 
                 const file = form.file.files[0];
 
@@ -983,11 +983,11 @@ function App() {
                 if (!destinatarioEmail)
                   newErrors.destinatario_email =
                     'Ingresa un correo válido.';
-                if (!empresaRut)
+                if (!empresaRutValue)
                   newErrors.empresa_rut = 'El RUT de la empresa es obligatorio.';
                 else {
                   // Validar formato del RUT empresa
-                  const cleanRut = empresaRut.replace(/[^0-9kK]/g, '');
+                  const cleanRut = empresaRutValue.replace(/[^0-9kK]/g, '');
                   if (cleanRut.length < 8 || cleanRut.length > 10) {
                     newErrors.empresa_rut = 'RUT inválido (ej: 12.345.678-9)';
                   }
