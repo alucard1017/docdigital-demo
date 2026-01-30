@@ -50,18 +50,24 @@ export function DetailView({
     return () => clearInterval(interval);
   }, [selectedDoc]);
 
-  // ✅ Función para descargar PDF
+  // ✅ Función para descargar PDF a través del backend
   const handleDownloadPDF = async () => {
     try {
-      if (!pdfUrl) {
-        alert("No hay URL del PDF disponible");
+      if (!selectedDoc?.id) {
+        alert("No hay documento");
         return;
       }
 
-      // Descargar desde la URL firmada de S3
-      const response = await fetch(pdfUrl);
+      const token = localStorage.getItem('token');
+      const response = await fetch(
+        `${API_URL}/api/docs/${selectedDoc.id}/download`,
+        {
+          headers: { Authorization: `Bearer ${token}` },
+        }
+      );
+
       if (!response.ok) {
-        throw new Error("Error descargando el archivo");
+        throw new Error('Error descargando archivo');
       }
 
       const blob = await response.blob();
@@ -199,25 +205,23 @@ export function DetailView({
               </span>
 
               <div style={{ display: "flex", gap: 12 }}>
-                {pdfUrl && (
-                  <button
-                    onClick={handleDownloadPDF}
-                    className="btn-main"
-                    style={{
-                      background: "#10b981",
-                      color: "#ffffff",
-                      textDecoration: "none",
-                      fontSize: "0.85rem",
-                      padding: "8px 16px",
-                      border: "none",
-                      borderRadius: "6px",
-                      cursor: "pointer",
-                      fontWeight: 600,
-                    }}
-                  >
-                    📥 Descargar PDF
-                  </button>
-                )}
+                <button
+                  onClick={handleDownloadPDF}
+                  className="btn-main"
+                  style={{
+                    background: "#10b981",
+                    color: "#ffffff",
+                    textDecoration: "none",
+                    fontSize: "0.85rem",
+                    padding: "8px 16px",
+                    border: "none",
+                    borderRadius: "6px",
+                    cursor: "pointer",
+                    fontWeight: 600,
+                  }}
+                >
+                  📥 Descargar PDF
+                </button>
 
                 {pdfUrl && (
                   <a
