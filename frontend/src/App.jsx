@@ -27,6 +27,19 @@ function formatRun(value) {
   return formattedBody + '-' + dv;
 }
 
+function formatRunDoc(value) {
+  let clean = value.replace(/[^0-9kK]/g, '');
+  if (clean.length > 10) clean = clean.slice(0, 10);
+  if (clean.length === 0) return '';
+
+  const body = clean.slice(0, -1);
+  const dv = clean.slice(-1);
+
+  if (!body) return dv;
+
+  return body.replace(/\B(?=(\d{3})+(?!\d))/g, '.') + '-' + dv;
+}
+
 function App() {
   /* ===============================
      ESTADOS DE LA APLICACIÓN
@@ -924,6 +937,9 @@ function App() {
                 const firmanteRun = firmanteRunValue;
                 const empresaRut = empresaRutValue;
 
+                const firmanteRunClean = firmanteRunValue.replace(/[^0-9kK]/g, '');
+                const empresaRutClean = empresaRutValue.replace(/[^0-9kK]/g, '');
+
                 const title = form.title.value.trim();
                 const firmanteEmail = form.firmante_email.value.trim();
                 // Campos del firmante
@@ -1291,7 +1307,7 @@ function App() {
                       required
                       placeholder="RUN / RUT del representante *"
                       value={firmanteRunValue}
-                     onChange={(e) => setFirmanteRunValue(formatRun(e.target.value))}
+                     onChange={(e) => setFirmanteRunValue(formatRunDoc(e.target.value))}
                     />
                     {formErrors.firmante_run && (
                       <p
@@ -1353,7 +1369,7 @@ function App() {
                       required
                       placeholder="RUT de la empresa *"
                       value={empresaRutValue}
-                      onChange={(e) => setEmpresaRutValue(e.target.value.replace(/[^0-9kK]/g, ''))}
+                      onChange={(e) => setEmpresaRutValue(formatRunDoc(e.target.value))}
                     />
                     {formErrors.empresa_rut && (
                       <p
