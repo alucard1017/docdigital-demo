@@ -7,7 +7,7 @@ function isValidEmail(email) {
 
 // Valida RUN chileno (simplificado)
 function isValidRun(run) {
-  if (!run) return false;
+  if (!run || typeof run !== 'string') return false;
   const clean = run.replace(/[^0-9kK]/g, '');
   return clean.length >= 8 && clean.length <= 10;
 }
