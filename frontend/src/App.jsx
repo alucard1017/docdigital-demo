@@ -19,7 +19,7 @@ function formatRun(value) {
   const MAX_LEN = 10;
   if (clean.length > MAX_LEN) clean = clean.slice(0, MAX_LEN);
   if (clean.length < 2) return clean;
-  
+
   const body = clean.slice(0, -1);
   const dv = clean.slice(-1);
   const formattedBody = body.replace(/\B(?=(\d{3})+(?!\d))/g, '.');
@@ -921,8 +921,10 @@ function App() {
                 const form = e.target;
                 const formData = new FormData(form);
 
-                const title = form.title.value.trim();
+                const firmanteRun = firmanteRunValue;
+                const empresaRut = empresaRutValue;
 
+                const title = form.title.value.trim();
                 // Campos del firmante
                 const firmanteNombre1 =
                   form.firmante_nombre1.value.trim();
@@ -932,18 +934,14 @@ function App() {
                   form.firmante_apellido1.value.trim();
                 const firmanteApellido2 =
                   (form.firmante_apellido2?.value || '').trim();
-                const firmanteEmail =
-                  form.firmante_email.value.trim();
-                const firmanteRun = form.firmante_run.value.trim();
                 const firmanteMovil =
-                  form.firmante_movil.value.trim();
+                  form.firmante_movil.value.trim(); 
 
                 // Campos del destinatario / empresa
                 const destinatarioNombre =
                   form.destinatario_nombre?.value.trim() || '';
                 const destinatarioEmail =
                   form.destinatario_email.value.trim();
-                const empresaRut = form.empresa_rut.value.trim();
 
                 const file = form.file.files[0];
 
@@ -1291,9 +1289,8 @@ function App() {
                       className="input-field"
                       required
                       placeholder="RUN / RUT del representante *"
-                      onChange={(e) => {
-                        e.target.value = formatRun(e.target.value);
-                      }}  
+                      value={firmanteRunValue}
+                      onChange={(e) => setFirmanteRunValue(e.target.value.replace(/[^0-9kK]/g, ''))}
                     />
                     {formErrors.firmante_run && (
                       <p
@@ -1355,7 +1352,7 @@ function App() {
                       required
                       placeholder="RUT de la empresa *"
                       value={empresaRutValue}
-                      onChange={(e) => setEmpresaRutValue(formatRun(e.target.value))}
+                      onChange={(e) => setEmpresaRutValue(e.target.value.replace(/[^0-9kK]/g, ''))}
                     />
                     {formErrors.empresa_rut && (
                       <p
