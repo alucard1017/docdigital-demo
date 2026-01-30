@@ -1043,6 +1043,8 @@ function App() {
                   form.reset();
                   setShowVisador(false);
                   setExtraSigners([]);
+                  setFirmanteRunValue('');
+                  setEmpresaRutValue('');
                   setView('list');
                   cargarDocs();
                 } catch (err) {
@@ -1350,6 +1352,8 @@ function App() {
                       className="input-field"
                       required
                       placeholder="RUT de la empresa *"
+                      value={empresaRutValue}
+                      onChange={(e) => setEmpresaRutValue(formatRun(e.target.value))}
                     />
                     {formErrors.empresa_rut && (
                       <p
