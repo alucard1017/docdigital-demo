@@ -50,6 +50,35 @@ export function DetailView({
     return () => clearInterval(interval);
   }, [selectedDoc]);
 
+  // ✅ Función para descargar PDF
+  const handleDownloadPDF = async () => {
+    try {
+      if (!pdfUrl) {
+        alert("No hay URL del PDF disponible");
+        return;
+      }
+
+      // Descargar desde la URL firmada de S3
+      const response = await fetch(pdfUrl);
+      if (!response.ok) {
+        throw new Error("Error descargando el archivo");
+      }
+
+      const blob = await response.blob();
+      const url = window.URL.createObjectURL(blob);
+      const link = document.createElement('a');
+      link.href = url;
+      link.download = `${selectedDoc.title || 'documento'}.pdf`;
+      document.body.appendChild(link);
+      link.click();
+      document.body.removeChild(link);
+      window.URL.revokeObjectURL(url);
+    } catch (err) {
+      console.error("Error descargando PDF:", err);
+      alert("❌ Error al descargar el PDF");
+    }
+  };
+
   if (!selectedDoc) return null;
 
   const safeEvents = Array.isArray(events) ? events : [];
@@ -155,35 +184,61 @@ export function DetailView({
                 </div>
               )}
 
-            {/* Botón descargar */}
+            {/* Botones Ver / Descargar */}
             <div
               style={{
                 display: "flex",
                 justifyContent: "space-between",
                 alignItems: "center",
                 marginBottom: 8,
+                gap: 12,
               }}
             >
               <span style={{ fontSize: "0.85rem", color: "#64748b" }}>
                 Visualización del documento original
               </span>
 
-              {pdfUrl && (
-                <a
-                  href={pdfUrl}
-                  download
-                  className="btn-main"
-                  style={{
-                    background: "#e5e7eb",
-                    color: "#111827",
-                    textDecoration: "none",
-                    fontSize: "0.85rem",
-                    padding: "6px 12px",
-                  }}
-                >
-                  Descargar PDF
-                </a>
-              )}
+              <div style={{ display: "flex", gap: 12 }}>
+                {pdfUrl && (
+                  <button
+                    onClick={handleDownloadPDF}
+                    className="btn-main"
+                    style={{
+                      background: "#10b981",
+                      color: "#ffffff",
+                      textDecoration: "none",
+                      fontSize: "0.85rem",
+                      padding: "8px 16px",
+                      border: "none",
+                      borderRadius: "6px",
+                      cursor: "pointer",
+                      fontWeight: 600,
+                    }}
+                  >
+                    📥 Descargar PDF
+                  </button>
+                )}
+
+                {pdfUrl && (
+                  <a
+                    href={pdfUrl}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="btn-main"
+                    style={{
+                      background: "#e5e7eb",
+                      color: "#111827",
+                      textDecoration: "none",
+                      fontSize: "0.85rem",
+                      padding: "8px 16px",
+                      borderRadius: "6px",
+                      fontWeight: 600,
+                    }}
+                  >
+                    👁️ Ver en nueva pestaña
+                  </a>
+                )}
+              </div>
             </div>
 
             {/* Visor PDF */}
