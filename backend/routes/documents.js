@@ -403,6 +403,58 @@ router.post('/:id/visar', requireAuth, async (req, res) => {
   }
 });
 
+   /* ================================
+ * POST: Rechazar documento
+ * ================================ */
+router.post('/:id/rechazar', requireAuth, async (req, res) => {
+  try {
+    const id = req.params.id;
+    const { motivo } = req.body;
+    
+    const current = await db.query(
+      `SELECT * FROM documents WHERE id = $1 AND owner_id = $2`,
+      [id, req.user.id]
+    );
+    
+    if (current.rowCount === 0) {
+      return res.status(404).json({ message: 'No encontrado' });
+    }
+    
+    const docActual = current.rows[0];
+    
+    if (docActual.status === 'FIRMADO') {
+      return res.status(400).json({ message: 'Ya firmado, no se puede rechazar' });
+    }
+    
+    if (docActual.status === 'RECHAZADO') {
+      return res.status(400).json({ message: 'Ya rechazado' });
+    }
+    
+    const result = await db.query(
+      `UPDATE documents SET status = $1, reject_reason = $2, updated_at = NOW() WHERE id = $3 AND owner_id = $4 RETURNING *`,
+      ['RECHAZADO', motivo || 'Sin especificar', id, req.user.id]
+    );
+    
+    const doc = result.rows[0];
+    
+    await db.query(
+      `INSERT INTO document_events (document_id, actor, action, details, from_status, to_status) 
+       VALUES ($1, $2, $3, $4, $5, $6)`,
+      [doc.id, req.user.name || 'Sistema', 'RECHAZADO', `Documento rechazado: ${motivo || 'Sin especificar'}`, docActual.status, 'RECHAZADO']
+    );
+    
+    return res.json({
+      ...doc,
+      file_url: doc.file_path,
+      message: 'Documento rechazado exitosamente'
+    });
+  } catch (err) {
+    console.error('❌ Error rechazando documento:', err);
+    return res.status(500).json({ message: 'Error interno del servidor' });
+  }
+});
+
+
 /* ================================
    EXPORTAR ROUTER
    ================================ */
