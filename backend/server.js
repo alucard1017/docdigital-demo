@@ -4,6 +4,7 @@ const cors = require('cors');
 const path = require('path');
 const fs = require('fs');
 const rateLimit = require('express-rate-limit');
+const https = require('https');
 
 console.log('=====================================');
 console.log('🚀 INICIANDO SERVER.JS');
@@ -38,34 +39,30 @@ console.log('✓ Variables de entorno validadas');
    RATE LIMITING
    ================================ */
 const generalLimiter = rateLimit({
-  windowMs: 15 * 60 * 1000, // 15 minutos
-  max: 100,                 // máx 100 requests por IP
+  windowMs: 15 * 60 * 1000,
+  max: 100,
   message: 'Demasiadas solicitudes, intenta después'
 });
 
 const loginLimiter = rateLimit({
-  windowMs: 15 * 60 * 1000, // 15 minutos
-  max: 5,                   // máx 5 intentos de login
+  windowMs: 15 * 60 * 1000,
+  max: 5,
   message: 'Demasiados intentos de login, intenta después'
 });
 
-// Aplicar rate limit global
 app.use(generalLimiter);
 
 /* ================================
    MIDDLEWARES
    ================================ */
-
-// Lista de orígenes permitidos
 const allowedOrigins = [
-  process.env.FRONTEND_URL,        // producción (Render)
-  'http://localhost:5173',         // Vite local
-  'http://localhost:3000'          // otro puerto local
+  process.env.FRONTEND_URL,
+  'http://localhost:5173',
+  'http://localhost:3000'
 ].filter(Boolean);
 
 app.use(cors({
   origin: function (origin, callback) {
-    // Permitir herramientas sin origin (Postman, curl, etc.)
     if (!origin) return callback(null, true);
     if (allowedOrigins.includes(origin)) {
       return callback(null, true);
@@ -79,7 +76,6 @@ app.use(cors({
 app.use(express.json({ limit: '25mb' }));
 app.use(express.urlencoded({ limit: '25mb', extended: true }));
 
-// Servir archivos estáticos locales (si existen)
 const uploadsDir = path.join(__dirname, 'uploads');
 if (!fs.existsSync(uploadsDir)) {
   fs.mkdirSync(uploadsDir, { recursive: true });
@@ -92,13 +88,7 @@ console.log('✓ Directorio de uploads verificado');
 
 /* ================================
    RUTAS DE SALUD / PING
-   (sin autenticación)
    ================================ */
-
-/**
- * GET /api/health
- * Ruta para despertar el backend en Render
- */
 app.get('/api/health', (req, res) => {
   res.json({
     ok: true,
@@ -109,10 +99,6 @@ app.get('/api/health', (req, res) => {
 });
 console.log('✓ Ruta GET /api/health registrada');
 
-/**
- * GET /
- * Ruta raíz simple
- */
 app.get('/', (req, res) => {
   res.json({
     message: 'API de DocDigital funcionando',
@@ -137,20 +123,57 @@ app.use('/api/docs', docRoutes);
 console.log('✓ Rutas /api/docs registradas');
 
 /* ================================
-   RUTA S3 / DESCARGAS
+   DESCARGA DE DOCUMENTOS (PDF)
    ================================ */
-
 /**
- * GET /api/s3/download/:fileKey
- * Descargar archivo desde S3 (con URL firmada)
+ * GET /api/docs/:id/download
+ * Descargar PDF del documento (el backend lo trae de S3 y lo envía)
  */
+app.get('/api/docs/:id/download', requireAuth, async (req, res) => {
+  try {
+    const db = require('./db');
+    const { getSignedUrl } = require('./services/s3');
+    
+    const docId = req.params.id;
+    
+    // Verificar que el documento existe y pertenece al usuario
+    const docRes = await db.query(
+      `SELECT file_path, title FROM documents WHERE id = $1 AND owner_id = $2`,
+      [docId, req.user.id]
+    );
+    
+    if (docRes.rows.length === 0) {
+      return res.status(404).json({ message: 'Documento no encontrado' });
+    }
+    
+    const doc = docRes.rows[0];
+    const signedUrl = await getSignedUrl(doc.file_path, 3600);
+    
+    // Descargar desde S3 y enviar al navegador
+    https.get(signedUrl, (s3Res) => {
+      res.setHeader('Content-Type', 'application/pdf');
+      res.setHeader('Content-Disposition', `attachment; filename="${doc.title || 'documento'}.pdf"`);
+      s3Res.pipe(res);
+    }).on('error', (err) => {
+      console.error('❌ Error descargando de S3:', err);
+      res.status(500).json({ message: 'Error descargando archivo' });
+    });
+  } catch (error) {
+    console.error('❌ Error en descarga:', error);
+    res.status(500).json({ message: 'Error interno' });
+  }
+});
+console.log('✓ Ruta GET /api/docs/:id/download registrada');
+
+/* ================================
+   RUTA S3 / URLs FIRMADAS
+   ================================ */
 app.get('/api/s3/download/:fileKey', requireAuth, async (req, res) => {
   try {
     const { getSignedUrl } = require('./services/s3');
     const db = require('./db');
     const fileKey = req.params.fileKey;
 
-    // Validar que el usuario tenga acceso
     const docCheck = await db.query(
       `SELECT id FROM documents WHERE file_path LIKE $1 AND owner_id = $2 LIMIT 1`,
       [`%${fileKey}%`, req.user.id]
@@ -172,11 +195,6 @@ console.log('✓ Ruta GET /api/s3/download/:fileKey registrada');
 /* ================================
    RUTAS DE PRUEBA / ADMIN
    ================================ */
-
-/**
- * GET /api/admin/ping
- * Ruta solo para admins (prueba de autenticación)
- */
 app.get('/api/admin/ping', requireAuth, requireRole('admin'), (req, res) => {
   return res.json({
     message: 'Solo admin puede ver esto',
@@ -184,12 +202,8 @@ app.get('/api/admin/ping', requireAuth, requireRole('admin'), (req, res) => {
     timestamp: new Date().toISOString()
   });
 });
-console.log('✓ Ruta GET /api/admin/ping (solo admin) registrada');
+console.log('✓ Ruta GET /api/admin/ping registrada');
 
-/**
- * GET /api/test-auth
- * Ruta para probar tokens de autenticación
- */
 app.get('/api/test-auth', (req, res) => {
   console.log('📍 GET /api/test-auth llamado');
   const header = req.headers.authorization || '';
@@ -203,8 +217,7 @@ app.get('/api/test-auth', (req, res) => {
 console.log('✓ Ruta GET /api/test-auth registrada');
 
 /* ================================
-   RUTA DEMO RECORDATORIOS
-   (protegida, solo admin)
+   RECORDATORIOS
    ================================ */
 app.post('/api/recordatorios/pendientes', requireAuth, requireRole('admin'), async (req, res) => {
   try {
@@ -256,7 +269,7 @@ app.post('/api/recordatorios/pendientes', requireAuth, requireRole('admin'), asy
 console.log('✓ Ruta POST /api/recordatorios/pendientes registrada');
 
 /* ================================
-   ESTADÍSTICAS (OPCIONAL)
+   ESTADÍSTICAS
    ================================ */
 app.get('/api/stats', requireAuth, async (req, res) => {
   try {
@@ -327,6 +340,7 @@ const server = app.listen(PORT, () => {
   console.log('   POST /api/docs/:id/firmar');
   console.log('   POST /api/docs/:id/visar');
   console.log('   POST /api/docs/:id/rechazar');
+  console.log('   GET  /api/docs/:id/download (NUEVO)');
   console.log('   GET  /api/s3/download/:fileKey');
   console.log('   POST /api/recordatorios/pendientes');
   console.log('=====================================');
@@ -335,9 +349,6 @@ const server = app.listen(PORT, () => {
   console.log('=====================================');
 });
 
-/* ================================
-   MANEJO DE ERRORES NO CAPTURADOS
-   ================================ */
 process.on('unhandledRejection', (reason, promise) => {
   console.error('❌ Unhandled Rejection at:', promise, 'reason:', reason);
 });
