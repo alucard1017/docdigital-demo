@@ -5,18 +5,21 @@ import { API_BASE_URL } from "../constants";
 
 const API_URL = API_BASE_URL;
 
-export function DocumentRow({ doc, onOpenDetail }) {
-  const handleVerPdf = () => {
-    if (!doc.file_url) {
-      alert("No se encontró la URL del contrato para este documento.");
-      return;
+export function DocumentRow({ doc, onOpenDetail, token }) {
+  const handleVerPdf = async () => {
+    try {
+      const res = await fetch(`${API_URL}/api/docs/${doc.id}/pdf`, {
+        headers: { Authorization: `Bearer ${token}` },
+      });
+      const data = await res.json();
+      if (!res.ok) {
+        throw new Error(data.message || "No se pudo obtener el PDF");
+      }
+      window.open(data.url, "_blank"); // URL firmada desde backend
+    } catch (err) {
+      console.error("Error abriendo PDF:", err);
+      alert("❌ " + err.message);
     }
-
-    const url = doc.file_url.startsWith("http")
-      ? doc.file_url
-      : `${API_URL}${doc.file_url}`;
-
-    window.open(url, "_blank");
   };
 
   const handleVerRechazo = () => {

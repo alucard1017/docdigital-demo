@@ -168,7 +168,7 @@ export function DetailView({
                 Visualización del documento original
               </span>
 
-              {selectedDoc.file_url && (
+              {pdfUrl && (
                 <a
                   href={pdfUrl}
                   download
@@ -197,7 +197,7 @@ export function DetailView({
                 background: "#111827",
               }}
             >
-              {selectedDoc.file_url ? (
+              {pdfUrl ? (
                 <iframe
                   title="PDF del documento"
                   src={pdfUrl}

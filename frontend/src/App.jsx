@@ -70,6 +70,9 @@ function App() {
   const [selectedDoc, setSelectedDoc] = useState(null);
   const [events, setEvents] = useState([]);
 
+  // URL firmada del PDF del documento en detalle
+  const [pdfUrl, setPdfUrl] = useState(null);
+
   // Firma pública por token
   const [publicSignDoc, setPublicSignDoc] = useState(null);
   const [publicSignError, setPublicSignError] = useState('');
@@ -137,6 +140,32 @@ function App() {
       setEvents([]);
     }
   }, [token, selectedDoc, view]);
+
+  // Cargar URL firmada del PDF para el documento seleccionado
+  useEffect(() => {
+    if (!token || !selectedDoc) {
+      setPdfUrl(null);
+      return;
+    }
+
+        const fetchPdfUrl = async () => {
+      try {
+        const res = await fetch(`${API_URL}/api/docs/${selectedDoc.id}/pdf`, {
+          headers: { Authorization: `Bearer ${token}` },
+        });
+        const data = await res.json();
+        if (!res.ok) {
+          throw new Error(data.message || 'No se pudo obtener el PDF');
+        }
+        setPdfUrl(data.url); // URL firmada desde S3
+      } catch (err) {
+        console.error('Error obteniendo URL de PDF:', err);
+        setPdfUrl(null);
+      }
+    };
+
+    fetchPdfUrl();
+  }, [token, selectedDoc]);
 
   // Cargar documentos automáticamente cuando haya token y vista lista
   useEffect(() => {
@@ -230,18 +259,26 @@ function App() {
   async function manejarAccionDocumento(id, accion, extraData = {}) {
     if (accion === 'ver') {
       const doc = docs.find((d) => d.id === id);
-      if (!doc || !doc.file_url) {
-        alert('No se encontró la URL del contrato para este documento.');
+      if (!doc) {
+        alert('No se encontró el documento.');
         return;
       }
 
-      const url = doc.file_url.startsWith('http')
-        ? doc.file_url
-        : `${API_URL}${doc.file_url}`;
-
-      window.open(url, '_blank');
-      return;
-    }
+      try {
+        const res = await fetch(`${API_URL}/api/docs/${doc.id}/pdf`, {
+          headers: { Authorization: `Bearer ${token}` },
+          });
+          const data = await res.json();
+          if (!res.ok) {
+            throw new Error(data.message || 'No se pudo obtener el PDF');
+          }
+          window.open(data.url, '_blank'); // URL firmada desde el backend
+        } catch (err) {
+          console.error('Error abriendo PDF:', err);
+          alert('❌ ' + err.message);
+        }
+        return;
+        }
 
     try {
       let body = undefined;
@@ -435,11 +472,7 @@ function App() {
   // VISTA FIRMA PÚBLICA POR TOKEN
   // ===============================
   if (view === 'public-sign') {
-    const pdfUrl = publicSignDoc?.file_url?.startsWith('http')
-      ? publicSignDoc.file_url
-      : publicSignDoc
-      ? `${API_URL}${publicSignDoc.file_url}`
-      : '';
+    const pdfUrl = publicSignDoc?.file_url || "";
     
     return (
       <div className="login-bg">
@@ -563,34 +596,30 @@ function App() {
      VISTA DETALLE DE DOCUMENTO
      =============================== */
   if (view === 'detail' && selectedDoc) {
-    const pdfUrl = selectedDoc.file_url?.startsWith('http')
-      ? selectedDoc.file_url
-      : `${API_URL}${selectedDoc.file_url || ''}`;
-
     const puedeFirmar = ![
-      DOC_STATUS.FIRMADO,
-      DOC_STATUS.RECHAZADO,
-    ].includes(selectedDoc.status);
+    DOC_STATUS.FIRMADO,
+    DOC_STATUS.RECHAZADO,
+  ].includes(selectedDoc.status);
 
     const puedeRechazar = ![
-      DOC_STATUS.FIRMADO,
-      DOC_STATUS.RECHAZADO,
-    ].includes(selectedDoc.status);
+    DOC_STATUS.FIRMADO,
+    DOC_STATUS.RECHAZADO,
+  ].includes(selectedDoc.status);
 
     return (
-      <DetailView
-        selectedDoc={selectedDoc}
-        pdfUrl={pdfUrl}
-        puedeFirmar={puedeFirmar}
-        puedeRechazar={puedeRechazar}
-        events={events}
-        manejarAccionDocumento={manejarAccionDocumento}
-        setView={setView}
-        setSelectedDoc={setSelectedDoc}
-        logout={logout}
-      />
-    );
-  }
+    <DetailView
+      selectedDoc={selectedDoc}
+      pdfUrl={pdfUrl}
+      puedeFirmar={puedeFirmar}
+      puedeRechazar={puedeRechazar}
+      events={events}
+      manejarAccionDocumento={manejarAccionDocumento}
+      setView={setView}
+      setSelectedDoc={setSelectedDoc}
+      logout={logout}
+    />
+  );
+}
 
   /* ===============================
      FILTRO EN MEMORIA PARA LA BANDEJA
@@ -801,6 +830,7 @@ function App() {
                         <DocumentRow
                           key={d.id}
                           doc={d}
+                          token={token}
                           onOpenDetail={(doc) => {
                             setSelectedDoc(doc);
                             setView('detail');
