@@ -1273,6 +1273,9 @@ function App() {
                       className="input-field"
                       required
                       placeholder="RUN / RUT del representante *"
+                      onChange={(e) => {
+                        e.target.value = formatRun(e.target.value);
+                      }}  
                     />
                     {formErrors.firmante_run && (
                       <p
