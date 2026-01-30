@@ -925,6 +925,7 @@ function App() {
                 const empresaRut = empresaRutValue;
 
                 const title = form.title.value.trim();
+                const firmanteEmail = form.firmante_email.value.trim();
                 // Campos del firmante
                 const firmanteNombre1 =
                   form.firmante_nombre1.value.trim();
