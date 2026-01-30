@@ -79,6 +79,9 @@ function App() {
   const [publicSignLoading, setPublicSignLoading] = useState(false);
   const [publicSignToken, setPublicSignToken] = useState('');
 
+  const [firmanteRunValue, setFirmanteRunValue] = useState('');
+  const [empresaRutValue, setEmpresaRutValue] = useState('');
+
   async function cargarFirmaPublica(token) {
     try {
       setPublicSignLoading(true);
@@ -929,8 +932,7 @@ function App() {
                   (form.firmante_apellido2?.value || '').trim();
                 const firmanteEmail =
                   form.firmante_email.value.trim();
-                const firmanteRun =
-                  form.firmante_run.value.trim();
+                const firmanteRun = firmanteRunValue;
                 const firmanteMovil =
                   form.firmante_movil.value.trim();
 
@@ -939,8 +941,7 @@ function App() {
                   form.destinatario_nombre?.value.trim() || '';
                 const destinatarioEmail =
                   form.destinatario_email.value.trim();
-                const empresaRut =
-                  form.empresa_rut.value.trim();
+                const empresaRut = empresaRutValue;
 
                 const file = form.file.files[0];
 
@@ -983,8 +984,14 @@ function App() {
                   newErrors.destinatario_email =
                     'Ingresa un correo válido.';
                 if (!empresaRut)
-                  newErrors.empresa_rut =
-                    'El RUT de la empresa es obligatorio.';
+                  newErrors.empresa_rut = 'El RUT de la empresa es obligatorio.';
+                else {
+                  // Validar formato del RUT empresa
+                  const cleanRut = empresaRut.replace(/[^0-9kK]/g, '');
+                  if (cleanRut.length < 8 || cleanRut.length > 10) {
+                    newErrors.empresa_rut = 'RUT inválido (ej: 12.345.678-9)';
+                  }
+                } 
 
                 if (Object.keys(newErrors).length > 0) {
                   setFormErrors(newErrors);
