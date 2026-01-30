@@ -7,6 +7,7 @@ const db = require('../db');
 const { requireAuth } = require('./auth');
 const { sendSignatureInviteEmail } = require('../services/sendSignatureInviteEmail');
 const { uploadPdfToS3, getSignedUrl } = require('../services/s3');
+const { isValidEmail, isValidRun, validateLength } = require('../utils/validators');
 
 const router = express.Router();
 
@@ -109,6 +110,27 @@ router.post('/', requireAuth, upload.single('file'), handleMulterError, async (r
       return res.status(400).json({ message: 'Faltan campos obligatorios' });
     }
 
+	// ✅ Validaciones de formato
+	if (!isValidEmail(firmante_email)) {
+  	  return res.status(400).json({ message: 'Email del firmante inválido' });
+	}
+
+	if (!isValidEmail(destinatario_email)) {
+  	  return res.status(400).json({ message: 'Email del destinatario inválido' });
+	}
+
+	if (!isValidRun(firmante_run)) {
+   	  return res.status(400).json({
+    	    message: 'RUN del firmante inválido (ej: 12.345.678-9)'
+  	  });
+	}
+
+	try {
+  	  validateLength(title, 5, 200, 'Título');
+  	  validateLength(firmante_nombre_completo, 3, 100, 'Nombre del firmante');
+	} catch (err) {
+  	  return res.status(400).json({ message: err.message });
+	}
     // Subir archivo a S3: guardamos SOLO la clave (documentos/...)
     let s3Key = null;
     try {
@@ -402,6 +424,58 @@ router.post('/:id/visar', requireAuth, async (req, res) => {
     return res.status(500).json({ message: 'Error interno del servidor' });
   }
 });
+
+   /* ================================
+ * POST: Rechazar documento
+ * ================================ */
+router.post('/:id/rechazar', requireAuth, async (req, res) => {
+  try {
+    const id = req.params.id;
+    const { motivo } = req.body;
+    
+    const current = await db.query(
+      `SELECT * FROM documents WHERE id = $1 AND owner_id = $2`,
+      [id, req.user.id]
+    );
+    
+    if (current.rowCount === 0) {
+      return res.status(404).json({ message: 'No encontrado' });
+    }
+    
+    const docActual = current.rows[0];
+    
+    if (docActual.status === 'FIRMADO') {
+      return res.status(400).json({ message: 'Ya firmado, no se puede rechazar' });
+    }
+    
+    if (docActual.status === 'RECHAZADO') {
+      return res.status(400).json({ message: 'Ya rechazado' });
+    }
+    
+    const result = await db.query(
+      `UPDATE documents SET status = $1, reject_reason = $2, updated_at = NOW() WHERE id = $3 AND owner_id = $4 RETURNING *`,
+      ['RECHAZADO', motivo || 'Sin especificar', id, req.user.id]
+    );
+    
+    const doc = result.rows[0];
+    
+    await db.query(
+      `INSERT INTO document_events (document_id, actor, action, details, from_status, to_status) 
+       VALUES ($1, $2, $3, $4, $5, $6)`,
+      [doc.id, req.user.name || 'Sistema', 'RECHAZADO', `Documento rechazado: ${motivo || 'Sin especificar'}`, docActual.status, 'RECHAZADO']
+    );
+    
+    return res.json({
+      ...doc,
+      file_url: doc.file_path,
+      message: 'Documento rechazado exitosamente'
+    });
+  } catch (err) {
+    console.error('❌ Error rechazando documento:', err);
+    return res.status(500).json({ message: 'Error interno del servidor' });
+  }
+});
+
 
 /* ================================
    EXPORTAR ROUTER

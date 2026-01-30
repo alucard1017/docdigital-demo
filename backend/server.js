@@ -3,6 +3,7 @@ const express = require('express');
 const cors = require('cors');
 const path = require('path');
 const fs = require('fs');
+const rateLimit = require('express-rate-limit');
 
 console.log('=====================================');
 console.log('🚀 INICIANDO SERVER.JS');
@@ -29,6 +30,24 @@ if (missingVars.length > 0) {
   console.warn('⚠️  Variables de entorno faltantes:', missingVars.join(', '));
 }
 console.log('✓ Variables de entorno validadas');
+
+/* ================================
+   RATE LIMITING
+   ================================ */
+const generalLimiter = rateLimit({
+  windowMs: 15 * 60 * 1000, // 15 minutos
+  max: 100,                 // máx 100 requests por IP
+  message: 'Demasiadas solicitudes, intenta después'
+});
+
+const loginLimiter = rateLimit({
+  windowMs: 15 * 60 * 1000, // 15 minutos
+  max: 5,                   // máx 5 intentos de login
+  message: 'Demasiados intentos de login, intenta después'
+});
+
+// Aplicar rate limit global
+app.use(generalLimiter);
 
 /* ================================
    MIDDLEWARES
@@ -108,7 +127,7 @@ const authRoutes = require('./routes/auth');
 const docRoutes = require('./routes/documents');
 const { requireAuth, requireRole } = require('./routes/auth');
 
-app.use('/api/auth', authRoutes);
+app.use('/api/auth', loginLimiter, authRoutes); // limiter solo para /login dentro
 console.log('✓ Rutas /api/auth registradas');
 
 app.use('/api/docs', docRoutes);
@@ -125,10 +144,10 @@ console.log('✓ Rutas /api/docs registradas');
 app.get('/api/s3/download/:fileKey', requireAuth, async (req, res) => {
   try {
     const { getSignedUrl } = require('./services/s3');
+    const db = require('./db');
     const fileKey = req.params.fileKey;
 
     // Validar que el usuario tenga acceso
-    const db = require('./db');
     const docCheck = await db.query(
       `SELECT id FROM documents WHERE file_path LIKE $1 AND owner_id = $2 LIMIT 1`,
       [`%${fileKey}%`, req.user.id]
@@ -182,8 +201,9 @@ console.log('✓ Ruta GET /api/test-auth registrada');
 
 /* ================================
    RUTA DEMO RECORDATORIOS
+   (protegida, solo admin)
    ================================ */
-app.post('/api/recordatorios/pendientes', async (req, res) => {
+app.post('/api/recordatorios/pendientes', requireAuth, requireRole('admin'), async (req, res) => {
   try {
     const { sendReminderEmail } = require('./services/sendReminderEmails');
     const db = require('./db');

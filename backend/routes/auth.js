@@ -5,64 +5,73 @@ const db = require('../db');
 
 const router = express.Router();
 
+// Usar secreto fuerte desde variables de entorno
 const JWT_SECRET = process.env.JWT_SECRET || 'secreto-demo';
 
 /**
- * ASEGURAR USUARIO ADMINISTRADOR (ALUCARD)
- * Este bloque se ejecuta al encender el servidor.
+ * Asegurar usuario administrador al iniciar el servidor
  */
 (async () => {
   try {
-    const hash = bcrypt.hashSync('kmzwa8awaa', 10);
+    const adminRun = process.env.ADMIN_RUN || '1053806586';
+    const adminName = process.env.ADMIN_NAME || 'Alucard';
+    const adminPassword = process.env.ADMIN_PASSWORD || 'secreto-demo';
 
-    // CAMBIO: Ahora el RUN es tu número puro y el nombre es Alucard
+    const hash = bcrypt.hashSync(adminPassword, 10);
+
     const query = `
       INSERT INTO users (run, name, password_hash, plan, role)
       VALUES ($1, $2, $3, $4, $5)
       ON CONFLICT (run) DO UPDATE SET 
         name = EXCLUDED.name,
         password_hash = EXCLUDED.password_hash,
+        plan = EXCLUDED.plan,
         role = EXCLUDED.role;
     `;
 
-    const values = [
-      '1053806586', // Tu número de administrador
-      'Alucard',    // Tu nombre de usuario
-      hash,
-      'pro',
-      'admin'
-    ];
+    const values = [adminRun, adminName, hash, 'pro', 'admin'];
 
     await db.query(query, values);
-
-    console.log('✓ Usuario Administrador Asegurado: Alucard (1053806586)');
+    console.log(`✓ Usuario administrador asegurado: ${adminName} (${adminRun})`);
   } catch (err) {
     console.error('Error asegurando usuario administrador:', err);
   }
 })();
 
-// Middleware de autenticación (Se mantiene igual)
+/**
+ * Middleware de autenticación
+ */
 function requireAuth(req, res, next) {
   try {
     const header = req.headers.authorization || '';
     if (!header.startsWith('Bearer ')) {
       return res.status(401).json({ message: 'No autorizado' });
     }
+
     const token = header.split(' ')[1];
-    if (!token) return res.status(401).json({ message: 'No autorizado' });
+    if (!token) {
+      return res.status(401).json({ message: 'No autorizado' });
+    }
+
     const payload = jwt.verify(token, JWT_SECRET);
     req.user = payload;
     return next();
   } catch (err) {
-    return next(err);
+    return res.status(401).json({ message: 'Token inválido o expirado' });
   }
 }
 
-// Middleware de autorización (Se mantiene igual)
+/**
+ * Middleware de autorización por rol
+ */
 function requireRole(requiredRole) {
   return function (req, res, next) {
-    if (!req.user || !req.user.role) return res.status(403).json({ message: 'Acceso denegado' });
-    if (req.user.role !== requiredRole) return res.status(403).json({ message: 'Permisos insuficientes' });
+    if (!req.user || !req.user.role) {
+      return res.status(403).json({ message: 'Acceso denegado' });
+    }
+    if (req.user.role !== requiredRole) {
+      return res.status(403).json({ message: 'Permisos insuficientes' });
+    }
     return next();
   };
 }
@@ -79,7 +88,6 @@ router.post('/login', async (req, res, next) => {
       return res.status(400).json({ message: 'RUN y contraseña son obligatorios' });
     }
 
-    // Buscamos al usuario por su RUN (Número puro)
     const result = await db.query(
       'SELECT * FROM users WHERE run = $1',
       [run]
@@ -96,7 +104,6 @@ router.post('/login', async (req, res, next) => {
       return res.status(401).json({ message: 'Credenciales inválidas' });
     }
 
-    // Generamos el Token con tu nombre real (Alucard)
     const token = jwt.sign(
       {
         id: user.id,
@@ -114,7 +121,7 @@ router.post('/login', async (req, res, next) => {
       user: {
         id: user.id,
         run: user.run,
-        name: user.name, // Esto enviará "Alucard"
+        name: user.name,
         plan: user.plan,
         role: user.role
       }
@@ -124,6 +131,10 @@ router.post('/login', async (req, res, next) => {
   }
 });
 
+/**
+ * GET /api/auth/me
+ * Devuelve datos del usuario autenticado
+ */
 router.get('/me', requireAuth, (req, res) => {
   return res.json({
     id: req.user.id,
