@@ -11,6 +11,9 @@ console.log('=====================================');
 
 const app = express();
 
+// ✅ Confiar en proxy de Render
+app.set('trust proxy', 1);
+
 /* ================================
    VALIDAR VARIABLES DE ENTORNO
    ================================ */
@@ -127,7 +130,7 @@ const authRoutes = require('./routes/auth');
 const docRoutes = require('./routes/documents');
 const { requireAuth, requireRole } = require('./routes/auth');
 
-app.use('/api/auth', loginLimiter, authRoutes); // limiter solo para /login dentro
+app.use('/api/auth', loginLimiter, authRoutes);
 console.log('✓ Rutas /api/auth registradas');
 
 app.use('/api/docs', docRoutes);
@@ -157,7 +160,7 @@ app.get('/api/s3/download/:fileKey', requireAuth, async (req, res) => {
       return res.status(403).json({ message: 'No tienes acceso a este archivo' });
     }
 
-    const signedUrl = getSignedUrl(fileKey, 3600); // URL válida 1 hora
+    const signedUrl = getSignedUrl(fileKey, 3600);
     res.json({ url: signedUrl, expires_in: 3600 });
   } catch (error) {
     console.error('❌ Error generando URL S3:', error);
