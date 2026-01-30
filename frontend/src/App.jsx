@@ -962,8 +962,15 @@ function App() {
                   newErrors.firmante_email =
                     'Ingresa un correo válido.';
                 if (!firmanteRun)
-                  newErrors.firmante_run =
-                    'RUN / RUT es obligatorio.';
+                  newErrors.firmante_run = 'RUN / RUT es obligatorio.';
+                else {
+                  // Validar formato del RUN
+                  const cleanRun = firmanteRun.replace(/[^0-9kK]/g, '');
+                  if (cleanRun.length < 8 || cleanRun.length > 10) {
+                    newErrors.firmante_run = 'RUN inválido (ej: 12.345.678-9)';
+                  }
+                }
+
                 if (!firmanteMovil)
                   newErrors.firmante_movil =
                     'El teléfono es obligatorio.';
