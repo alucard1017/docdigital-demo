@@ -5,18 +5,6 @@ function isValidEmail(email) {
   return regex.test(email);
 }
 
-// Valida RUN chileno (con dígito verificador correcto)
-function isValidRun(run) {
-  if (!run || typeof run !== 'string') return false;
-
-  // Eliminamos puntos, guiones, espacios, etc.
-// Valida email básico
-function isValidEmail(email) {
-  if (!email) return false;
-  const regex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
-  return regex.test(email);
-}
-
 // Valida RUN/RUT chileno con dígito verificador
 function isValidRun(run) {
   if (!run || typeof run !== 'string') return false;
@@ -24,7 +12,7 @@ function isValidRun(run) {
   // Limpia puntos, guiones, espacios, etc.
   const clean = run.replace(/[^0-9kK]/g, '');
 
-  // Debe tener entre 8 y 9 caracteres (cuerpo + dígito verificador) [web:2][web:3]
+  // Debe tener entre 8 y 9 caracteres (cuerpo + dígito verificador)
   if (clean.length < 8 || clean.length > 9) {
     return false;
   }
