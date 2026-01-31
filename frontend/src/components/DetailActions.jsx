@@ -3,12 +3,15 @@ import React from "react";
 
 export function DetailActions({
   puedeFirmar,
+  puedeVisar,
   puedeRechazar,
   selectedDoc,
   setView,
   setSelectedDoc,
   manejarAccionDocumento,
 }) {
+  if (!selectedDoc) return null;
+
   return (
     <div
       style={{
@@ -51,6 +54,22 @@ export function DetailActions({
           }}
         >
           Rechazar
+        </button>
+      )}
+
+      {puedeVisar && (
+        <button
+          type="button"
+          className="btn-main"
+          style={{
+            background: "#fbbf24",
+            color: "#78350f",
+          }}
+          onClick={async () => {
+            await manejarAccionDocumento(selectedDoc.id, "visar");
+          }}
+        >
+          Visar documento
         </button>
       )}
 

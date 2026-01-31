@@ -3,7 +3,6 @@ import React, { useState, useEffect } from "react";
 import { Timeline } from "./Timeline";
 import { EventList } from "./EventList";
 import { DetailActions } from "./DetailActions";
-import { DetailHeader } from "./DetailHeader";
 import { DOC_STATUS, API_BASE_URL } from "../constants";
 
 const API_URL = API_BASE_URL;
@@ -12,6 +11,7 @@ export function DetailView({
   selectedDoc,
   pdfUrl,
   puedeFirmar,
+  puedeVisar,
   puedeRechazar,
   events,
   manejarAccionDocumento,
@@ -50,7 +50,6 @@ export function DetailView({
     return () => clearInterval(interval);
   }, [selectedDoc]);
 
-  // ✅ Función para descargar PDF
   const handleDownloadPDF = async () => {
     try {
       if (!pdfUrl) {
@@ -58,7 +57,6 @@ export function DetailView({
         return;
       }
 
-      // Descargar desde la URL firmada de S3
       const response = await fetch(pdfUrl);
       if (!response.ok) {
         throw new Error("Error descargando el archivo");
@@ -66,9 +64,9 @@ export function DetailView({
 
       const blob = await response.blob();
       const url = window.URL.createObjectURL(blob);
-      const link = document.createElement('a');
+      const link = document.createElement("a");
       link.href = url;
-      link.download = `${selectedDoc.title || 'documento'}.pdf`;
+      link.download = `${selectedDoc.title || "documento"}.pdf`;
       document.body.appendChild(link);
       link.click();
       document.body.removeChild(link);
@@ -126,7 +124,6 @@ export function DetailView({
         </header>
 
         <div className="content-body">
-          {/* Tarjeta principal con documento */}
           <div className="card-premium">
             <h1
               style={{
@@ -149,7 +146,6 @@ export function DetailView({
               <strong>{selectedDoc.status}</strong>
             </p>
 
-            {/* Descripción */}
             {selectedDoc.description && (
               <div
                 style={{
@@ -165,7 +161,6 @@ export function DetailView({
               </div>
             )}
 
-            {/* Motivo de rechazo */}
             {selectedDoc.status === DOC_STATUS.RECHAZADO &&
               selectedDoc.reject_reason && (
                 <div
@@ -184,7 +179,6 @@ export function DetailView({
                 </div>
               )}
 
-            {/* Botones Ver / Descargar */}
             <div
               style={{
                 display: "flex",
@@ -241,7 +235,6 @@ export function DetailView({
               </div>
             </div>
 
-            {/* Visor PDF */}
             <div
               style={{
                 borderRadius: 12,
@@ -269,7 +262,6 @@ export function DetailView({
               )}
             </div>
 
-            {/* TIMELINE */}
             <div style={{ marginTop: 32, marginBottom: 32 }}>
               {loadingTimeline ? (
                 <div
@@ -296,7 +288,6 @@ export function DetailView({
               )}
             </div>
 
-            {/* Historial de acciones */}
             <div
               style={{
                 marginTop: 16,
@@ -318,9 +309,9 @@ export function DetailView({
               <EventList events={safeEvents} />
             </div>
 
-            {/* Botones Firmar / Rechazar */}
             <DetailActions
               puedeFirmar={puedeFirmar}
+              puedeVisar={puedeVisar}
               puedeRechazar={puedeRechazar}
               selectedDoc={selectedDoc}
               setView={setView}
