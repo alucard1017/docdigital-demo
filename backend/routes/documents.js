@@ -378,8 +378,7 @@ router.post('/:id/firmar', requireAuth, async (req, res) => {
       return res.status(400).json({ message: 'Documento rechazado' });
     }
 
-    // 💡 Regla de negocio:
-    // Si requiere visación, NO se puede firmar mientras esté PENDIENTE
+    // 👇 ESTA ES LA CLAVE
     if (docActual.requires_visado === true && docActual.status === 'PENDIENTE') {
       return res.status(400).json({
         message: 'Este documento requiere visación antes de firmar'
@@ -387,16 +386,15 @@ router.post('/:id/firmar', requireAuth, async (req, res) => {
     }
 
     const result = await db.query(
-      `UPDATE documents 
-       SET status = $1, updated_at = NOW() 
-       WHERE id = $2 AND owner_id = $3 
+      `UPDATE documents SET status = $1, updated_at = NOW()
+       WHERE id = $2 AND owner_id = $3
        RETURNING *`,
       ['FIRMADO', id, req.user.id]
     );
     const doc = result.rows[0];
 
     await db.query(
-      `INSERT INTO document_events (document_id, actor, action, details, from_status, to_status) 
+      `INSERT INTO document_events (document_id, actor, action, details, from_status, to_status)
        VALUES ($1, $2, $3, $4, $5, $6)`,
       [doc.id, req.user.name || 'Sistema', 'FIRMADO', 'Firmado', docActual.status, 'FIRMADO']
     );
