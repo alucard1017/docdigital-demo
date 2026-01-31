@@ -369,15 +369,28 @@ router.post('/:id/firmar', requireAuth, async (req, res) => {
     }
 
     const docActual = current.rows[0];
+
     if (docActual.status === 'FIRMADO') {
       return res.status(400).json({ message: 'Ya firmado' });
     }
+
     if (docActual.status === 'RECHAZADO') {
       return res.status(400).json({ message: 'Documento rechazado' });
     }
 
+    // 💡 Regla de negocio:
+    // Si requiere visación, NO se puede firmar mientras esté PENDIENTE
+    if (docActual.requires_visado === true && docActual.status === 'PENDIENTE') {
+      return res.status(400).json({
+        message: 'Este documento requiere visación antes de firmar'
+      });
+    }
+
     const result = await db.query(
-      `UPDATE documents SET status = $1, updated_at = NOW() WHERE id = $2 AND owner_id = $3 RETURNING *`,
+      `UPDATE documents 
+       SET status = $1, updated_at = NOW() 
+       WHERE id = $2 AND owner_id = $3 
+       RETURNING *`,
       ['FIRMADO', id, req.user.id]
     );
     const doc = result.rows[0];
@@ -415,15 +428,34 @@ router.post('/:id/visar', requireAuth, async (req, res) => {
     }
 
     const docActual = current.rows[0];
+
     if (docActual.status === 'FIRMADO') {
       return res.status(400).json({ message: 'Ya firmado' });
     }
+
+    if (docActual.status === 'RECHAZADO') {
+      return res.status(400).json({ message: 'Documento rechazado' });
+    }
+
+    // Si el documento NO requiere visación, no tiene sentido visar
+    if (docActual.requires_visado !== true) {
+      return res.status(400).json({
+        message: 'Este documento no requiere visación'
+      });
+    }
+
+    // Solo se puede visar cuando está PENDIENTE
     if (docActual.status !== 'PENDIENTE') {
-      return res.status(400).json({ message: 'Solo se pueden visar documentos PENDIENTES' });
+      return res.status(400).json({
+        message: 'Solo se pueden visar documentos en estado PENDIENTE'
+      });
     }
 
     const result = await db.query(
-      `UPDATE documents SET status = $1, updated_at = NOW() WHERE id = $2 AND owner_id = $3 RETURNING *`,
+      `UPDATE documents 
+       SET status = $1, updated_at = NOW() 
+       WHERE id = $2 AND owner_id = $3 
+       RETURNING *`,
       ['VISADO', id, req.user.id]
     );
     const doc = result.rows[0];
