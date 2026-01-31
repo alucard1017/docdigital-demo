@@ -9,8 +9,7 @@ function isValidEmail(email) {
 function isValidRun(run) {
   if (!run || typeof run !== 'string') return false;
   const clean = run.replace(/[^0-9kK]/g, '');
-  return clean.length >= 8 && clean.length <= 10;
-}
+return clean.length >= 8 && clean.length <= 9;}
 
 // Valida longitud de strings
 function validateLength(str, min, max, fieldName) {
