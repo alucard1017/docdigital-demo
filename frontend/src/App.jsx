@@ -29,8 +29,10 @@ function formatRun(value) {
 
 function formatRunDoc(value) {
   let clean = value.replace(/[^0-9kK]/g, '');
-  if (clean.length > 10) clean = clean.slice(0, 10);
   if (clean.length === 0) return '';
+  if (clean.length > 10) clean = clean.slice(0, 10);
+
+  if (clean.length <= 1) return clean;
 
   const body = clean.slice(0, -1);
   const dv = clean.slice(-1);
@@ -1016,13 +1018,13 @@ function App() {
                   firmanteNombre2,
                   firmanteApellido1,
                   firmanteApellido2,
-                ]
-                formData.append('firmante_nombre_completo', firmanteNombreCompleto);
-                formData.append('firmante_run', firmanteRunClean);
-                formData.append('firmante_movil', firmanteMovil);
-                formData.append('empresa_rut', empresaRutClean);
-                formData.append('requiresVisado', showVisador ? 'true' : 'false');
+                  ].filter(Boolean).join(' ');
 
+                  formData.append('firmante_nombre_completo', firmanteNombreCompleto);
+                  formData.append('firmante_run', firmanteRunValue);
+                  formData.append('firmante_movil', firmanteMovil);
+                  formData.append('empresa_rut', empresaRutValue);
+                  formData.append('requiresVisado', showVisador ? 'true' : 'false');;
 
                 try {
                   const res = await fetch(
