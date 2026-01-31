@@ -119,6 +119,7 @@ router.post('/', requireAuth, upload.single('file'), handleMulterError, async (r
   	  return res.status(400).json({ message: 'Email del destinatario inválido' });
 	}
 
+	   console.log('DEBUG RUN:', firmante_run, typeof firmante_run);
 	if (!isValidRun(firmante_run)) {
    	  return res.status(400).json({
     	    message: 'RUN del firmante inválido (ej: 12.345.678-9)'
