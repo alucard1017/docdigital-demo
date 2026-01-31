@@ -105,33 +105,52 @@ router.post('/', requireAuth, upload.single('file'), handleMulterError, async (r
       requiresVisado
     } = req.body;
 
-    if (!req.file) return res.status(400).json({ message: 'El archivo PDF es obligatorio' });
-    if (!title || !firmante_nombre_completo || !firmante_email || !firmante_run || !destinatario_nombre || !destinatario_email || !empresa_rut) {
+    // Archivo obligatorio
+    if (!req.file) {
+      return res.status(400).json({ message: 'El archivo PDF es obligatorio' });
+    }
+
+    // Campos obligatorios mínimos
+    if (
+      !title ||
+      !firmante_nombre_completo ||
+      !firmante_email ||
+      !firmante_run ||
+      !destinatario_nombre ||
+      !destinatario_email ||
+      !empresa_rut
+    ) {
       return res.status(400).json({ message: 'Faltan campos obligatorios' });
     }
 
-	// ✅ Validaciones de formato
-	if (!isValidEmail(firmante_email)) {
-  	  return res.status(400).json({ message: 'Email del firmante inválido' });
-	}
+    // ✅ Validaciones de formato
+    if (!isValidEmail(firmante_email)) {
+      return res.status(400).json({ message: 'Email del firmante inválido' });
+    }
 
-	if (!isValidEmail(destinatario_email)) {
-  	  return res.status(400).json({ message: 'Email del destinatario inválido' });
-	}
+    if (!isValidEmail(destinatario_email)) {
+      return res.status(400).json({ message: 'Email del destinatario inválido' });
+    }
 
-	   console.log('DEBUG RUN:', firmante_run, typeof firmante_run);
-	if (!isValidRun(firmante_run)) {
-   	  return res.status(400).json({
-    	    message: 'RUN del firmante inválido (ej: 12.345.678-9)'
-  	  });
-	}
+    // 🧠 Normalizar RUN: puede venir como string o como array
+    console.log('DEBUG RUN ORIGINAL:', firmante_run, typeof firmante_run);
+    const runValue = Array.isArray(firmante_run) ? firmante_run[0] : firmante_run;
+    console.log('DEBUG RUN NORMALIZADO:', runValue, typeof runValue);
 
-	try {
-  	  validateLength(title, 5, 200, 'Título');
-  	  validateLength(firmante_nombre_completo, 3, 100, 'Nombre del firmante');
-	} catch (err) {
-  	  return res.status(400).json({ message: err.message });
-	}
+    if (!isValidRun(runValue)) {
+      return res.status(400).json({
+        message: 'RUN del firmante inválido (ej: 12.345.678-9)'
+      });
+    }
+
+    // Validaciones de longitud
+    try {
+      validateLength(title, 5, 200, 'Título');
+      validateLength(firmante_nombre_completo, 3, 100, 'Nombre del firmante');
+    } catch (err) {
+      return res.status(400).json({ message: err.message });
+    }
+
     // Subir archivo a S3: guardamos SOLO la clave (documentos/...)
     let s3Key = null;
     try {
@@ -176,7 +195,7 @@ router.post('/', requireAuth, upload.single('file'), handleMulterError, async (r
         req.user.id, title, description, s3Key, 'PENDIENTE',
         destinatario_nombre, destinatario_email, destinatario_movil,
         visador_nombre, visador_email, visador_movil,
-        firmante_nombre_completo, firmante_email, firmante_movil, firmante_run,
+        firmante_nombre_completo, firmante_email, firmante_movil, runValue,
         empresa_rut, requires_visado, signatureToken, signatureExpiresAt, 'PENDIENTE'
       ]
     );
@@ -200,7 +219,7 @@ router.post('/', requireAuth, upload.single('file'), handleMulterError, async (r
     return res.status(201).json({
       ...doc,
       requiresVisado: doc.requires_visado === true,
-      file_url: doc.file_path, // clave S3
+      file_url: doc.file_path,
       message: 'Documento creado y subido a S3'
     });
   } catch (err) {
