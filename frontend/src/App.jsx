@@ -617,21 +617,26 @@ function App() {
      VISTA DETALLE DE DOCUMENTO
      =============================== */
   if (view === 'detail' && selectedDoc) {
-    const puedeFirmar = ![
+  const requiereVisado = selectedDoc.requires_visado === true;
+
+  const puedeVisar =
+    requiereVisado && selectedDoc.status === DOC_STATUS.PENDIENTE;
+
+  const puedeFirmar =
+    (!requiereVisado && selectedDoc.status === DOC_STATUS.PENDIENTE) ||
+    (requiereVisado && selectedDoc.status === DOC_STATUS.VISADO);
+
+  const puedeRechazar = ![
     DOC_STATUS.FIRMADO,
     DOC_STATUS.RECHAZADO,
   ].includes(selectedDoc.status);
 
-    const puedeRechazar = ![
-    DOC_STATUS.FIRMADO,
-    DOC_STATUS.RECHAZADO,
-  ].includes(selectedDoc.status);
-
-    return (
+  return (
     <DetailView
       selectedDoc={selectedDoc}
       pdfUrl={pdfUrl}
       puedeFirmar={puedeFirmar}
+      puedeVisar={puedeVisar}
       puedeRechazar={puedeRechazar}
       events={events}
       manejarAccionDocumento={manejarAccionDocumento}
