@@ -50,33 +50,6 @@ export function DetailView({
     return () => clearInterval(interval);
   }, [selectedDoc]);
 
-  const handleDownloadPDF = async () => {
-    try {
-      if (!pdfUrl) {
-        alert("No hay URL del PDF disponible");
-        return;
-      }
-
-      const response = await fetch(pdfUrl);
-      if (!response.ok) {
-        throw new Error("Error descargando el archivo");
-      }
-
-      const blob = await response.blob();
-      const url = window.URL.createObjectURL(blob);
-      const link = document.createElement("a");
-      link.href = url;
-      link.download = `${selectedDoc.title || "documento"}.pdf`;
-      document.body.appendChild(link);
-      link.click();
-      document.body.removeChild(link);
-      window.URL.revokeObjectURL(url);
-    } catch (err) {
-      console.error("Error descargando PDF:", err);
-      alert("❌ Error al descargar el PDF");
-    }
-  };
-
   if (!selectedDoc) return null;
 
   const safeEvents = Array.isArray(events) ? events : [];
@@ -179,6 +152,7 @@ export function DetailView({
                 </div>
               )}
 
+            {/* Botones Ver / Descargar */}
             <div
               style={{
                 display: "flex",
@@ -194,8 +168,9 @@ export function DetailView({
 
               <div style={{ display: "flex", gap: 12 }}>
                 {pdfUrl && (
-                  <button
-                    onClick={handleDownloadPDF}
+                  <a
+                    href={pdfUrl}
+                    download={`${selectedDoc.title || "documento"}.pdf`}
                     className="btn-main"
                     style={{
                       background: "#10b981",
@@ -203,14 +178,12 @@ export function DetailView({
                       textDecoration: "none",
                       fontSize: "0.85rem",
                       padding: "8px 16px",
-                      border: "none",
                       borderRadius: "6px",
-                      cursor: "pointer",
                       fontWeight: 600,
                     }}
                   >
                     📥 Descargar PDF
-                  </button>
+                  </a>
                 )}
 
                 {pdfUrl && (
@@ -235,6 +208,7 @@ export function DetailView({
               </div>
             </div>
 
+            {/* Visor PDF */}
             <div
               style={{
                 borderRadius: 12,
@@ -262,6 +236,7 @@ export function DetailView({
               )}
             </div>
 
+            {/* Timeline */}
             <div style={{ marginTop: 32, marginBottom: 32 }}>
               {loadingTimeline ? (
                 <div
@@ -288,6 +263,7 @@ export function DetailView({
               )}
             </div>
 
+            {/* Historial de acciones */}
             <div
               style={{
                 marginTop: 16,
@@ -309,6 +285,7 @@ export function DetailView({
               <EventList events={safeEvents} />
             </div>
 
+            {/* Acciones (Visar / Firmar / Rechazar) */}
             <DetailActions
               puedeFirmar={puedeFirmar}
               puedeVisar={puedeVisar}
