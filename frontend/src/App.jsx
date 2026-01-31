@@ -97,6 +97,7 @@ function App() {
   const [firmanteRunValue, setFirmanteRunValue] = useState('');
   const [empresaRutValue, setEmpresaRutValue] = useState('');
 
+
   async function cargarFirmaPublica(token) {
     try {
       setPublicSignLoading(true);
@@ -979,19 +980,15 @@ function App() {
                 if (!firmanteEmail)
                   newErrors.firmante_email =
                     'Ingresa un correo válido.';
-                if (!firmanteRun)
+                if (!firmanteRunClean)
                   newErrors.firmante_run = 'RUN / RUT es obligatorio.';
                 else {
-                  // Validar formato del RUN
-                  const cleanRun = firmanteRun.replace(/[^0-9kK]/g, '');
-                  if (cleanRun.length < 8 || cleanRun.length > 10) {
+                  if (firmanteRunClean.length < 8 || firmanteRunClean.length > 10) {
                     newErrors.firmante_run = 'RUN inválido (ej: 12.345.678-9)';
                   }
                 }
-
                 if (!firmanteMovil)
-                  newErrors.firmante_movil =
-                    'El teléfono es obligatorio.';
+                  newErrors.firmante_movil = 'El teléfono es obligatorio.';
 
                 // Validación mínimos del destinatario / empresa
                 if (!destinatarioNombre)
@@ -1000,12 +997,10 @@ function App() {
                 if (!destinatarioEmail)
                   newErrors.destinatario_email =
                     'Ingresa un correo válido.';
-                if (!empresaRutValue)
+                if (!empresaRutClean)
                   newErrors.empresa_rut = 'El RUT de la empresa es obligatorio.';
                 else {
-                  // Validar formato del RUT empresa
-                  const cleanRut = empresaRutValue.replace(/[^0-9kK]/g, '');
-                  if (cleanRut.length < 8 || cleanRut.length > 10) {
+                  if (empresaRutClean.length < 8 || empresaRutClean.length > 10) {
                     newErrors.empresa_rut = 'RUT inválido (ej: 12.345.678-9)';
                   }
                 } 
@@ -1022,27 +1017,12 @@ function App() {
                   firmanteApellido1,
                   firmanteApellido2,
                 ]
-                  .filter(Boolean)
-                  .join(' ');
+                formData.append('firmante_nombre_completo', firmanteNombreCompleto);
+                formData.append('firmante_run', firmanteRunClean);
+                formData.append('firmante_movil', firmanteMovil);
+                formData.append('empresa_rut', empresaRutClean);
+                formData.append('requiresVisado', showVisador ? 'true' : 'false');
 
-                formData.append(
-                  'firmante_nombre_completo',
-                  firmanteNombreCompleto
-                );
-                formData.append('firmante_run', firmanteRun);
-                formData.append(
-                  'firmante_movil',
-                  firmanteMovil
-                );
-                formData.append(
-                  'empresa_rut',
-                  empresaRut
-                );
-
-                formData.append(
-                  'requiresVisado',
-                  showVisador ? 'true' : 'false'
-                );
 
                 try {
                   const res = await fetch(
