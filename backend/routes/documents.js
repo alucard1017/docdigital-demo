@@ -120,6 +120,11 @@ router.post(
         firmante_run,
         empresa_rut,
         requiresVisado,
+
+        // OPCIONALES: firmante adicional
+        firmante_adicional_nombre_completo,
+        firmante_adicional_email,
+        firmante_adicional_movil,
       } = req.body;
 
       if (!req.file) {
@@ -152,6 +157,18 @@ router.post(
         return res
           .status(400)
           .json({ message: 'Email del destinatario inválido' });
+      }
+
+      if (visador_email && !isValidEmail(visador_email)) {
+        return res
+          .status(400)
+          .json({ message: 'Email del visador inválido' });
+      }
+
+      if (firmante_adicional_email && !isValidEmail(firmante_adicional_email)) {
+        return res
+          .status(400)
+          .json({ message: 'Email del firmante adicional inválido' });
       }
 
       console.log('DEBUG RUN ORIGINAL:', firmante_run, typeof firmante_run);
@@ -199,6 +216,7 @@ router.post(
         }
       }
 
+      // Token principal (firmante “dueño”)
       const signatureToken = crypto.randomUUID();
       const signatureExpiresAt = new Date(
         Date.now() + 7 * 24 * 60 * 60 * 1000
@@ -267,22 +285,67 @@ router.post(
       const frontBaseUrl =
         process.env.FRONTEND_URL || 'https://docdigital-demo.onrender.com';
 
+      // ===========================
+      // ENVÍO DE CORREOS
+      // ===========================
+
+      // 1) Firmante principal
       await sendSignatureInviteEmail({
         signer_email: firmante_email,
         signer_name: firmante_nombre_completo,
         document_title: title,
+        // luego cambiaremos a /public/sign para evitar login
         sign_url: `${frontBaseUrl}/?token=${signatureToken}`,
       });
 
-     // Correo al visador (solo si corresponde)
-     if (requires_visado && visador_email) {
-       await sendSignatureInviteEmail({
-        signer_email: visador_email,
-        signer_name: visador_nombre || 'Visador',
-        document_title: title,
-        sign_url: `${frontBaseUrl}/?token=${signatureToken}&mode=visado`,
-      });
-    }
+      // 2) Firmante adicional (si existe)
+      if (firmante_adicional_email) {
+        const tokenFirmanteAdicional = crypto.randomUUID();
+
+        // Aquí podrías guardar este token en otra tabla si quieres control por persona
+        console.log(
+          '📧 Enviando invitación a firmante adicional:',
+          firmante_adicional_email
+        );
+
+        await sendSignatureInviteEmail({
+          signer_email: firmante_adicional_email,
+          signer_name:
+            firmante_adicional_nombre_completo || 'Firmante adicional',
+          document_title: title,
+          sign_url: `${frontBaseUrl}/?token=${tokenFirmanteAdicional}`,
+        });
+      }
+
+      // 3) Visador (si el documento requiere visado y hay email)
+      if (requires_visado && visador_email) {
+        const tokenVisador = crypto.randomUUID();
+
+        console.log('📧 Enviando invitación a visador:', visador_email);
+
+        await sendSignatureInviteEmail({
+          signer_email: visador_email,
+          signer_name: visador_nombre || 'Visador',
+          document_title: title,
+          sign_url: `${frontBaseUrl}/?token=${tokenVisador}&mode=visado`,
+        });
+      }
+
+      // 4) Empresa / destinatario (solo notificación)
+      if (destinatario_email) {
+        console.log(
+          '📧 Enviando notificación a destinatario/empresa:',
+          destinatario_email
+        );
+
+        await sendSignatureInviteEmail({
+          signer_email: destinatario_email,
+          signer_name: destinatario_nombre || 'Destinatario',
+          document_title: title,
+          // Solo informar, puede ser un link genérico o nada
+          sign_url: `${frontBaseUrl}`,
+        });
+      }
 
       return res.status(201).json({
         ...doc,
