@@ -12,6 +12,13 @@ export function DetailActions({
 }) {
   if (!selectedDoc) return null;
 
+  const API_URL = import.meta.env.VITE_API_URL || "";
+
+  const handleDownload = () => {
+    if (!selectedDoc) return;
+    window.location.href = `${API_URL}/api/docs/${selectedDoc.id}/download`;
+  };
+
   return (
     <div
       style={{
@@ -35,6 +42,19 @@ export function DetailActions({
         }}
       >
         Volver sin firmar
+      </button>
+
+      {/* Botón Descargar PDF */}
+      <button
+        type="button"
+        className="btn-main"
+        style={{
+          background: "#16a34a",
+          color: "white",
+        }}
+        onClick={handleDownload}
+      >
+        Descargar PDF
       </button>
 
       {puedeRechazar && (

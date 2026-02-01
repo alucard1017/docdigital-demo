@@ -3,6 +3,7 @@ const multer = require('multer');
 const path = require('path');
 const crypto = require('crypto');
 const fs = require('fs');
+const axios = require('axios'); // <= para hacer stream desde S3
 const db = require('../db');
 const { requireAuth } = require('./auth');
 const { sendSignatureInviteEmail } = require('../services/sendSignatureInviteEmail');
@@ -72,7 +73,6 @@ router.get('/', requireAuth, async (req, res) => {
     const docs = result.rows.map((row) => ({
       ...row,
       requiresVisado: row.requires_visado === true,
-      // IMPORTANTE: file_url ya NO es /uploads, es la clave S3 guardada en file_path
       file_url: row.file_path
     }));
 
@@ -105,12 +105,10 @@ router.post('/', requireAuth, upload.single('file'), handleMulterError, async (r
       requiresVisado
     } = req.body;
 
-    // Archivo obligatorio
     if (!req.file) {
       return res.status(400).json({ message: 'El archivo PDF es obligatorio' });
     }
 
-    // Campos obligatorios mínimos
     if (
       !title ||
       !firmante_nombre_completo ||
@@ -123,7 +121,6 @@ router.post('/', requireAuth, upload.single('file'), handleMulterError, async (r
       return res.status(400).json({ message: 'Faltan campos obligatorios' });
     }
 
-    // ✅ Validaciones de formato
     if (!isValidEmail(firmante_email)) {
       return res.status(400).json({ message: 'Email del firmante inválido' });
     }
@@ -132,7 +129,6 @@ router.post('/', requireAuth, upload.single('file'), handleMulterError, async (r
       return res.status(400).json({ message: 'Email del destinatario inválido' });
     }
 
-    // 🧠 Normalizar RUN: puede venir como string o como array
     console.log('DEBUG RUN ORIGINAL:', firmante_run, typeof firmante_run);
     const runValue = Array.isArray(firmante_run) ? firmante_run[0] : firmante_run;
     console.log('DEBUG RUN NORMALIZADO:', runValue, typeof runValue);
@@ -143,7 +139,6 @@ router.post('/', requireAuth, upload.single('file'), handleMulterError, async (r
       });
     }
 
-    // Validaciones de longitud
     try {
       validateLength(title, 5, 200, 'Título');
       validateLength(firmante_nombre_completo, 3, 100, 'Nombre del firmante');
@@ -151,7 +146,6 @@ router.post('/', requireAuth, upload.single('file'), handleMulterError, async (r
       return res.status(400).json({ message: err.message });
     }
 
-    // Subir archivo a S3: guardamos SOLO la clave (documentos/...)
     let s3Key = null;
     try {
       s3Key = `documentos/${req.user.id}/${Date.now()}-${req.file.originalname}`;
@@ -161,7 +155,6 @@ router.post('/', requireAuth, upload.single('file'), handleMulterError, async (r
       console.error('⚠️ Error subiendo a S3:', s3Error.message);
       return res.status(500).json({ message: 'No se pudo subir el archivo a S3' });
     } finally {
-      // Borrar siempre el archivo temporal
       if (req.file && fs.existsSync(req.file.path)) {
         fs.unlink(req.file.path, (err) => {
           if (err) console.error('⚠️ Error eliminando archivo temporal:', err);
@@ -169,7 +162,6 @@ router.post('/', requireAuth, upload.single('file'), handleMulterError, async (r
       }
     }
 
-    // Token de firma
     const signatureToken = crypto.randomUUID();
     const signatureExpiresAt = new Date(Date.now() + 7 * 24 * 60 * 60 * 1000);
     const requires_visado = requiresVisado === 'true';
@@ -229,14 +221,14 @@ router.post('/', requireAuth, upload.single('file'), handleMulterError, async (r
 });
 
 /* ================================
-   GET: Descargar PDF (redirect a S3)
+   GET: URL firmada solo para VER PDF
    ================================ */
-router.get('/:id/download', async (req, res) => {
+router.get('/:id/pdf', async (req, res) => {
   try {
     const { id } = req.params;
 
     const result = await db.query(
-      `SELECT file_path 
+      `SELECT file_path
        FROM documents
        WHERE id = $1`,
       [id]
@@ -252,10 +244,10 @@ router.get('/:id/download', async (req, res) => {
       return res.status(404).json({ message: 'Documento sin archivo asociado' });
     }
 
-    const signedUrl = await getSignedUrl(file_path, 3600);
-    return res.redirect(signedUrl);
+    const signedUrl = await getSignedUrl(file_path, 3600); // URL firmada S3 [web:184]
+    return res.json({ url: signedUrl });
   } catch (err) {
-    console.error('❌ Error en descarga de documento:', err);
+    console.error('❌ Error obteniendo PDF:', err);
     return res.status(500).json({ message: 'Error interno del servidor' });
   }
 });
@@ -372,7 +364,6 @@ router.post('/:id/firmar', requireAuth, async (req, res) => {
       return res.status(400).json({ message: 'Documento rechazado' });
     }
 
-    // 👇 ESTA ES LA CLAVE
     if (docActual.requires_visado === true && docActual.status === 'PENDIENTE') {
       return res.status(400).json({
         message: 'Este documento requiere visación antes de firmar'
@@ -429,14 +420,12 @@ router.post('/:id/visar', requireAuth, async (req, res) => {
       return res.status(400).json({ message: 'Documento rechazado' });
     }
 
-    // Si el documento NO requiere visación, no tiene sentido visar
     if (docActual.requires_visado !== true) {
       return res.status(400).json({
         message: 'Este documento no requiere visación'
       });
     }
 
-    // Solo se puede visar cuando está PENDIENTE
     if (docActual.status !== 'PENDIENTE') {
       return res.status(400).json({
         message: 'Solo se pueden visar documentos en estado PENDIENTE'
@@ -469,7 +458,7 @@ router.post('/:id/visar', requireAuth, async (req, res) => {
   }
 });
 
-   /* ================================
+/* ================================
  * POST: Rechazar documento
  * ================================ */
 router.post('/:id/rechazar', requireAuth, async (req, res) => {
@@ -521,14 +510,14 @@ router.post('/:id/rechazar', requireAuth, async (req, res) => {
 });
 
 /* ================================
-   GET: Descargar PDF (redirect a S3)
+   GET: Descargar PDF (FORZAR DESCARGA)
    ================================ */
 router.get('/:id/download', async (req, res) => {
   try {
     const id = req.params.id;
 
     const result = await db.query(
-      `SELECT id, owner_id, file_path 
+      `SELECT id, title, file_path 
        FROM documents
        WHERE id = $1`,
       [id]
@@ -544,8 +533,16 @@ router.get('/:id/download', async (req, res) => {
       return res.status(404).json({ message: 'Documento sin archivo asociado' });
     }
 
-    const signedUrl = await getSignedUrl(doc.file_path, 3600);
-    return res.redirect(signedUrl);
+    const signedUrl = await getSignedUrl(doc.file_path, 3600); // [web:184]
+
+    const fileResponse = await axios.get(signedUrl, { responseType: 'stream' });
+
+    const filename = (doc.title || `documento-${doc.id}`).replace(/[^a-zA-Z0-9-_]/g, '_') + '.pdf';
+
+    res.setHeader('Content-Type', 'application/pdf');
+    res.setHeader('Content-Disposition', `attachment; filename="${filename}"`); // fuerza descarga [web:278][web:281]
+
+    fileResponse.data.pipe(res);
   } catch (err) {
     console.error('❌ Error en descarga de documento:', err);
     return res.status(500).json({ message: 'Error interno del servidor' });
