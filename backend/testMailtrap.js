@@ -1,27 +1,28 @@
 const nodemailer = require('nodemailer');
 require('dotenv').config();
 
-async function main() {
+async function test() {
   const transporter = nodemailer.createTransport({
     host: process.env.SMTP_HOST,
-    port: Number(process.env.SMTP_PORT),
+    port: 587,
+    secure: false,
     auth: {
-      user: process.env.SMTP_USER,
-      pass: process.env.SMTP_PASS,
+      user: 'api',                      // usuario fijo que muestra Mailtrap
+      pass: process.env.SMTP_PASS,      // tu token
     },
   });
 
   try {
     const info = await transporter.sendMail({
-      from: `"Prueba" <${process.env.REMITENTE}>`,
-      to: 'test@example.com',
-      subject: 'Prueba Mailtrap',
-      text: 'Hola desde Mailtrap',
+      from: '"Prueba Local" <no-reply@demomailtrap.co>',
+      to: 'chuquid2000@gmail.com',
+      subject: 'Prueba Mailtrap desde local',
+      text: 'Si lees esto, Mailtrap SMTP funciona desde tu PC.',
     });
-    console.log('OK, enviado:', info.messageId);
-  } catch (err) {
-    console.error('ERROR SMTP:', err);
+    console.log('OK:', info.messageId);
+  } catch (e) {
+    console.error('ERROR LOCAL:', e);
   }
 }
 
-main();
+test();
