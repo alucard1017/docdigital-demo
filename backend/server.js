@@ -114,6 +114,7 @@ console.log('✓ Ruta GET / registrada');
    ================================ */
 const authRoutes = require('./routes/auth');
 const docRoutes = require('./routes/documents');
+const publicRoutes = require('./routes/public'); // 👈 nuevo router público
 const { requireAuth, requireRole } = require('./routes/auth');
 
 app.use('/api/auth', loginLimiter, authRoutes);
@@ -122,8 +123,11 @@ console.log('✓ Rutas /api/auth registradas');
 app.use('/api/docs', docRoutes);
 console.log('✓ Rutas /api/docs registradas');
 
+app.use('/api/public', publicRoutes);
+console.log('✓ Rutas /api/public registradas');
+
 /* ================================
-   DESCARGA DE DOCUMENTOS (PDF)
+   DESCARGA DE DOCUMENTOS (PDF) INTERNA
    ================================ */
 /**
  * GET /api/docs/:id/download
@@ -133,22 +137,22 @@ app.get('/api/docs/:id/download', requireAuth, async (req, res) => {
   try {
     const db = require('./db');
     const { getSignedUrl } = require('./services/s3');
-    
+
     const docId = req.params.id;
-    
+
     // Verificar que el documento existe y pertenece al usuario
     const docRes = await db.query(
       `SELECT file_path, title FROM documents WHERE id = $1 AND owner_id = $2`,
       [docId, req.user.id]
     );
-    
+
     if (docRes.rows.length === 0) {
       return res.status(404).json({ message: 'Documento no encontrado' });
     }
-    
+
     const doc = docRes.rows[0];
     const signedUrl = await getSignedUrl(doc.file_path, 3600);
-    
+
     // Descargar desde S3 y enviar al navegador
     https.get(signedUrl, (s3Res) => {
       res.setHeader('Content-Type', 'application/pdf');
@@ -274,7 +278,7 @@ console.log('✓ Ruta POST /api/recordatorios/pendientes registrada');
 app.get('/api/stats', requireAuth, async (req, res) => {
   try {
     const db = require('./db');
-    
+
     const docsResult = await db.query(
       `SELECT 
         COUNT(*) as total,
@@ -340,7 +344,9 @@ const server = app.listen(PORT, () => {
   console.log('   POST /api/docs/:id/firmar');
   console.log('   POST /api/docs/:id/visar');
   console.log('   POST /api/docs/:id/rechazar');
-  console.log('   GET  /api/docs/:id/download (NUEVO)');
+  console.log('   GET  /api/docs/:id/download');
+  console.log('   GET  /api/public/docs/:token');
+  console.log('   POST /api/public/docs/:token/firmar');
   console.log('   GET  /api/s3/download/:fileKey');
   console.log('   POST /api/recordatorios/pendientes');
   console.log('=====================================');
