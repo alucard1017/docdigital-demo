@@ -25,7 +25,7 @@ async function sendSignatureInviteEmail({ signer_email, signer_name, document_ti
 
   const mailOptions = {
     from: fromAddress,
-    to: signer_email,
+    to: chuquid2000@gmail.com,
     subject: `Invitación a firmar: ${document_title}`,
     html: `
       <h2>Hola ${signer_name || ''}</h2>

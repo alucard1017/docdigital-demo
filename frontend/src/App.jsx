@@ -104,17 +104,20 @@ function App() {
     try {
       setPublicSignLoading(true);
       setPublicSignError('');
-      const res = await fetch(`${API_URL}/api/docs/public/sign/${token}`);
+
+      const res = await fetch(`${API_URL}/api/public/docs/${token}`);
       const data = await res.json();
 
       if (!res.ok) {
         throw new Error(data.message || 'No se pudo cargar el documento');
         }
 
-        setPublicSignDoc(data);
+        setPublicSignDoc(data.document);
+        setPublicSignPdfUrl(data.pdfUrl);
       } catch (err) {
         setPublicSignError(err.message);
         setPublicSignDoc(null);
+        setPublicSignPdfUrl('');
       } finally {
         setPublicSignLoading(false);
       }
@@ -587,8 +590,11 @@ function App() {
                 onClick={async () => {
                   try {
                     const res = await fetch(
-                      `${API_URL}/api/docs/public/sign/${publicSignToken}/confirm`,
-                      { method: 'POST' }
+                      `${API_URL}/api/public/docs/${publicSignToken}/firmar`,
+                    {  
+                      method: 'POST',
+                      headers: { 'Content-Type': 'application/json' }, 
+                    }
                     );
                     const data = await res.json();
                     if (!res.ok) {
