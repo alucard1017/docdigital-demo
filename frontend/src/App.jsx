@@ -186,7 +186,7 @@ function App() {
     };
 
     fetchPdfUrl();
-  }, [token, selectedDoc]);
+  }, [token, selectedDoc, API_URL]);
 
   // Cargar documentos automáticamente cuando haya token y vista lista
   useEffect(() => {

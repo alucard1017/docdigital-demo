@@ -66,6 +66,10 @@ export function DetailActions({
             color: "#78350f",
           }}
           onClick={async () => {
+            const ok = window.confirm(
+              "Declaro que he revisado íntegramente el documento, que tomo conocimiento de su contenido y que emito mi visado en conformidad, para los efectos que correspondan, en el marco de la Ley N° 19.799 sobre documentos electrónicos y firma electrónica. Entiendo que este visado quedará registrado electrónicamente junto con la trazabilidad del proceso."
+            );
+            if (!ok) return;
             await manejarAccionDocumento(selectedDoc.id, "visar");
           }}
         >
