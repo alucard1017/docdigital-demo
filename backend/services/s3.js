@@ -1,22 +1,34 @@
-const { S3Client, PutObjectCommand, GetObjectCommand, DeleteObjectCommand } = require("@aws-sdk/client-s3");
+// backend/services/storageR2.js (o el nombre que ya usas para S3)
+const {
+  S3Client,
+  PutObjectCommand,
+  GetObjectCommand,
+  DeleteObjectCommand,
+} = require("@aws-sdk/client-s3");
 const { getSignedUrl: presign } = require("@aws-sdk/s3-request-presigner");
 const fs = require("fs");
 const path = require("path");
 
-const s3Client = new S3Client({
-  region: process.env.AWS_REGION || "us-east-2",
+const R2_ACCOUNT_ID = process.env.R2_ACCOUNT_ID;
+const R2_BUCKET = process.env.R2_BUCKET;
+const R2_ACCESS_KEY_ID = process.env.R2_ACCESS_KEY_ID;
+const R2_SECRET_ACCESS_KEY = process.env.R2_SECRET_ACCESS_KEY;
+const R2_ENDPOINT = process.env.R2_ENDPOINT;
+
+// Cliente S3 apuntando a R2
+const r2Client = new S3Client({
+  region: "auto",
+  endpoint: R2_ENDPOINT,
   credentials: {
-    accessKeyId: process.env.AWS_ACCESS_KEY_ID,
-    secretAccessKey: process.env.AWS_SECRET_ACCESS_KEY,
+    accessKeyId: R2_ACCESS_KEY_ID,
+    secretAccessKey: R2_SECRET_ACCESS_KEY,
   },
 });
 
-const BUCKET = process.env.AWS_S3_BUCKET || "firma-express-pdfs";
+const BUCKET = R2_BUCKET;
 
 /**
- * Subir un PDF a S3
- * @param {string} filePath - Ruta local del archivo
- * @param {string} fileName - Clave en S3 (ej: documentos/userId/archivo.pdf)
+ * Subir un PDF a R2
  */
 async function uploadPdfToS3(filePath, fileName) {
   try {
@@ -33,17 +45,17 @@ async function uploadPdfToS3(filePath, fileName) {
       ContentType: "application/pdf",
     });
 
-    await s3Client.send(command);
-    console.log(`✅ PDF subido a S3: ${fileName}`);
+    await r2Client.send(command);
+    console.log(`✅ PDF subido a R2: ${fileName}`);
     return fileName;
   } catch (error) {
-    console.error("❌ Error al subir PDF a S3 COMPLETO:", error);
+    console.error("❌ Error al subir PDF a R2:", error);
     throw error;
   }
 }
 
 /**
- * Descargar un PDF de S3 a disco local
+ * Descargar un PDF de R2 a disco local
  */
 async function downloadPdfFromS3(fileName, savePath) {
   try {
@@ -52,7 +64,7 @@ async function downloadPdfFromS3(fileName, savePath) {
       Key: fileName,
     });
 
-    const result = await s3Client.send(command);
+    const result = await r2Client.send(command);
 
     const dir = path.dirname(savePath);
     if (!fs.existsSync(dir)) {
@@ -66,16 +78,16 @@ async function downloadPdfFromS3(fileName, savePath) {
     const buffer = Buffer.concat(chunks);
 
     fs.writeFileSync(savePath, buffer);
-    console.log(`✅ PDF descargado desde S3: ${fileName}`);
+    console.log(`✅ PDF descargado desde R2: ${fileName}`);
     return savePath;
   } catch (error) {
-    console.error("❌ Error al descargar PDF de S3:", error.message);
+    console.error("❌ Error al descargar PDF de R2:", error.message);
     throw error;
   }
 }
 
 /**
- * Eliminar un PDF de S3
+ * Eliminar un PDF de R2
  */
 async function deletePdfFromS3(fileName) {
   try {
@@ -84,11 +96,11 @@ async function deletePdfFromS3(fileName) {
       Key: fileName,
     });
 
-    await s3Client.send(command);
-    console.log(`✅ PDF eliminado de S3: ${fileName}`);
+    await r2Client.send(command);
+    console.log(`✅ PDF eliminado de R2: ${fileName}`);
     return true;
   } catch (error) {
-    console.error("❌ Error al eliminar PDF de S3:", error.message);
+    console.error("❌ Error al eliminar PDF de R2:", error.message);
     throw error;
   }
 }
@@ -103,10 +115,10 @@ async function getSignedUrl(fileName, expiresIn = 3600) {
       Key: fileName,
     });
 
-    const url = await presign(s3Client, command, { expiresIn });
+    const url = await presign(r2Client, command, { expiresIn });
     return url;
   } catch (error) {
-    console.error("❌ Error al generar URL firmada de S3:", error.message);
+    console.error("❌ Error al generar URL firmada de R2:", error.message);
     throw error;
   }
 }
