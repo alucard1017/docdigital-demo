@@ -274,6 +274,16 @@ router.post(
         sign_url: `${frontBaseUrl}/?token=${signatureToken}`,
       });
 
+     // Correo al visador (solo si corresponde)
+     if (requires_visado && visador_email) {
+       await sendSignatureInviteEmail({
+        signer_email: visador_email,
+        signer_name: visador_nombre || 'Visador',
+        document_title: title,
+        sign_url: `${frontBaseUrl}/?token=${signatureToken}&mode=visado`,
+      });
+    }
+
       return res.status(201).json({
         ...doc,
         requiresVisado: doc.requires_visado === true,
