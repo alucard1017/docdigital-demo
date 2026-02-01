@@ -1,56 +1,67 @@
 // backend/services/sendSignatureInviteEmail.js
-const nodemailer = require('nodemailer');
+const fetch = require('node-fetch');
 require('dotenv').config();
 
-// Transporter SMTP con Mailtrap (producción)
-const transporter = nodemailer.createTransport({
-  host: process.env.SMTP_HOST,      // live.smtp.mailtrap.io
-  port: 587,                        // usamos 587 con STARTTLS
-  secure: false,
-  auth: {
-    user: 'api',                    // usuario SMTP de Mailtrap
-    pass: process.env.SMTP_PASS,    // tu API token
-  },
-  tls: {
-    rejectUnauthorized: false,
-  },
-  connectionTimeout: 20000,
-  greetingTimeout: 20000,
-  socketTimeout: 20000,
-});
+const MAILTRAP_API_URL = 'https://send.api.mailtrap.io/api/send';
 
-/**
- * Envía una invitación al representante legal para firmar vía enlace con token.
- */
 async function sendSignatureInviteEmail({
   signer_email,
   signer_name,
   document_title,
   sign_url,
 }) {
-  const fromAddress = '"Firma Digital" <no-reply@demomailtrap.co>'; // usa tu dominio verificado
+  const fromEmail = process.env.MAILTRAP_SENDER_EMAIL;
+  const fromName = process.env.MAILTRAP_SENDER_NAME || 'Firma Digital';
 
-  const mailOptions = {
-    from: fromAddress,
-    to: signer_email,
-    subject: `Invitación a firmar: ${document_title}`,
-    html: `
-      <h2>Hola ${signer_name || ''}</h2>
-      <p>Has sido invitado a firmar el documento <strong>"${document_title}"</strong>.</p>
-      <p>Puedes revisarlo y firmarlo haciendo clic en el siguiente enlace:</p>
-      <p><a href="${sign_url}">Firmar documento ahora</a></p>
-      <p>Si no reconoces esta solicitud, puedes ignorar este correo.</p>
-      <p>Saludos,<br>Equipo Firma Digital</p>
-    `,
+  const subject = `Invitación a firmar: ${document_title}`;
+
+  const html = `
+    <h2>Hola ${signer_name || ''}</h2>
+    <p>Has sido invitado a firmar el documento <strong>"${document_title}"</strong>.</p>
+    <p>Puedes revisarlo y firmarlo haciendo clic en el siguiente enlace:</p>
+    <p><a href="${sign_url}">Firmar documento ahora</a></p>
+    <p>Si no reconoces esta solicitud, puedes ignorar este correo.</p>
+    <p>Saludos,<br>Equipo Firma Digital</p>
+  `;
+
+  const payload = {
+    from: {
+      email: fromEmail,
+      name: fromName,
+    },
+    to: [
+      {
+        email: signer_email,
+        name: signer_name || '',
+      },
+    ],
+    subject,
+    html,
   };
 
   try {
-    console.log('Enviando invitación de firma a:', signer_email);
-    const info = await transporter.sendMail(mailOptions);
-    console.log('Correo de invitación de firma enviado:', info.messageId);
+    console.log('Enviando invitación de firma (Email API) a:', signer_email);
+
+    const response = await fetch(MAILTRAP_API_URL, {
+      method: 'POST',
+      headers: {
+        Authorization: `Bearer ${process.env.MAILTRAP_API_TOKEN}`,
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify(payload),
+    });
+
+    if (!response.ok) {
+      const errorText = await response.text();
+      console.error('Error Mailtrap API:', response.status, errorText);
+      return false;
+    }
+
+    const data = await response.json();
+    console.log('Correo de invitación enviado via Mailtrap API:', data.message_ids || data);
     return true;
   } catch (error) {
-    console.error('Error enviando correo de invitación de firma:', error);
+    console.error('Error llamando a Mailtrap Email API:', error);
     return false;
   }
 }
