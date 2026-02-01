@@ -32,6 +32,7 @@ export function DetailView({
           `${API_URL}/api/docs/${selectedDoc.id}/timeline`
         );
         const data = await res.json();
+
         if (res.ok && data && data.timeline) {
           setTimeline(data.timeline);
         } else {
@@ -129,7 +130,7 @@ export function DetailView({
                   fontSize: "0.9rem",
                   color: "#4b5563",
                 }}
-            >
+              >
                 <strong>Descripción:</strong> {selectedDoc.description}
               </div>
             )}
@@ -288,7 +289,7 @@ export function DetailView({
               )}
             </div>
 
-            {/* Acciones (Visar / Firmar / Rechazar) */}
+            {/* Acciones */}
             <DetailActions
               puedeFirmar={puedeFirmar}
               puedeVisar={puedeVisar}

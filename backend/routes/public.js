@@ -31,20 +31,28 @@ router.get('/docs/:token', async (req, res) => {
     );
 
     if (result.rowCount === 0) {
-      return res.status(404).json({ message: 'Enlace inválido o documento no encontrado' });
+      return res
+        .status(404)
+        .json({ message: 'Enlace inválido o documento no encontrado' });
     }
 
     const doc = result.rows[0];
 
-    if (doc.signature_token_expires_at && doc.signature_token_expires_at < new Date()) {
-      return res.status(400).json({ message: 'El enlace de firma ha expirado' });
+    if (
+      doc.signature_token_expires_at &&
+      doc.signature_token_expires_at < new Date()
+    ) {
+      return res
+        .status(400)
+        .json({ message: 'El enlace de firma ha expirado' });
     }
 
     if (!doc.file_path) {
-      return res.status(404).json({ message: 'Documento sin archivo asociado' });
+      return res
+        .status(404)
+        .json({ message: 'Documento sin archivo asociado' });
     }
 
-    // URL firmada para ver el PDF
     const pdfUrl = await getSignedUrl(doc.file_path, 3600);
 
     return res.json({
@@ -82,26 +90,37 @@ router.post('/docs/:token/firmar', async (req, res) => {
     );
 
     if (current.rowCount === 0) {
-      return res.status(404).json({ message: 'Enlace inválido o documento no encontrado' });
+      return res
+        .status(404)
+        .json({ message: 'Enlace inválido o documento no encontrado' });
     }
 
     const docActual = current.rows[0];
 
-    if (docActual.signature_token_expires_at && docActual.signature_token_expires_at < new Date()) {
-      return res.status(400).json({ message: 'El enlace de firma ha expirado' });
+    if (
+      docActual.signature_token_expires_at &&
+      docActual.signature_token_expires_at < new Date()
+    ) {
+      return res
+        .status(400)
+        .json({ message: 'El enlace de firma ha expirado' });
     }
 
     if (docActual.signature_status === 'FIRMADO') {
-      return res.status(400).json({ message: 'Este documento ya fue firmado' });
+      return res
+        .status(400)
+        .json({ message: 'Este documento ya fue firmado' });
     }
 
     if (docActual.status === 'RECHAZADO') {
-      return res.status(400).json({ message: 'Documento rechazado, no se puede firmar' });
+      return res
+        .status(400)
+        .json({ message: 'Documento rechazado, no se puede firmar' });
     }
 
     if (docActual.requires_visado === true && docActual.status === 'PENDIENTE') {
       return res.status(400).json({
-        message: 'Este documento requiere visación antes de firmar'
+        message: 'Este documento requiere visación antes de firmar',
       });
     }
 
@@ -117,7 +136,9 @@ router.post('/docs/:token/firmar', async (req, res) => {
     const doc = result.rows[0];
 
     await db.query(
-      `INSERT INTO document_events (document_id, actor, action, details, from_status, to_status)
+      `INSERT INTO document_events (
+         document_id, actor, action, details, from_status, to_status
+       )
        VALUES ($1, $2, $3, $4, $5, $6)`,
       [
         doc.id,
@@ -125,14 +146,14 @@ router.post('/docs/:token/firmar', async (req, res) => {
         'FIRMADO_PUBLICO',
         'Documento firmado desde enlace público',
         docActual.status,
-        'FIRMADO'
+        'FIRMADO',
       ]
     );
 
     return res.json({
       ...doc,
       file_url: doc.file_path,
-      message: 'Documento firmado correctamente desde enlace público'
+      message: 'Documento firmado correctamente desde enlace público',
     });
   } catch (err) {
     console.error('❌ Error firmando documento público:', err);
