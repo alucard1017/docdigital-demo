@@ -3,29 +3,30 @@ const nodemailer = require('nodemailer');
 require('dotenv').config();
 
 const transporter = nodemailer.createTransport({
-  host: process.env.SMTP_HOST,
+  host: process.env.SMTP_HOST,              // live.smtp.mailtrap.io
   port: Number(process.env.SMTP_PORT) || 587,
-  secure: process.env.SMTP_PORT === '465',
+  secure: false,                            // usamos STARTTLS en 587
   auth: {
-    user: process.env.SMTP_USER,
-    pass: process.env.SMTP_PASS,
+    user: process.env.SMTP_USER,            // apismtp@mailtrap.io
+    pass: process.env.SMTP_PASS,            // tu API token
   },
 });
 
 /**
  * Envía una invitación al representante legal para firmar vía enlace con token.
- * @param {Object} params
- * @param {string} params.signer_email - Correo del representante.
- * @param {string} params.signer_name  - Nombre completo del representante.
- * @param {string} params.document_title - Título del documento.
- * @param {string} params.sign_url - URL completa con ?token=...
  */
-async function sendSignatureInviteEmail({ signer_email, signer_name, document_title, sign_url }) {
-  const fromAddress = `"Firma Digital" <${process.env.REMITENTE || process.env.SMTP_USER}>`;
+async function sendSignatureInviteEmail({
+  signer_email,
+  signer_name,
+  document_title,
+  sign_url,
+}) {
+  // Usa aquí el dominio verificado en Mailtrap, por ejemplo:
+  const fromAddress = `"Firma Digital" <no-reply@demomailtrap.co>`;
 
   const mailOptions = {
     from: fromAddress,
-    to: 'chuquid2000@gmail.com',
+    to: signer_email, // ahora sí al correo real del firmante
     subject: `Invitación a firmar: ${document_title}`,
     html: `
       <h2>Hola ${signer_name || ''}</h2>
@@ -38,6 +39,7 @@ async function sendSignatureInviteEmail({ signer_email, signer_name, document_ti
   };
 
   try {
+    console.log('Enviando invitación de firma a:', signer_email);
     const info = await transporter.sendMail(mailOptions);
     console.log('Correo de invitación de firma enviado:', info.messageId);
     return true;
