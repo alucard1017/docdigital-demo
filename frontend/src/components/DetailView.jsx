@@ -144,7 +144,7 @@ export function DetailView({
                     background: "#fef2f2",
                     fontSize: "0.9rem",
                     color: "#b91c1c",
-                    border: "1px solid "#fecaca",
+                    border: "1px solid #fecaca", // aquí estaba el error
                   }}
                 >
                   <strong>Motivo de rechazo:</strong>{" "}
