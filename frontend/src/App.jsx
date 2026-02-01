@@ -95,6 +95,7 @@ function App() {
   const [publicSignError, setPublicSignError] = useState('');
   const [publicSignLoading, setPublicSignLoading] = useState(false);
   const [publicSignToken, setPublicSignToken] = useState('');
+  const [publicSignPdfUrl, setPublicSignPdfUrl] = useState('');
 
   const [firmanteRunValue, setFirmanteRunValue] = useState('');
   const [empresaRutValue, setEmpresaRutValue] = useState('');
@@ -496,7 +497,7 @@ function App() {
   // VISTA FIRMA PÚBLICA POR TOKEN
   // ===============================
   if (view === 'public-sign') {
-    const pdfUrl = publicSignDoc?.file_url || "";
+    const pdfUrl = publicSignPdfUrl || "";
     
     return (
       <div className="login-bg">
