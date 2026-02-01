@@ -129,7 +129,7 @@ export function DetailView({
                   fontSize: "0.9rem",
                   color: "#4b5563",
                 }}
-              >
+            >
                 <strong>Descripción:</strong> {selectedDoc.description}
               </div>
             )}
@@ -144,7 +144,7 @@ export function DetailView({
                     background: "#fef2f2",
                     fontSize: "0.9rem",
                     color: "#b91c1c",
-                    border: "1px solid #fecaca", // aquí estaba el error
+                    border: "1px solid #fecaca",
                   }}
                 >
                   <strong>Motivo de rechazo:</strong>{" "}
@@ -167,7 +167,6 @@ export function DetailView({
               </span>
 
               <div style={{ display: "flex", gap: 12 }}>
-                {/* Descargar vía backend (endpoint /api/docs/:id/download) */}
                 {selectedDoc && (
                   <a
                     href={`${API_URL}/api/docs/${selectedDoc.id}/download`}
@@ -186,7 +185,6 @@ export function DetailView({
                   </a>
                 )}
 
-                {/* Ver directo en S3 (o URL firmada) */}
                 {pdfUrl && (
                   <a
                     href={pdfUrl}
@@ -283,7 +281,11 @@ export function DetailView({
                 Historial de acciones
               </h3>
 
-              <EventList events={safeEvents} />
+              {timeline && timeline.events && timeline.events.length > 0 ? (
+                <EventList events={timeline.events} />
+              ) : (
+                <EventList events={safeEvents} />
+              )}
             </div>
 
             {/* Acciones (Visar / Firmar / Rechazar) */}
