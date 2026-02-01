@@ -546,11 +546,6 @@ router.get('/:id/download', async (req, res) => {
 
     const doc = result.rows[0];
 
-    // Solo el dueño, por ahora
-    if (doc.owner_id !== req.user.id) {
-      return res.status(403).json({ message: 'No autorizado' });
-    }
-
     if (!doc.file_path) {
       return res.status(404).json({ message: 'Documento sin archivo asociado' });
     }
