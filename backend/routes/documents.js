@@ -229,15 +229,15 @@ router.post('/', requireAuth, upload.single('file'), handleMulterError, async (r
 });
 
 /* ================================
-   GET: Ver PDF del documento (S3)
+   GET: Descargar PDF (redirect a S3)
    ================================ */
-router.get('/:id/pdf', requireAuth, async (req, res) => {
+router.get('/:id/download', async (req, res) => {
   try {
-    const id = req.params.id;
+    const { id } = req.params;
 
     const result = await db.query(
-      `SELECT id, owner_id, file_path 
-       FROM documents 
+      `SELECT file_path 
+       FROM documents
        WHERE id = $1`,
       [id]
     );
@@ -246,22 +246,16 @@ router.get('/:id/pdf', requireAuth, async (req, res) => {
       return res.status(404).json({ message: 'Documento no encontrado' });
     }
 
-    const doc = result.rows[0];
+    const { file_path } = result.rows[0];
 
-    // Por ahora solo el owner puede verlo
-    if (doc.owner_id !== req.user.id) {
-      return res.status(403).json({ message: 'No autorizado para ver este documento' });
-    }
-
-    if (!doc.file_path) {
+    if (!file_path) {
       return res.status(404).json({ message: 'Documento sin archivo asociado' });
     }
 
-    // file_path contiene la clave S3: documentos/...
-    const signedUrl = await getSignedUrl(doc.file_path, 3600);
-    return res.json({ url: signedUrl });
+    const signedUrl = await getSignedUrl(file_path, 3600);
+    return res.redirect(signedUrl);
   } catch (err) {
-    console.error('❌ Error obteniendo PDF:', err);
+    console.error('❌ Error en descarga de documento:', err);
     return res.status(500).json({ message: 'Error interno del servidor' });
   }
 });
