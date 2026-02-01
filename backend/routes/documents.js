@@ -526,6 +526,42 @@ router.post('/:id/rechazar', requireAuth, async (req, res) => {
   }
 });
 
+/* ================================
+   GET: Descargar PDF (redirect a S3)
+   ================================ */
+router.get('/:id/download', async (req, res) => {
+  try {
+    const id = req.params.id;
+
+    const result = await db.query(
+      `SELECT id, owner_id, file_path 
+       FROM documents
+       WHERE id = $1`,
+      [id]
+    );
+
+    if (result.rowCount === 0) {
+      return res.status(404).json({ message: 'Documento no encontrado' });
+    }
+
+    const doc = result.rows[0];
+
+    // Solo el dueño, por ahora
+    if (doc.owner_id !== req.user.id) {
+      return res.status(403).json({ message: 'No autorizado' });
+    }
+
+    if (!doc.file_path) {
+      return res.status(404).json({ message: 'Documento sin archivo asociado' });
+    }
+
+    const signedUrl = await getSignedUrl(doc.file_path, 3600);
+    return res.redirect(signedUrl);
+  } catch (err) {
+    console.error('❌ Error en descarga de documento:', err);
+    return res.status(500).json({ message: 'Error interno del servidor' });
+  }
+});
 
 /* ================================
    EXPORTAR ROUTER
