@@ -2,14 +2,21 @@
 const nodemailer = require('nodemailer');
 require('dotenv').config();
 
+// Transporter SMTP con Mailtrap (producción)
 const transporter = nodemailer.createTransport({
-  host: process.env.SMTP_HOST,              // live.smtp.mailtrap.io
-  port: Number(process.env.SMTP_PORT) || 587,
-  secure: false,                            // usamos STARTTLS en 587
+  host: process.env.SMTP_HOST,        // live.smtp.mailtrap.io
+  port: 587,                          // fijamos 587
+  secure: false,                      // usamos STARTTLS
   auth: {
-    user: process.env.SMTP_USER,            // apismtp@mailtrap.io
-    pass: process.env.SMTP_PASS,            // tu API token
+    user: process.env.SMTP_USER,      // apismtp@mailtrap.io
+    pass: process.env.SMTP_PASS,      // tu API token
   },
+  tls: {
+    rejectUnauthorized: false,
+  },
+  connectionTimeout: 20000,          // 20s
+  greetingTimeout: 20000,
+  socketTimeout: 20000,
 });
 
 /**
@@ -21,12 +28,11 @@ async function sendSignatureInviteEmail({
   document_title,
   sign_url,
 }) {
-  // Usa aquí el dominio verificado en Mailtrap, por ejemplo:
-  const fromAddress = `"Firma Digital" <no-reply@demomailtrap.co>`;
+  const fromAddress = `"Firma Digital" <no-reply@demomailtrap.co>`; // tu dominio verificado
 
   const mailOptions = {
     from: fromAddress,
-    to: signer_email, // ahora sí al correo real del firmante
+    to: signer_email,
     subject: `Invitación a firmar: ${document_title}`,
     html: `
       <h2>Hola ${signer_name || ''}</h2>
