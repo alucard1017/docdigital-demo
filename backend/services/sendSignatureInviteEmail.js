@@ -1,8 +1,15 @@
-// backend/services/sendSignatureInviteEmail.js
-const fetch = require('node-fetch');
+const nodemailer = require('nodemailer');
 require('dotenv').config();
 
-const MAILTRAP_API_URL = 'https://send.api.mailtrap.io/api/send';
+const transporter = nodemailer.createTransport({
+  host: process.env.SMTP_HOST,
+  port: Number(process.env.SMTP_PORT) || 587,
+  secure: false, // con 587 se usa STARTTLS
+  auth: {
+    user: process.env.SMTP_USER,
+    pass: process.env.SMTP_PASS,
+  },
+});
 
 async function sendSignatureInviteEmail({
   signer_email,
@@ -10,10 +17,8 @@ async function sendSignatureInviteEmail({
   document_title,
   sign_url,
 }) {
-  console.log('DEBUG EMAIL >> to:', signer_email, 'title:', document_title);
-
-  const fromEmail = process.env.MAILTRAP_SENDER_EMAIL;
-  const fromName = process.env.MAILTRAP_SENDER_NAME || 'Firma Digital';
+  const fromEmail = process.env.SMTP_FROM_EMAIL;
+  const fromName = process.env.SMTP_FROM_NAME || 'Firma Digital';
 
   const subject = `Invitación a firmar: ${document_title}`;
 
@@ -26,44 +31,20 @@ async function sendSignatureInviteEmail({
     <p>Saludos,<br>Equipo Firma Digital</p>
   `;
 
-  const payload = {
-    from: {
-      email: fromEmail,
-      name: fromName,
-    },
-    to: [
-      {
-        email: signer_email,
-        name: signer_name || '',
-      },
-    ],
-    subject,
-    html,
-  };
-
   try {
-    console.log('Enviando invitación de firma (Email API) a:', signer_email);
+    console.log('DEBUG EMAIL >> to:', signer_email, 'title:', document_title);
 
-    const response = await fetch(MAILTRAP_API_URL, {
-      method: 'POST',
-      headers: {
-        Authorization: `Bearer ${process.env.MAILTRAP_API_TOKEN}`,
-        'Content-Type': 'application/json',
-      },
-      body: JSON.stringify(payload),
+    const info = await transporter.sendMail({
+      from: `"${fromName}" <${fromEmail}>`,
+      to: signer_email,
+      subject,
+      html,
     });
 
-    if (!response.ok) {
-      const errorText = await response.text();
-      console.error('Error Mailtrap API:', response.status, errorText);
-      return false;
-    }
-
-    const data = await response.json();
-    console.log('Correo de invitación enviado via Mailtrap API:', data.message_ids || data);
+    console.log('Correo enviado via SMTP Mailtrap:', info.messageId);
     return true;
   } catch (error) {
-    console.error('Error llamando a Mailtrap Email API:', error);
+    console.error('Error enviando correo via SMTP Mailtrap:', error);
     return false;
   }
 }
