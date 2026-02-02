@@ -286,7 +286,7 @@ router.post(
         process.env.FRONTEND_URL || 'https://docdigital-demo.onrender.com';
 
       // ===========================
-      // ENVÍO DE CORREOS
+      // ENVÍO DE CORREOS (RUTA PÚBLICA)
       // ===========================
 
       // 1) Firmante principal
@@ -294,15 +294,13 @@ router.post(
         signer_email: firmante_email,
         signer_name: firmante_nombre_completo,
         document_title: title,
-        // luego cambiaremos a /public/sign para evitar login
-        sign_url: `${frontBaseUrl}/?token=${signatureToken}`,
+        sign_url: `${frontBaseUrl}/firma-publica?token=${signatureToken}`,
       });
 
       // 2) Firmante adicional (si existe)
       if (firmante_adicional_email) {
         const tokenFirmanteAdicional = crypto.randomUUID();
 
-        // Aquí podrías guardar este token en otra tabla si quieres control por persona
         console.log(
           '📧 Enviando invitación a firmante adicional:',
           firmante_adicional_email
@@ -313,7 +311,7 @@ router.post(
           signer_name:
             firmante_adicional_nombre_completo || 'Firmante adicional',
           document_title: title,
-          sign_url: `${frontBaseUrl}/?token=${tokenFirmanteAdicional}`,
+          sign_url: `${frontBaseUrl}/firma-publica?token=${tokenFirmanteAdicional}`,
         });
       }
 
@@ -327,7 +325,7 @@ router.post(
           signer_email: visador_email,
           signer_name: visador_nombre || 'Visador',
           document_title: title,
-          sign_url: `${frontBaseUrl}/?token=${tokenVisador}&mode=visado`,
+          sign_url: `${frontBaseUrl}/firma-publica?token=${tokenVisador}&mode=visado`,
         });
       }
 
@@ -342,7 +340,6 @@ router.post(
           signer_email: destinatario_email,
           signer_name: destinatario_nombre || 'Destinatario',
           document_title: title,
-          // Solo informar, puede ser un link genérico o nada
           sign_url: `${frontBaseUrl}`,
         });
       }

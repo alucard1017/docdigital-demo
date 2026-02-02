@@ -133,8 +133,9 @@ function App() {
   useEffect(() => {
     const params = new URLSearchParams(window.location.search);
     const tokenUrl = params.get('token');
+    const isFirmaPublica = window.location.pathname === '/firma-publica';
 
-    if (tokenUrl) {
+    if (tokenUrl && isFirmaPublica) {
       setView('public-sign');
       setPublicSignToken(tokenUrl);
       cargarFirmaPublica(tokenUrl);
@@ -710,6 +711,7 @@ function App() {
   /* ===============================
      VISTA DASHBOARD (LIST + UPLOAD)
      =============================== */
+
      console.log('DEBUG SIMPLE');
      
   return (
