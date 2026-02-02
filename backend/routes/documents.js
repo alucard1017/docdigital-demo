@@ -1,3 +1,4 @@
+// backend/routes/documents.js
 const express = require('express');
 const multer = require('multer');
 const path = require('path');
@@ -285,9 +286,14 @@ router.post(
       const frontBaseUrl =
         process.env.FRONTEND_URL || 'https://docdigital-demo.onrender.com';
 
-      // ===========================
-      // ENVÍO DE CORREOS (RUTA PÚBLICA)
-      // ===========================
+      console.log(
+        'DEBUG DOC EMAILS >> requires_visado:',
+        requires_visado,
+        'visador_email:',
+        visador_email,
+        'destinatario_email:',
+        destinatario_email
+      );
 
       // 1) Firmante principal
       await sendSignatureInviteEmail({

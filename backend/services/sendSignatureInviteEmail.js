@@ -10,6 +10,8 @@ async function sendSignatureInviteEmail({
   document_title,
   sign_url,
 }) {
+  console.log('DEBUG EMAIL >> to:', signer_email, 'title:', document_title);
+
   const fromEmail = process.env.MAILTRAP_SENDER_EMAIL;
   const fromName = process.env.MAILTRAP_SENDER_NAME || 'Firma Digital';
 
