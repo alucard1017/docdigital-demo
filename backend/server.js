@@ -56,7 +56,7 @@ app.use(generalLimiter);
    MIDDLEWARES
    ================================ */
 const allowedOrigins = [
-  process.env.FRONTEND_URL,      // Render
+  process.env.FRONTEND_URL, // Render
   'http://localhost:5173',
   'http://localhost:5174',
   'http://localhost:3000',
@@ -94,6 +94,8 @@ console.log('✓ Directorio de uploads verificado');
    ================================ */
 app.get('/api/health', (req, res) => {
   try {
+    console.log('DEBUG HEALTH >> /api/health llamado'); // 👈 log añadido
+
     res.json({
       ok: true,
       timestamp: new Date().toISOString(),
@@ -128,7 +130,11 @@ const { requireAuth, requireRole } = require('./routes/auth');
 app.use('/api/auth', loginLimiter, authRoutes);
 console.log('✓ Rutas /api/auth registradas');
 
-app.use('/api/docs', docRoutes);
+// 👇 Wrap para loguear cualquier request a /api/docs
+app.use('/api/docs', (req, res, next) => {
+  console.log(`DEBUG DOCS >> ${req.method} ${req.originalUrl} llamado`);
+  next();
+}, docRoutes);
 console.log('✓ Rutas /api/docs registradas');
 
 app.use('/api/public', publicRoutes);
