@@ -1,13 +1,34 @@
 const nodemailer = require('nodemailer');
 require('dotenv').config();
 
+console.log('DEBUG EMAIL >> Cargando sendSignatureInviteEmail.js');
+
+const {
+  SMTP_HOST,
+  SMTP_PORT,
+  SMTP_USER,
+  SMTP_PASS,
+  SMTP_FROM_EMAIL,
+  SMTP_FROM_NAME,
+} = process.env;
+
+if (!SMTP_HOST || !SMTP_PORT || !SMTP_USER || !SMTP_PASS || !SMTP_FROM_EMAIL) {
+  console.warn('DEBUG EMAIL >> Faltan variables SMTP:', {
+    SMTP_HOST: !!SMTP_HOST,
+    SMTP_PORT: !!SMTP_PORT,
+    SMTP_USER: !!SMTP_USER,
+    SMTP_PASS: !!SMTP_PASS,
+    SMTP_FROM_EMAIL: !!SMTP_FROM_EMAIL,
+  });
+}
+
 const transporter = nodemailer.createTransport({
-  host: process.env.SMTP_HOST,
-  port: Number(process.env.SMTP_PORT) || 587,
+  host: SMTP_HOST,
+  port: Number(SMTP_PORT) || 587,
   secure: false, // con 587 se usa STARTTLS
   auth: {
-    user: process.env.SMTP_USER,
-    pass: process.env.SMTP_PASS,
+    user: SMTP_USER,
+    pass: SMTP_PASS,
   },
 });
 
@@ -17,8 +38,8 @@ async function sendSignatureInviteEmail({
   document_title,
   sign_url,
 }) {
-  const fromEmail = process.env.SMTP_FROM_EMAIL;
-  const fromName = process.env.SMTP_FROM_NAME || 'Firma Digital';
+  const fromEmail = SMTP_FROM_EMAIL;
+  const fromName = SMTP_FROM_NAME || 'Firma Digital';
 
   const subject = `Invitación a firmar: ${document_title}`;
 
@@ -32,7 +53,11 @@ async function sendSignatureInviteEmail({
   `;
 
   try {
-    console.log('DEBUG EMAIL >> to:', signer_email, 'title:', document_title);
+    console.log('DEBUG EMAIL >> preparando envío', {
+      to: signer_email,
+      subject,
+      sign_url,
+    });
 
     const info = await transporter.sendMail({
       from: `"${fromName}" <${fromEmail}>`,
@@ -41,10 +66,10 @@ async function sendSignatureInviteEmail({
       html,
     });
 
-    console.log('Correo enviado via SMTP Mailtrap:', info.messageId);
+    console.log('DEBUG EMAIL >> enviado OK, messageId:', info && info.messageId);
     return true;
   } catch (error) {
-    console.error('Error enviando correo via SMTP Mailtrap:', error);
+    console.error('DEBUG EMAIL >> error enviando correo:', error.message);
     return false;
   }
 }
