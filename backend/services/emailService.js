@@ -1,34 +1,117 @@
 // backend/services/emailService.js
-const nodemailer = require('nodemailer');
+const { emailQueue } = require("../queues/emailQueue");
 
-function createTransportForClient(cfg) {
-  return nodemailer.createTransport({
-    host: cfg.smtp_host,
-    port: cfg.smtp_port,
-    secure: cfg.smtp_port === 465,
-    auth: {
-      user: cfg.smtp_user,
-      pass: cfg.smtp_pass,
-    },
-  });
+/**
+ * Encolar un email para envío asincrónico
+ */
+async function queueEmail(to, subject, html) {
+  try {
+    const job = await emailQueue.add(
+      { to, subject, html },
+      { delay: 0 }
+    );
+    console.log(`📬 [EMAIL SERVICE] Email encolado para ${to} (Job #${job.id})`);
+    return job;
+  } catch (error) {
+    console.error("❌ [EMAIL SERVICE] Error encolando email:", error.message);
+    throw error;
+  }
 }
 
-async function sendReminderEmail(documento, clientEmailConfig) {
-  const transporter = createTransportForClient(clientEmailConfig);
+/**
+ * Enviar invitación a firmar
+ */
+async function sendSigningInvitation(email, docTitle, signUrl) {
+  const html = `
+    <!DOCTYPE html>
+    <html>
+      <head>
+        <style>
+          body { font-family: Arial, sans-serif; line-height: 1.6; color: #333; }
+          .container { max-width: 600px; margin: 0 auto; padding: 20px; }
+          .header { background-color: #3b82f6; color: white; padding: 20px; text-align: center; border-radius: 5px; }
+          .content { margin: 20px 0; }
+          .button { display: inline-block; background-color: #3b82f6; color: white; padding: 12px 24px; text-decoration: none; border-radius: 5px; margin: 20px 0; }
+          .footer { font-size: 12px; color: #999; margin-top: 30px; border-top: 1px solid #eee; padding-top: 10px; }
+        </style>
+      </head>
+      <body>
+        <div class="container">
+          <div class="header">
+            <h2>📄 Invitación a Firmar Documento</h2>
+          </div>
+          <div class="content">
+            <p>¡Hola!</p>
+            <p>Ha recibido una invitación para <strong>firmar</strong> el siguiente documento:</p>
+            <p style="font-size: 16px; font-weight: bold; color: #1e293b;">${docTitle}</p>
+            <p>Haga clic en el botón siguiente para proceder con la firma electrónica:</p>
+            <a href="${signUrl}" class="button">Ir a Firmar Documento</a>
+            <p style="color: #666; font-size: 14px;">Este enlace es válido por 30 días.</p>
+          </div>
+          <div class="footer">
+            <p>© 2026 Firma Express - Plataforma de Firma Digital</p>
+            <p>Este es un email automático, por favor no responda.</p>
+          </div>
+        </div>
+      </body>
+    </html>
+  `;
 
-  const mailOptions = {
-    from: `"Firma Digital" <${clientEmailConfig.remitente || clientEmailConfig.smtp_user}>`,
-    to: documento.signer_email,
-    subject: 'Recordatorio: Firma tu documento pendiente',
-    html: `
-      <h2>¡Hola!</h2>
-      <p>El documento "${documento.nombre}" está esperando tu firma.</p>
-      <p><a href="${clientEmailConfig.frontend_url}/firmar/${documento.id}">Firmar ahora</a></p>
-      <p>Saludos,<br>Equipo Firma Digital</p>
-    `,
-  };
-
-  await transporter.sendMail(mailOptions);
+  return queueEmail(email, `Invitación a firmar: ${docTitle}`, html);
 }
 
-module.exports = { createTransportForClient, sendReminderEmail };
+/**
+ * Enviar invitación a visar
+ */
+async function sendVisadoInvitation(email, docTitle, signUrl) {
+  const html = `
+    <!DOCTYPE html>
+    <html>
+      <head>
+        <style>
+          body { font-family: Arial, sans-serif; line-height: 1.6; color: #333; }
+          .container { max-width: 600px; margin: 0 auto; padding: 20px; }
+          .header { background-color: #f59e0b; color: white; padding: 20px; text-align: center; border-radius: 5px; }
+          .content { margin: 20px 0; }
+          .button { display: inline-block; background-color: #f59e0b; color: white; padding: 12px 24px; text-decoration: none; border-radius: 5px; margin: 20px 0; }
+          .footer { font-size: 12px; color: #999; margin-top: 30px; border-top: 1px solid #eee; padding-top: 10px; }
+        </style>
+      </head>
+      <body>
+        <div class="container">
+          <div class="header">
+            <h2>✓ Invitación a Visar Documento</h2>
+          </div>
+          <div class="content">
+            <p>¡Hola!</p>
+            <p>Ha recibido una invitación para <strong>visar</strong> el siguiente documento:</p>
+            <p style="font-size: 16px; font-weight: bold; color: #1e293b;">${docTitle}</p>
+            <p>El visado es un acto formal que valida el contenido y estado del documento.</p>
+            <a href="${signUrl}" class="button">Ir a Visar Documento</a>
+            <p style="color: #666; font-size: 14px;">Este enlace es válido por 30 días.</p>
+          </div>
+          <div class="footer">
+            <p>© 2026 Firma Express - Plataforma de Firma Digital</p>
+            <p>Este es un email automático, por favor no responda.</p>
+          </div>
+        </div>
+      </body>
+    </html>
+  `;
+
+  return queueEmail(email, `Invitación a visar: ${docTitle}`, html);
+}
+
+/**
+ * Enviar notificación genérica
+ */
+async function sendNotification(email, subject, html) {
+  return queueEmail(email, subject, html);
+}
+
+module.exports = {
+  queueEmail,
+  sendSigningInvitation,
+  sendVisadoInvitation,
+  sendNotification,
+};

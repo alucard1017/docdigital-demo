@@ -6,7 +6,7 @@ const fs = require('fs');
 const axios = require('axios');
 const db = require('../db');
 const { requireAuth } = require('./auth');
-const { sendSignatureInviteEmail } = require('../services/sendSignatureInviteEmail');
+const { sendSigningInvitation, sendVisadoInvitation } = require('../services/emailService');
 const { uploadPdfToS3, getSignedUrl } = require('../services/s3');
 const { isValidEmail, isValidRun, validateLength } = require('../utils/validators');
 
@@ -303,66 +303,73 @@ router.post(
         destinatario_email
       );
 
-      // 1) Firmante principal
-      await sendSignatureInviteEmail({
-        signer_email: firmante_email,
-        signer_name: firmante_nombre_completo,
-        document_title: title,
-        sign_url: `${frontBaseUrl}/firma-publica?token=${signatureToken}`,
-      });
+      // ⭐ ENCOLAR EMAILS EN BACKGROUND (NO ESPERAR)
+      try {
+        // 1) Firmante principal
+        if (firmante_email) {
+          sendSigningInvitation(
+            firmante_email,
+            title,
+            `${frontBaseUrl}/firma-publica?token=${signatureToken}`
+          ).catch((err) => {
+            console.error('❌ Error encolando email de firma:', err.message);
+          });
+        }
 
-      // 2) Firmante adicional (si existe)
-      if (firmante_adicional_email) {
-        const tokenFirmanteAdicional = crypto.randomUUID();
+        // 2) Firmante adicional (si existe)
+        if (firmante_adicional_email) {
+          const tokenFirmanteAdicional = crypto.randomUUID();
+          console.log(
+            '📧 Encolando email para firmante adicional:',
+            firmante_adicional_email
+          );
+          sendSigningInvitation(
+            firmante_adicional_email,
+            title,
+            `${frontBaseUrl}/firma-publica?token=${tokenFirmanteAdicional}`
+          ).catch((err) => {
+            console.error('❌ Error encolando email de firmante adicional:', err.message);
+          });
+        }
 
-        console.log(
-          '📧 Enviando invitación a firmante adicional:',
-          firmante_adicional_email
-        );
+        // 3) Visador (si el documento requiere visado y hay email)
+        if (requires_visado && visador_email) {
+          const tokenVisador = crypto.randomUUID();
+          console.log('📧 Encolando email para visador:', visador_email);
+          sendVisadoInvitation(
+            visador_email,
+            title,
+            `${frontBaseUrl}/firma-publica?token=${tokenVisador}&mode=visado`
+          ).catch((err) => {
+            console.error('❌ Error encolando email de visado:', err.message);
+          });
+        }
 
-        await sendSignatureInviteEmail({
-          signer_email: firmante_adicional_email,
-          signer_name:
-            firmante_adicional_nombre_completo || 'Firmante adicional',
-          document_title: title,
-          sign_url: `${frontBaseUrl}/firma-publica?token=${tokenFirmanteAdicional}`,
-        });
+        // 4) Empresa / destinatario (opcional)
+        if (destinatario_email && destinatario_email !== firmante_email) {
+          console.log(
+            '📧 Encolando notificación a destinatario/empresa:',
+            destinatario_email
+          );
+          sendSigningInvitation(
+            destinatario_email,
+            title,
+            `${frontBaseUrl}/documentos/${doc.id}`
+          ).catch((err) => {
+            console.error('❌ Error encolando email de destinatario:', err.message);
+          });
+        }
+      } catch (emailError) {
+        // Los errores en encolado NO bloquean la respuesta
+        console.error('⚠️ Error al encolar emails:', emailError.message);
       }
 
-      // 3) Visador (si el documento requiere visado y hay email)
-      if (requires_visado && visador_email) {
-        const tokenVisador = crypto.randomUUID();
-
-        console.log('📧 Enviando invitación a visador:', visador_email);
-
-        await sendSignatureInviteEmail({
-          signer_email: visador_email,
-          signer_name: visador_nombre || 'Visador',
-          document_title: title,
-          sign_url: `${frontBaseUrl}/firma-publica?token=${tokenVisador}&mode=visado`,
-        });
-      }
-
-      // 4) Empresa / destinatario (solo notificación)
-      if (destinatario_email) {
-        console.log(
-          '📧 Enviando notificación a destinatario/empresa:',
-          destinatario_email
-        );
-
-        await sendSignatureInviteEmail({
-          signer_email: destinatario_email,
-          signer_name: destinatario_nombre || 'Destinatario',
-          document_title: title,
-          sign_url: `${frontBaseUrl}`,
-        });
-      }
-
+      // ⭐ RESPONDER INMEDIATAMENTE (sin esperar emails)
       return res.status(201).json({
         ...doc,
         requiresVisado: doc.requires_visado === true,
         file_url: doc.file_path,
-        message: 'Documento creado y subido a S3',
+        message: 'Documento creado exitosamente. Los emails se enviarán en segundo plano.',
       });
     } catch (err) {
       console.error('❌ Error creando documento:', err);
