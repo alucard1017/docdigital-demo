@@ -6,7 +6,6 @@ import { ListHeader } from './components/ListHeader';
 import { DocumentRow } from './components/DocumentRow';
 import { DOC_STATUS } from './constants';
 import { API_BASE_URL } from "./constants";
-import { UsersPanel } from './components/UsersPanel';
 
 const API_URL = API_BASE_URL;
 
@@ -713,7 +712,7 @@ function App() {
      VISTA DASHBOARD (LIST + UPLOAD)
      =============================== */
 
-     console.log('DEBUG SIMPLE');
+     console.log('DEBUG SUPER MEGA SIMPLE v3');
 
      {console.log('DEBUG ESTADO:', {
           view,
