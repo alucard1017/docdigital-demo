@@ -11,12 +11,11 @@ export function Sidebar({
   setStatusFilter,
   logout
 }) {
-  const normalizedRun = user?.run?.replace(/[.\-]/g, '') || '';
-  const OWNER_RUN = '1053806586'; // tu RUN normalizado
+  // Ajusta este ID al de tu usuario dueño (mira en la tabla users)
+  const OWNER_ID = 7; // ejemplo
 
-  const isOwner = normalizedRun === OWNER_RUN;
+  const isOwner = user?.id === OWNER_ID;
   const isGlobalAdmin = user?.role === 'admin_global';
-  const isAdmin = user?.role === 'admin';
 
   // Menú de usuarios solo para dueño + admin_global
   const showUsersMenu = isOwner || isGlobalAdmin;
@@ -40,7 +39,10 @@ export function Sidebar({
         <div style={{ fontWeight: 700, marginBottom: 4 }}>
           Sesión activa
         </div>
-        <div>{user?.email || 'usuario@correo.com'}</div>
+        <div>{user?.name || 'Usuario'}</div>
+        <div style={{ opacity: 0.7 }}>
+          {user?.email || 'usuario@correo.com'}
+        </div>
         <div style={{ opacity: 0.7 }}>
           Rol: {user?.role || 'FIRMANTE'}
         </div>
