@@ -15,8 +15,6 @@ export function DetailActions({
 }) {
   if (!selectedDoc) return null;
 
-  const API_URL = import.meta.env.VITE_API_URL;
-
   const handleDownload = () => {
     if (!selectedDoc) return;
     window.location.href = `${API_URL}/api/docs/${selectedDoc.id}/download`;
