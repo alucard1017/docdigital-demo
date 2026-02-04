@@ -1514,7 +1514,9 @@ function App() {
             VISTA USUARIOS (ADMIN)
             ================================ */}
           {view === 'users' && (
-          <UsersPanel />
+            <div style={{ padding: '2rem' }}>
+              <h2>Panel de usuarios (en construcción)</h2>
+            </div>
         )}
       </div>
     </div>
