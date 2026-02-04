@@ -6,8 +6,32 @@ const { requireAuth, requireRole } = require('./auth');
 
 const router = express.Router();
 
-// RUN del dueño que NUNCA se puede borrar
-const OWNER_RUN = process.env.ADMIN_RUN || '1053806586';
+const normalizeRun = run => (run || '').replace(/[.\-]/g, '');
+
+// RUN del dueño que NUNCA se puede borrar (normalizado)
+const OWNER_RUN = normalizeRun(process.env.ADMIN_RUN || '1053806586');
+
+/**
+ * POST /api/users/register
+ * Registro público (si lo usas)
+ */
+router.post('/register', async (req, res, next) => {
+  try {
+    const { run, name, email, password, plan, role } = req.body;
+
+    const normalizedRun = normalizeRun(run);
+    const hash = bcrypt.hashSync(password, 10);
+
+    await db.query(
+      'INSERT INTO users (run, name, email, password_hash, plan, role) VALUES ($1, $2, $3, $4, $5, $6)',
+      [normalizedRun, name, email, hash, plan || 'basic', role || 'user']
+    );
+
+    return res.status(201).json({ message: 'Usuario creado' });
+  } catch (err) {
+    return next(err);
+  }
+});
 
 /**
  * GET /api/users
@@ -39,13 +63,14 @@ router.post('/', requireAuth, requireRole('admin'), async (req, res) => {
         .json({ message: 'RUN, nombre y contraseña son obligatorios' });
     }
 
+    const normalizedRun = normalizeRun(run);
     const hash = bcrypt.hashSync(password, 10);
 
     const result = await db.query(
       `INSERT INTO users (run, name, password_hash, plan, role)
        VALUES ($1, $2, $3, $4, $5)
        RETURNING id, run, name, plan, role`,
-      [run, name, hash, plan, role]
+      [normalizedRun, name, hash, plan, role]
     );
 
     return res.status(201).json(result.rows[0]);
@@ -83,7 +108,7 @@ router.delete('/:id', requireAuth, requireRole('admin'), async (req, res) => {
     }
 
     // 2) Solo el dueño puede borrar otros admins
-    if (target.role === 'admin' && req.user.run !== OWNER_RUN) {
+    if (target.role === 'admin' && normalizeRun(req.user.run) !== OWNER_RUN) {
       return res
         .status(403)
         .json({ message: 'Solo el dueño puede eliminar otros administradores' });

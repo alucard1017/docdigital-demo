@@ -8,12 +8,16 @@ const router = express.Router();
 // Usar secreto fuerte desde variables de entorno
 const JWT_SECRET = process.env.JWT_SECRET || 'secreto-demo';
 
+// Normalizar RUN: quitar puntos y guiones
+const normalizeRun = run => (run || '').replace(/[.\-]/g, '');
+
 /**
  * Asegurar usuario administrador al iniciar el servidor
  */
 (async () => {
   try {
-    const adminRun = process.env.ADMIN_RUN || '1053806586';
+    const adminRunRaw = process.env.ADMIN_RUN || '1053806586';
+    const adminRun = normalizeRun(adminRunRaw);
     const adminName = process.env.ADMIN_NAME || 'Alucard';
     const adminPassword = process.env.ADMIN_PASSWORD || 'secreto-demo';
 
@@ -88,9 +92,11 @@ router.post('/login', async (req, res, next) => {
       return res.status(400).json({ message: 'RUN y contraseña son obligatorios' });
     }
 
+    const normalizedRun = normalizeRun(run);
+
     const result = await db.query(
       'SELECT * FROM users WHERE run = $1',
-      [run]
+      [normalizedRun]
     );
 
     const user = result.rows[0];
