@@ -35,19 +35,45 @@ router.post('/register', async (req, res, next) => {
 
 /**
  * GET /api/users
- * Lista de usuarios (solo admin)
+ * Lista de usuarios
+ * - Dueño (OWNER_RUN): ve todos
+ * - admin_global: ve todos excepto al dueño
+ * - admin normal: solo se ve a sí mismo
  * Permite filtrar por rol: /api/users?role=admin
  */
 router.get('/', requireAuth, requireRole('admin'), async (req, res) => {
   try {
+    const requesterRun = normalizeRun(req.user.run);
+    const isOwner = requesterRun === OWNER_RUN;
+    const isGlobalAdmin = req.user.role === 'admin_global';
+
     const { role } = req.query;
 
-    let query = 'SELECT id, run, name, email, plan, role FROM users';
     const params = [];
+    const whereParts = [];
+
+    if (isOwner || isGlobalAdmin) {
+      // Pueden ver varios usuarios
+      if (!isOwner) {
+        // admin_global no ve al dueño
+        whereParts.push(`run <> $${params.length + 1}`);
+        params.push(OWNER_RUN);
+      }
+    } else {
+      // admin normal: solo su propio usuario
+      whereParts.push(`run = $${params.length + 1}`);
+      params.push(requesterRun);
+    }
 
     if (role) {
-      query += ' WHERE role = $1';
+      whereParts.push(`role = $${params.length + 1}`);
       params.push(role);
+    }
+
+    let query = 'SELECT id, run, name, email, plan, role FROM users';
+
+    if (whereParts.length > 0) {
+      query += ' WHERE ' + whereParts.join(' AND ');
     }
 
     query += ' ORDER BY id ASC';
@@ -63,15 +89,26 @@ router.get('/', requireAuth, requireRole('admin'), async (req, res) => {
 /**
  * POST /api/users
  * Crear usuario (solo admin)
+ * - Dueño puede crear cualquiera (incluidos admin_global)
+ * - admin_global y admin crean usuarios normales por defecto
  */
 router.post('/', requireAuth, requireRole('admin'), async (req, res) => {
   try {
-    const { run, name, password, plan = 'basic', role = 'admin', email } = req.body;
+    const { run, name, password, plan = 'basic', role, email } = req.body;
 
     if (!run || !name || !password) {
       return res
         .status(400)
         .json({ message: 'RUN, nombre y contraseña son obligatorios' });
+    }
+
+    const requesterRun = normalizeRun(req.user.run);
+    const isOwner = requesterRun === OWNER_RUN;
+
+    // Si no se envía rol, o el que crea no es dueño, forzamos 'admin' o 'user'
+    let finalRole = role || 'admin';
+    if (!isOwner && (finalRole === 'admin_global')) {
+      finalRole = 'admin';
     }
 
     const normalizedRun = normalizeRun(run);
@@ -81,7 +118,7 @@ router.post('/', requireAuth, requireRole('admin'), async (req, res) => {
       `INSERT INTO users (run, name, email, password_hash, plan, role)
        VALUES ($1, $2, $3, $4, $5, $6)
        RETURNING id, run, name, email, plan, role`,
-      [normalizedRun, name, email || null, hash, plan, role]
+      [normalizedRun, name, email || null, hash, plan, finalRole]
     );
 
     return res.status(201).json(result.rows[0]);
@@ -93,7 +130,9 @@ router.post('/', requireAuth, requireRole('admin'), async (req, res) => {
 
 /**
  * DELETE /api/users/:id
- * Borrar usuario (solo admin) pero NUNCA al dueño
+ * Borrar usuario (solo admin) pero:
+ * - Nadie puede borrar al dueño
+ * - Solo el dueño puede borrar otros admins/admin_global
  */
 router.delete('/:id', requireAuth, requireRole('admin'), async (req, res) => {
   try {
@@ -110,16 +149,18 @@ router.delete('/:id', requireAuth, requireRole('admin'), async (req, res) => {
     }
 
     const target = userRes.rows[0];
+    const requesterRun = normalizeRun(req.user.run);
+    const isOwner = requesterRun === OWNER_RUN;
 
-    // 1) Nadie puede borrar al dueño (tu RUN)
+    // 1) Nadie puede borrar al dueño
     if (target.run === OWNER_RUN) {
       return res
         .status(403)
         .json({ message: 'No se puede eliminar la cuenta principal del sistema' });
     }
 
-    // 2) Solo el dueño puede borrar otros admins
-    if (target.role === 'admin' && normalizeRun(req.user.run) !== OWNER_RUN) {
+    // 2) Solo el dueño puede borrar otros admins (admin o admin_global)
+    if ((target.role === 'admin' || target.role === 'admin_global') && !isOwner) {
       return res
         .status(403)
         .json({ message: 'Solo el dueño puede eliminar otros administradores' });

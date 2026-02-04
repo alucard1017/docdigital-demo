@@ -11,7 +11,15 @@ export function Sidebar({
   setStatusFilter,
   logout
 }) {
+  const normalizedRun = user?.run?.replace(/[.\-]/g, '') || '';
+  const OWNER_RUN = '1053806586'; // tu RUN normalizado
+
+  const isOwner = normalizedRun === OWNER_RUN;
+  const isGlobalAdmin = user?.role === 'admin_global';
   const isAdmin = user?.role === 'admin';
+
+  // Menú de usuarios solo para dueño + admin_global
+  const showUsersMenu = isOwner || isGlobalAdmin;
 
   return (
     <aside className="sidebar">
@@ -78,7 +86,6 @@ export function Sidebar({
         Atajos
       </h3>
 
-      {/* Atajo: solo pendientes */}
       <div
         className={`nav-item ${
           statusFilter === 'PENDIENTES' ? 'active' : ''
@@ -88,7 +95,6 @@ export function Sidebar({
         <span>⏳</span> Solo pendientes
       </div>
 
-      {/* Atajo: solo firmados */}
       <div
         className={`nav-item ${
           statusFilter === 'FIRMADOS' ? 'active' : ''
@@ -98,8 +104,8 @@ export function Sidebar({
         <span>✅</span> Solo firmados
       </div>
 
-      {/* Sección Administración (solo admins) */}
-      {isAdmin && (
+      {/* Sección Administración (dueño + admin_global) */}
+      {showUsersMenu && (
         <>
           <h3
             style={{
