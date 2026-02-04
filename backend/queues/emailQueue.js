@@ -2,13 +2,15 @@
 const Queue = require("bull");
 const nodemailer = require("nodemailer");
 
-// Crear la cola de emails con Redis
-const emailQueue = new Queue("emails", {
-  redis: {
-    host: process.env.REDIS_HOST || "127.0.0.1",
-    port: process.env.REDIS_PORT || 6379,
-    password: process.env.REDIS_PASSWORD || undefined,
-  },
+// ⚙️ Conexión a Redis en Render usando REDIS_URL
+const redisUrl = process.env.REDIS_URL; // Internal URL de Render, tipo redis://red-xxxx:6379
+
+if (!redisUrl) {
+  console.error("❌ [EMAIL QUEUE] REDIS_URL no está definida en process.env");
+}
+
+// Crear la cola de emails con Redis de Render
+const emailQueue = new Queue("emails", redisUrl, {
   defaultJobOptions: {
     attempts: 3, // Reintentar 3 veces
     backoff: {
