@@ -11,6 +11,8 @@ const { sendSignatureInviteEmail } = require('../services/sendSignatureInviteEma
 const { uploadPdfToS3, getSignedUrl } = require('../services/s3');
 const { isValidEmail, isValidRun, validateLength } = require('../utils/validators');
 
+console.log('DEBUG START >> documents.js cargado en Render');
+
 const router = express.Router();
 
 /* ================================
