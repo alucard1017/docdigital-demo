@@ -1,4 +1,3 @@
-// backend/routes/documents.js
 const express = require('express');
 const multer = require('multer');
 const path = require('path');
@@ -108,6 +107,15 @@ router.post(
   handleMulterError,
   async (req, res) => {
     try {
+      console.log('DEBUG DOCS >> POST /api/docs recibido');
+      console.log('DEBUG BODY >>', {
+        title: req.body.title,
+        destinatario_email: req.body.destinatario_email,
+        firmante_email: req.body.firmante_email,
+        visador_email: req.body.visador_email,
+        requiresVisado: req.body.requiresVisado,
+      });
+
       const {
         title,
         description,
@@ -123,8 +131,6 @@ router.post(
         firmante_run,
         empresa_rut,
         requiresVisado,
-
-        // OPCIONALES: firmante adicional
         firmante_adicional_nombre_completo,
         firmante_adicional_email,
         firmante_adicional_movil,
