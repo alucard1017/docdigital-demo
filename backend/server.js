@@ -126,6 +126,7 @@ const authRoutes = require('./routes/auth');
 const docRoutes = require('./routes/documents');
 const publicRoutes = require('./routes/public');
 const usersRouter = require('./routes/users');         // 👈 NUEVO
+const publicRegisterRoutes = require('./routes/publicRegister');
 const { requireAuth, requireRole } = require('./routes/auth');
 
 app.use('/api/auth', loginLimiter, authRoutes);
@@ -143,6 +144,9 @@ console.log('✓ Rutas /api/docs registradas');
 
 app.use('/api/public', publicRoutes);
 console.log('✓ Rutas /api/public registradas');
+
+app.use('/api/public', publicRegisterRoutes);
+console.log('✓ Rutas /api/public/register registradas');
 
 /* ================================
    DESCARGA DE DOCUMENTOS (PDF) INTERNA
