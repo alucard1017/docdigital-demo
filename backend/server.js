@@ -94,7 +94,7 @@ console.log('✓ Directorio de uploads verificado');
    ================================ */
 app.get('/api/health', (req, res) => {
   try {
-    console.log('DEBUG HEALTH >> /api/health llamado'); // 👈 log añadido
+    console.log('DEBUG HEALTH >> /api/health llamado');
 
     res.json({
       ok: true,
@@ -125,12 +125,16 @@ console.log('✓ Ruta GET / registrada');
 const authRoutes = require('./routes/auth');
 const docRoutes = require('./routes/documents');
 const publicRoutes = require('./routes/public');
+const usersRouter = require('./routes/users');         // 👈 NUEVO
 const { requireAuth, requireRole } = require('./routes/auth');
 
 app.use('/api/auth', loginLimiter, authRoutes);
 console.log('✓ Rutas /api/auth registradas');
 
-// 👇 Wrap para loguear cualquier request a /api/docs
+app.use('/api/users', usersRouter);                    // 👈 NUEVO
+console.log('✓ Rutas /api/users registradas');
+
+// Wrap para loguear cualquier request a /api/docs
 app.use('/api/docs', (req, res, next) => {
   console.log(`DEBUG DOCS >> ${req.method} ${req.originalUrl} llamado`);
   next();
@@ -364,6 +368,9 @@ const server = app.listen(PORT, () => {
   console.log('   GET  /api/stats');
   console.log('   GET  /api/auth/...');
   console.log('   POST /api/auth/...');
+  console.log('   GET  /api/users');
+  console.log('   POST /api/users');
+  console.log('   DELETE /api/users/:id');
   console.log('   GET  /api/docs');
   console.log('   POST /api/docs');
   console.log('   GET  /api/docs/:id/timeline');
