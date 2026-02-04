@@ -1,5 +1,8 @@
 // src/components/DetailActions.jsx
 import React from "react";
+import { API_BASE_URL } from "../constants";
+
+const API_URL = API_BASE_URL;
 
 export function DetailActions({
   puedeFirmar,

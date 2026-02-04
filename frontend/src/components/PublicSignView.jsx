@@ -1,6 +1,7 @@
 import React, { useEffect, useState } from "react";
+import { API_BASE_URL } from "../constants";
 
-const API_URL = import.meta.env.VITE_API_URL || "";
+const API_URL = API_BASE_URL;
 
 export function PublicSignView({ token }) {
   const [loading, setLoading] = useState(true);
