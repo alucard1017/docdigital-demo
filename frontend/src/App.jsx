@@ -714,7 +714,15 @@ function App() {
      =============================== */
 
      console.log('DEBUG SIMPLE');
-     
+
+     {console.log('DEBUG ESTADO:', {
+          view,
+          loadingDocs,
+          errorDocs,
+          docsPaginadosLength: docsPaginados.length,
+          })}
+      console.log('DEBUG USER:', user);
+ 
   return (
     <div className="dashboard-layout">
       <Sidebar
@@ -743,13 +751,6 @@ function App() {
           rechazados={rechazados}
           onSync={cargarDocs}
         />
-
-        {console.log('DEBUG ESTADO:', {
-          view,
-          loadingDocs,
-          errorDocs,
-          docsPaginadosLength: docsPaginados.length,
-          })}
 
           {/* ===============================
             VISTA LISTA DE DOCUMENTOS
@@ -1509,7 +1510,7 @@ function App() {
             </form>
           </div>
           )}
-          
+
           {/* ===============================
             VISTA USUARIOS (ADMIN)
             ================================ */}
