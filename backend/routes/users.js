@@ -36,12 +36,23 @@ router.post('/register', async (req, res, next) => {
 /**
  * GET /api/users
  * Lista de usuarios (solo admin)
+ * Permite filtrar por rol: /api/users?role=admin
  */
 router.get('/', requireAuth, requireRole('admin'), async (req, res) => {
   try {
-    const result = await db.query(
-      'SELECT id, run, name, plan, role FROM users ORDER BY id ASC'
-    );
+    const { role } = req.query;
+
+    let query = 'SELECT id, run, name, email, plan, role FROM users';
+    const params = [];
+
+    if (role) {
+      query += ' WHERE role = $1';
+      params.push(role);
+    }
+
+    query += ' ORDER BY id ASC';
+
+    const result = await db.query(query, params);
     return res.json(result.rows);
   } catch (err) {
     console.error('❌ Error listando usuarios:', err);
@@ -55,7 +66,7 @@ router.get('/', requireAuth, requireRole('admin'), async (req, res) => {
  */
 router.post('/', requireAuth, requireRole('admin'), async (req, res) => {
   try {
-    const { run, name, password, plan = 'basic', role = 'admin' } = req.body;
+    const { run, name, password, plan = 'basic', role = 'admin', email } = req.body;
 
     if (!run || !name || !password) {
       return res
@@ -67,10 +78,10 @@ router.post('/', requireAuth, requireRole('admin'), async (req, res) => {
     const hash = bcrypt.hashSync(password, 10);
 
     const result = await db.query(
-      `INSERT INTO users (run, name, password_hash, plan, role)
-       VALUES ($1, $2, $3, $4, $5)
-       RETURNING id, run, name, plan, role`,
-      [normalizedRun, name, hash, plan, role]
+      `INSERT INTO users (run, name, email, password_hash, plan, role)
+       VALUES ($1, $2, $3, $4, $5, $6)
+       RETURNING id, run, name, email, plan, role`,
+      [normalizedRun, name, email || null, hash, plan, role]
     );
 
     return res.status(201).json(result.rows[0]);

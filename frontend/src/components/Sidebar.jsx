@@ -7,10 +7,12 @@ export function Sidebar({
   pendientes,
   view,
   setView,
-  statusFilter,      // ← añadido
+  statusFilter,
   setStatusFilter,
   logout
 }) {
+  const isAdmin = user?.role === 'admin';
+
   return (
     <aside className="sidebar">
       <h2>Firma Express</h2>
@@ -96,17 +98,30 @@ export function Sidebar({
         <span>✅</span> Solo firmados
       </div>
 
-      {/* Si quieres un atajo para ver todos, puedes añadir: */}
-      {/* 
-      <div
-        className={`nav-item ${
-          statusFilter === 'TODOS' ? 'active' : ''
-        }`}
-        onClick={() => setStatusFilter('TODOS')}
-      >
-        <span>📂</span> Ver todos
-      </div>
-      */}
+      {/* Sección Administración (solo admins) */}
+      {isAdmin && (
+        <>
+          <h3
+            style={{
+              fontSize: '0.75rem',
+              textTransform: 'uppercase',
+              letterSpacing: '0.08em',
+              color: '#6b7280',
+              marginTop: 24,
+              marginBottom: 8
+            }}
+          >
+            Administración
+          </h3>
+
+          <div
+            className={`nav-item ${view === 'users' ? 'active' : ''}`}
+            onClick={() => setView('users')}
+          >
+            <span>👥</span> Usuarios
+          </div>
+        </>
+      )}
 
       {/* Mini resumen + logout abajo */}
       <div

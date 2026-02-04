@@ -6,6 +6,7 @@ import { ListHeader } from './components/ListHeader';
 import { DocumentRow } from './components/DocumentRow';
 import { DOC_STATUS } from './constants';
 import { API_BASE_URL } from "./constants";
+import { UsersPanel } from './components/UsersPanel';
 
 const API_URL = API_BASE_URL;
 
@@ -122,7 +123,7 @@ function App() {
       } finally {
         setPublicSignLoading(false);
       }
-    }      
+    }     
 
   // Ping para despertar el backend en Render
   useEffect(() => {
@@ -726,6 +727,7 @@ function App() {
         setStatusFilter={setStatusFilter}
         logout={logout}
       />
+
       <div className="content-body">
         <ListHeader
           sort={sort}
@@ -749,7 +751,11 @@ function App() {
           docsPaginadosLength: docsPaginados.length,
           })}
 
-        {view === 'list' ? (
+          {/* ===============================
+            VISTA LISTA DE DOCUMENTOS
+            ================================ */}
+
+        {view === 'list' && (
           <div>
             {loadingDocs ? (
               // LOADER
@@ -919,10 +925,11 @@ function App() {
               </>
             )}
           </div>
-        ) : (
-          /* ===============================
+        )}
+          {/* ===============================
              VISTA SUBIDA NUEVO DOCUMENTO
-             =============================== */
+             =============================== */}
+             {view === 'upload' && (
           <div className="card-premium">
             <h1
               style={{
@@ -1501,6 +1508,13 @@ function App() {
               </div>
             </form>
           </div>
+          )}
+          
+          {/* ===============================
+            VISTA USUARIOS (ADMIN)
+            ================================ */}
+          {view === 'users' && (
+          <UsersPanel />
         )}
       </div>
     </div>
