@@ -6,6 +6,7 @@ import { ListHeader } from './components/ListHeader';
 import { DocumentRow } from './components/DocumentRow';
 import { DOC_STATUS } from './constants';
 import { API_BASE_URL } from "./constants";
+import { UsersPanel } from "./components/UsersPanel";
 
 const API_URL = API_BASE_URL;
 
@@ -1514,9 +1515,7 @@ function App() {
             VISTA USUARIOS (ADMIN)
             ================================ */}
           {view === 'users' && (
-            <div style={{ padding: '2rem' }}>
-              <h2>Panel de usuarios (en construcción)</h2>
-            </div>
+            <UsersPanel />
         )}
       </div>
     </div>
