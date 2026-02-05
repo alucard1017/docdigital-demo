@@ -23,7 +23,8 @@ router.post('/register', async (req, res, next) => {
     const hash = bcrypt.hashSync(password, 10);
 
     await db.query(
-      'INSERT INTO users (run, name, email, password_hash, plan, role) VALUES ($1, $2, $3, $4, $5, $6)',
+      `INSERT INTO users (run, name, email, password_hash, plan, role)
+       VALUES ($1, $2, $3, $4, $5, $6)`,
       [normalizedRun, name, email, hash, plan || 'basic', role || 'user']
     );
 
@@ -70,7 +71,10 @@ router.get('/', requireAuth, requireRole('admin'), async (req, res) => {
       params.push(role);
     }
 
-    let query = 'SELECT id, run, name, email, plan, role FROM users';
+    let query = `
+      SELECT id, run, name, email, plan, role
+      FROM users
+    `;
 
     if (whereParts.length > 0) {
       query += ' WHERE ' + whereParts.join(' AND ');
@@ -90,7 +94,7 @@ router.get('/', requireAuth, requireRole('admin'), async (req, res) => {
  * POST /api/users
  * Crear usuario (solo admin)
  * - Dueño puede crear cualquiera (incluidos admin_global)
- * - admin_global y admin crean usuarios normales por defecto
+ * - admin_global y admin crean admins normales por defecto
  */
 router.post('/', requireAuth, requireRole('admin'), async (req, res) => {
   try {
@@ -105,9 +109,8 @@ router.post('/', requireAuth, requireRole('admin'), async (req, res) => {
     const requesterRun = normalizeRun(req.user.run);
     const isOwner = requesterRun === OWNER_RUN;
 
-    // Si no se envía rol, o el que crea no es dueño, forzamos 'admin' o 'user'
     let finalRole = role || 'admin';
-    if (!isOwner && (finalRole === 'admin_global')) {
+    if (!isOwner && finalRole === 'admin_global') {
       finalRole = 'admin';
     }
 
@@ -129,6 +132,107 @@ router.post('/', requireAuth, requireRole('admin'), async (req, res) => {
 });
 
 /**
+ * PUT /api/users/:id
+ * Editar usuario (solo admin)
+ * - Nadie puede cambiar el rol del dueño
+ * - Solo el dueño puede subir/bajar roles de admin/admin_global
+ */
+router.put('/:id', requireAuth, requireRole('admin'), async (req, res) => {
+  try {
+    const { id } = req.params;
+    const { run, name, email, plan, role, password } = req.body;
+
+    const requesterRun = normalizeRun(req.user.run);
+    const isOwner = requesterRun === OWNER_RUN;
+    const isGlobalAdmin = req.user.role === 'admin_global';
+
+    const userRes = await db.query(
+      'SELECT id, run, role FROM users WHERE id = $1',
+      [id]
+    );
+
+    if (userRes.rowCount === 0) {
+      return res.status(404).json({ message: 'Usuario no encontrado' });
+    }
+
+    const target = userRes.rows[0];
+    const targetIsOwner = normalizeRun(target.run) === OWNER_RUN;
+
+    // Nadie puede cambiar al dueño salvo él mismo, y sin tocar role
+    if (targetIsOwner && !isOwner) {
+      return res
+        .status(403)
+        .json({ message: 'No tienes permisos para modificar la cuenta principal' });
+    }
+
+    // Solo el dueño puede cambiar el rol de otros admins/admin_global
+    if ((target.role === 'admin' || target.role === 'admin_global') && !isOwner) {
+      if (role && role !== target.role) {
+        return res
+          .status(403)
+          .json({ message: 'Solo el dueño puede cambiar el rol de otros administradores' });
+      }
+    }
+
+    const fields = [];
+    const values = [];
+    let idx = 1;
+
+    if (run) {
+      fields.push(`run = $${idx++}`);
+      values.push(normalizeRun(run));
+    }
+    if (name) {
+      fields.push(`name = $${idx++}`);
+      values.push(name);
+    }
+    if (email !== undefined) {
+      fields.push(`email = $${idx++}`);
+      values.push(email || null);
+    }
+    if (plan) {
+      fields.push(`plan = $${idx++}`);
+      values.push(plan);
+    }
+    if (role && !(targetIsOwner && !isOwner)) {
+      // No permitimos que alguien distinto del dueño cambie el rol del owner
+      if (!isOwner && (role === 'admin_global')) {
+        // admin_global / admin no pueden subir a admin_global
+        return res
+          .status(403)
+          .json({ message: 'Solo el dueño puede asignar rol admin_global' });
+      }
+      fields.push(`role = $${idx++}`);
+      values.push(role);
+    }
+    if (password) {
+      const hash = bcrypt.hashSync(password, 10);
+      fields.push(`password_hash = $${idx++}`);
+      values.push(hash);
+    }
+
+    if (fields.length === 0) {
+      return res.status(400).json({ message: 'No hay campos para actualizar' });
+    }
+
+    values.push(id);
+
+    const result = await db.query(
+      `UPDATE users
+       SET ${fields.join(', ')}
+       WHERE id = $${idx}
+       RETURNING id, run, name, email, plan, role`,
+      values
+    );
+
+    return res.json(result.rows[0]);
+  } catch (err) {
+    console.error('❌ Error actualizando usuario:', err);
+    return res.status(500).json({ message: 'Error interno del servidor' });
+  }
+});
+
+/**
  * DELETE /api/users/:id
  * Borrar usuario (solo admin) pero:
  * - Nadie puede borrar al dueño
@@ -138,7 +242,6 @@ router.delete('/:id', requireAuth, requireRole('admin'), async (req, res) => {
   try {
     const { id } = req.params;
 
-    // Obtener datos del usuario objetivo
     const userRes = await db.query(
       'SELECT id, run, role FROM users WHERE id = $1',
       [id]
@@ -153,7 +256,7 @@ router.delete('/:id', requireAuth, requireRole('admin'), async (req, res) => {
     const isOwner = requesterRun === OWNER_RUN;
 
     // 1) Nadie puede borrar al dueño
-    if (target.run === OWNER_RUN) {
+    if (normalizeRun(target.run) === OWNER_RUN) {
       return res
         .status(403)
         .json({ message: 'No se puede eliminar la cuenta principal del sistema' });
