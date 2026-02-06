@@ -21,10 +21,10 @@ const router = express.Router();
 async function aplicarMarcaAguaLocal(filePath) {
   try {
     const bytes = await fs.promises.readFile(filePath);
-    const pdfDoc = await PDFDocument.load(bytes);	
+    const pdfDoc = await PDFDocument.load(bytes);
     const pages = pdfDoc.getPages();
 
-    const texto = 'VERIFIRMA';
+    const textoPrincipal = 'VERIFIRMA';
     const textoSecundario = 'Documento en proceso – No válido como original';
     const fontSizeMain = 28;
     const fontSizeSub = 11;
@@ -39,6 +39,8 @@ async function aplicarMarcaAguaLocal(filePath) {
 
       for (let x = -width * 0.25; x < width * 1.25; x += xStep) {
         for (let y = -height * 0.25; y < height * 1.25; y += yStep) {
+
+          // Línea 1: marca
           page.drawText(textoPrincipal, {
             x,
             y,
@@ -48,14 +50,15 @@ async function aplicarMarcaAguaLocal(filePath) {
             opacity,
           });
 
-	 page.drawText(textoSecundario, {
-	   x,
-	   y: y - 20,
-           size: fontSizeSub,
-           color,
-           rotate: degrees(angle),
-           opacity,
-	  });
+          // Línea 2: leyenda legal debajo
+          page.drawText(textoSecundario, {
+            x,
+            y: y - 20,
+            size: fontSizeSub,
+            color,
+            rotate: degrees(angle),
+            opacity,
+          });
         }
       }
     }
