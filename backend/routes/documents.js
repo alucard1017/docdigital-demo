@@ -21,24 +21,24 @@ const router = express.Router();
 async function aplicarMarcaAguaLocal(filePath) {
   try {
     const bytes = await fs.promises.readFile(filePath);
-    const pdfDoc = await PDFDocument.load(bytes);
+    const pdfDoc = await PDFDocument.load(bytes);	
     const pages = pdfDoc.getPages();
 
     const texto = 'VERIFIRMA';
     const textoSecundario = 'Documento en proceso – No válido como original';
-    const fontSizeMain = 26;
-    const fontSizeSub = 10;
-    const opacity = 0.24;
+    const fontSizeMain = 28;
+    const fontSizeSub = 11;
+    const opacity = 0.3;
     const angle = 33;
     const xStep = 260;
     const yStep = 220;
-    const color = rgb(0.75, 0.75, 0.75);
+    const color = rgb(0.7, 0.7, 0.7);
 
     for (const page of pages) {
       const { width, height } = page.getSize();
 
-      for (let x = -width * 0.3; x < width * 1.3; x += xStep) {
-        for (let y = -height * 0.3; y < height * 1.3; y += yStep) {
+      for (let x = -width * 0.25; x < width * 1.25; x += xStep) {
+        for (let y = -height * 0.25; y < height * 1.25; y += yStep) {
           page.drawText(textoPrincipal, {
             x,
             y,
@@ -47,9 +47,10 @@ async function aplicarMarcaAguaLocal(filePath) {
             rotate: degrees(angle),
             opacity,
           });
+
 	 page.drawText(textoSecundario, {
 	   x,
-	   y: y - 18,
+	   y: y - 20,
            size: fontSizeSub,
            color,
            rotate: degrees(angle),
