@@ -1161,13 +1161,39 @@ function App() {
                   >
                     CONTRATO (PDF)
                   </label>
+
+                  <div style={{ display: "flex", flexDirection: "column", gap: 6 }}></div>
                   <input
+                    id="file-input"
                     type="file"
                     name="file"
                     accept=".pdf"
                     required
-                    style={{ fontSize: '0.85rem' }}
+                    style={{ display: "none" }}
+                    onChange={(e) => {
+                      const fileName = e.target.files[0]?.name || "";
+                      const label = document.getElementById("file-name-label");
+                      if (label) label.textContent = fileName || "Ningún contrato seleccionado";
+                    }}
                   />
+
+                  {/* Botón visible */}
+                  <button
+                    type="button"
+                    className="btn-main"
+                    onClick={() => document.getElementById("file-input").click()}
+                  >
+                    Seleccionar contrato
+                  </button>  
+
+                  {/* Nombre del archivo seleccionado */}
+                  <span
+                    id="file-name-label"
+                    style={{ fontSize: "0.8rem", color: "#64748b" }}
+                  >
+                    Ningún contrato seleccionado
+                  </span>
+
                   {formErrors.file && (
                     <p
                       style={{
@@ -1179,15 +1205,6 @@ function App() {
                       {formErrors.file}
                     </p>
                   )}
-                  <p
-                    style={{
-                      marginTop: 4,
-                      fontSize: '0.8rem',
-                      color: '#64748b',
-                    }}
-                  >
-                    Seleccione el contrato en formato PDF.
-                  </p>
                 </div>
               </div>
 
