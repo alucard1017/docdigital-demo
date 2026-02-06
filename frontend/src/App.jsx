@@ -859,6 +859,7 @@ function App() {
                       <tr>
                         <th>N° de contrato</th>
                         <th>Título del Documento</th>
+                        <th>Tipo de trámite</th>
                         <th>Fecha de creación</th>
                         <th style={{ textAlign: 'center' }}>
                           Estado Actual
@@ -934,9 +935,8 @@ function App() {
           <div className="card-premium">
             <h1
               style={{
-                margin: 0,
-                fontSize: '2rem',
-                fontWeight: 800,
+                fontSize: "1.4rem",
+                marginBottom: 8,
               }}
             >
               Nuevo Documento para Firma
@@ -944,12 +944,44 @@ function App() {
             <p
               style={{
                 color: '#64748b',
-                marginBottom: 30,
+                marginBottom: 16,
                 fontSize: '1.05rem',
               }}
             >
               Configure los participantes y cargue el PDF.
             </p>
+            {/* Botones de tipo de trámite */}
+            <div
+              style={{
+                display: "flex",
+                gap: 12,
+                marginBottom: 24,
+              }}
+            >
+              <button
+                type="button"
+                className="btn-main"
+                style={{
+                  backgroundColor: tipoTramite === "propio" ? "#0f766e" : "#e5e7eb",
+                  color: tipoTramite === "propio" ? "#ffffff" : "#111827",
+                }}
+                onClick={() => setTipoTramite("propio")}
+              >
+                Trámite propio (sin notaría)
+              </button>
+
+              <button
+                type="button"
+                className="btn-main"
+                style={{
+                  backgroundColor: tipoTramite === "notaria" ? "#1d4ed8" : "#e5e7eb",
+                  color: tipoTramite === "notaria" ? "#ffffff" : "#111827",
+                }}
+                onClick={() => setTipoTramite("notaria")}
+              >
+                Trámite con notaría
+              </button>
+            </div>
 
             <form
               onSubmit={async (e) => {
@@ -958,6 +990,12 @@ function App() {
 
                 const form = e.target;
                 const formData = new FormData(form);
+
+                // Añadimos tipo de trámite al FormData
+                formData.append("tipoTramite", tipoTramite);
+                if (tipoTramite === "notaria") {
+                  formData.append("requiere_firma_notarial", "true");
+                }
 
                 const firmanteRun = firmanteRunValue;
                 const empresaRut = empresaRutValue;
