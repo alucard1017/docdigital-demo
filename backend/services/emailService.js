@@ -1,19 +1,40 @@
 // backend/services/emailService.js
-const { emailQueue } = require("../queues/emailQueue");
+const { emailQueue } = require('../queues/emailQueue');
+const nodemailer = require('nodemailer');
+
+// Transporter directo (por si la cola está desactivada)
+const directTransporter = nodemailer.createTransport({
+  host: process.env.SMTP_HOST || 'sandbox.smtp.mailtrap.io',
+  port: process.env.SMTP_PORT || 2525,
+  auth: {
+    user: process.env.SMTP_USER,
+    pass: process.env.SMTP_PASS,
+  },
+});
 
 /**
  * Encolar un email para envío asincrónico
+ * Si la cola está desactivada (dummy), hace fallback a envío directo.
  */
 async function queueEmail(to, subject, html) {
   try {
-    const job = await emailQueue.add(
-      { to, subject, html },
-      { delay: 0 }
-    );
-    console.log(`📬 [EMAIL SERVICE] Email encolado para ${to} (Job #${job.id})`);
-    return job;
+    if (emailQueue && typeof emailQueue.add === 'function' && emailQueue.add.name !== 'bound add') {
+      const job = await emailQueue.add({ to, subject, html }, { delay: 0 });
+      console.log(`📬 [EMAIL SERVICE] Email encolado para ${to} (Job #${job.id})`);
+      return job;
+    }
+
+    console.log('⚠️ [EMAIL SERVICE] Cola de emails no disponible, enviando directo a', to);
+    const result = await directTransporter.sendMail({
+      from: process.env.SMTP_FROM || 'noreply@verifirma.com',
+      to,
+      subject,
+      html,
+    });
+    console.log(`✅ [EMAIL SERVICE] Email enviado directo a ${to} - MessageID: ${result.messageId}`);
+    return result;
   } catch (error) {
-    console.error("❌ [EMAIL SERVICE] Error encolando email:", error.message);
+    console.error('❌ [EMAIL SERVICE] Error enviando email:', error.message);
     throw error;
   }
 }
@@ -42,14 +63,14 @@ async function sendSigningInvitation(email, docTitle, signUrl) {
           </div>
           <div class="content">
             <p>¡Hola!</p>
-            <p>Ha recibido una invitación para <strong>firmar</strong> el siguiente documento:</p>
+            <p>Ha recibido una invitación para <strong>firmar</strong> el siguiente documento en <strong>VeriFirma</strong>:</p>
             <p style="font-size: 16px; font-weight: bold; color: #1e293b;">${docTitle}</p>
             <p>Haga clic en el botón siguiente para proceder con la firma electrónica:</p>
             <a href="${signUrl}" class="button">Ir a Firmar Documento</a>
             <p style="color: #666; font-size: 14px;">Este enlace es válido por 30 días.</p>
           </div>
           <div class="footer">
-            <p>© 2026 Firma Express - Plataforma de Firma Digital</p>
+            <p>© 2026 VeriFirma - Plataforma de Firma Digital</p>
             <p>Este es un email automático, por favor no responda.</p>
           </div>
         </div>
@@ -84,14 +105,14 @@ async function sendVisadoInvitation(email, docTitle, signUrl) {
           </div>
           <div class="content">
             <p>¡Hola!</p>
-            <p>Ha recibido una invitación para <strong>visar</strong> el siguiente documento:</p>
+            <p>Ha recibido una invitación para <strong>visar</strong> el siguiente documento en <strong>VeriFirma</strong>:</p>
             <p style="font-size: 16px; font-weight: bold; color: #1e293b;">${docTitle}</p>
             <p>El visado es un acto formal que valida el contenido y estado del documento.</p>
             <a href="${signUrl}" class="button">Ir a Visar Documento</a>
             <p style="color: #666; font-size: 14px;">Este enlace es válido por 30 días.</p>
           </div>
           <div class="footer">
-            <p>© 2026 Firma Express - Plataforma de Firma Digital</p>
+            <p>© 2026 VeriFirma - Plataforma de Firma Digital</p>
             <p>Este es un email automático, por favor no responda.</p>
           </div>
         </div>
