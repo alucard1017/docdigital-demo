@@ -24,21 +24,33 @@ async function aplicarMarcaAguaLocal(filePath) {
     const pdfDoc = await PDFDocument.load(bytes);
     const pages = pdfDoc.getPages();
 
+    const texto = 'VERIFIRMA - COPIA';
+    const fontSize = 18;        // más pequeño para repetir
+    const opacity = 0.25;       // más suave
+    const angle = 30;           // diagonal
+    const xStep = 180;          // separación horizontal
+    const yStep = 160;          // separación vertical
+
     for (const page of pages) {
       const { width, height } = page.getSize();
-      page.drawText('VERIFIRMA - COPIA', {
-        x: width / 2 - 150,
-        y: height / 2,
-        size: 36,
-        color: rgb(0.8, 0.8, 0.8),
-        rotate: degrees(30),
-        opacity: 0.4,
-      });
+
+      for (let x = -width; x < width * 2; x += xStep) {
+        for (let y = -height; y < height * 2; y += yStep) {
+          page.drawText(texto, {
+            x,
+            y,
+            size: fontSize,
+            color: rgb(0.8, 0.8, 0.8),
+            rotate: degrees(angle),
+            opacity,
+          });
+        }
+      }
     }
 
     const pdfBytes = await pdfDoc.save();
     await fs.promises.writeFile(filePath, pdfBytes);
-    console.log('✅ Marca de agua aplicada a', filePath);
+    console.log('✅ Marca de agua en patrón repetido aplicada a', filePath);
   } catch (err) {
     console.error('⚠️ Error aplicando marca de agua:', err);
   }
@@ -279,26 +291,26 @@ router.post(
 
       // INSERT en documents
       const result = await db.query(
-        `INSERT INTO documents (
-           owner_id, title, description, file_path, status,
-           destinatario_nombre, destinatario_email, destinatario_movil,
-           visador_nombre, visador_email, visador_movil,
-           firmante_nombre, firmante_email, firmante_movil, firmante_run,
-           empresa_rut, requires_visado, signature_token,
-           signature_token_expires_at, signature_status,
-           tipo_tramite, estado, pdf_original_url, pdf_final_url, requiere_firma_notarial,
-           created_at, updated_at
-         ) VALUES (
-           $1, $2, $3, $4, $5,
-           $6, $7, $8,
-           $9, $10, $11,
-           $12, $13, $14, $15,
-           $16, $17, $18, $19,
-           $20,
-           $21, $22, $23, $24,
-           NOW(), NOW()
-         )
-         RETURNING *`,
+  	`INSERT INTO documents (
+     	  owner_id, title, description, file_path, status,
+     	  destinatario_nombre, destinatario_email, destinatario_movil,
+     	  visador_nombre, visador_email, visador_movil,
+     	  firmante_nombre, firmante_email, firmante_movil, firmante_run,
+     	  empresa_rut, requires_visado, signature_token,
+     	  signature_token_expires_at, signature_status,
+     	  tipo_tramite, estado, pdf_original_url, pdf_final_url, requiere_firma_notarial,
+     	  created_at, updated_at
+   	 ) VALUES (
+    	  $1, $2, $3, $4, $5,
+     	  $6, $7, $8,
+     	  $9, $10, $11,
+     	  $12, $13, $14, $15,
+     	  $16, $17, $18, $19,
+     	  $20,
+     	  $21, $22, $23, $24, $25,
+     	  NOW(), NOW()
+   	)
+   	RETURNING *`,
         [
           req.user.id,
           title,
