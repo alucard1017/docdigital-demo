@@ -18,7 +18,7 @@ export function Sidebar({
 
   return (
     <aside className="sidebar">
-      <h2>Firma Express</h2>
+      <h2>VeriFirma</h2>
 
       {/* Bloque usuario */}
       <div

@@ -370,7 +370,7 @@ function App() {
               fontWeight: 800,
             }}
           >
-            Firma Express
+            VeriFirma
           </h1>
           <p
             style={{

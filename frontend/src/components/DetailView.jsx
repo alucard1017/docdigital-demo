@@ -59,7 +59,7 @@ export function DetailView({
     <div className="dashboard-layout">
       {/* Sidebar */}
       <aside className="sidebar">
-        <h2>Firma Express</h2>
+        <h2>VeriFirma</h2>
 
         <div
           className="nav-item"
