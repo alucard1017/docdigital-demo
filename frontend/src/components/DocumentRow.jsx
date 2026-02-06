@@ -1,3 +1,4 @@
+// src/components/DocumentRow.jsx
 import React from "react";
 import { DocStatusBadge } from "./DocStatusBadge";
 import { DOC_STATUS } from "../constants";
@@ -12,6 +13,8 @@ function getTipoTramiteLabel(tipo) {
 }
 
 export function DocumentRow({ doc, onOpenDetail, token }) {
+  const tipoTramite = doc.tipo_tramite || doc.tipoTramite || null;
+
   const handleVerPdf = async () => {
     try {
       const res = await fetch(`${API_URL}/api/docs/${doc.id}/pdf`, {
@@ -38,7 +41,7 @@ export function DocumentRow({ doc, onOpenDetail, token }) {
 
   return (
     <tr>
-      {/* ID */}
+      {/* N° de contrato */}
       <td style={{ color: "#94a3b8", fontWeight: 600 }}>#{doc.id}</td>
 
       {/* Título */}
@@ -54,13 +57,13 @@ export function DocumentRow({ doc, onOpenDetail, token }) {
             borderRadius: 999,
             fontSize: 12,
             backgroundColor:
-              doc.tipo_tramite === "notaria" ? "#eef2ff" : "#ecfeff",
+              tipoTramite === "notaria" ? "#eef2ff" : "#ecfeff",
             color:
-              doc.tipo_tramite === "notaria" ? "#4f46e5" : "#0f766e",
+              tipoTramite === "notaria" ? "#4f46e5" : "#0f766e",
             whiteSpace: "nowrap",
           }}
         >
-          {getTipoTramiteLabel(doc.tipo_tramite)}
+          {getTipoTramiteLabel(tipoTramite)}
         </span>
       </td>
 
@@ -77,7 +80,7 @@ export function DocumentRow({ doc, onOpenDetail, token }) {
           : "-"}
       </td>
 
-      {/* Estado (legacy) */}
+      {/* Estado */}
       <td style={{ textAlign: "center" }}>
         <DocStatusBadge status={doc.status} />
       </td>

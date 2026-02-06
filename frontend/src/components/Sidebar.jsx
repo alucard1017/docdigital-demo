@@ -1,5 +1,5 @@
 // src/components/Sidebar.jsx
-import React from 'react';
+import React from "react";
 
 export function Sidebar({
   user,
@@ -9,15 +9,11 @@ export function Sidebar({
   setView,
   statusFilter,
   setStatusFilter,
-  logout
+  logout,
 }) {
-  // Ajusta este ID al de tu usuario dueño (mira en la tabla users)
-  const OWNER_ID = 7; // ejemplo
-
+  const OWNER_ID = 7; // ajusta si cambia
   const isOwner = user?.id === OWNER_ID;
-  const isGlobalAdmin = user?.role === 'admin_global';
-
-  // Menú de usuarios solo para dueño + admin_global
+  const isGlobalAdmin = user?.role === "admin_global";
   const showUsersMenu = isOwner || isGlobalAdmin;
 
   return (
@@ -31,58 +27,57 @@ export function Sidebar({
           marginBottom: 24,
           padding: 12,
           borderRadius: 12,
-          background: '#0f172a',
-          color: '#e5e7eb',
-          fontSize: '0.85rem'
+          background: "#0f172a",
+          color: "#e5e7eb",
+          fontSize: "0.85rem",
         }}
       >
-        <div style={{ fontWeight: 700, marginBottom: 4 }}>
-          Sesión activa
-        </div>
-        <div>{user?.name || 'Usuario'}</div>
+        <div style={{ fontWeight: 700, marginBottom: 4 }}>Sesión activa</div>
+        <div>{user?.name || "Usuario"}</div>
         <div style={{ opacity: 0.7 }}>
-          {user?.email || 'usuario@correo.com'}
+          {user?.email || "usuario@correo.com"}
         </div>
         <div style={{ opacity: 0.7 }}>
-          Rol: {user?.role || 'FIRMANTE'}
+          Rol: {user?.role || "FIRMANTE"}
         </div>
       </div>
 
       {/* Sección Bandeja */}
       <h3
         style={{
-          fontSize: '0.75rem',
-          textTransform: 'uppercase',
-          letterSpacing: '0.08em',
-          color: '#6b7280',
-          marginBottom: 8
+          fontSize: "0.75rem",
+          textTransform: "uppercase",
+          letterSpacing: "0.08em",
+          color: "#6b7280",
+          marginBottom: 8,
         }}
       >
         Bandeja
       </h3>
 
       <div
-        className={`nav-item ${view === 'list' ? 'active' : ''}`}
-        onClick={() => setView('list')}
+        className={`nav-item ${view === "list" ? "active" : ""}`}
+        onClick={() => setView("list")}
       >
-        <span>📄</span> Mis Documentos
+        <span>📄</span> Mis trámites
       </div>
+
       <div
-        className={`nav-item ${view === 'upload' ? 'active' : ''}`}
-        onClick={() => setView('upload')}
+        className={`nav-item ${view === "upload" ? "active" : ""}`}
+        onClick={() => setView("upload")}
       >
-        <span>📤</span> Subir Nuevo PDF
+        <span>📤</span> Crear nuevo trámite
       </div>
 
       {/* Sección Atajos */}
       <h3
         style={{
-          fontSize: '0.75rem',
-          textTransform: 'uppercase',
-          letterSpacing: '0.08em',
-          color: '#6b7280',
+          fontSize: "0.75rem",
+          textTransform: "uppercase",
+          letterSpacing: "0.08em",
+          color: "#6b7280",
           marginTop: 24,
-          marginBottom: 8
+          marginBottom: 8,
         }}
       >
         Atajos
@@ -90,61 +85,61 @@ export function Sidebar({
 
       <div
         className={`nav-item ${
-          statusFilter === 'PENDIENTES' ? 'active' : ''
+          statusFilter === "PENDIENTES" ? "active" : ""
         }`}
-        onClick={() => setStatusFilter('PENDIENTES')}
+        onClick={() => setStatusFilter("PENDIENTES")}
       >
         <span>⏳</span> Solo pendientes
       </div>
 
       <div
         className={`nav-item ${
-          statusFilter === 'FIRMADOS' ? 'active' : ''
+          statusFilter === "FIRMADOS" ? "active" : ""
         }`}
-        onClick={() => setStatusFilter('FIRMADOS')}
+        onClick={() => setStatusFilter("FIRMADOS")}
       >
         <span>✅</span> Solo firmados
       </div>
 
-      {/* Sección Administración (dueño + admin_global) */}
+      {/* Sección Administración */}
       {showUsersMenu && (
         <>
           <h3
             style={{
-              fontSize: '0.75rem',
-              textTransform: 'uppercase',
-              letterSpacing: '0.08em',
-              color: '#6b7280',
+              fontSize: "0.75rem",
+              textTransform: "uppercase",
+              letterSpacing: "0.08em",
+              color: "#6b7280",
               marginTop: 24,
-              marginBottom: 8
+              marginBottom: 8,
             }}
           >
             Administración
           </h3>
 
           <div
-            className={`nav-item ${view === 'users' ? 'active' : ''}`}
-            onClick={() => setView('users')}
+            className={`nav-item ${view === "users" ? "active" : ""}`}
+            onClick={() => setView("users")}
           >
             <span>👥</span> Usuarios
           </div>
         </>
       )}
 
-      {/* Mini resumen + logout abajo */}
+      {/* Mini resumen + logout */}
       <div
         style={{
-          marginTop: 'auto',
+          marginTop: "auto",
           marginBottom: 12,
           padding: 10,
           borderRadius: 12,
-          background: '#020617',
-          color: '#9ca3af',
-          fontSize: '0.8rem'
+          background: "#020617",
+          color: "#9ca3af",
+          fontSize: "0.8rem",
         }}
       >
         <div style={{ marginBottom: 4 }}>
-          Documentos totales: <strong>{docs.length}</strong>
+          Trámites totales: <strong>{docs.length}</strong>
         </div>
         <div>
           Pendientes hoy: <strong>{pendientes}</strong>
@@ -156,7 +151,7 @@ export function Sidebar({
         className="nav-item"
         onClick={logout}
       >
-        <span>🚪</span> Cerrar Sesión
+        <span>🚪</span> Cerrar sesión
       </div>
     </aside>
   );

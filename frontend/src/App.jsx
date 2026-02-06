@@ -847,7 +847,7 @@ function App() {
                     color: '#1e293b',
                   }}
                 >
-                  Crear nuevo documento
+                  Crear nuevo trámite
                 </button>
               </div>
             ) : (
@@ -940,7 +940,7 @@ function App() {
                 marginBottom: 8,
               }}
             >
-              Nuevo Documento para Firma
+              Crear nuevo trámite
             </h1>
             <p
               style={{
