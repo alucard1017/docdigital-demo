@@ -25,22 +25,22 @@ async function aplicarMarcaAguaLocal(filePath) {
     const pages = pdfDoc.getPages();
 
     const texto = 'VERIFIRMA - COPIA';
-    const fontSize = 18;
-    const opacity = 0.25;
+    const fontSize = 40;
+    const opacity = 0.6;
     const angle = 30;
-    const xStep = 180;
-    const yStep = 160;
+    const xStep = 250;
+    const yStep = 220;
 
     for (const page of pages) {
       const { width, height } = page.getSize();
 
-      for (let x = -width; x < width * 2; x += xStep) {
-        for (let y = -height; y < height * 2; y += yStep) {
+      for (let x = -width / 2; x < width * 1.5; x += xStep) {
+        for (let y = -height / 2; y < height * 1.5; y += yStep) {
           page.drawText(texto, {
             x,
             y,
             size: fontSize,
-            color: rgb(0.8, 0.8, 0.8),
+            color: rgb(0.7, 0.7, 0.7),
             rotate: degrees(angle),
             opacity,
           });
@@ -50,7 +50,7 @@ async function aplicarMarcaAguaLocal(filePath) {
 
     const pdfBytes = await pdfDoc.save();
     await fs.promises.writeFile(filePath, pdfBytes);
-    console.log('✅ Marca de agua en patrón repetido aplicada a', filePath);
+    console.log('✅ Marca de agua AUMENTADA aplicada a', filePath);
   } catch (err) {
     console.error('⚠️ Error aplicando marca de agua:', err);
   }
