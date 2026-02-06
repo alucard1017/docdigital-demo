@@ -9,7 +9,7 @@ const { requireAuth } = require('./auth');
 const { sendSigningInvitation, sendVisadoInvitation } = require('../services/emailService');
 const { uploadPdfToS3, getSignedUrl } = require('../services/s3');
 const { isValidEmail, isValidRun, validateLength } = require('../utils/validators');
-const { PDFDocument, rgb, degrees } = require('pdf-lib'); // 👈 NUEVO
+const { PDFDocument, rgb, degrees } = require('pdf-lib');
 
 console.log('DEBUG START >> documents.js cargado en Render');
 
@@ -25,11 +25,11 @@ async function aplicarMarcaAguaLocal(filePath) {
     const pages = pdfDoc.getPages();
 
     const texto = 'VERIFIRMA - COPIA';
-    const fontSize = 18;        // más pequeño para repetir
-    const opacity = 0.25;       // más suave
-    const angle = 30;           // diagonal
-    const xStep = 180;          // separación horizontal
-    const yStep = 160;          // separación vertical
+    const fontSize = 18;
+    const opacity = 0.25;
+    const angle = 30;
+    const xStep = 180;
+    const yStep = 160;
 
     for (const page of pages) {
       const { width, height } = page.getSize();
@@ -257,7 +257,7 @@ router.post(
         return res.status(400).json({ message: err.message });
       }
 
-      // 👇 NUEVO: aplicar marca de agua antes de subir
+      // Aplicar marca de agua al PDF temporal antes de subirlo a S3
       await aplicarMarcaAguaLocal(req.file.path);
 
       // Subir PDF a S3
@@ -291,52 +291,52 @@ router.post(
 
       // INSERT en documents
       const result = await db.query(
-  	`INSERT INTO documents (
-     	  owner_id, title, description, file_path, status,
-     	  destinatario_nombre, destinatario_email, destinatario_movil,
-     	  visador_nombre, visador_email, visador_movil,
-     	  firmante_nombre, firmante_email, firmante_movil, firmante_run,
-     	  empresa_rut, requires_visado, signature_token,
-     	  signature_token_expires_at, signature_status,
-     	  tipo_tramite, estado, pdf_original_url, pdf_final_url, requiere_firma_notarial,
-     	  created_at, updated_at
-   	 ) VALUES (
-    	  $1, $2, $3, $4, $5,
-     	  $6, $7, $8,
-     	  $9, $10, $11,
-     	  $12, $13, $14, $15,
-     	  $16, $17, $18, $19,
-     	  $20,
-     	  $21, $22, $23, $24, $25,
-     	  NOW(), NOW()
-   	)
-   	RETURNING *`,
+        `INSERT INTO documents (
+           owner_id, title, description, file_path, status,
+           destinatario_nombre, destinatario_email, destinatario_movil,
+           visador_nombre, visador_email, visador_movil,
+           firmante_nombre, firmante_email, firmante_movil, firmante_run,
+           empresa_rut, requires_visado, signature_token,
+           signature_token_expires_at, signature_status,
+           tipo_tramite, estado, pdf_original_url, pdf_final_url, requiere_firma_notarial,
+           created_at, updated_at
+         ) VALUES (
+           $1, $2, $3, $4, $5,
+           $6, $7, $8,
+           $9, $10, $11,
+           $12, $13, $14, $15,
+           $16, $17, $18, $19,
+           $20,
+           $21, $22, $23, $24, $25,
+           NOW(), NOW()
+         )
+         RETURNING *`,
         [
-          req.user.id,
-          title,
-          description,
-          s3Key,
-          'PENDIENTE',
-          destinatario_nombre,
-          destinatario_email,
-          destinatario_movil,
-          visador_nombre,
-          visador_email,
-          visador_movil,
-          firmante_nombre_completo,
-          firmante_email,
-          firmante_movil,
-          runValue,
-          empresa_rut,
-          requires_visado,
-          signatureToken,
-          signatureExpiresAt,
-          'PENDIENTE',
-          tipo_tramite,
-          'borrador',
-          s3Key,
-          null,
-          requiereNotaria,
+          req.user.id,              // 1
+          title,                    // 2
+          description,              // 3
+          s3Key,                    // 4 file_path
+          'PENDIENTE',              // 5 status
+          destinatario_nombre,      // 6
+          destinatario_email,       // 7
+          destinatario_movil,       // 8
+          visador_nombre,           // 9
+          visador_email,            // 10
+          visador_movil,            // 11
+          firmante_nombre_completo, // 12
+          firmante_email,           // 13
+          firmante_movil,           // 14
+          runValue,                 // 15
+          empresa_rut,              // 16
+          requires_visado,          // 17
+          signatureToken,           // 18
+          signatureExpiresAt,       // 19
+          'PENDIENTE',              // 20 signature_status
+          tipo_tramite,             // 21
+          'borrador',               // 22 estado
+          s3Key,                    // 23 pdf_original_url
+          null,                     // 24 pdf_final_url
+          requiereNotaria,          // 25 requiere_firma_notarial
         ]
       );
 
@@ -458,6 +458,5 @@ router.post(
 );
 
 /* ==== resto de rutas (GET /:id/pdf, timeline, firmar, visar, rechazar, download) igual que ya tenías ==== */
-// 👉 Deja sin cambios todo lo que sigue a partir de router.get('/:id/pdf', ...)
 
 module.exports = router;
