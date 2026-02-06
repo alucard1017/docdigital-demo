@@ -7,10 +7,10 @@ import { API_BASE_URL } from "../constants";
 const API_URL = API_BASE_URL;
 
 function getTipoTramiteLabel(tipo) {
-  if (tipo === "notaria") return "Con notaría";
-  if (tipo === "propio") return "Propio";
+  if (tipo === "notaria") return "Trámite Notarial";
+  if (tipo === "propio") return "Trámite Propio";
   return "N/D";
-}
+} 
 
 export function DocumentRow({ doc, onOpenDetail, token }) {
   const tipoTramite = doc.tipo_tramite || doc.tipoTramite || null;
