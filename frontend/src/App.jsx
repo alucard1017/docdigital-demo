@@ -723,6 +723,7 @@ function App() {
           docsPaginadosLength: docsPaginados.length,
           })}
       console.log('DEBUG USER:', user);
+      console.log("DEBUG tipoTramite:", tipoTramite);
  
   return (
     <div className="dashboard-layout">
@@ -1158,7 +1159,7 @@ function App() {
                       marginBottom: 10,
                     }}
                   >
-                    ARCHIVO PDF
+                    CONTRATO (PDF)
                   </label>
                   <input
                     type="file"
@@ -1178,6 +1179,15 @@ function App() {
                       {formErrors.file}
                     </p>
                   )}
+                  <p
+                    style={{
+                      marginTop: 4,
+                      fontSize: '0.8rem',
+                      color: '#64748b',
+                    }}
+                  >
+                    Seleccione el contrato en formato PDF.
+                  </p>
                 </div>
               </div>
 
