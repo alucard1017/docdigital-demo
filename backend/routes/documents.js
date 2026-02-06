@@ -24,33 +24,44 @@ async function aplicarMarcaAguaLocal(filePath) {
     const pdfDoc = await PDFDocument.load(bytes);
     const pages = pdfDoc.getPages();
 
-    const texto = 'VERIFIRMA - COPIA';
-    const fontSize = 40;
-    const opacity = 0.6;
-    const angle = 30;
-    const xStep = 250;
+    const texto = 'VERIFIRMA';
+    const textoSecundario = 'Documento en proceso – No válido como original';
+    const fontSizeMain = 26;
+    const fontSizeSub = 10;
+    const opacity = 0.24;
+    const angle = 33;
+    const xStep = 260;
     const yStep = 220;
+    const color = rgb(0.75, 0.75, 0.75);
 
     for (const page of pages) {
       const { width, height } = page.getSize();
 
-      for (let x = -width / 2; x < width * 1.5; x += xStep) {
-        for (let y = -height / 2; y < height * 1.5; y += yStep) {
-          page.drawText(texto, {
+      for (let x = -width * 0.3; x < width * 1.3; x += xStep) {
+        for (let y = -height * 0.3; y < height * 1.3; y += yStep) {
+          page.drawText(textoPrincipal, {
             x,
             y,
-            size: fontSize,
-            color: rgb(0.7, 0.7, 0.7),
+            size: fontSizeMain,
+            color,
             rotate: degrees(angle),
             opacity,
           });
+	 page.drawText(textoSecundario, {
+	   x,
+	   y: y - 18,
+           size: fontSizeSub,
+           color,
+           rotate: degrees(angle),
+           opacity,
+	  });
         }
       }
     }
 
     const pdfBytes = await pdfDoc.save();
     await fs.promises.writeFile(filePath, pdfBytes);
-    console.log('✅ Marca de agua AUMENTADA aplicada a', filePath);
+    console.log('✅ Marca de agua VERIFIRMA estilo PRO aplicada a', filePath);
   } catch (err) {
     console.error('⚠️ Error aplicando marca de agua:', err);
   }
