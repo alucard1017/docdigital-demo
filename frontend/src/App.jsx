@@ -61,6 +61,7 @@ function App() {
 
   // Errores del formulario de subida
   const [formErrors, setFormErrors] = useState({});
+  const [tipoTramite, setTipoTramite] = useState("propio");
 
   // Sesión
   const [token, setToken] = useState(localStorage.getItem('token') || '');
