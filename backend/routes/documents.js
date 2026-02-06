@@ -77,7 +77,7 @@ router.get('/', requireAuth, async (req, res) => {
          visador_nombre, visador_email, visador_movil,
          firmante_nombre, firmante_email, firmante_movil, firmante_run,
          empresa_rut, signature_status, requires_visado, reject_reason,
-         created_at, updated_at 
+         tipo_tramite,requiere_firma_notarial,created_at, updated_at 
        FROM documents 
        WHERE owner_id = $1 
        ORDER BY ${orderByClause}`,
@@ -90,7 +90,7 @@ router.get('/', requireAuth, async (req, res) => {
       file_url: row.file_path,
     }));
 
-    return res.json(docs);
+    res.json(result.rows);
   } catch (err) {
     console.error('❌ Error listando documentos:', err);
     return res.status(500).json({ message: 'Error interno del servidor' });
@@ -98,7 +98,7 @@ router.get('/', requireAuth, async (req, res) => {
 });
 
 /* ================================
-   POST: Crear nuevo documento
+   POST: Crear nuevo documento / trámite
    ================================ */
 router.post(
   '/',
@@ -114,6 +114,8 @@ router.post(
         firmante_email: req.body.firmante_email,
         visador_email: req.body.visador_email,
         requiresVisado: req.body.requiresVisado,
+        tipoTramite: req.body.tipoTramite,
+        requiere_firma_notarial: req.body.requiere_firma_notarial,
       });
 
       const {
@@ -134,7 +136,16 @@ router.post(
         firmante_adicional_nombre_completo,
         firmante_adicional_email,
         firmante_adicional_movil,
+        tipoTramite,
+        requiere_firma_notarial,
       } = req.body;
+
+      // Normalizar tipo_tramite y flag notarial
+      const tipo_tramite =
+        tipoTramite === 'notaria' ? 'notaria' : 'propio';
+      const requiereNotaria =
+        requiere_firma_notarial === 'true' ||
+        requiere_firma_notarial === true;
 
       if (!req.file) {
         return res
@@ -204,6 +215,7 @@ router.post(
         return res.status(400).json({ message: err.message });
       }
 
+      // Subir PDF a S3
       let s3Key = null;
 
       try {
@@ -232,6 +244,7 @@ router.post(
       );
       const requires_visado = requiresVisado === 'true';
 
+      // INSERT en documents (ya con tipo_tramite, estado, pdf_* y requiere_firma_notarial)
       const result = await db.query(
         `INSERT INTO documents (
            owner_id, title, description, file_path, status,
@@ -240,6 +253,7 @@ router.post(
            firmante_nombre, firmante_email, firmante_movil, firmante_run,
            empresa_rut, requires_visado, signature_token,
            signature_token_expires_at, signature_status,
+           tipo_tramite, estado, pdf_original_url, pdf_final_url, requiere_firma_notarial,
            created_at, updated_at
          ) VALUES (
            $1, $2, $3, $4, $5,
@@ -247,7 +261,9 @@ router.post(
            $9, $10, $11,
            $12, $13, $14, $15,
            $16, $17, $18, $19,
-           $20, NOW(), NOW()
+           $20,
+           $21, $22, $23, $24,
+           NOW(), NOW()
          )
          RETURNING *`,
         [
@@ -255,7 +271,7 @@ router.post(
           title,
           description,
           s3Key,
-          'PENDIENTE',
+          'PENDIENTE', // status legacy
           destinatario_nombre,
           destinatario_email,
           destinatario_movil,
@@ -270,17 +286,24 @@ router.post(
           requires_visado,
           signatureToken,
           signatureExpiresAt,
-          'PENDIENTE',
+          'PENDIENTE', // signature_status
+          tipo_tramite, // nuevo
+          'borrador', // nuevo estado del trámite
+          s3Key, // pdf_original_url
+          null, // pdf_final_url
+          requiereNotaria, // requiere_firma_notarial
         ]
       );
 
       const doc = result.rows[0];
 
+      // Audit trail enriquecido
       await db.query(
         `INSERT INTO document_events (
-           document_id, actor, action, details, from_status, to_status
+           document_id, actor, action, details, from_status, to_status,
+           tipo_evento, detalle, ip, user_agent
          ) 
-         VALUES ($1, $2, $3, $4, $5, $6)`,
+         VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)`,
         [
           doc.id,
           req.user.name || 'Sistema',
@@ -288,6 +311,14 @@ router.post(
           `Documento "${title}" creado`,
           null,
           'PENDIENTE',
+          'DOCUMENTO_CREADO',
+          JSON.stringify({
+            titulo: title,
+            creadoPor: req.user.id,
+            tipo_tramite,
+          }),
+          req.ip,
+          req.headers['user-agent'] || null,
         ]
       );
 
@@ -303,7 +334,7 @@ router.post(
         destinatario_email
       );
 
-      // ⭐ ENCOLAR EMAILS EN BACKGROUND (NO ESPERAR)
+      // ENCOLAR EMAILS EN BACKGROUND (sin bloquear respuesta)
       try {
         // 1) Firmante principal
         if (firmante_email) {
@@ -328,11 +359,14 @@ router.post(
             title,
             `${frontBaseUrl}/firma-publica?token=${tokenFirmanteAdicional}`
           ).catch((err) => {
-            console.error('❌ Error encolando email de firmante adicional:', err.message);
+            console.error(
+              '❌ Error encolando email de firmante adicional:',
+              err.message
+            );
           });
         }
 
-        // 3) Visador (si el documento requiere visado y hay email)
+        // 3) Visador (si requiere visado y hay email)
         if (requires_visado && visador_email) {
           const tokenVisador = crypto.randomUUID();
           console.log('📧 Encolando email para visador:', visador_email);
@@ -345,7 +379,7 @@ router.post(
           });
         }
 
-        // 4) Empresa / destinatario (opcional)
+        // 4) Destinatario / empresa (opcional)
         if (destinatario_email && destinatario_email !== firmante_email) {
           console.log(
             '📧 Encolando notificación a destinatario/empresa:',
@@ -356,20 +390,22 @@ router.post(
             title,
             `${frontBaseUrl}/documentos/${doc.id}`
           ).catch((err) => {
-            console.error('❌ Error encolando email de destinatario:', err.message);
+            console.error(
+              '❌ Error encolando email de destinatario:',
+              err.message
+            );
           });
         }
       } catch (emailError) {
-        // Los errores en encolado NO bloquean la respuesta
         console.error('⚠️ Error al encolar emails:', emailError.message);
       }
 
-      // ⭐ RESPONDER INMEDIATAMENTE (sin esperar emails)
       return res.status(201).json({
         ...doc,
         requiresVisado: doc.requires_visado === true,
         file_url: doc.file_path,
-        message: 'Documento creado exitosamente. Los emails se enviarán en segundo plano.',
+        message:
+          'Documento creado exitosamente. Los emails se enviarán en segundo plano.',
       });
     } catch (err) {
       console.error('❌ Error creando documento:', err);
@@ -381,14 +417,14 @@ router.post(
 );
 
 /* ================================
-   GET: URL firmada solo para VER PDF
+   GET: URL firmada solo para VER PDF (con estados)
    ================================ */
 router.get('/:id/pdf', async (req, res) => {
   try {
     const { id } = req.params;
 
     const result = await db.query(
-      `SELECT file_path
+      `SELECT file_path, pdf_original_url, pdf_final_url, estado
        FROM documents
        WHERE id = $1`,
       [id]
@@ -400,16 +436,37 @@ router.get('/:id/pdf', async (req, res) => {
         .json({ message: 'Documento no encontrado' });
     }
 
-    const { file_path } = result.rows[0];
+    const {
+      file_path,
+      pdf_original_url,
+      pdf_final_url,
+      estado,
+    } = result.rows[0];
 
-    if (!file_path) {
+    if (!file_path && !pdf_original_url) {
       return res
         .status(404)
         .json({ message: 'Documento sin archivo asociado' });
     }
 
-    const signedUrl = await getSignedUrl(file_path, 3600);
-    return res.json({ url: signedUrl });
+    // Si está completado y existe pdf_final_url, devolvemos ese directo
+    if (estado === 'completado' && pdf_final_url) {
+      const signedUrl = await getSignedUrl(pdf_final_url, 3600);
+      return res.json({ url: signedUrl, final: true });
+    }
+
+    // Por ahora: devolver el PDF original (luego aquí metemos watermark)
+    const key = pdf_original_url || file_path;
+    const signedUrl = await getSignedUrl(key, 3600);
+
+    return res.json({
+      url: signedUrl,
+      final: false,
+      message:
+        estado === 'completado'
+          ? 'Documento completado, pero aún sin PDF final generado.'
+          : 'Documento en estado no completado (usar watermark en el front o en futura versión del backend).',
+    });
   } catch (err) {
     console.error('❌ Error obteniendo PDF:', err);
     return res.status(500).json({ message: 'Error interno del servidor' });
