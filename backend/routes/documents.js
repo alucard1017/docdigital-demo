@@ -26,13 +26,13 @@ async function aplicarMarcaAguaLocal(filePath) {
 
     const textoPrincipal = 'VERIFIRMA';
     const textoSecundario = 'Documento en proceso – No válido como original';
-    const fontSizeMain = 28;
+    const fontSizeMain = 30;
     const fontSizeSub = 11;
-    const opacity = 0.3;
+    const opacity = 0.36;
     const angle = 33;
     const xStep = 260;
     const yStep = 220;
-    const color = rgb(0.7, 0.7, 0.7);
+    const color = rgb(0.6, 0.6, 0.6);
 
     for (const page of pages) {
       const { width, height } = page.getSize();
