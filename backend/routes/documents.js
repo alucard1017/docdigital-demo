@@ -182,7 +182,6 @@ router.post(
         requiere_firma_notarial,
       } = req.body;
 
-      // Normalizar tipo_tramite y flag notarial
       const tipo_tramite =
         tipoTramite === 'notaria' ? 'notaria' : 'propio';
       const requiereNotaria =
@@ -257,7 +256,7 @@ router.post(
         return res.status(400).json({ message: err.message });
       }
 
-      // Aplicar marca de agua al PDF temporal antes de subirlo a S3
+      // Marca de agua antes de subir a S3
       await aplicarMarcaAguaLocal(req.file.path);
 
       // Subir PDF a S3
@@ -282,14 +281,12 @@ router.post(
         }
       }
 
-      // Token principal (firmante “dueño”)
       const signatureToken = crypto.randomUUID();
       const signatureExpiresAt = new Date(
         Date.now() + 7 * 24 * 60 * 60 * 1000
       );
       const requires_visado = requiresVisado === 'true';
 
-      // INSERT en documents
       const result = await db.query(
         `INSERT INTO documents (
            owner_id, title, description, file_path, status,
@@ -312,37 +309,36 @@ router.post(
          )
          RETURNING *`,
         [
-          req.user.id,              // 1
-          title,                    // 2
-          description,              // 3
-          s3Key,                    // 4 file_path
-          'PENDIENTE',              // 5 status
-          destinatario_nombre,      // 6
-          destinatario_email,       // 7
-          destinatario_movil,       // 8
-          visador_nombre,           // 9
-          visador_email,            // 10
-          visador_movil,            // 11
-          firmante_nombre_completo, // 12
-          firmante_email,           // 13
-          firmante_movil,           // 14
-          runValue,                 // 15
-          empresa_rut,              // 16
-          requires_visado,          // 17
-          signatureToken,           // 18
-          signatureExpiresAt,       // 19
-          'PENDIENTE',              // 20 signature_status
-          tipo_tramite,             // 21
-          'borrador',               // 22 estado
-          s3Key,                    // 23 pdf_original_url
-          null,                     // 24 pdf_final_url
-          requiereNotaria,          // 25 requiere_firma_notarial
+          req.user.id,
+          title,
+          description,
+          s3Key,
+          'PENDIENTE',
+          destinatario_nombre,
+          destinatario_email,
+          destinatario_movil,
+          visador_nombre,
+          visador_email,
+          visador_movil,
+          firmante_nombre_completo,
+          firmante_email,
+          firmante_movil,
+          runValue,
+          empresa_rut,
+          requires_visado,
+          signatureToken,
+          signatureExpiresAt,
+          'PENDIENTE',
+          tipo_tramite,
+          'borrador',
+          s3Key,
+          null,
+          requiereNotaria,
         ]
       );
 
       const doc = result.rows[0];
 
-      // Audit trail
       await db.query(
         `INSERT INTO document_events (
            document_id, actor, action, details, from_status, to_status,
@@ -379,7 +375,6 @@ router.post(
         destinatario_email
       );
 
-      // ENCOLAR EMAILS EN BACKGROUND
       try {
         if (firmante_email) {
           sendSigningInvitation(
@@ -457,6 +452,418 @@ router.post(
   }
 );
 
-/* ==== resto de rutas (GET /:id/pdf, timeline, firmar, visar, rechazar, download) igual que ya tenías ==== */
+/* ================================
+   GET: URL firmada solo para VER PDF
+   ================================ */
+router.get('/:id/pdf', async (req, res) => {
+  try {
+    const { id } = req.params;
 
+    const result = await db.query(
+      `SELECT file_path, pdf_original_url, pdf_final_url, estado
+       FROM documents
+       WHERE id = $1`,
+      [id]
+    );
+
+    if (result.rowCount === 0) {
+      return res
+        .status(404)
+        .json({ message: 'Documento no encontrado' });
+    }
+
+    const {
+      file_path,
+      pdf_original_url,
+      pdf_final_url,
+      estado,
+    } = result.rows[0];
+
+    if (!file_path && !pdf_original_url) {
+      return res
+        .status(404)
+        .json({ message: 'Documento sin archivo asociado' });
+    }
+
+    if (estado === 'completado' && pdf_final_url) {
+      const signedUrlFinal = await getSignedUrl(pdf_final_url, 3600);
+      return res.json({ url: signedUrlFinal, final: true });
+    }
+
+    const key = pdf_original_url || file_path;
+    const signedUrl = await getSignedUrl(key, 3600);
+
+    return res.json({
+      url: signedUrl,
+      final: false,
+    });
+  } catch (err) {
+    console.error('❌ Error obteniendo PDF:', err);
+    return res.status(500).json({ message: 'Error interno del servidor' });
+  }
+});
+
+/* ================================
+   GET: Timeline del documento
+   ================================ */
+router.get('/:id/timeline', async (req, res) => {
+  try {
+    const docId = req.params.id;
+
+    const docRes = await db.query(
+      `SELECT 
+         id, title, status, destinatario_nombre,
+         empresa_rut, created_at, updated_at,
+         requires_visado, firmante_nombre, visador_nombre 
+       FROM documents 
+       WHERE id = $1`,
+      [docId]
+    );
+
+    if (docRes.rows.length === 0) {
+      return res
+        .status(404)
+        .json({ message: 'Documento no encontrado' });
+    }
+
+    const doc = docRes.rows[0];
+
+    const eventsRes = await db.query(
+      `SELECT 
+         id, action, details, actor, from_status, to_status, created_at 
+       FROM document_events 
+       WHERE document_id = $1 
+       ORDER BY created_at ASC`,
+      [docId]
+    );
+
+    const events = eventsRes.rows;
+
+    let currentStep = 'Pendiente';
+    let nextStep = '';
+    let progress = 0;
+
+    if (doc.status === 'PENDIENTE') {
+      if (doc.requires_visado) {
+        nextStep = '⏳ Esperando visación';
+        progress = 25;
+      } else {
+        nextStep = '⏳ Esperando firma';
+        progress = 50;
+      }
+    } else if (doc.status === 'VISADO') {
+      currentStep = 'Visado';
+      nextStep = '⏳ Esperando firma';
+      progress = 75;
+    } else if (doc.status === 'FIRMADO') {
+      currentStep = 'Firmado';
+      nextStep = '✅ Completado';
+      progress = 100;
+    } else if (doc.status === 'RECHAZADO') {
+      currentStep = 'Rechazado';
+      nextStep = '❌ Rechazado';
+      progress = 0;
+    }
+
+    const formattedEvents = events.map((evt) => ({
+      id: evt.id,
+      action: evt.action,
+      details: evt.details,
+      actor: evt.actor,
+      timestamp: evt.created_at,
+      fromStatus: evt.from_status,
+      toStatus: evt.to_status,
+    }));
+
+    return res.json({
+      document: {
+        id: doc.id,
+        title: doc.title,
+        status: doc.status,
+        destinatario_nombre: doc.destinatario_nombre,
+        empresa_rut: doc.empresa_rut,
+        created_at: doc.created_at,
+        updated_at: doc.updated_at,
+        requires_visado: doc.requires_visado,
+      },
+      timeline: {
+        currentStep,
+        nextStep,
+        progress,
+        events: formattedEvents,
+      },
+    });
+  } catch (err) {
+    console.error('❌ Error obteniendo timeline:', err);
+    return res.status(500).json({ message: 'Error interno del servidor' });
+  }
+});
+
+/* ================================
+   POST: Firmar documento (propietario)
+   ================================ */
+router.post('/:id/firmar', requireAuth, async (req, res) => {
+  try {
+    const id = req.params.id;
+
+    const current = await db.query(
+      `SELECT * 
+       FROM documents 
+       WHERE id = $1 AND owner_id = $2`,
+      [id, req.user.id]
+    );
+
+    if (current.rowCount === 0) {
+      return res.status(404).json({ message: 'No encontrado' });
+    }
+
+    const docActual = current.rows[0];
+
+    if (docActual.status === 'FIRMADO') {
+      return res.status(400).json({ message: 'Ya firmado' });
+    }
+
+    if (docActual.status === 'RECHAZADO') {
+      return res.status(400).json({ message: 'Documento rechazado' });
+    }
+
+    if (docActual.requires_visado === true && docActual.status === 'PENDIENTE') {
+      return res.status(400).json({
+        message: 'Este documento requiere visación antes de firmar',
+      });
+    }
+
+    const result = await db.query(
+      `UPDATE documents 
+       SET status = $1, updated_at = NOW()
+       WHERE id = $2 AND owner_id = $3
+       RETURNING *`,
+      ['FIRMADO', id, req.user.id]
+    );
+    const doc = result.rows[0];
+
+    await db.query(
+      `INSERT INTO document_events (
+         document_id, actor, action, details, from_status, to_status
+       )
+       VALUES ($1, $2, $3, $4, $5, $6)`,
+      [
+        doc.id,
+        req.user.name || 'Sistema',
+        'FIRMADO',
+        'Firmado',
+        docActual.status,
+        'FIRMADO',
+      ]
+    );
+
+    return res.json({
+      ...doc,
+      file_url: doc.file_path,
+      message: 'Documento firmado exitosamente',
+    });
+  } catch (err) {
+    console.error('❌ Error firmando documento:', err);
+    return res.status(500).json({ message: 'Error interno del servidor' });
+  }
+});
+
+/* ================================
+   POST: Visar documento
+   ================================ */
+router.post('/:id/visar', requireAuth, async (req, res) => {
+  try {
+    const id = req.params.id;
+
+    const current = await db.query(
+      `SELECT * 
+       FROM documents 
+       WHERE id = $1 AND owner_id = $2`,
+      [id, req.user.id]
+    );
+
+    if (current.rowCount === 0) {
+      return res.status(404).json({ message: 'No encontrado' });
+    }
+
+    const docActual = current.rows[0];
+
+    if (docActual.status === 'FIRMADO') {
+      return res.status(400).json({ message: 'Ya firmado' });
+    }
+
+    if (docActual.status === 'RECHAZADO') {
+      return res.status(400).json({ message: 'Documento rechazado' });
+    }
+
+    if (docActual.requires_visado !== true) {
+      return res.status(400).json({
+        message: 'Este documento no requiere visación',
+      });
+    }
+
+    if (docActual.status !== 'PENDIENTE') {
+      return res.status(400).json({
+        message: 'Solo se pueden visar documentos en estado PENDIENTE',
+      });
+    }
+
+    const result = await db.query(
+      `UPDATE documents 
+       SET status = $1, updated_at = NOW() 
+       WHERE id = $2 AND owner_id = $3 
+       RETURNING *`,
+      ['VISADO', id, req.user.id]
+    );
+    const doc = result.rows[0];
+
+    await db.query(
+      `INSERT INTO document_events (
+         document_id, actor, action, details, from_status, to_status
+       ) 
+       VALUES ($1, $2, $3, $4, $5, $6)`,
+      [
+        doc.id,
+        req.user.name || 'Sistema',
+        'VISADO',
+        'Documento visado por el propietario',
+        docActual.status,
+        'VISADO',
+      ]
+    );
+
+    return res.json({
+      ...doc,
+      file_url: doc.file_path,
+      message: 'Documento visado exitosamente',
+    });
+  } catch (err) {
+    console.error('❌ Error visando documento:', err);
+    return res.status(500).json({ message: 'Error interno del servidor' });
+  }
+});
+
+/* ================================
+ * POST: Rechazar documento
+ * ================================ */
+router.post('/:id/rechazar', requireAuth, async (req, res) => {
+  try {
+    const id = req.params.id;
+    const { motivo } = req.body;
+
+    const current = await db.query(
+      `SELECT * 
+       FROM documents 
+       WHERE id = $1 AND owner_id = $2`,
+      [id, req.user.id]
+    );
+
+    if (current.rowCount === 0) {
+      return res.status(404).json({ message: 'No encontrado' });
+    }
+
+    const docActual = current.rows[0];
+
+    if (docActual.status === 'FIRMADO') {
+      return res.status(400).json({
+        message: 'Ya firmado, no se puede rechazar',
+      });
+    }
+
+    if (docActual.status === 'RECHAZADO') {
+      return res.status(400).json({ message: 'Ya rechazado' });
+    }
+
+    const result = await db.query(
+      `UPDATE documents 
+       SET status = $1, reject_reason = $2, updated_at = NOW()
+       WHERE id = $3 AND owner_id = $4 
+       RETURNING *`,
+      ['RECHAZADO', motivo || 'Sin especificar', id, req.user.id]
+    );
+
+    const doc = result.rows[0];
+
+    await db.query(
+      `INSERT INTO document_events (
+         document_id, actor, action, details, from_status, to_status
+       ) 
+       VALUES ($1, $2, $3, $4, $5, $6)`,
+      [
+        doc.id,
+        req.user.name || 'Sistema',
+        'RECHAZADO',
+        `Documento rechazado: ${motivo || 'Sin especificar'}`,
+        docActual.status,
+        'RECHAZADO',
+      ]
+    );
+
+    return res.json({
+      ...doc,
+      file_url: doc.file_path,
+      message: 'Documento rechazado exitosamente',
+    });
+  } catch (err) {
+    console.error('❌ Error rechazando documento:', err);
+    return res.status(500).json({ message: 'Error interno del servidor' });
+  }
+});
+
+/* ================================
+   GET: Descargar PDF (FORZAR DESCARGA)
+   ================================ */
+router.get('/:id/download', async (req, res) => {
+  try {
+    const id = req.params.id;
+
+    const result = await db.query(
+      `SELECT id, title, file_path 
+       FROM documents
+       WHERE id = $1`,
+      [id]
+    );
+
+    if (result.rowCount === 0) {
+      return res
+        .status(404)
+        .json({ message: 'Documento no encontrado' });
+    }
+
+    const doc = result.rows[0];
+
+    if (!doc.file_path) {
+      return res
+        .status(404)
+        .json({ message: 'Documento sin archivo asociado' });
+    }
+
+    const signedUrl = await getSignedUrl(doc.file_path, 3600);
+
+    const fileResponse = await axios.get(signedUrl, {
+      responseType: 'stream',
+    });
+
+    const filename =
+      (doc.title || `documento-${doc.id}`).replace(
+        /[^a-zA-Z0-9-_]/g,
+        '_'
+      ) + '.pdf';
+
+    res.setHeader('Content-Type', 'application/pdf');
+    res.setHeader(
+      'Content-Disposition',
+      `attachment; filename="${filename}"`
+    );
+
+    fileResponse.data.pipe(res);
+  } catch (err) {
+    console.error('❌ Error en descarga de documento:', err);
+    return res.status(500).json({ message: 'Error interno del servidor' });
+  }
+});
+
+/* ================================
+   EXPORTAR ROUTER
+   ================================ */
 module.exports = router;
