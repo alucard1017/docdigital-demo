@@ -5,6 +5,12 @@ import { API_BASE_URL } from "../constants";
 
 const API_URL = API_BASE_URL;
 
+function getTipoTramiteLabel(tipo) {
+  if (tipo === "notaria") return "Con notaría";
+  if (tipo === "propio") return "Propio";
+  return "N/D";
+}
+
 export function DocumentRow({ doc, onOpenDetail, token }) {
   const handleVerPdf = async () => {
     try {
@@ -15,7 +21,7 @@ export function DocumentRow({ doc, onOpenDetail, token }) {
       if (!res.ok) {
         throw new Error(data.message || "No se pudo obtener el PDF");
       }
-      window.open(data.url, "_blank"); // URL firmada desde backend
+      window.open(data.url, "_blank");
     } catch (err) {
       console.error("Error abriendo PDF:", err);
       alert("❌ " + err.message);
@@ -32,12 +38,33 @@ export function DocumentRow({ doc, onOpenDetail, token }) {
 
   return (
     <tr>
+      {/* ID */}
       <td style={{ color: "#94a3b8", fontWeight: 600 }}>#{doc.id}</td>
 
+      {/* Título */}
       <td style={{ fontWeight: 700, color: "#1e293b" }}>
         {doc.title || "Sin título"}
       </td>
 
+      {/* Tipo de trámite */}
+      <td>
+        <span
+          style={{
+            padding: "2px 8px",
+            borderRadius: 999,
+            fontSize: 12,
+            backgroundColor:
+              doc.tipo_tramite === "notaria" ? "#eef2ff" : "#ecfeff",
+            color:
+              doc.tipo_tramite === "notaria" ? "#4f46e5" : "#0f766e",
+            whiteSpace: "nowrap",
+          }}
+        >
+          {getTipoTramiteLabel(doc.tipo_tramite)}
+        </span>
+      </td>
+
+      {/* Fecha creación */}
       <td>
         {doc.created_at
           ? new Date(doc.created_at).toLocaleString("es-CO", {
@@ -50,12 +77,15 @@ export function DocumentRow({ doc, onOpenDetail, token }) {
           : "-"}
       </td>
 
+      {/* Estado (legacy) */}
       <td style={{ textAlign: "center" }}>
         <DocStatusBadge status={doc.status} />
       </td>
 
+      {/* Firmante principal */}
       <td>{doc.firmante_nombre || "No asignado"}</td>
 
+      {/* Acciones */}
       <td
         style={{
           verticalAlign: "middle",
