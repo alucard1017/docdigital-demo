@@ -104,7 +104,6 @@ function App() {
   const [firmanteRunValue, setFirmanteRunValue] = useState('');
   const [empresaRutValue, setEmpresaRutValue] = useState('');
 
-
   async function cargarFirmaPublica(token) {
     try {
       setPublicSignLoading(true);
@@ -115,18 +114,18 @@ function App() {
 
       if (!res.ok) {
         throw new Error(data.message || 'No se pudo cargar el documento');
-        }
-
-        setPublicSignDoc(data.document);
-        setPublicSignPdfUrl(data.pdfUrl);
-      } catch (err) {
-        setPublicSignError(err.message);
-        setPublicSignDoc(null);
-        setPublicSignPdfUrl('');
-      } finally {
-        setPublicSignLoading(false);
       }
-    }     
+
+      setPublicSignDoc(data.document);
+      setPublicSignPdfUrl(data.pdfUrl);
+    } catch (err) {
+      setPublicSignError(err.message);
+      setPublicSignDoc(null);
+      setPublicSignPdfUrl('');
+    } finally {
+      setPublicSignLoading(false);
+    }
+  }
 
   // Ping para despertar el backend en Render
   useEffect(() => {
@@ -144,7 +143,7 @@ function App() {
       setPublicSignToken(tokenUrl);
       cargarFirmaPublica(tokenUrl);
     }
-  }, []);    
+  }, []);
 
   // Cargar eventos del documento seleccionado
   useEffect(() => {
@@ -178,7 +177,7 @@ function App() {
       return;
     }
 
-        const fetchPdfUrl = async () => {
+    const fetchPdfUrl = async () => {
       try {
         const res = await fetch(`${API_URL}/api/docs/${selectedDoc.id}/pdf`, {
           headers: { Authorization: `Bearer ${token}` },
@@ -195,7 +194,7 @@ function App() {
     };
 
     fetchPdfUrl();
-  }, [token, selectedDoc, API_URL]);
+  }, [token, selectedDoc]);
 
   // Cargar documentos automáticamente cuando haya token y vista lista
   useEffect(() => {
@@ -205,8 +204,8 @@ function App() {
   }, [token, view, sort]);
 
   /* ===============================
-    LOGIN
-    =============================== */
+     LOGIN
+     =============================== */
   async function handleLogin(e) {
     e.preventDefault();
     setIsLoggingIn(true);
@@ -242,8 +241,8 @@ function App() {
   }
 
   /* ===============================
-    CARGA DE DOCUMENTOS
-    =============================== */
+     CARGA DE DOCUMENTOS
+     =============================== */
   async function cargarDocs(sortParam = sort) {
     if (!token) return;
     setLoadingDocs(true);
@@ -297,18 +296,18 @@ function App() {
       try {
         const res = await fetch(`${API_URL}/api/docs/${doc.id}/pdf`, {
           headers: { Authorization: `Bearer ${token}` },
-          });
-          const data = await res.json();
-          if (!res.ok) {
-            throw new Error(data.message || 'No se pudo obtener el PDF');
-          }
-          window.open(data.url, '_blank'); // URL firmada desde el backend
-        } catch (err) {
-          console.error('Error abriendo PDF:', err);
-          alert('❌ ' + err.message);
+        });
+        const data = await res.json();
+        if (!res.ok) {
+          throw new Error(data.message || 'No se pudo obtener el PDF');
         }
-        return;
-        }
+        window.open(data.url, '_blank'); // URL firmada desde el backend
+      } catch (err) {
+        console.error('Error abriendo PDF:', err);
+        alert('❌ ' + err.message);
+      }
+      return;
+    }
 
     try {
       let body = undefined;
@@ -380,7 +379,7 @@ function App() {
   // ===============================
   // VISTA FIRMA PÚBLICA POR TOKEN
   // ===============================
-  if (view === 'public-sign') {  
+  if (view === 'public-sign') {
     return (
       <PublicSignView
         publicSignLoading={publicSignLoading}
@@ -393,46 +392,45 @@ function App() {
       />
     );
   }
-                       
+
   /* ===============================
      VISTA DETALLE DE DOCUMENTO
      =============================== */
   if (view === 'detail' && selectedDoc) {
-  const requiereVisado = selectedDoc.requires_visado === true;
+    const requiereVisado = selectedDoc.requires_visado === true;
 
-  const puedeVisar =
-    requiereVisado && selectedDoc.status === DOC_STATUS.PENDIENTE;
+    const puedeVisar =
+      requiereVisado && selectedDoc.status === DOC_STATUS.PENDIENTE;
 
-  const puedeFirmar =
-    (!requiereVisado && selectedDoc.status === DOC_STATUS.PENDIENTE) ||
-    (requiereVisado && selectedDoc.status === DOC_STATUS.VISADO);
+    const puedeFirmar =
+      (!requiereVisado && selectedDoc.status === DOC_STATUS.PENDIENTE) ||
+      (requiereVisado && selectedDoc.status === DOC_STATUS.VISADO);
 
-  const puedeRechazar = ![
-    DOC_STATUS.FIRMADO,
-    DOC_STATUS.RECHAZADO,
-  ].includes(selectedDoc.status);
+    const puedeRechazar = ![
+      DOC_STATUS.FIRMADO,
+      DOC_STATUS.RECHAZADO,
+    ].includes(selectedDoc.status);
 
-  return (
-    <DetailView
-      selectedDoc={selectedDoc}
-      pdfUrl={pdfUrl}
-      puedeFirmar={puedeFirmar}
-      puedeVisar={puedeVisar}
-      puedeRechazar={puedeRechazar}
-      events={events}
-      manejarAccionDocumento={manejarAccionDocumento}
-      setView={setView}
-      setSelectedDoc={setSelectedDoc}
-      logout={logout}
-    />
-  );
-}
+    return (
+      <DetailView
+        selectedDoc={selectedDoc}
+        pdfUrl={pdfUrl}
+        puedeFirmar={puedeFirmar}
+        puedeVisar={puedeVisar}
+        puedeRechazar={puedeRechazar}
+        events={events}
+        manejarAccionDocumento={manejarAccionDocumento}
+        setView={setView}
+        setSelectedDoc={setSelectedDoc}
+        logout={logout}
+      />
+    );
+  }
 
   /* ===============================
      FILTRO EN MEMORIA PARA LA BANDEJA
      =============================== */
   const docsFiltrados = docs.filter((d) => {
-    // filtro por estado
     if (statusFilter === 'PENDIENTES' && d.status !== DOC_STATUS.PENDIENTE) {
       return false;
     }
@@ -445,9 +443,7 @@ function App() {
     if (statusFilter === 'RECHAZADOS' && d.status !== DOC_STATUS.RECHAZADO) {
       return false;
     }
-    // 'TODOS' no filtra nada
 
-    // filtro por texto
     if (search.trim() !== '') {
       const q = search.toLowerCase();
       const titulo = (d.title || '').toLowerCase();
@@ -459,7 +455,6 @@ function App() {
     return true;
   });
 
-  // Conteos globales por estado (independientes de filtros/búsqueda)
   const pendientes = docs.filter(
     (d) => d.status === DOC_STATUS.PENDIENTE
   ).length;
@@ -474,7 +469,6 @@ function App() {
   ).length;
   const totalFiltrado = docsFiltrados.length;
 
-  // Paginación calculada a partir del filtro
   const totalPaginas = Math.ceil(docsFiltrados.length / pageSize);
   const docsPaginados = docsFiltrados.slice(
     (page - 1) * pageSize,
@@ -485,17 +479,16 @@ function App() {
      VISTA DASHBOARD (LIST + UPLOAD)
      =============================== */
 
-     console.log('DEBUG SUPER MEGA SIMPLE v3');
+  console.log('DEBUG SUPER MEGA SIMPLE v3');
+  console.log('DEBUG ESTADO:', {
+    view,
+    loadingDocs,
+    errorDocs,
+    docsPaginadosLength: docsPaginados.length,
+  });
+  console.log('DEBUG USER:', user);
+  console.log('DEBUG tipoTramite:', tipoTramite);
 
-     {console.log('DEBUG ESTADO:', {
-          view,
-          loadingDocs,
-          errorDocs,
-          docsPaginadosLength: docsPaginados.length,
-          })}
-      console.log('DEBUG USER:', user);
-      console.log("DEBUG tipoTramite:", tipoTramite);
- 
   return (
     <div className="dashboard-layout">
       <Sidebar
@@ -525,74 +518,49 @@ function App() {
           onSync={cargarDocs}
         />
 
-          {/* ===============================
+        {/* ===============================
             VISTA LISTA DE DOCUMENTOS
-            ================================ */}
-
+           ================================ */}
         {view === 'list' && (
-          <div>
+          <>
             {/* HERO DASHBOARD */}
-            <div
-              style={{
-                background: 'linear-gradient(135deg, #0f172a, #020617)',
-                borderRadius: 24,
-                padding: 24,
-                marginBottom: 24,
-                display: 'flex',
-                flexDirection: 'column',
-                alignItems: 'center',
-                gap: 20,
-                color: '#e5e7eb',
-              }}
-            >
-              <div style={{ width: '100%',textAlign: 'center',  }}>
-                <h1
-                  style={{
-                    fontSize: '1.6rem',
-                    fontWeight: 800,
-                    marginBottom: 6,
-                    color: '#f9fafb',
-                }}
-              >
-                Gestiona todas tus firmas digitales en un solo lugar
-              </h1>
-              <p
-                style={{
-                  fontSize: '0.98rem',
-                  lineHeight: 1.5,
-                  color: '#cbd5f5',
-                  marginBottom: 14,
-                }}
-              >
-                Envía contratos, actas y documentos legales para firma electrónica
-                avanzada en minutos. Sigue el estado en tiempo real y mantén un
-                historial completo de cada trámite.
-              </p>
-              <div style={{ display: 'flex', gap: 10, flexWrap: 'wrap',justifyContent: 'center', }}>
-                <button
-                  type="button"
-                  className="btn-main btn-primary"
-                  onClick={() => setView('upload')}
-                  style={{ paddingInline: 22 }}
-                >
-                  + Nuevo documento para firma
-                </button>
-                <button
-                  type="button"
-                  className="btn-main"
-                  onClick={cargarDocs}
-                  style={{
-                    backgroundColor: '#020617',
-                    color: '#e5e7eb',
-                    border: '1px solid #1e293b',
-                    paddingInline: 22,
-                  }}
-                >
-                  Ver documentos enviados
-                </button>
+            <div className="hero-dashboard">
+              <div className="hero-dashboard-inner">
+                <h1 className="hero-dashboard-title">
+                  Gestiona todas tus firmas digitales en un solo lugar
+                </h1>
+                <p className="hero-dashboard-text">
+                  Envía contratos, actas y documentos legales para firma electrónica
+                  avanzada en minutos. Sigue el estado en tiempo real y mantén un
+                  historial completo de cada trámite.
+                </p>
+                <div className="hero-dashboard-actions">
+                  <button
+                    type="button"
+                    className="btn-main btn-primary"
+                    onClick={() => setView('upload')}
+                    style={{ paddingInline: 22 }}
+                  >
+                    + Nuevo documento para firma
+                  </button>
+                  <button
+                    type="button"
+                    className="btn-main"
+                    onClick={cargarDocs}
+                    style={{
+                      backgroundColor: '#020617',
+                      color: '#e5e7eb',
+                      border: '1px solid #1e293b',
+                      paddingInline: 22,
+                    }}
+                  >
+                    Ver documentos enviados
+                  </button>
+                </div>
               </div>
             </div>
 
+            {/* (por ahora oculto) Resumen rápido */}
             <div
               style={{
                 display: 'none',
@@ -621,7 +589,6 @@ function App() {
                 completa tu primer flujo de firma real.
               </p>
             </div>
-          </div>
 
             {loadingDocs ? (
               // LOADER
@@ -658,9 +625,7 @@ function App() {
                 <p style={{ marginBottom: 8, fontWeight: 700 }}>
                   Ocurrió un problema al cargar la bandeja.
                 </p>
-                <p
-                  style={{ marginBottom: 16, fontSize: '0.9rem' }}
-                >
+                <p style={{ marginBottom: 16, fontSize: '0.9rem' }}>
                   {errorDocs ||
                     'Por favor, revisa tu conexión e inténtalo nuevamente.'}
                 </p>
@@ -716,7 +681,6 @@ function App() {
               </div>
             ) : (
               <>
-              
                 {/* Tabla de documentos */}
                 <div className="table-wrapper">
                   <table className="doc-table">
@@ -791,31 +755,33 @@ function App() {
                 </div>
               </>
             )}
-          </div>
+          </>
         )}
-          {/* ===============================
-             VISTA SUBIDA NUEVO DOCUMENTO
-             =============================== */}
-             {view === 'upload' && (
-              <NewDocumentForm
-                API_URL={API_URL}
-                token={token}
-                tipoTramite={tipoTramite}
-                setTipoTramite={setTipoTramite}
-                formErrors={formErrors}setFormErrors={setFormErrors}
-                showVisador={showVisador}
-                setShowVisador={setShowVisador}
-                extraSigners={extraSigners}
-                setExtraSigners={setExtraSigners}
-                firmanteRunValue={firmanteRunValue}
-                setFirmanteRunValue={setFirmanteRunValue}
-                empresaRutValue={empresaRutValue}
-                setEmpresaRutValue={setEmpresaRutValue}
-                formatRunDoc={formatRunDoc}
-                setView={setView}
-                cargarDocs={cargarDocs}
-              />
-            )}
+
+        {/* ===============================
+            VISTA SUBIDA NUEVO DOCUMENTO
+           =============================== */}
+        {view === 'upload' && (
+          <NewDocumentForm
+            API_URL={API_URL}
+            token={token}
+            tipoTramite={tipoTramite}
+            setTipoTramite={setTipoTramite}
+            formErrors={formErrors}
+            setFormErrors={setFormErrors}
+            showVisador={showVisador}
+            setShowVisador={setShowVisador}
+            extraSigners={extraSigners}
+            setExtraSigners={setExtraSigners}
+            firmanteRunValue={firmanteRunValue}
+            setFirmanteRunValue={setFirmanteRunValue}
+            empresaRutValue={empresaRutValue}
+            setEmpresaRutValue={setEmpresaRutValue}
+            formatRunDoc={formatRunDoc}
+            setView={setView}
+            cargarDocs={cargarDocs}
+          />
+        )}
       </div>
     </div>
   );
