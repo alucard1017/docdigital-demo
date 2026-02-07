@@ -537,17 +537,15 @@ function App() {
                 background: 'linear-gradient(135deg, #0f172a, #020617)',
                 borderRadius: 24,
                 padding: 24,
-                margin: '24px auto', 
-                maxWidth: 960,
+                marginBottom: 24,
                 display: 'flex',
-                flexDirection: 'column',
                 alignItems: 'center',
-                textAlign: 'center',
+                justifyContent: 'space-between',
                 gap: 20,
                 color: '#e5e7eb',
               }}
             >
-              <div style={{ maxWidth: 520 }}>
+              <div style={{ maxWidth: 520, margin: '0 auto', textAlign: 'center', }}>
                 <h1
                   style={{
                     fontSize: '1.6rem',
