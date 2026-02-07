@@ -538,10 +538,11 @@ function App() {
                 borderRadius: 24,
                 padding: 24,
                 margin: '24px auto', 
-                maxWidth: 840,
+                maxWidth: 960,
                 display: 'flex',
+                flexDirection: 'column',
                 alignItems: 'center',
-                justifyContent: 'space-between',
+                textAlign: 'center',
                 gap: 20,
                 color: '#e5e7eb',
               }}
@@ -569,7 +570,7 @@ function App() {
                 avanzada en minutos. Sigue el estado en tiempo real y mantén un
                 historial completo de cada trámite.
               </p>
-              <div style={{ display: 'flex', gap: 10, flexWrap: 'wrap' }}>
+              <div style={{ display: 'flex', gap: 10, flexWrap: 'wrap',justifyContent: 'center', }}>
                 <button
                   type="button"
                   className="btn-main btn-primary"
