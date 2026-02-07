@@ -539,13 +539,13 @@ function App() {
                 padding: 24,
                 marginBottom: 24,
                 display: 'flex',
+                flexDirection: 'column',
                 alignItems: 'center',
-                justifyContent: 'space-between',
                 gap: 20,
                 color: '#e5e7eb',
               }}
             >
-              <div style={{ maxWidth: 520, margin: '0 auto', textAlign: 'center', }}>
+              <div style={{ width: '100%',textAlign: 'center',  }}>
                 <h1
                   style={{
                     fontSize: '1.6rem',
