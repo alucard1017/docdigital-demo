@@ -12,7 +12,7 @@ const s3 = new S3Client({
   },
 });
 
-const BUCKET = process.env.AWS_S3_BUCKET || 'firma-express-pdfs';
+const BUCKET = process.env.AWS_S3_BUCKET || 'verifirma-pdfs';
 
 async function main() {
   try {

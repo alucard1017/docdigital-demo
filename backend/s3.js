@@ -12,7 +12,7 @@ const s3Client = new S3Client({
   },
 });
 
-const BUCKET = process.env.AWS_S3_BUCKET || 'firma-express-pdfs';
+const BUCKET = process.env.AWS_S3_BUCKET || 'verifirma-pdfs';
 
 /**
  * Subir un PDF a S3
