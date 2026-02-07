@@ -6,7 +6,6 @@ import { ListHeader } from './components/ListHeader';
 import { DocumentRow } from './components/DocumentRow';
 import { DOC_STATUS } from './constants';
 import { API_BASE_URL } from "./constants";
-import { UsersPanel } from "./components/UsersPanel";
 import { LoginView } from './views/LoginView';
 import { PublicSignView } from './views/PublicSignView';
 import { NewDocumentForm } from './views/NewDocumentForm';
@@ -532,6 +531,98 @@ function App() {
 
         {view === 'list' && (
           <div>
+            {/* HERO DASHBOARD */}
+            <div
+              style={{
+                background: 'linear-gradient(135deg, #0f172a, #020617)',
+                borderRadius: 24,
+                padding: 24,
+                marginBottom: 24,
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'space-between',
+                gap: 20,
+                color: '#e5e7eb',
+              }}
+            >
+              <div style={{ maxWidth: 520 }}>
+                <h1
+                  style={{
+                    fontSize: '1.6rem',
+                    fontWeight: 800,
+                    marginBottom: 6,
+                    color: '#f9fafb',
+                }}
+              >
+                Gestiona todas tus firmas digitales en un solo lugar
+              </h1>
+              <p
+                style={{
+                  fontSize: '0.98rem',
+                  lineHeight: 1.5,
+                  color: '#cbd5f5',
+                  marginBottom: 14,
+                }}
+              >
+                Envía contratos, actas y documentos legales para firma electrónica
+                avanzada en minutos. Sigue el estado en tiempo real y mantén un
+                historial completo de cada trámite.
+              </p>
+              <div style={{ display: 'flex', gap: 10, flexWrap: 'wrap' }}>
+                <button
+                  type="button"
+                  className="btn-main btn-primary"
+                  onClick={() => setView('upload')}
+                  style={{ paddingInline: 22 }}
+                >
+                  + Nuevo documento para firma
+                </button>
+                <button
+                  type="button"
+                  className="btn-main"
+                  onClick={cargarDocs}
+                  style={{
+                    backgroundColor: '#020617',
+                    color: '#e5e7eb',
+                    border: '1px solid #1e293b',
+                    paddingInline: 22,
+                  }}
+                >
+                  Ver documentos enviados
+                </button>
+              </div>
+            </div>
+
+            <div
+              style={{
+                display: 'none',
+                minWidth: 200,
+                height: 130,
+                borderRadius: 18,
+                border: '1px solid rgba(148, 163, 184, 0.25)',
+                background:
+                  'radial-gradient(circle at 0 0, rgba(56, 189, 248, 0.25), transparent 55%), radial-gradient(circle at 100% 100%, rgba(129, 140, 248, 0.18), transparent 55%)',
+                padding: 14,
+              }}
+            >
+              <p
+                style={{
+                  fontSize: '0.8rem',
+                  color: '#e5e7eb',
+                  marginBottom: 8,
+                  fontWeight: 600,
+                }}
+              >
+                Resumen rápido
+              </p>
+              <p style={{ fontSize: '0.8rem', color: '#cbd5f5' }}>
+                Próximo paso: conecta tu dominio{' '}
+                <span style={{ color: '#a5b4fc' }}>app.verifirma.cl</span> y
+                completa tu primer flujo de firma real.
+              </p>
+            </div>
+          </div>
+
             {loadingDocs ? (
               // LOADER
               <div
@@ -725,13 +816,6 @@ function App() {
                 cargarDocs={cargarDocs}
               />
             )}
-
-          {/* ===============================
-            VISTA USUARIOS (ADMIN)
-            ================================ */}
-          {view === 'users' && (
-            <UsersPanel />
-        )}
       </div>
     </div>
   );
