@@ -538,7 +538,7 @@ function App() {
                 borderRadius: 24,
                 padding: 24,
                 margin: '24px auto', 
-                maxWidth: 960,
+                maxWidth: 840,
                 display: 'flex',
                 alignItems: 'center',
                 justifyContent: 'space-between',
