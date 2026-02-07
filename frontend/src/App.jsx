@@ -538,6 +538,8 @@ function App() {
                 borderRadius: 24,
                 padding: 24,
                 marginBottom: 24,
+                marginInline: 'auto',
+                maxWidth: 980,
                 display: 'flex',
                 alignItems: 'center',
                 justifyContent: 'space-between',
