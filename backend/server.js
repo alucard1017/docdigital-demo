@@ -111,7 +111,7 @@ console.log('✓ Ruta GET /api/health registrada');
 
 app.get('/', (req, res) => {
   res.json({
-    message: 'API de DocDigital funcionando',
+    message: 'API de VeriFirma funcionando',
     version: '2.0',
     features: ['autenticación', 'documentos', 'firma digital', 'S3 storage'],
     timestamp: new Date().toISOString(),
