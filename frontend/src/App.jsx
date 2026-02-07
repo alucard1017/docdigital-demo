@@ -9,6 +9,7 @@ import { API_BASE_URL } from "./constants";
 import { LoginView } from './views/LoginView';
 import { PublicSignView } from './views/PublicSignView';
 import { NewDocumentForm } from './views/NewDocumentForm';
+import { UsersAdminView } from './views/UsersAdminView';
 
 const API_URL = API_BASE_URL;
 
@@ -781,6 +782,12 @@ function App() {
             setView={setView}
             cargarDocs={cargarDocs}
           />
+        )}
+        {/* ===============================
+              VISTA ADMIN USUARIOS
+          =============================== */}
+        {view === 'users' && (
+          <UsersAdminView API_URL={API_URL} token={token} />
         )}
       </div>
     </div>

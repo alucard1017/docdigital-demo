@@ -119,7 +119,10 @@ export function Sidebar({
 
           <div
             className={`nav-item ${view === "users" ? "active" : ""}`}
-            onClick={() => setView("users")}
+            onClick={() => {
+              console.log("CLICK USUARIOS");
+              setView("users");
+            }}
           >
             <span>👥</span> Usuarios
           </div>
