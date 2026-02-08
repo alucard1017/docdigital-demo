@@ -513,7 +513,7 @@ export function NewDocumentForm({
           </div>
         </div>
 
-        {/* === ARCHIVO PDF === */}
+        {/* === ARCHIVO PDF (BOTÓN ENMASCARADO) === */}
         <div style={{ marginTop: 24, marginBottom: 24 }}>
           <label
             style={{
@@ -525,13 +525,34 @@ export function NewDocumentForm({
           >
             Archivo PDF del contrato *
           </label>
+
+          {/* input file oculto */}
           <input
             type="file"
             name="file"
             accept="application/pdf"
-            className="input-field"
-            required
+            style={{ display: 'none' }}
+            id="file-input-contrato"
           />
+
+          {/* botón visible */}
+          <button
+            type="button"
+            className="btn-main"
+            style={{
+              background: '#0f766e',
+              color: '#ffffff',
+              padding: '10px 24px',
+              fontWeight: 600,
+            }}
+            onClick={() => {
+              const el = document.getElementById('file-input-contrato');
+              if (el) el.click();
+            }}
+          >
+            Subir contrato (PDF)
+          </button>
+
           {formErrors.file && (
             <p
               style={{
@@ -605,7 +626,7 @@ export function NewDocumentForm({
             marginTop: 32,
             display: 'flex',
             gap: 16,
-            borderTop: '1px solid #f1f5f9',
+            borderTop: '1px solid '#f1f5f9',
             paddingTop: 24,
           }}
         >
