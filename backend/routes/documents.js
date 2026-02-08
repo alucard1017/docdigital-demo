@@ -39,8 +39,6 @@ async function aplicarMarcaAguaLocal(filePath) {
 
       for (let x = -width * 0.25; x < width * 1.25; x += xStep) {
         for (let y = -height * 0.25; y < height * 1.25; y += yStep) {
-
-          // Línea 1: marca
           page.drawText(textoPrincipal, {
             x,
             y,
@@ -50,7 +48,6 @@ async function aplicarMarcaAguaLocal(filePath) {
             opacity,
           });
 
-          // Línea 2: leyenda legal debajo
           page.drawText(textoSecundario, {
             x,
             y: y - 20,
@@ -65,7 +62,7 @@ async function aplicarMarcaAguaLocal(filePath) {
 
     const pdfBytes = await pdfDoc.save();
     await fs.promises.writeFile(filePath, pdfBytes);
-    console.log('✅ Marca de agua VERIFIRMA estilo PRO aplicada a', filePath);
+    console.log('✅ Marca de agua VERIFIRMA aplicada a', filePath);
   } catch (err) {
     console.error('⚠️ Error aplicando marca de agua:', err);
   }
@@ -156,6 +153,7 @@ router.get('/', requireAuth, async (req, res) => {
 
 /* ================================
    POST: Crear nuevo documento / trámite
+   con flujo Visador -> Firmante
    ================================ */
 router.post(
   '/',
@@ -302,6 +300,9 @@ router.post(
       );
       const requires_visado = requiresVisado === 'true';
 
+      // Estado inicial según si requiere visado
+      const initialStatus = requires_visado ? 'PENDIENTE_VISADO' : 'PENDIENTE_FIRMA';
+
       const result = await db.query(
         `INSERT INTO documents (
            owner_id, title, description, file_path, status,
@@ -328,7 +329,7 @@ router.post(
           title,
           description,
           s3Key,
-          'PENDIENTE',
+          initialStatus,
           destinatario_nombre,
           destinatario_email,
           destinatario_movil,
@@ -354,6 +355,35 @@ router.post(
 
       const doc = result.rows[0];
 
+      // Crear participantes del flujo Visador -> Firmante
+      if (requires_visado && visador_email) {
+        await db.query(
+          `INSERT INTO document_participants (document_id, step_order, role, name, email)
+           VALUES 
+           ($1, 1, 'VISADOR', $2, $3),
+           ($1, 2, 'FIRMANTE', $4, $5)`,
+          [
+            doc.id,
+            visador_nombre || 'Visador',
+            visador_email,
+            firmante_nombre_completo,
+            firmante_email,
+          ]
+        );
+      } else {
+        // Sin visado: solo firmante (step 2)
+        await db.query(
+          `INSERT INTO document_participants (document_id, step_order, role, name, email)
+           VALUES 
+           ($1, 2, 'FIRMANTE', $2, $3)`,
+          [
+            doc.id,
+            firmante_nombre_completo,
+            firmante_email,
+          ]
+        );
+      }
+
       await db.query(
         `INSERT INTO document_events (
            document_id, actor, action, details, from_status, to_status,
@@ -366,7 +396,7 @@ router.post(
           'CREADO',
           `Documento "${title}" creado`,
           null,
-          'PENDIENTE',
+          initialStatus,
           'DOCUMENTO_CREADO',
           JSON.stringify({
             titulo: title,
@@ -391,6 +421,7 @@ router.post(
       );
 
       try {
+        // Enviar invitación a firmante principal (flujo público actual)
         if (firmante_email) {
           sendSigningInvitation(
             firmante_email,
@@ -419,6 +450,7 @@ router.post(
           });
         }
 
+        // Invitación a visador solo si requiere_visado
         if (requires_visado && visador_email) {
           const tokenVisador = crypto.randomUUID();
           console.log('📧 Encolando email para visador:', visador_email);
@@ -558,18 +590,14 @@ router.get('/:id/timeline', async (req, res) => {
     let nextStep = '';
     let progress = 0;
 
-    if (doc.status === 'PENDIENTE') {
-      if (doc.requires_visado) {
-        nextStep = '⏳ Esperando visación';
-        progress = 25;
-      } else {
-        nextStep = '⏳ Esperando firma';
-        progress = 50;
-      }
-    } else if (doc.status === 'VISADO') {
-      currentStep = 'Visado';
+    if (doc.status === 'PENDIENTE_VISADO') {
+      currentStep = 'Pendiente de visado';
+      nextStep = '⏳ Esperando visación';
+      progress = 25;
+    } else if (doc.status === 'PENDIENTE_FIRMA') {
+      currentStep = 'Pendiente de firma';
       nextStep = '⏳ Esperando firma';
-      progress = 75;
+      progress = doc.requires_visado ? 75 : 50;
     } else if (doc.status === 'FIRMADO') {
       currentStep = 'Firmado';
       nextStep = '✅ Completado';
@@ -616,6 +644,9 @@ router.get('/:id/timeline', async (req, res) => {
 
 /* ================================
    POST: Firmar documento (propietario)
+   (legacy, para owner; luego lo
+   podrás ir sustituyendo por flujo
+   completo de participantes)
    ================================ */
 router.post('/:id/firmar', requireAuth, async (req, res) => {
   try {
@@ -642,7 +673,7 @@ router.post('/:id/firmar', requireAuth, async (req, res) => {
       return res.status(400).json({ message: 'Documento rechazado' });
     }
 
-    if (docActual.requires_visado === true && docActual.status === 'PENDIENTE') {
+    if (docActual.requires_visado === true && docActual.status === 'PENDIENTE_VISADO') {
       return res.status(400).json({
         message: 'Este documento requiere visación antes de firmar',
       });
@@ -666,7 +697,7 @@ router.post('/:id/firmar', requireAuth, async (req, res) => {
         doc.id,
         req.user.name || 'Sistema',
         'FIRMADO',
-        'Firmado',
+        'Firmado por propietario',
         docActual.status,
         'FIRMADO',
       ]
@@ -684,7 +715,9 @@ router.post('/:id/firmar', requireAuth, async (req, res) => {
 });
 
 /* ================================
-   POST: Visar documento
+   POST: Visar documento (propietario)
+   (legacy; luego puedes migrar
+   al nuevo flujo por participantes)
    ================================ */
 router.post('/:id/visar', requireAuth, async (req, res) => {
   try {
@@ -717,9 +750,9 @@ router.post('/:id/visar', requireAuth, async (req, res) => {
       });
     }
 
-    if (docActual.status !== 'PENDIENTE') {
+    if (docActual.status !== 'PENDIENTE_VISADO') {
       return res.status(400).json({
-        message: 'Solo se pueden visar documentos en estado PENDIENTE',
+        message: 'Solo se pueden visar documentos en estado PENDIENTE_VISADO',
       });
     }
 
@@ -728,7 +761,7 @@ router.post('/:id/visar', requireAuth, async (req, res) => {
        SET status = $1, updated_at = NOW() 
        WHERE id = $2 AND owner_id = $3 
        RETURNING *`,
-      ['VISADO', id, req.user.id]
+      ['PENDIENTE_FIRMA', id, req.user.id]
     );
     const doc = result.rows[0];
 
@@ -743,7 +776,7 @@ router.post('/:id/visar', requireAuth, async (req, res) => {
         'VISADO',
         'Documento visado por el propietario',
         docActual.status,
-        'VISADO',
+        'PENDIENTE_FIRMA',
       ]
     );
 
@@ -759,7 +792,7 @@ router.post('/:id/visar', requireAuth, async (req, res) => {
 });
 
 /* ================================
- * POST: Rechazar documento
+ * POST: Rechazar documento (propietario)
  * ================================ */
 router.post('/:id/rechazar', requireAuth, async (req, res) => {
   try {

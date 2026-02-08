@@ -83,7 +83,7 @@ export function NewDocumentForm({
           const form = e.target;
           const formData = new FormData(form);
 
-          // Añadimos tipo de trámite al FormData
+          // tipo de trámite
           formData.append('tipoTramite', tipoTramite);
           if (tipoTramite === 'notaria') {
             formData.append('requiere_firma_notarial', 'true');
@@ -97,7 +97,8 @@ export function NewDocumentForm({
 
           const title = form.title.value.trim();
           const firmanteEmail = form.firmante_email.value.trim();
-          // Campos del firmante
+
+          // Campos firmante
           const firmanteNombre1 = form.firmante_nombre1.value.trim();
           const firmanteNombre2 =
             (form.firmante_nombre2?.value || '').trim();
@@ -107,7 +108,7 @@ export function NewDocumentForm({
             (form.firmante_apellido2?.value || '').trim();
           const firmanteMovil = form.firmante_movil.value.trim();
 
-          // Campos del destinatario / empresa
+          // Destinatario / empresa
           const destinatarioNombre =
             form.destinatario_nombre?.value.trim() || '';
           const destinatarioEmail =
@@ -122,7 +123,7 @@ export function NewDocumentForm({
           if (!file)
             newErrors.file = 'Adjunta un archivo PDF.';
 
-          // Validación mínimos del firmante
+          // Validaciones firmante
           if (!firmanteNombre1)
             newErrors.firmante_nombre1 =
               'Este campo es obligatorio.';
@@ -145,7 +146,7 @@ export function NewDocumentForm({
             newErrors.firmante_movil =
               'El teléfono es obligatorio.';
 
-          // Validación mínimos del destinatario / empresa
+          // Validaciones destinatario / empresa
           if (!destinatarioNombre)
             newErrors.destinatario_nombre =
               'Este campo es obligatorio.';
@@ -168,7 +169,6 @@ export function NewDocumentForm({
             return;
           }
 
-          // Opcional: construir nombres completos y agregarlos al formData
           const firmanteNombreCompleto = [
             firmanteNombre1,
             firmanteNombre2,
@@ -212,6 +212,36 @@ export function NewDocumentForm({
           }
         }}
       >
+        {/* === TÍTULO DEL CONTRATO === */}
+        <div style={{ marginBottom: 20 }}>
+          <label
+            style={{
+              fontWeight: 700,
+              fontSize: '0.9rem',
+              display: 'block',
+              marginBottom: 8,
+            }}
+          >
+            Nombre del contrato / trámite *
+          </label>
+          <input
+            name="title"
+            className="input-field"
+            placeholder="Ej: Contrato de prestación de servicios"
+          />
+          {formErrors.title && (
+            <p
+              style={{
+                color: '#b91c1c',
+                fontSize: '0.8rem',
+                marginTop: 4,
+              }}
+            >
+              {formErrors.title}
+            </p>
+          )}
+        </div>
+
         {/* === DESCRIPCIÓN Y VISADOR === */}
         <div style={{ marginBottom: 30 }}>
           <label
@@ -482,7 +512,7 @@ export function NewDocumentForm({
           </div>
         </div>
 
-        {/* === FIRMANTES ADICIONALES === */}
+        {/* FIRMANTES ADICIONALES */}
         {extraSigners.map((signer, index) => (
           <div key={signer.id} className="card-mini">
             <h4>
@@ -536,7 +566,7 @@ export function NewDocumentForm({
           </div>
         ))}
 
-        {/* === BOTONES FINALES === */}
+        {/* BOTONES FINALES */}
         <div
           style={{
             marginTop: 32,
