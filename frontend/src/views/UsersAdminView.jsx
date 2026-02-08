@@ -11,16 +11,16 @@ export function UsersAdminView({ API_URL, token }) {
     setError("");
 
     try {
-      const res = await fetch(`${API_URL}/api/admin/users`, {
+      const res = await fetch(`${API_URL}/api/users`, {
         headers: { Authorization: `Bearer ${token}` },
       });
 
+      const data = await res.json().catch(() => ({}));
+
       if (!res.ok) {
-        const data = await res.json().catch(() => ({}));
         throw new Error(data.message || "No se pudieron cargar los usuarios");
       }
 
-      const data = await res.json();
       setUsers(data);
     } catch (err) {
       setError(err.message || "Error de conexión al cargar usuarios.");
