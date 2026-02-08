@@ -2,6 +2,7 @@ import { useEffect, useState } from "react";
 
 export function UsersAdminView({ API_URL, token }) {
   const [users, setUsers] = useState([]);
+  const [roleFilter, setRoleFilter] = useState("todos");
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
 
@@ -11,7 +12,12 @@ export function UsersAdminView({ API_URL, token }) {
     setError("");
 
     try {
-      const res = await fetch(`${API_URL}/api/users`, {
+      const url =
+        roleFilter && roleFilter !== "todos"
+          ? `${API_URL}/api/users?role=${encodeURIComponent(roleFilter)}`
+          : `${API_URL}/api/users`;
+
+      const res = await fetch(url, {
         headers: { Authorization: `Bearer ${token}` },
       });
 
@@ -31,7 +37,7 @@ export function UsersAdminView({ API_URL, token }) {
 
   useEffect(() => {
     cargarUsuarios();
-  }, [token]);
+  }, [token, roleFilter]);
 
   if (loading) {
     return (
@@ -119,6 +125,42 @@ export function UsersAdminView({ API_URL, token }) {
         Administración de usuarios
       </h2>
 
+      <div
+        style={{
+          marginBottom: 16,
+          display: "flex",
+          justifyContent: "flex-end",
+          gap: 8,
+        }}
+      >
+        <label
+          style={{
+            fontSize: "0.85rem",
+            color: "#64748b",
+            display: "flex",
+            alignItems: "center",
+            gap: 8,
+          }}
+        >
+          Rol:
+          <select
+            value={roleFilter}
+            onChange={(e) => setRoleFilter(e.target.value)}
+            style={{
+              padding: "4px 8px",
+              borderRadius: 6,
+              border: "1px solid #e5e7eb",
+              fontSize: "0.85rem",
+            }}
+          >
+            <option value="todos">Todos</option>
+            <option value="admin">Admin</option>
+            <option value="admin_global">Admin global</option>
+            <option value="user">Usuario</option>
+          </select>
+        </label>
+      </div>
+
       <div className="table-wrapper">
         <table className="doc-table">
           <thead>
@@ -127,16 +169,18 @@ export function UsersAdminView({ API_URL, token }) {
               <th>Nombre completo</th>
               <th>Correo</th>
               <th>Rol</th>
+              <th>Plan</th>
               <th style={{ textAlign: "center" }}>Estado</th>
             </tr>
           </thead>
           <tbody>
             {users.map((u) => (
               <tr key={u.id}>
-                <td>{u.run || u.rut || "-"}</td>
-                <td>{u.nombre || u.full_name || "-"}</td>
+                <td>{u.run || "-"}</td>
+                <td>{u.name || "-"}</td>
                 <td>{u.email}</td>
                 <td>{u.role || "usuario"}</td>
+                <td>{u.plan || "-"}</td>
                 <td style={{ textAlign: "center" }}>
                   <span
                     className="status-badge"

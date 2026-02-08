@@ -6,7 +6,7 @@ const { requireAuth, requireRole } = require('./auth');
 
 const router = express.Router();
 
-const normalizeRun = run => (run || '').replace(/[.\-]/g, '');
+const normalizeRun = run => (run || '').replace(/[.\\-]/g, '');
 
 // RUN del dueño que NUNCA se puede borrar (normalizado)
 const OWNER_RUN = normalizeRun(process.env.ADMIN_RUN || '1053806586');
@@ -23,8 +23,8 @@ router.post('/register', async (req, res, next) => {
     const hash = bcrypt.hashSync(password, 10);
 
     await db.query(
-      `INSERT INTO users (run, name, email, password_hash, plan, role)
-       VALUES ($1, $2, $3, $4, $5, $6)`,
+      `INSERT INTO users (run, name, email, password_hash, plan, role, active)
+       VALUES ($1, $2, $3, $4, $5, $6, true)`,
       [normalizedRun, name, email, hash, plan || 'basic', role || 'user']
     );
 
@@ -72,7 +72,7 @@ router.get('/', requireAuth, requireRole('admin'), async (req, res) => {
     }
 
     let query = `
-      SELECT id, run, name, email, plan, role
+      SELECT id, run, name, email, plan, role, active
       FROM users
     `;
 
@@ -98,7 +98,7 @@ router.get('/', requireAuth, requireRole('admin'), async (req, res) => {
  */
 router.post('/', requireAuth, requireRole('admin'), async (req, res) => {
   try {
-    const { run, name, password, plan = 'basic', role, email } = req.body;
+    const { run, name, password, plan = 'basic', role, email, active } = req.body;
 
     if (!run || !name || !password) {
       return res
@@ -117,11 +117,14 @@ router.post('/', requireAuth, requireRole('admin'), async (req, res) => {
     const normalizedRun = normalizeRun(run);
     const hash = bcrypt.hashSync(password, 10);
 
+    const finalActive =
+      typeof active === 'boolean' ? active : true;
+
     const result = await db.query(
-      `INSERT INTO users (run, name, email, password_hash, plan, role)
-       VALUES ($1, $2, $3, $4, $5, $6)
-       RETURNING id, run, name, email, plan, role`,
-      [normalizedRun, name, email || null, hash, plan, finalRole]
+      `INSERT INTO users (run, name, email, password_hash, plan, role, active)
+       VALUES ($1, $2, $3, $4, $5, $6, $7)
+       RETURNING id, run, name, email, plan, role, active`,
+      [normalizedRun, name, email || null, hash, plan, finalRole, finalActive]
     );
 
     return res.status(201).json(result.rows[0]);
@@ -140,7 +143,7 @@ router.post('/', requireAuth, requireRole('admin'), async (req, res) => {
 router.put('/:id', requireAuth, requireRole('admin'), async (req, res) => {
   try {
     const { id } = req.params;
-    const { run, name, email, plan, role, password } = req.body;
+    const { run, name, email, plan, role, password, active } = req.body;
 
     const requesterRun = normalizeRun(req.user.run);
     const isOwner = requesterRun === OWNER_RUN;
@@ -196,7 +199,7 @@ router.put('/:id', requireAuth, requireRole('admin'), async (req, res) => {
     }
     if (role && !(targetIsOwner && !isOwner)) {
       // No permitimos que alguien distinto del dueño cambie el rol del owner
-      if (!isOwner && (role === 'admin_global')) {
+      if (!isOwner && role === 'admin_global') {
         // admin_global / admin no pueden subir a admin_global
         return res
           .status(403)
@@ -210,6 +213,10 @@ router.put('/:id', requireAuth, requireRole('admin'), async (req, res) => {
       fields.push(`password_hash = $${idx++}`);
       values.push(hash);
     }
+    if (typeof active === 'boolean') {
+      fields.push(`active = $${idx++}`);
+      values.push(active);
+    }
 
     if (fields.length === 0) {
       return res.status(400).json({ message: 'No hay campos para actualizar' });
@@ -221,7 +228,7 @@ router.put('/:id', requireAuth, requireRole('admin'), async (req, res) => {
       `UPDATE users
        SET ${fields.join(', ')}
        WHERE id = $${idx}
-       RETURNING id, run, name, email, plan, role`,
+       RETURNING id, run, name, email, plan, role, active`,
       values
     );
 
