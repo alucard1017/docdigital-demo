@@ -1,48 +1,71 @@
 // backend/services/emailService.js
-const { emailQueue } = require('../queues/emailQueue');
 const nodemailer = require('nodemailer');
 
-// Transporter directo (por si la cola está desactivada)
-const directTransporter = nodemailer.createTransport({
-  host: process.env.SMTP_HOST || 'sandbox.smtp.mailtrap.io',
-  port: process.env.SMTP_PORT || 2525,
+console.log('📬 [EMAIL] Cargando emailService.js');
+
+// Variables SMTP (Render / .env)
+const {
+  SMTP_HOST,
+  SMTP_PORT,
+  SMTP_USER,
+  SMTP_PASS,
+  SMTP_FROM_EMAIL,
+  SMTP_FROM_NAME,
+} = process.env;
+
+// Log de variables presentes (no muestra contraseñas)
+if (!SMTP_HOST || !SMTP_PORT || !SMTP_USER || !SMTP_PASS || !SMTP_FROM_EMAIL) {
+  console.warn('⚠️ [EMAIL] Faltan variables SMTP:', {
+    SMTP_HOST: !!SMTP_HOST,
+    SMTP_PORT: !!SMTP_PORT,
+    SMTP_USER: !!SMTP_USER,
+    SMTP_PASS: !!SMTP_PASS,
+    SMTP_FROM_EMAIL: !!SMTP_FROM_EMAIL,
+  });
+}
+
+// Transporter único
+const transporter = nodemailer.createTransport({
+  host: SMTP_HOST || 'sandbox.smtp.mailtrap.io',
+  port: Number(SMTP_PORT) || 2525,
+  secure: Number(SMTP_PORT) === 465,
   auth: {
-    user: process.env.SMTP_USER,
-    pass: process.env.SMTP_PASS,
+    user: SMTP_USER,
+    pass: SMTP_PASS,
   },
 });
 
 /**
- * Encolar un email para envío asincrónico
- * Si la cola está desactivada (dummy), hace fallback a envío directo.
+ * Enviar email genérico
  */
-async function queueEmail(to, subject, html) {
-  try {
-    if (emailQueue && typeof emailQueue.add === 'function' && emailQueue.add.name !== 'bound add') {
-      const job = await emailQueue.add({ to, subject, html }, { delay: 0 });
-      console.log(`📬 [EMAIL SERVICE] Email encolado para ${to} (Job #${job.id})`);
-      return job;
-    }
+async function sendEmail({ to, subject, html }) {
+  const fromEmail = SMTP_FROM_EMAIL || 'noreply@verifirma.com';
+  const fromName = SMTP_FROM_NAME || 'VeriFirma';
 
-    console.log('⚠️ [EMAIL SERVICE] Cola de emails no disponible, enviando directo a', to);
-    const result = await directTransporter.sendMail({
-      from: process.env.SMTP_FROM || 'noreply@verifirma.com',
+  try {
+    console.log('📬 [EMAIL] Enviando email:', { to, subject });
+
+    const info = await transporter.sendMail({
+      from: `"${fromName}" <${fromEmail}>`,
       to,
       subject,
       html,
     });
-    console.log(`✅ [EMAIL SERVICE] Email enviado directo a ${to} - MessageID: ${result.messageId}`);
-    return result;
+
+    console.log('✅ [EMAIL] Enviado OK:', info && info.messageId);
+    return true;
   } catch (error) {
-    console.error('❌ [EMAIL SERVICE] Error enviando email:', error.message);
-    throw error;
+    console.error('❌ [EMAIL] Error enviando email:', error.message);
+    return false;
   }
 }
 
 /**
- * Enviar invitación a firmar
+ * Invitación a firmar
  */
-async function sendSigningInvitation(email, docTitle, signUrl) {
+async function sendSigningInvitation(email, docTitle, signUrl, signerName = '') {
+  const subject = `Invitación a firmar: ${docTitle}`;
+
   const html = `
     <!DOCTYPE html>
     <html>
@@ -62,29 +85,31 @@ async function sendSigningInvitation(email, docTitle, signUrl) {
             <h2>📄 Invitación a Firmar Documento</h2>
           </div>
           <div class="content">
-            <p>¡Hola!</p>
-            <p>Ha recibido una invitación para <strong>firmar</strong> el siguiente documento en <strong>VeriFirma</strong>:</p>
+            <p>Hola ${signerName || ''}</p>
+            <p>Has recibido una invitación para <strong>firmar</strong> el siguiente documento en <strong>VeriFirma</strong>:</p>
             <p style="font-size: 16px; font-weight: bold; color: #1e293b;">${docTitle}</p>
-            <p>Haga clic en el botón siguiente para proceder con la firma electrónica:</p>
+            <p>Haz clic en el botón siguiente para proceder con la firma electrónica:</p>
             <a href="${signUrl}" class="button">Ir a Firmar Documento</a>
             <p style="color: #666; font-size: 14px;">Este enlace es válido por 30 días.</p>
           </div>
           <div class="footer">
             <p>© 2026 VeriFirma - Plataforma de Firma Digital</p>
-            <p>Este es un email automático, por favor no responda.</p>
+            <p>Este es un email automático, por favor no respondas.</p>
           </div>
         </div>
       </body>
     </html>
   `;
 
-  return queueEmail(email, `Invitación a firmar: ${docTitle}`, html);
+  return sendEmail({ to: email, subject, html });
 }
 
 /**
- * Enviar invitación a visar
+ * Invitación a visar
  */
-async function sendVisadoInvitation(email, docTitle, signUrl) {
+async function sendVisadoInvitation(email, docTitle, signUrl, visadorName = '') {
+  const subject = `Invitación a visar: ${docTitle}`;
+
   const html = `
     <!DOCTYPE html>
     <html>
@@ -104,34 +129,34 @@ async function sendVisadoInvitation(email, docTitle, signUrl) {
             <h2>✓ Invitación a Visar Documento</h2>
           </div>
           <div class="content">
-            <p>¡Hola!</p>
-            <p>Ha recibido una invitación para <strong>visar</strong> el siguiente documento en <strong>VeriFirma</strong>:</p>
+            <p>Hola ${visadorName || ''}</p>
+            <p>Has recibido una invitación para <strong>visar</strong> el siguiente documento en <strong>VeriFirma</strong>:</p>
             <p style="font-size: 16px; font-weight: bold; color: #1e293b;">${docTitle}</p>
-            <p>El visado es un acto formal que valida el contenido y estado del documento.</p>
+            <p>El visado valida el contenido y estado del documento.</p>
             <a href="${signUrl}" class="button">Ir a Visar Documento</a>
             <p style="color: #666; font-size: 14px;">Este enlace es válido por 30 días.</p>
           </div>
           <div class="footer">
             <p>© 2026 VeriFirma - Plataforma de Firma Digital</p>
-            <p>Este es un email automático, por favor no responda.</p>
+            <p>Este es un email automático, por favor no respondas.</p>
           </div>
         </div>
       </body>
     </html>
   `;
 
-  return queueEmail(email, `Invitación a visar: ${docTitle}`, html);
+  return sendEmail({ to: email, subject, html });
 }
 
 /**
- * Enviar notificación genérica
+ * Notificación genérica HTML
  */
 async function sendNotification(email, subject, html) {
-  return queueEmail(email, subject, html);
+  return sendEmail({ to: email, subject, html });
 }
 
 module.exports = {
-  queueEmail,
+  sendEmail,
   sendSigningInvitation,
   sendVisadoInvitation,
   sendNotification,

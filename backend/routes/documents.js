@@ -1,3 +1,4 @@
+// backend/routes/documents.js
 const express = require('express');
 const multer = require('multer');
 const path = require('path');
@@ -6,7 +7,10 @@ const fs = require('fs');
 const axios = require('axios');
 const db = require('../db');
 const { requireAuth } = require('./auth');
-const { sendSigningInvitation, sendVisadoInvitation } = require('../services/emailService');
+const {
+  sendSigningInvitation,
+  sendVisadoInvitation,
+} = require('../services/emailService');
 const { uploadPdfToS3, getSignedUrl } = require('../services/s3');
 const { isValidEmail, isValidRun, validateLength } = require('../utils/validators');
 const { PDFDocument, rgb, degrees } = require('pdf-lib');
@@ -300,8 +304,10 @@ router.post(
       );
       const requires_visado = requiresVisado === 'true';
 
-      // Estado inicial según si requiere visado
-      const initialStatus = requires_visado ? 'PENDIENTE_VISADO' : 'PENDIENTE_FIRMA';
+      // Estado inicial
+      const initialStatus = requires_visado
+        ? 'PENDIENTE_VISADO'
+        : 'PENDIENTE_FIRMA';
 
       const result = await db.query(
         `INSERT INTO documents (
@@ -355,7 +361,7 @@ router.post(
 
       const doc = result.rows[0];
 
-      // Crear participantes del flujo Visador -> Firmante
+      // Participantes
       if (requires_visado && visador_email) {
         await db.query(
           `INSERT INTO document_participants (document_id, step_order, role, name, email)
@@ -371,7 +377,6 @@ router.post(
           ]
         );
       } else {
-        // Sin visado: solo firmante (step 2)
         await db.query(
           `INSERT INTO document_participants (document_id, step_order, role, name, email)
            VALUES 
@@ -384,6 +389,7 @@ router.post(
         );
       }
 
+      // Evento de creación
       await db.query(
         `INSERT INTO document_events (
            document_id, actor, action, details, from_status, to_status,
@@ -420,67 +426,89 @@ router.post(
         destinatario_email
       );
 
+      // Envío de correos (no bloquea la respuesta)
       try {
-        // Enviar invitación a firmante principal (flujo público actual)
+        // Firmante principal
         if (firmante_email) {
+          const urlFirma = `${frontBaseUrl}/firma-publica?token=${signatureToken}`;
+          console.log('📧 [DOC EMAIL] Invitación firmante:', {
+            to: firmante_email,
+            url: urlFirma,
+          });
+
           sendSigningInvitation(
             firmante_email,
             title,
-            `${frontBaseUrl}/firma-publica?token=${signatureToken}`
+            urlFirma,
+            firmante_nombre_completo
           ).catch((err) => {
-            console.error('❌ Error encolando email de firma:', err.message);
+            console.error('❌ [DOC EMAIL] Error envío firmante:', err.message);
           });
         }
 
+        // Firmante adicional
         if (firmante_adicional_email) {
           const tokenFirmanteAdicional = crypto.randomUUID();
-          console.log(
-            '📧 Encolando email para firmante adicional:',
-            firmante_adicional_email
-          );
+          const urlFirmaAdicional = `${frontBaseUrl}/firma-publica?token=${tokenFirmanteAdicional}`;
+          console.log('📧 [DOC EMAIL] Invitación firmante adicional:', {
+            to: firmante_adicional_email,
+            url: urlFirmaAdicional,
+          });
+
           sendSigningInvitation(
             firmante_adicional_email,
             title,
-            `${frontBaseUrl}/firma-publica?token=${tokenFirmanteAdicional}`
+            urlFirmaAdicional,
+            firmante_adicional_nombre_completo || ''
           ).catch((err) => {
             console.error(
-              '❌ Error encolando email de firmante adicional:',
+              '❌ [DOC EMAIL] Error envío firmante adicional:',
               err.message
             );
           });
         }
 
-        // Invitación a visador solo si requiere_visado
+        // Visador
         if (requires_visado && visador_email) {
           const tokenVisador = crypto.randomUUID();
-          console.log('📧 Encolando email para visador:', visador_email);
+          const urlVisado = `${frontBaseUrl}/firma-publica?token=${tokenVisador}&mode=visado`;
+          console.log('📧 [DOC EMAIL] Invitación visador:', {
+            to: visador_email,
+            url: urlVisado,
+          });
+
           sendVisadoInvitation(
             visador_email,
             title,
-            `${frontBaseUrl}/firma-publica?token=${tokenVisador}&mode=visado`
+            urlVisado,
+            visador_nombre || ''
           ).catch((err) => {
-            console.error('❌ Error encolando email de visado:', err.message);
+            console.error('❌ [DOC EMAIL] Error envío visador:', err.message);
           });
         }
 
+        // Destinatario / empresa (notificación)
         if (destinatario_email && destinatario_email !== firmante_email) {
-          console.log(
-            '📧 Encolando notificación a destinatario/empresa:',
-            destinatario_email
-          );
+          const urlDest = `${frontBaseUrl}/documentos/${doc.id}`;
+          console.log('📧 [DOC EMAIL] Notificación destinatario:', {
+            to: destinatario_email,
+            url: urlDest,
+          });
+
           sendSigningInvitation(
             destinatario_email,
             title,
-            `${frontBaseUrl}/documentos/${doc.id}`
+            urlDest,
+            destinatario_nombre || ''
           ).catch((err) => {
             console.error(
-              '❌ Error encolando email de destinatario:',
+              '❌ [DOC EMAIL] Error envío destinatario:',
               err.message
             );
           });
         }
       } catch (emailError) {
-        console.error('⚠️ Error al encolar emails:', emailError.message);
+        console.error('⚠️ [DOC EMAIL] Error al disparar emails:', emailError.message);
       }
 
       return res.status(201).json({
@@ -488,7 +516,7 @@ router.post(
         requiresVisado: doc.requires_visado === true,
         file_url: doc.file_path,
         message:
-          'Documento creado exitosamente. Los emails se enviarán en segundo plano.',
+          'Documento creado exitosamente. Los emails se envían en segundo plano.',
       });
     } catch (err) {
       console.error('❌ Error creando documento:', err);
@@ -644,9 +672,6 @@ router.get('/:id/timeline', async (req, res) => {
 
 /* ================================
    POST: Firmar documento (propietario)
-   (legacy, para owner; luego lo
-   podrás ir sustituyendo por flujo
-   completo de participantes)
    ================================ */
 router.post('/:id/firmar', requireAuth, async (req, res) => {
   try {
@@ -716,8 +741,6 @@ router.post('/:id/firmar', requireAuth, async (req, res) => {
 
 /* ================================
    POST: Visar documento (propietario)
-   (legacy; luego puedes migrar
-   al nuevo flujo por participantes)
    ================================ */
 router.post('/:id/visar', requireAuth, async (req, res) => {
   try {
