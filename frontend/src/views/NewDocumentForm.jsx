@@ -212,34 +212,94 @@ export function NewDocumentForm({
           }
         }}
       >
-        {/* === TÍTULO DEL CONTRATO === */}
-        <div style={{ marginBottom: 20 }}>
-          <label
-            style={{
-              fontWeight: 700,
-              fontSize: '0.9rem',
-              display: 'block',
-              marginBottom: 8,
-            }}
-          >
-            Nombre del contrato / trámite *
-          </label>
-          <input
-            name="title"
-            className="input-field"
-            placeholder="Ej: Contrato de prestación de servicios"
-          />
-          {formErrors.title && (
-            <p
+        {/* === TÍTULO DEL CONTRATO + BOTÓN PDF === */}
+        <div
+          style={{
+            marginBottom: 20,
+            display: 'flex',
+            gap: 16,
+            alignItems: 'flex-end',
+          }}
+        >
+          <div style={{ flex: 1 }}>
+            <label
               style={{
-                color: '#b91c1c',
-                fontSize: '0.8rem',
-                marginTop: 4,
+                fontWeight: 700,
+                fontSize: '0.9rem',
+                display: 'block',
+                marginBottom: 8,
               }}
             >
-              {formErrors.title}
-            </p>
-          )}
+              Nombre del contrato / trámite *
+            </label>
+            <input
+              name="title"
+              className="input-field"
+              placeholder="Ej: Contrato de prestación de servicios"
+            />
+            {formErrors.title && (
+              <p
+                style={{
+                  color: '#b91c1c',
+                  fontSize: '0.8rem',
+                  marginTop: 4,
+                }}
+              >
+                {formErrors.title}
+              </p>
+            )}
+          </div>
+
+          {/* input file oculto */}
+          <input
+            type="file"
+            name="file"
+            accept="application/pdf"
+            id="file-input-contrato"
+            style={{ display: 'none' }}
+          />
+
+          {/* botón visible al lado del título */}
+          <div>
+            <label
+              style={{
+                fontWeight: 700,
+                fontSize: '0.9rem',
+                display: 'block',
+                marginBottom: 8,
+              }}
+            >
+              Archivo PDF *
+            </label>
+            <button
+              type="button"
+              className="btn-main"
+              style={{
+                background: '#0f766e',
+                color: '#ffffff',
+                padding: '10px 24px',
+                fontWeight: 600,
+                whiteSpace: 'nowrap',
+              }}
+              onClick={() => {
+                const el = document.getElementById('file-input-contrato');
+                if (el) el.click();
+              }}
+            >
+              Subir contrato (PDF)
+            </button>
+            {formErrors.file && (
+              <p
+                style={{
+                  color: '#b91c1c',
+                  fontSize: '0.8rem',
+                  marginTop: 4,
+                }}
+              >
+                {formErrors.file}
+              </p>
+            )}
+          </div>
         </div>
 
         {/* === DESCRIPCIÓN Y OBSERVACIONES === */}
@@ -511,59 +571,6 @@ export function NewDocumentForm({
               )}
             </div>
           </div>
-        </div>
-
-        {/* === ARCHIVO PDF (BOTÓN ENMASCARADO) === */}
-        <div style={{ marginTop: 24, marginBottom: 24 }}>
-          <label
-            style={{
-              fontWeight: 700,
-              fontSize: '0.9rem',
-              display: 'block',
-              marginBottom: 8,
-            }}
-          >
-            Archivo PDF del contrato *
-          </label>
-
-          {/* input file oculto */}
-          <input
-            type="file"
-            name="file"
-            accept="application/pdf"
-            style={{ display: 'none' }}
-            id="file-input-contrato"
-          />
-
-          {/* botón visible */}
-          <button
-            type="button"
-            className="btn-main"
-            style={{
-              background: '#0f766e',
-              color: '#ffffff',
-              padding: '10px 24px',
-              fontWeight: 600,
-            }}
-            onClick={() => {
-              const el = document.getElementById('file-input-contrato');
-              if (el) el.click();
-            }}
-          >
-            Subir contrato (PDF)
-          </button>
-
-          {formErrors.file && (
-            <p
-              style={{
-                color: '#b91c1c',
-                fontSize: '0.8rem',
-                marginTop: 4,
-              }}
-            >
-              {formErrors.file}
-            </p>
-          )}
         </div>
 
         {/* FIRMANTES ADICIONALES */}
