@@ -1,61 +1,46 @@
 // backend/services/emailService.js
-const nodemailer = require('nodemailer');
+const { MailtrapClient } = require('mailtrap');
 
-console.log('📬 [EMAIL] Cargando emailService.js');
+console.log('📬 [EMAIL] Cargando emailService.js (Mailtrap API)');
 
-// Variables SMTP (Render / .env)
-const {
-  SMTP_HOST,
-  SMTP_PORT,
-  SMTP_USER,
-  SMTP_PASS,
-  SMTP_FROM_EMAIL,
-  SMTP_FROM_NAME,
-} = process.env;
+const TOKEN = process.env.MAILTRAP_TOKEN;
+const SENDER_EMAIL = process.env.MAILTRAP_SENDER_EMAIL;
+const SENDER_NAME = process.env.MAILTRAP_SENDER_NAME || 'VeriFirma';
 
-// Log de variables presentes (no muestra contraseñas)
-if (!SMTP_HOST || !SMTP_PORT || !SMTP_USER || !SMTP_PASS || !SMTP_FROM_EMAIL) {
-  console.warn('⚠️ [EMAIL] Faltan variables SMTP:', {
-    SMTP_HOST: !!SMTP_HOST,
-    SMTP_PORT: !!SMTP_PORT,
-    SMTP_USER: !!SMTP_USER,
-    SMTP_PASS: !!SMTP_PASS,
-    SMTP_FROM_EMAIL: !!SMTP_FROM_EMAIL,
+if (!TOKEN || !SENDER_EMAIL) {
+  console.warn('⚠️ [EMAIL] Faltan variables MAILTRAP_TOKEN o MAILTRAP_SENDER_EMAIL', {
+    MAILTRAP_TOKEN: !!TOKEN,
+    MAILTRAP_SENDER_EMAIL: !!SENDER_EMAIL,
   });
 }
 
-// Transporter único
-const transporter = nodemailer.createTransport({
-  host: SMTP_HOST || 'sandbox.smtp.mailtrap.io',
-  port: Number(SMTP_PORT) || 2525,
-  secure: Number(SMTP_PORT) === 465,
-  auth: {
-    user: SMTP_USER,
-    pass: SMTP_PASS,
-  },
-});
+const client = new MailtrapClient({ token: TOKEN });
+
+const sender = { name: SENDER_NAME, email: SENDER_EMAIL };
 
 /**
- * Enviar email genérico
+ * Enviar email genérico HTML
  */
 async function sendEmail({ to, subject, html }) {
-  const fromEmail = SMTP_FROM_EMAIL || 'noreply@verifirma.com';
-  const fromName = SMTP_FROM_NAME || 'VeriFirma';
+  if (!TOKEN || !SENDER_EMAIL) {
+    console.error('❌ [EMAIL] Mailtrap API no configurada correctamente');
+    return false;
+  }
 
   try {
-    console.log('📬 [EMAIL] Enviando email:', { to, subject });
+    console.log('📬 [EMAIL] Enviando email (Mailtrap API):', { to, subject });
 
-    const info = await transporter.sendMail({
-      from: `"${fromName}" <${fromEmail}>`,
-      to,
+    await client.send({
+      from: sender,
+      to: [{ email: to }],
       subject,
       html,
     });
 
-    console.log('✅ [EMAIL] Enviado OK:', info && info.messageId);
+    console.log('✅ [EMAIL] Enviado OK (Mailtrap API)');
     return true;
   } catch (error) {
-    console.error('❌ [EMAIL] Error enviando email:', error.message);
+    console.error('❌ [EMAIL] Error enviando email (Mailtrap API):', error.message);
     return false;
   }
 }
