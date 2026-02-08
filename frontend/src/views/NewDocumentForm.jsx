@@ -114,7 +114,7 @@ export function NewDocumentForm({
           const destinatarioEmail =
             form.destinatario_email.value.trim();
 
-          const file = form.file.files[0];
+          const file = form.file?.files?.[0];
 
           const newErrors = {};
 
@@ -242,7 +242,7 @@ export function NewDocumentForm({
           )}
         </div>
 
-        {/* === DESCRIPCIÓN Y VISADOR === */}
+        {/* === DESCRIPCIÓN Y OBSERVACIONES === */}
         <div style={{ marginBottom: 30 }}>
           <label
             style={{
@@ -262,6 +262,7 @@ export function NewDocumentForm({
           />
         </div>
 
+        {/* === VISADOR === */}
         <div
           style={{
             background: '#f1f5f9',
@@ -510,6 +511,38 @@ export function NewDocumentForm({
               )}
             </div>
           </div>
+        </div>
+
+        {/* === ARCHIVO PDF === */}
+        <div style={{ marginTop: 24, marginBottom: 24 }}>
+          <label
+            style={{
+              fontWeight: 700,
+              fontSize: '0.9rem',
+              display: 'block',
+              marginBottom: 8,
+            }}
+          >
+            Archivo PDF del contrato *
+          </label>
+          <input
+            type="file"
+            name="file"
+            accept="application/pdf"
+            className="input-field"
+            required
+          />
+          {formErrors.file && (
+            <p
+              style={{
+                color: '#b91c1c',
+                fontSize: '0.8rem',
+                marginTop: 4,
+              }}
+            >
+              {formErrors.file}
+            </p>
+          )}
         </div>
 
         {/* FIRMANTES ADICIONALES */}
