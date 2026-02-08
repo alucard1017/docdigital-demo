@@ -10,7 +10,7 @@ import { LoginView } from './views/LoginView';
 import { PublicSignView } from './views/PublicSignView';
 import { NewDocumentForm } from './views/NewDocumentForm';
 import { UsersAdminView } from './views/UsersAdminView';
-import { UserForm } from '../components/admin/UserForm';
+import { UserForm } from "./components/admin/UserForm";
 
 const API_URL = API_BASE_URL;
 
