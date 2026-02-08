@@ -626,7 +626,7 @@ export function NewDocumentForm({
             marginTop: 32,
             display: 'flex',
             gap: 16,
-            borderTop: '1px solid '#f1f5f9',
+            borderTop: '1px solid #f1f5f9',
             paddingTop: 24,
           }}
         >
