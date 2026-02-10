@@ -352,7 +352,7 @@ export function NewDocumentForm({
             padding: 24,
             borderRadius: 22,
             marginBottom: 32,
-            border: '1px solid '#e2e8f0',
+            border: '1px solid #e2e8f0',
           }}
         >
           <label
