@@ -274,10 +274,8 @@ router.post(
         return res.status(400).json({ message: err.message });
       }
 
-      // Marca de agua antes de subir a S3
       await aplicarMarcaAguaLocal(req.file.path);
 
-      // Subir PDF a S3
       let s3Key = null;
 
       try {
@@ -299,19 +297,16 @@ router.post(
         }
       }
 
-      // Token del documento (consulta pública / visado)
       const signatureToken = crypto.randomUUID();
       const signatureExpiresAt = new Date(
         Date.now() + 7 * 24 * 60 * 60 * 1000
       );
       const requires_visado = requiresVisado === 'true';
 
-      // Estado inicial
       const initialStatus = requires_visado
         ? 'PENDIENTE_VISADO'
         : 'PENDIENTE_FIRMA';
 
-      // Crear documento
       const result = await db.query(
         `INSERT INTO documents (
            owner_id, title, description, file_path, status,
@@ -364,7 +359,7 @@ router.post(
 
       const doc = result.rows[0];
 
-      // Crear firmantes en document_signers con token propio
+      // Firmantes en document_signers con token propio
       const signerMainToken = crypto.randomUUID();
       await db.query(
         `INSERT INTO document_signers (
@@ -389,7 +384,7 @@ router.post(
         );
       }
 
-      // Participantes (puedes mantenerlo como tracking interno)
+      // document_participants (solo tracking)
       if (requires_visado && visador_email) {
         await db.query(
           `INSERT INTO document_participants (document_id, step_order, role, name, email)
@@ -417,7 +412,6 @@ router.post(
         );
       }
 
-      // Evento de creación
       await db.query(
         `INSERT INTO document_events (
            document_id, actor, action, details, from_status, to_status,
@@ -454,10 +448,9 @@ router.post(
         destinatario_email
       );
 
-      // Envío de correos (esperamos antes de responder)
       const emailPromises = [];
 
-      // Firmante principal (usa signerMainToken)
+      // Firmante principal
       if (firmante_email) {
         const urlFirma = `${frontBaseUrl}/firma-publica?token=${signerMainToken}`;
         console.log('📧 [DOC EMAIL] Invitación firmante:', {
@@ -475,7 +468,7 @@ router.post(
         );
       }
 
-      // Firmante adicional (usa signerAdditionalToken)
+      // Firmante adicional
       if (firmante_adicional_email && signerAdditionalToken) {
         const urlFirmaAdicional = `${frontBaseUrl}/firma-publica?token=${signerAdditionalToken}`;
         console.log('📧 [DOC EMAIL] Invitación firmante adicional:', {
@@ -493,7 +486,7 @@ router.post(
         );
       }
 
-      // Visador (sigue usando signatureToken del documento)
+      // Visador
       if (requires_visado && visador_email) {
         const urlVisado = `${frontBaseUrl}/firma-publica?token=${signatureToken}&mode=visado`;
         console.log('📧 [DOC EMAIL] Invitación visador:', {
@@ -853,6 +846,7 @@ router.post('/:id/rechazar', requireAuth, async (req, res) => {
       `SELECT * 
        FROM documents 
        WHERE id = $1 AND owner_id = $2`,
+
       [id, req.user.id]
     );
 
@@ -904,6 +898,106 @@ router.post('/:id/rechazar', requireAuth, async (req, res) => {
     });
   } catch (err) {
     console.error('❌ Error rechazando documento:', err);
+    return res.status(500).json({ message: 'Error interno del servidor' });
+  }
+});
+
+/* ================================
+   POST: Reenviar recordatorio (visado o firma)
+   ================================ */
+router.post('/:id/reenviar', requireAuth, async (req, res) => {
+  try {
+    const { id } = req.params;
+    const { tipo, signerId } = req.body; // tipo: 'VISADO' | 'FIRMA'
+
+    const docRes = await db.query(
+      `SELECT * FROM documents WHERE id = $1 AND owner_id = $2`,
+      [id, req.user.id]
+    );
+    if (docRes.rowCount === 0) {
+      return res.status(404).json({ message: 'Documento no encontrado' });
+    }
+    const doc = docRes.rows[0];
+
+    const frontBaseUrl =
+      process.env.FRONTEND_URL || 'https://docdigital-demo.onrender.com';
+
+    // Recordatorio de visado
+    if (tipo === 'VISADO') {
+      if (!doc.requires_visado || !doc.visador_email) {
+        return res
+          .status(400)
+          .json({ message: 'Este documento no tiene visador configurado' });
+      }
+
+      const url = `${frontBaseUrl}/firma-publica?token=${doc.signature_token}&mode=visado`;
+
+      await sendVisadoInvitation(
+        doc.visador_email,
+        doc.title,
+        url,
+        doc.visador_nombre || ''
+      );
+
+      await db.query(
+        `INSERT INTO document_events (
+           document_id, actor, action, details, from_status, to_status
+         )
+         VALUES ($1, $2, $3, $4, $5, $6)`,
+        [
+          doc.id,
+          req.user.name || 'Sistema',
+          'REENVIO_VISADO',
+          'Recordatorio enviado al visador',
+          doc.status,
+          doc.status,
+        ]
+      );
+
+      return res.json({ message: 'Recordatorio de visado reenviado' });
+    }
+
+    // Recordatorio a firmante concreto
+    if (tipo === 'FIRMA') {
+      const signerRes = await db.query(
+        `SELECT * FROM document_signers WHERE id = $1 AND document_id = $2`,
+        [signerId, id]
+      );
+      if (signerRes.rowCount === 0) {
+        return res.status(404).json({ message: 'Firmante no encontrado' });
+      }
+      const signer = signerRes.rows[0];
+
+      const url = `${frontBaseUrl}/firma-publica?token=${signer.sign_token}`;
+
+      await sendSigningInvitation(
+        signer.email,
+        doc.title,
+        url,
+        signer.name || ''
+      );
+
+      await db.query(
+        `INSERT INTO document_events (
+           document_id, actor, action, details, from_status, to_status
+         )
+         VALUES ($1, $2, $3, $4, $5, $6)`,
+        [
+          doc.id,
+          req.user.name || 'Sistema',
+          'REENVIO_FIRMA',
+          `Recordatorio de firma reenviado a ${signer.email}`,
+          doc.status,
+          doc.status,
+        ]
+      );
+
+      return res.json({ message: 'Recordatorio de firma reenviado' });
+    }
+
+    return res.status(400).json({ message: 'Tipo de reenvío inválido' });
+  } catch (err) {
+    console.error('❌ Error reenviando invitación:', err);
     return res.status(500).json({ message: 'Error interno del servidor' });
   }
 });

@@ -21,6 +21,7 @@ export function DetailView({
 }) {
   const [timeline, setTimeline] = useState(null);
   const [loadingTimeline, setLoadingTimeline] = useState(false);
+  const [reenviarLoading, setReenviarLoading] = useState(false);
 
   useEffect(() => {
     if (!selectedDoc) return;
@@ -28,9 +29,7 @@ export function DetailView({
     const fetchTimeline = async () => {
       try {
         setLoadingTimeline(true);
-        const res = await fetch(
-          `${API_URL}/api/docs/${selectedDoc.id}/timeline`
-        );
+        const res = await fetch(`${API_URL}/api/docs/${selectedDoc.id}/timeline`);
         const data = await res.json();
 
         if (res.ok && data && data.timeline) {
@@ -55,9 +54,36 @@ export function DetailView({
 
   const safeEvents = Array.isArray(events) ? events : [];
 
+  const mostrarBotonReenvioVisado =
+    selectedDoc.requires_visado === true &&
+    selectedDoc.status === DOC_STATUS.PENDIENTE_VISADO &&
+    selectedDoc.visador_email;
+
+  async function handleReenviarVisado() {
+    if (!selectedDoc) return;
+    try {
+      setReenviarLoading(true);
+      const res = await fetch(`${API_URL}/api/docs/${selectedDoc.id}/reenviar`, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({ tipo: "VISADO" }),
+      });
+      const data = await res.json();
+      if (!res.ok) {
+        throw new Error(data.message || "No se pudo reenviar el correo de visado");
+      }
+      alert(data.message || "Recordatorio de visado reenviado");
+    } catch (err) {
+      alert("❌ " + err.message);
+    } finally {
+      setReenviarLoading(false);
+    }
+  }
+
   return (
     <div className="dashboard-layout">
-      {/* Sidebar */}
       <aside className="sidebar">
         <h2>VeriFirma</h2>
 
@@ -153,7 +179,7 @@ export function DetailView({
                 </div>
               )}
 
-            {/* Botones Ver / Descargar */}
+            {/* Botones Ver / Descargar + Reenvío */}
             <div
               style={{
                 display: "flex",
@@ -167,7 +193,28 @@ export function DetailView({
                 Visualización del documento original
               </span>
 
-              <div style={{ display: "flex", gap: 12 }}>
+              <div style={{ display: "flex", gap: 8, alignItems: "center" }}>
+                {mostrarBotonReenvioVisado && (
+                  <button
+                    type="button"
+                    className="btn-main"
+                    onClick={handleReenviarVisado}
+                    disabled={reenviarLoading}
+                    style={{
+                      background: "#fbbf24",
+                      color: "#92400e",
+                      fontSize: "0.8rem",
+                      padding: "8px 12px",
+                      borderRadius: 6,
+                      fontWeight: 600,
+                    }}
+                  >
+                    {reenviarLoading
+                      ? "Reenviando visado..."
+                      : "Reenviar correo de visado"}
+                  </button>
+                )}
+
                 {selectedDoc && (
                   <a
                     href={`${API_URL}/api/docs/${selectedDoc.id}/download`}
@@ -289,7 +336,7 @@ export function DetailView({
               )}
             </div>
 
-            {/* Acciones */}
+            {/* Acciones principales (firmar / visar / rechazar) */}
             <DetailActions
               puedeFirmar={puedeFirmar}
               puedeVisar={puedeVisar}
