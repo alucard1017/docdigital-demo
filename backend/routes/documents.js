@@ -448,8 +448,9 @@ router.post(
 
         // Firmante adicional
         if (firmante_adicional_email) {
-          const tokenFirmanteAdicional = crypto.randomUUID();
-          const urlFirmaAdicional = `${frontBaseUrl}/firma-publica?token=${tokenFirmanteAdicional}`;
+	  // Usar el mismo token público guardado en documents.signature_token
+          const urlFirmaAdicional = `${frontBaseUrl}/firma-publica?
+	token=${signatureToken}`;
           console.log('📧 [DOC EMAIL] Invitación firmante adicional:', {
             to: firmante_adicional_email,
             url: urlFirmaAdicional,
@@ -470,8 +471,9 @@ router.post(
 
         // Visador
         if (requires_visado && visador_email) {
-          const tokenVisador = crypto.randomUUID();
-          const urlVisado = `${frontBaseUrl}/firma-publica?token=${tokenVisador}&mode=visado`;
+	  // Usar el mismo token público guardado en documents.signature_token
+          const urlVisado = `${frontBaseUrl}/firma-publica?
+	token=${signatureToken}&mode=visado`;
           console.log('📧 [DOC EMAIL] Invitación visador:', {
             to: visador_email,
             url: urlVisado,
@@ -938,3 +940,7 @@ router.get('/:id/download', async (req, res) => {
    EXPORTAR ROUTER
    ================================ */
 module.exports = router;
+
+
+
+reescribelo por favor
