@@ -61,7 +61,7 @@ function App() {
   const [showHelp, setShowHelp] = useState(false);
   const [message, setMessage] = useState('');
   const [isLoggingIn, setIsLoggingIn] = useState(false);
-  const [view, setView] = useState('list'); // 'list' | 'upload' | 'detail'
+  const [view, setView] = useState('list'); // 'list' | 'upload' | 'detail' | 'public-sign'
 
   // Errores del formulario de subida
   const [formErrors, setFormErrors] = useState({});
@@ -102,6 +102,7 @@ function App() {
   const [publicSignLoading, setPublicSignLoading] = useState(false);
   const [publicSignToken, setPublicSignToken] = useState('');
   const [publicSignPdfUrl, setPublicSignPdfUrl] = useState('');
+  const [publicSignMode, setPublicSignMode] = useState(null); // "visado" o null
 
   const [firmanteRunValue, setFirmanteRunValue] = useState('');
   const [empresaRutValue, setEmpresaRutValue] = useState('');
@@ -134,15 +135,17 @@ function App() {
     fetch(`${API_URL}/api/health`).catch(() => {});
   }, []);
 
-  // Detectar ?token= en la URL
+  // Detectar ?token= y mode= en la URL para firma pública
   useEffect(() => {
     const params = new URLSearchParams(window.location.search);
     const tokenUrl = params.get('token');
+    const modeUrl = params.get('mode'); // "visado" o null
     const isFirmaPublica = window.location.pathname === '/firma-publica';
 
     if (tokenUrl && isFirmaPublica) {
       setView('public-sign');
       setPublicSignToken(tokenUrl);
+      setPublicSignMode(modeUrl || null);
       cargarFirmaPublica(tokenUrl);
     }
   }, []);
@@ -379,7 +382,7 @@ function App() {
   }
 
   // ===============================
-  // VISTA FIRMA PÚBLICA POR TOKEN
+  // VISTA FIRMA/ VISADO PÚBLICO POR TOKEN
   // ===============================
   if (view === 'public-sign') {
     return (
@@ -389,6 +392,7 @@ function App() {
         publicSignDoc={publicSignDoc}
         publicSignPdfUrl={publicSignPdfUrl}
         publicSignToken={publicSignToken}
+        publicSignMode={publicSignMode}   // <-- aquí viaja "visado" o null
         API_URL={API_URL}
         cargarFirmaPublica={cargarFirmaPublica}
       />
@@ -627,7 +631,13 @@ function App() {
                 <p style={{ marginBottom: 8, fontWeight: 700 }}>
                   Ocurrió un problema al cargar la bandeja.
                 </p>
-                <p style={{ marginBottom: 16, fontSize: '0.9rem' }}>
+                <p
+                  style={{
+                    marginBottom: 16,
+                    fontSize: '0.9rem',
+                    color: '#b91c1c',
+                  }}
+                >
                   {errorDocs ||
                     'Por favor, revisa tu conexión e inténtalo nuevamente.'}
                 </p>
