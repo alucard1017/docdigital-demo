@@ -24,7 +24,9 @@ router.get('/docs/:token', async (req, res) => {
          firmante_run,
          requires_visado,
          signature_status,
-         signature_token_expires_at
+         signature_token_expires_at,
+         required_signers,
+         signed_count
        FROM documents
        WHERE signature_token = $1`,
       [token]
@@ -38,8 +40,6 @@ router.get('/docs/:token', async (req, res) => {
 
     const doc = result.rows[0];
 
-    // Podrías permitir ver aunque el enlace de firma esté expirado,
-    // pero como mínimo devolvemos un mensaje claro.
     if (
       doc.signature_token_expires_at &&
       doc.signature_token_expires_at < new Date()
@@ -68,6 +68,8 @@ router.get('/docs/:token', async (req, res) => {
         firmante_run: doc.firmante_run,
         requires_visado: doc.requires_visado,
         signature_status: doc.signature_status,
+        required_signers: doc.required_signers,
+        signed_count: doc.signed_count,
       },
       pdfUrl,
     });
@@ -108,33 +110,45 @@ router.post('/docs/:token/firmar', async (req, res) => {
         .json({ message: 'El enlace de firma ha expirado' });
     }
 
-    if (docActual.signature_status === 'FIRMADO') {
-      return res
-        .status(400)
-        .json({ message: 'Este documento ya fue firmado' });
-    }
-
     if (docActual.status === 'RECHAZADO') {
       return res
         .status(400)
         .json({ message: 'Documento rechazado, no se puede firmar' });
     }
 
-    // No permitir firmar si aún está pendiente de visado
     if (docActual.requires_visado === true && docActual.status === 'PENDIENTE_VISADO') {
       return res.status(400).json({
         message: 'Este documento requiere visación antes de firmar',
       });
     }
 
+    // Contador de firmas: incrementamos y vemos si ya firmaron todos
+    const currentSigned = docActual.signed_count || 0;
+    const required = docActual.required_signers || 1;
+    const newSignedCount = currentSigned + 1;
+    const allSigned = newSignedCount >= required;
+
+    // Si ya estaba marcado firmado, no dejamos volver a firmar
+    if (docActual.signature_status === 'FIRMADO' && allSigned) {
+      return res
+        .status(400)
+        .json({ message: 'Este documento ya fue firmado por todos los firmantes' });
+    }
+
     const result = await db.query(
       `UPDATE documents
        SET signature_status = $1,
            status = $2,
+           signed_count = $3,
            updated_at = NOW()
-       WHERE id = $3
+       WHERE id = $4
        RETURNING *`,
-      ['FIRMADO', 'FIRMADO', docActual.id]
+      [
+        allSigned ? 'FIRMADO' : 'PENDIENTE',
+        allSigned ? 'FIRMADO' : 'PENDIENTE_FIRMA',
+        newSignedCount,
+        docActual.id,
+      ]
     );
     const doc = result.rows[0];
 
@@ -147,16 +161,20 @@ router.post('/docs/:token/firmar', async (req, res) => {
         doc.id,
         doc.firmante_nombre || 'Firmante externo',
         'FIRMADO_PUBLICO',
-        'Documento firmado desde enlace público',
+        allSigned
+          ? 'Documento firmado por todos los firmantes desde enlace público'
+          : 'Documento firmado parcialmente desde enlace público',
         docActual.status,
-        'FIRMADO',
+        doc.status,
       ]
     );
 
     return res.json({
       ...doc,
       file_url: doc.file_path,
-      message: 'Documento firmado correctamente desde enlace público',
+      message: allSigned
+        ? 'Documento firmado correctamente por todos los firmantes'
+        : 'Firma registrada. Aún faltan firmantes por completar la firma',
     });
   } catch (err) {
     console.error('❌ Error firmando documento público:', err);
