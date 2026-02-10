@@ -426,8 +426,10 @@ router.post(
         destinatario_email
       );
 
-      // Envío de correos (no bloquea la respuesta)
-      try {
+
+        // Envío de correos (esta vez SÍ esperamos antes de responder)
+        const emailPromises = [];
+	
         // Firmante principal
         if (firmante_email) {
           const urlFirma = `${frontBaseUrl}/firma-publica?token=${signatureToken}`;
@@ -494,6 +496,35 @@ router.post(
             to: destinatario_email,
             url: urlDest,
           });
+
+          emailPromises.push(
+            sendSigningInvitation(
+              destinatario_email,
+              title,
+              urlDest,
+              destinatario_nombre || ''
+            )
+          );
+        }
+
+        try {
+          // Esperamos a que terminen todos los envíos
+          await Promise.all(emailPromises);
+        } catch (emailError) {
+          console.error(
+            '⚠️ [DOC EMAIL] Algún correo falló al enviar:',
+            emailError.message
+          );
+          // opcional: podrías decidir si igual respondes 201 o devuelves 500
+        }
+
+        return res.status(201).json({
+          ...doc,
+          requiresVisado: doc.requires_visado === true,
+          file_url: doc.file_path,
+          message:
+            'Documento creado exitosamente. Correos enviados (o intentados enviar) antes de responder.',
+        });
 
           sendSigningInvitation(
             destinatario_email,

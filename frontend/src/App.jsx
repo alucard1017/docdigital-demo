@@ -360,6 +360,24 @@ function App() {
     window.location.reload();
   };
 
+  // ===============================
+  // VISTA FIRMA/ VISADO PÚBLICO POR TOKEN
+  // ===============================
+  if (view === 'public-sign') {
+    return (
+      <PublicSignView
+        publicSignLoading={publicSignLoading}
+        publicSignError={publicSignError}
+        publicSignDoc={publicSignDoc}
+        publicSignPdfUrl={publicSignPdfUrl}
+        publicSignToken={publicSignToken}
+        publicSignMode={publicSignMode}   // <-- aquí viaja "visado" o null
+        API_URL={API_URL}
+        cargarFirmaPublica={cargarFirmaPublica}
+      />
+    );
+  }
+
   /* ===============================
      VISTA LOGIN
      =============================== */
@@ -377,24 +395,6 @@ function App() {
         message={message}
         isLoggingIn={isLoggingIn}
         handleLogin={handleLogin}
-      />
-    );
-  }
-
-  // ===============================
-  // VISTA FIRMA/ VISADO PÚBLICO POR TOKEN
-  // ===============================
-  if (view === 'public-sign') {
-    return (
-      <PublicSignView
-        publicSignLoading={publicSignLoading}
-        publicSignError={publicSignError}
-        publicSignDoc={publicSignDoc}
-        publicSignPdfUrl={publicSignPdfUrl}
-        publicSignToken={publicSignToken}
-        publicSignMode={publicSignMode}   // <-- aquí viaja "visado" o null
-        API_URL={API_URL}
-        cargarFirmaPublica={cargarFirmaPublica}
       />
     );
   }
