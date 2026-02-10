@@ -118,7 +118,8 @@ router.post('/docs/:token/firmar', async (req, res) => {
         .json({ message: 'Documento rechazado, no se puede firmar' });
     }
 
-    if (docActual.requires_visado === true && docActual.status === 'PENDIENTE') {
+    // OJO: aquí validas que no se pueda firmar si aún está pendiente de visado
+    if (docActual.requires_visado === true && docActual.status === 'PENDIENTE_VISADO') {
       return res.status(400).json({
         message: 'Este documento requiere visación antes de firmar',
       });
@@ -157,6 +158,91 @@ router.post('/docs/:token/firmar', async (req, res) => {
     });
   } catch (err) {
     console.error('❌ Error firmando documento público:', err);
+    return res.status(500).json({ message: 'Error interno del servidor' });
+  }
+});
+
+/* ================================
+   POST: Visar documento por token
+   ================================ */
+router.post('/docs/:token/visar', async (req, res) => {
+  try {
+    const { token } = req.params;
+
+    const current = await db.query(
+      `SELECT * 
+       FROM documents 
+       WHERE signature_token = $1`,
+      [token]
+    );
+
+    if (current.rowCount === 0) {
+      return res
+        .status(404)
+        .json({ message: 'Enlace inválido o documento no encontrado' });
+    }
+
+    const docActual = current.rows[0];
+
+    if (
+      docActual.signature_token_expires_at &&
+      docActual.signature_token_expires_at < new Date()
+    ) {
+      return res
+        .status(400)
+        .json({ message: 'El enlace de firma ha expirado' });
+    }
+
+    if (docActual.status === 'RECHAZADO') {
+      return res
+        .status(400)
+        .json({ message: 'Documento rechazado, no se puede visar' });
+    }
+
+    if (docActual.requires_visado !== true) {
+      return res
+        .status(400)
+        .json({ message: 'Este documento no requiere visación' });
+    }
+
+    if (docActual.status !== 'PENDIENTE_VISADO') {
+      return res.status(400).json({
+        message: 'Solo se pueden visar documentos en estado PENDIENTE_VISADO',
+      });
+    }
+
+    const result = await db.query(
+      `UPDATE documents
+       SET status = $1,
+           updated_at = NOW()
+       WHERE id = $2
+       RETURNING *`,
+      ['PENDIENTE_FIRMA', docActual.id]
+    );
+    const doc = result.rows[0];
+
+    await db.query(
+      `INSERT INTO document_events (
+         document_id, actor, action, details, from_status, to_status
+       )
+       VALUES ($1, $2, $3, $4, $5, $6)`,
+      [
+        doc.id,
+        doc.visador_nombre || 'Visador externo',
+        'VISADO_PUBLICO',
+        'Documento visado desde enlace público',
+        docActual.status,
+        'PENDIENTE_FIRMA',
+      ]
+    );
+
+    return res.json({
+      ...doc,
+      file_url: doc.file_path,
+      message: 'Documento visado correctamente desde enlace público',
+    });
+  } catch (err) {
+    console.error('❌ Error visando documento público:', err);
     return res.status(500).json({ message: 'Error interno del servidor' });
   }
 });

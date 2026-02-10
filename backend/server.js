@@ -135,17 +135,25 @@ app.use('/api/users', usersRouter);
 console.log('✓ Rutas /api/users registradas');
 
 // Log para cualquier request a /api/docs
-app.use('/api/docs', (req, res, next) => {
-  console.log(`DEBUG DOCS >> ${req.method} ${req.originalUrl} llamado`);
-  next();
-}, docRoutes);
+app.use(
+  '/api/docs',
+  (req, res, next) => {
+    console.log(`DEBUG DOCS >> ${req.method} ${req.originalUrl} llamado`);
+    next();
+  },
+  docRoutes
+);
 console.log('✓ Rutas /api/docs registradas');
 
 // Log para requests públicas
-app.use('/api/public', (req, res, next) => {
-  console.log(`DEBUG PUBLIC >> ${req.method} ${req.originalUrl} llamado`);
-  next();
-}, publicRoutes);
+app.use(
+  '/api/public',
+  (req, res, next) => {
+    console.log(`DEBUG PUBLIC >> ${req.method} ${req.originalUrl} llamado`);
+    next();
+  },
+  publicRoutes
+);
 console.log('✓ Rutas /api/public registradas');
 
 app.use('/api/public', publicRegisterRoutes);
@@ -387,6 +395,7 @@ const server = app.listen(PORT, () => {
   console.log('   GET  /api/docs/:id/download');
   console.log('   GET  /api/public/docs/:token');
   console.log('   POST /api/public/docs/:token/firmar');
+  console.log('   POST /api/public/docs/:token/visar'); // <- añadida
   console.log('   GET  /api/s3/download/:fileKey');
   console.log('   POST /api/recordatorios/pendientes');
   console.log('=====================================');
