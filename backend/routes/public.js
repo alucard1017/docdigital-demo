@@ -6,29 +6,31 @@ const { getSignedUrl } = require('../services/s3');
 const router = express.Router();
 
 /* ================================
-   GET: Datos + PDF para enlace público (consulta/firma/visado)
+   GET: Datos + PDF para enlace público de FIRMA (por firmante)
    ================================ */
 router.get('/docs/:token', async (req, res) => {
   try {
     const { token } = req.params;
 
+    // Buscamos por token de firmante en document_signers
     const result = await db.query(
       `SELECT 
-         id,
-         title,
-         status,
-         file_path,
-         destinatario_nombre,
-         empresa_rut,
-         firmante_nombre,
-         firmante_run,
-         requires_visado,
-         signature_status,
-         signature_token_expires_at,
-         required_signers,
-         signed_count
-       FROM documents
-       WHERE signature_token = $1`,
+         d.id,
+         d.title,
+         d.status,
+         d.file_path,
+         d.destinatario_nombre,
+         d.empresa_rut,
+         d.requires_visado,
+         d.signature_status,
+         d.signature_token_expires_at,
+         s.id AS signer_id,
+         s.name AS signer_name,
+         s.email AS signer_email,
+         s.status AS signer_status
+       FROM document_signers s
+       JOIN documents d ON d.id = s.document_id
+       WHERE s.sign_token = $1`,
       [token]
     );
 
@@ -64,12 +66,14 @@ router.get('/docs/:token', async (req, res) => {
         status: doc.status,
         destinatario_nombre: doc.destinatario_nombre,
         empresa_rut: doc.empresa_rut,
-        firmante_nombre: doc.firmante_nombre,
-        firmante_run: doc.firmante_run,
         requires_visado: doc.requires_visado,
         signature_status: doc.signature_status,
-        required_signers: doc.required_signers,
-        signed_count: doc.signed_count,
+      },
+      signer: {
+        id: doc.signer_id,
+        name: doc.signer_name,
+        email: doc.signer_email,
+        status: doc.signer_status,
       },
       pdfUrl,
     });
@@ -80,16 +84,23 @@ router.get('/docs/:token', async (req, res) => {
 });
 
 /* ================================
-   POST: Firmar documento por token (firmante externo)
+   POST: Firmar documento por token (firmante externo, por sign_token)
    ================================ */
 router.post('/docs/:token/firmar', async (req, res) => {
   try {
     const { token } = req.params;
 
+    // 1) Buscar firmante + documento por sign_token
     const current = await db.query(
-      `SELECT * 
-       FROM documents 
-       WHERE signature_token = $1`,
+      `SELECT 
+         s.id AS signer_id,
+         s.status AS signer_status,
+         s.name AS signer_name,
+         s.email AS signer_email,
+         d.*
+       FROM document_signers s
+       JOIN documents d ON d.id = s.document_id
+       WHERE s.sign_token = $1`,
       [token]
     );
 
@@ -99,59 +110,83 @@ router.post('/docs/:token/firmar', async (req, res) => {
         .json({ message: 'Enlace inválido o documento no encontrado' });
     }
 
-    const docActual = current.rows[0];
+    const row = current.rows[0];
 
+    // Validaciones de documento
     if (
-      docActual.signature_token_expires_at &&
-      docActual.signature_token_expires_at < new Date()
+      row.signature_token_expires_at &&
+      row.signature_token_expires_at < new Date()
     ) {
       return res
         .status(400)
         .json({ message: 'El enlace de firma ha expirado' });
     }
 
-    if (docActual.status === 'RECHAZADO') {
+    if (row.status === 'RECHAZADO') {
       return res
         .status(400)
         .json({ message: 'Documento rechazado, no se puede firmar' });
     }
 
-    if (docActual.requires_visado === true && docActual.status === 'PENDIENTE_VISADO') {
+    if (row.requires_visado === true && row.status === 'PENDIENTE_VISADO') {
       return res.status(400).json({
         message: 'Este documento requiere visación antes de firmar',
       });
     }
 
-    // Contador de firmas: incrementamos y vemos si ya firmaron todos
-    const currentSigned = docActual.signed_count || 0;
-    const required = docActual.required_signers || 1;
-    const newSignedCount = currentSigned + 1;
-    const allSigned = newSignedCount >= required;
-
-    // Si ya estaba marcado firmado, no dejamos volver a firmar
-    if (docActual.signature_status === 'FIRMADO' && allSigned) {
+    // Validación por firmante
+    if (row.signer_status === 'FIRMADO') {
       return res
         .status(400)
-        .json({ message: 'Este documento ya fue firmado por todos los firmantes' });
+        .json({ message: 'Este firmante ya firmó el documento' });
     }
 
-    const result = await db.query(
-      `UPDATE documents
-       SET signature_status = $1,
-           status = $2,
-           signed_count = $3,
-           updated_at = NOW()
-       WHERE id = $4
-       RETURNING *`,
-      [
-        allSigned ? 'FIRMADO' : 'PENDIENTE',
-        allSigned ? 'FIRMADO' : 'PENDIENTE_FIRMA',
-        newSignedCount,
-        docActual.id,
-      ]
+    // 2) Marcar este firmante como firmado
+    await db.query(
+      `UPDATE document_signers
+       SET status = 'FIRMADO',
+           signed_at = NOW()
+       WHERE id = $1`,
+      [row.signer_id]
     );
-    const doc = result.rows[0];
 
+    // 3) Contar firmantes firmados vs totales
+    const countRes = await db.query(
+      `SELECT 
+         COUNT(*) FILTER (WHERE status = 'FIRMADO') AS signed_count,
+         COUNT(*) AS total_signers
+       FROM document_signers
+       WHERE document_id = $1`,
+      [row.id]
+    );
+
+    const { signed_count, total_signers } = countRes.rows[0];
+    const allSigned = Number(signed_count) >= Number(total_signers);
+
+    // 4) Actualizar documento según si todos firmaron
+    let newDocStatus = row.status;
+    let newSignatureStatus = row.signature_status;
+
+    if (allSigned) {
+      newDocStatus = 'FIRMADO';
+      newSignatureStatus = 'FIRMADO';
+    } else {
+      newDocStatus = 'PENDIENTE_FIRMA';
+      newSignatureStatus = 'PENDIENTE';
+    }
+
+    const docUpdateRes = await db.query(
+      `UPDATE documents
+       SET status = $1,
+           signature_status = $2,
+           updated_at = NOW()
+       WHERE id = $3
+       RETURNING *`,
+      [newDocStatus, newSignatureStatus, row.id]
+    );
+    const doc = docUpdateRes.rows[0];
+
+    // 5) Evento
     await db.query(
       `INSERT INTO document_events (
          document_id, actor, action, details, from_status, to_status
@@ -159,13 +194,13 @@ router.post('/docs/:token/firmar', async (req, res) => {
        VALUES ($1, $2, $3, $4, $5, $6)`,
       [
         doc.id,
-        doc.firmante_nombre || 'Firmante externo',
+        row.signer_name || 'Firmante externo',
         'FIRMADO_PUBLICO',
         allSigned
           ? 'Documento firmado por todos los firmantes desde enlace público'
-          : 'Documento firmado parcialmente desde enlace público',
-        docActual.status,
-        doc.status,
+          : `Firma registrada para firmante ${row.signer_email}`,
+        row.status,
+        newDocStatus,
       ]
     );
 
@@ -184,6 +219,7 @@ router.post('/docs/:token/firmar', async (req, res) => {
 
 /* ================================
    POST: Visar documento por token (visador externo)
+   (sigue usando signature_token del DOCUMENTO)
    ================================ */
 router.post('/docs/:token/visar', async (req, res) => {
   try {

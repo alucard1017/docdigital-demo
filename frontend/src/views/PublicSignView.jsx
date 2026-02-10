@@ -4,19 +4,23 @@ import React from 'react';
 export function PublicSignView({
   publicSignLoading,
   publicSignError,
-  publicSignDoc,
+  publicSignDoc,      // ahora será "document"
   publicSignPdfUrl,
-  publicSignToken,
-  publicSignMode,        // <-- viene desde App.jsx: "visado" o null
+  publicSignToken,    // token = sign_token del firmante, o signature_token para visado
+  publicSignMode,     // "visado" o null
   API_URL,
-  cargarFirmaPublica,
+  cargarFirmaPublica, // debe seguir llamando GET /api/public/docs/:token
 }) {
   const pdfUrl = publicSignPdfUrl || '';
   const isVisado = publicSignMode === 'visado';
 
+  // publicSignDoc debe venir del backend como:
+  // { document: {...}, signer: {...} }
+  const document = publicSignDoc?.document || null;
+  const signer = publicSignDoc?.signer || null;
+
   async function handleConfirm() {
     try {
-      // Endpoint público distinto según sea visado o firma
       const actionPath = isVisado ? 'visar' : 'firmar';
 
       const res = await fetch(
@@ -47,10 +51,14 @@ export function PublicSignView({
     }
   }
 
+  const alreadySignedByThisSigner =
+    !isVisado && signer && signer.status === 'FIRMADO';
+  const docFullySigned =
+    !isVisado && document && document.status === 'FIRMADO';
+
   return (
     <div className="login-bg">
       <div className="login-card" style={{ maxWidth: 800 }}>
-        {/* Título cambia según modo */}
         <h1
           style={{
             textAlign: 'center',
@@ -63,7 +71,6 @@ export function PublicSignView({
           {isVisado ? 'Visado de Documento' : 'Firma de Documento'}
         </h1>
 
-        {/* Banner legal según modo */}
         <div
           style={{
             marginBottom: 20,
@@ -110,7 +117,7 @@ export function PublicSignView({
           </p>
         )}
 
-        {publicSignDoc && !publicSignLoading && !publicSignError && (
+        {document && !publicSignLoading && !publicSignError && (
           <>
             <p
               style={{
@@ -119,12 +126,26 @@ export function PublicSignView({
                 marginBottom: 20,
               }}
             >
-              Documento: <strong>{publicSignDoc.title}</strong>
+              Documento: <strong>{document.title}</strong>
               <br />
               Empresa:{' '}
-              <strong>{publicSignDoc.destinatario_nombre}</strong> (RUT{' '}
-              {publicSignDoc.empresa_rut})
+              <strong>{document.destinatario_nombre}</strong> (RUT{' '}
+              {document.empresa_rut})
             </p>
+
+            {!isVisado && signer && (
+              <p
+                style={{
+                  fontSize: '0.9rem',
+                  color: '#64748b',
+                  marginBottom: 10,
+                  textAlign: 'center',
+                }}
+              >
+                Estás firmando como:{' '}
+                <strong>{signer.name}</strong> ({signer.email})
+              </p>
+            )}
 
             <div style={{ textAlign: 'center', marginBottom: 20 }}>
               <a
@@ -138,19 +159,43 @@ export function PublicSignView({
               </a>
             </div>
 
-            <p
-              style={{
-                fontSize: '0.9rem',
-                color: '#64748b',
-                marginBottom: 20,
-              }}
-            >
-              Representante legal:{' '}
-              <strong>{publicSignDoc.firmante_nombre}</strong> (RUN{' '}
-              {publicSignDoc.firmante_run})
-            </p>
+            {!isVisado && document.firmante_nombre && (
+              <p
+                style={{
+                  fontSize: '0.9rem',
+                  color: '#64748b',
+                  marginBottom: 20,
+                }}
+              >
+                Representante legal principal:{' '}
+                <strong>{document.firmante_nombre}</strong> (RUN{' '}
+                {document.firmante_run})
+              </p>
+            )}
 
-            {publicSignDoc.signature_status === 'FIRMADO' ? (
+            {isVisado ? (
+              document.signature_status === 'FIRMADO' ? (
+                <p
+                  style={{
+                    textAlign: 'center',
+                    color: '#16a34a',
+                    fontWeight: 700,
+                    marginTop: 10,
+                  }}
+                >
+                  Este documento ya fue firmado, no es posible modificar su
+                  estado.
+                </p>
+              ) : (
+                <button
+                  className="btn-main btn-primary"
+                  style={{ width: '100%', marginTop: 10 }}
+                  onClick={handleConfirm}
+                >
+                  VISAR DOCUMENTO
+                </button>
+              )
+            ) : docFullySigned ? (
               <p
                 style={{
                   textAlign: 'center',
@@ -159,7 +204,18 @@ export function PublicSignView({
                   marginTop: 10,
                 }}
               >
-                Este documento ya fue firmado.
+                Este documento ya fue firmado por todos los firmantes.
+              </p>
+            ) : alreadySignedByThisSigner ? (
+              <p
+                style={{
+                  textAlign: 'center',
+                  color: '#16a34a',
+                  fontWeight: 700,
+                  marginTop: 10,
+                }}
+              >
+                Ya has firmado este documento.
               </p>
             ) : (
               <button
@@ -167,7 +223,7 @@ export function PublicSignView({
                 style={{ width: '100%', marginTop: 10 }}
                 onClick={handleConfirm}
               >
-                {isVisado ? 'VISAR DOCUMENTO' : 'FIRMAR DOCUMENTO'}
+                FIRMAR DOCUMENTO
               </button>
             )}
           </>

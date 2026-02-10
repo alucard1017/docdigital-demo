@@ -1,3 +1,4 @@
+// backend/routes/documents.js
 const express = require('express');
 const multer = require('multer');
 const path = require('path');
@@ -134,8 +135,7 @@ router.get('/', requireAuth, async (req, res) => {
          visador_nombre, visador_email, visador_movil,
          firmante_nombre, firmante_email, firmante_movil, firmante_run,
          empresa_rut, signature_status, requires_visado, reject_reason,
-         tipo_tramite, requiere_firma_notarial, created_at, updated_at,
-         required_signers, signed_count
+         tipo_tramite, requiere_firma_notarial, created_at, updated_at
        FROM documents 
        WHERE owner_id = $1 
        ORDER BY ${orderByClause}`,
@@ -299,23 +299,19 @@ router.post(
         }
       }
 
+      // Token del documento (consulta pública / visado)
       const signatureToken = crypto.randomUUID();
       const signatureExpiresAt = new Date(
         Date.now() + 7 * 24 * 60 * 60 * 1000
       );
       const requires_visado = requiresVisado === 'true';
 
-      // Número de firmantes requeridos (1 si no hay adicional, 2 si hay)
-      let requiredSigners = 1;
-      if (firmante_adicional_email) {
-        requiredSigners = 2;
-      }
-
       // Estado inicial
       const initialStatus = requires_visado
         ? 'PENDIENTE_VISADO'
         : 'PENDIENTE_FIRMA';
 
+      // Crear documento
       const result = await db.query(
         `INSERT INTO documents (
            owner_id, title, description, file_path, status,
@@ -325,7 +321,6 @@ router.post(
            empresa_rut, requires_visado, signature_token,
            signature_token_expires_at, signature_status,
            tipo_tramite, estado, pdf_original_url, pdf_final_url, requiere_firma_notarial,
-           required_signers, signed_count,
            created_at, updated_at
          ) VALUES (
            $1, $2, $3, $4, $5,
@@ -335,7 +330,6 @@ router.post(
            $16, $17, $18, $19,
            $20,
            $21, $22, $23, $24, $25,
-           $26, $27,
            NOW(), NOW()
          )
          RETURNING *`,
@@ -365,14 +359,37 @@ router.post(
           s3Key,
           null,
           requiereNotaria,
-          requiredSigners,
-          0,
         ]
       );
 
       const doc = result.rows[0];
 
-      // Participantes
+      // Crear firmantes en document_signers con token propio
+      const signerMainToken = crypto.randomUUID();
+      await db.query(
+        `INSERT INTO document_signers (
+           document_id, role, name, email, sign_token
+         ) VALUES ($1, 'FIRMANTE', $2, $3, $4)`,
+        [doc.id, firmante_nombre_completo, firmante_email, signerMainToken]
+      );
+
+      let signerAdditionalToken = null;
+      if (firmante_adicional_email) {
+        signerAdditionalToken = crypto.randomUUID();
+        await db.query(
+          `INSERT INTO document_signers (
+             document_id, role, name, email, sign_token
+           ) VALUES ($1, 'FIRMANTE', $2, $3, $4)`,
+          [
+            doc.id,
+            firmante_adicional_nombre_completo || 'Firmante adicional',
+            firmante_adicional_email,
+            signerAdditionalToken,
+          ]
+        );
+      }
+
+      // Participantes (puedes mantenerlo como tracking interno)
       if (requires_visado && visador_email) {
         await db.query(
           `INSERT INTO document_participants (document_id, step_order, role, name, email)
@@ -399,9 +416,6 @@ router.post(
           ]
         );
       }
-
-      // (Opcional) podrías también insertar al firmante adicional en document_participants,
-      // pero como todavía no manejas step_order diferenciado, lo dejamos igual a tu versión original.
 
       // Evento de creación
       await db.query(
@@ -440,12 +454,12 @@ router.post(
         destinatario_email
       );
 
-      // Envío de correos (esta vez SÍ esperamos antes de responder)
+      // Envío de correos (esperamos antes de responder)
       const emailPromises = [];
 
-      // Firmante principal
+      // Firmante principal (usa signerMainToken)
       if (firmante_email) {
-        const urlFirma = `${frontBaseUrl}/firma-publica?token=${signatureToken}`;
+        const urlFirma = `${frontBaseUrl}/firma-publica?token=${signerMainToken}`;
         console.log('📧 [DOC EMAIL] Invitación firmante:', {
           to: firmante_email,
           url: urlFirma,
@@ -461,9 +475,9 @@ router.post(
         );
       }
 
-      // Firmante adicional
-      if (firmante_adicional_email) {
-        const urlFirmaAdicional = `${frontBaseUrl}/firma-publica?token=${signatureToken}`;
+      // Firmante adicional (usa signerAdditionalToken)
+      if (firmante_adicional_email && signerAdditionalToken) {
+        const urlFirmaAdicional = `${frontBaseUrl}/firma-publica?token=${signerAdditionalToken}`;
         console.log('📧 [DOC EMAIL] Invitación firmante adicional:', {
           to: firmante_adicional_email,
           url: urlFirmaAdicional,
@@ -479,7 +493,7 @@ router.post(
         );
       }
 
-      // Visador
+      // Visador (sigue usando signatureToken del documento)
       if (requires_visado && visador_email) {
         const urlVisado = `${frontBaseUrl}/firma-publica?token=${signatureToken}&mode=visado`;
         console.log('📧 [DOC EMAIL] Invitación visador:', {
@@ -497,7 +511,7 @@ router.post(
         );
       }
 
-      // Destinatario / empresa (notificación)
+      // Destinatario / empresa (consulta pública)
       if (destinatario_email && destinatario_email !== firmante_email) {
         const urlDest = `${frontBaseUrl}/consulta-publica?token=${signatureToken}`;
         console.log('📧 [DOC EMAIL] Notificación destinatario:', {
