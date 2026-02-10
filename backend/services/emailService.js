@@ -7,6 +7,13 @@ const TOKEN = process.env.MAILTRAP_TOKEN;
 const SENDER_EMAIL = process.env.MAILTRAP_SENDER_EMAIL;
 const SENDER_NAME = process.env.MAILTRAP_SENDER_NAME || 'VeriFirma';
 
+// DEBUG: ver qué llega desde Render
+console.log('🔎 [EMAIL] DEBUG ENV:', {
+  MAILTRAP_TOKEN: TOKEN ? '[OK] token presente' : '[FALTA]',
+  MAILTRAP_SENDER_EMAIL: SENDER_EMAIL || '[FALTA]',
+  MAILTRAP_SENDER_NAME: SENDER_NAME || '[FALTA]',
+});
+
 if (!TOKEN || !SENDER_EMAIL) {
   console.warn('⚠️ [EMAIL] Faltan variables MAILTRAP_TOKEN o MAILTRAP_SENDER_EMAIL', {
     MAILTRAP_TOKEN: !!TOKEN,
@@ -35,6 +42,7 @@ async function sendEmail({ to, subject, html }) {
       to: [{ email: to }],
       subject,
       html,
+      category: 'Transactional',
     });
 
     console.log('✅ [EMAIL] Enviado OK (Mailtrap API)');
