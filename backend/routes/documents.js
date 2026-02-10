@@ -418,7 +418,7 @@ router.post(
         process.env.FRONTEND_URL || 'https://docdigital-demo.onrender.com';
 
       console.log(
-        'DEBUG DOC EMAILS >> requires_visado:',	
+        'DEBUG DOC EMAILS >> requires_visado:',
         requires_visado,
         'visador_email:',
         visador_email,
@@ -426,120 +426,97 @@ router.post(
         destinatario_email
       );
 
+      // Envío de correos (esta vez SÍ esperamos antes de responder)
+      const emailPromises = [];
 
-        // Envío de correos (esta vez SÍ esperamos antes de responder)
-        const emailPromises = [];
-	
-        // Firmante principal
-        if (firmante_email) {
-          const urlFirma = `${frontBaseUrl}/firma-publica?token=${signatureToken}`;
-          console.log('📧 [DOC EMAIL] Invitación firmante:', {
-            to: firmante_email,
-            url: urlFirma,
-          });
-
-          emailPromises.push(
-            sendSigningInvitation(
-              firmante_email,
-              title,
-              urlFirma,
-              firmante_nombre_completo
-            )
-          );
-        }
-
-        // Firmante adicional
-        if (firmante_adicional_email) {
-          const urlFirmaAdicional = `${frontBaseUrl}/firma-publica?token=${signatureToken}`;
-          console.log('📧 [DOC EMAIL] Invitación firmante adicional:', {
-            to: firmante_adicional_email,
-            url: urlFirmaAdicional,
-          });
-
-          emailPromises.push(
-            sendSigningInvitation(
-              firmante_adicional_email,
-              title,
-              urlFirmaAdicional,
-              firmante_adicional_nombre_completo || ''
-            )
-          );
-        }
-
-        // Visador
-        if (requires_visado && visador_email) {
-          const urlVisado = `${frontBaseUrl}/firma-publica?token=${signatureToken}&mode=visado`;
-          console.log('📧 [DOC EMAIL] Invitación visador:', {
-            to: visador_email,
-            url: urlVisado,
-          });
-
-          emailPromises.push(
-            sendVisadoInvitation(
-              visador_email,
-              title,
-              urlVisado,
-              visador_nombre || ''
-            )
-          );
-        }
-
-        // Destinatario / empresa (notificación)
-        if (destinatario_email && destinatario_email !== firmante_email) {
-          const urlDest = `${frontBaseUrl}/documentos/${doc.id}`;
-          console.log('📧 [DOC EMAIL] Notificación destinatario:', {
-            to: destinatario_email,
-            url: urlDest,
-          });
-
-          emailPromises.push(
-            sendSigningInvitation(
-              destinatario_email,
-              title,
-              urlDest,
-              destinatario_nombre || ''
-            )
-          );
-        }
-
-        try {
-          await Promise.all(emailPromises);
-        } catch (emailError) {
-          console.error(
-            '⚠️ [DOC EMAIL] Algún correo falló al enviar:',
-            emailError.message
-          );
-        }
-
-        return res.status(201).json({
-          ...doc,
-          requiresVisado: doc.requires_visado === true,
-          file_url: doc.file_path,
-          message:
-            'Documento creado exitosamente. Correos enviados (o intentados enviar) antes de responder.',
+      // Firmante principal
+      if (firmante_email) {
+        const urlFirma = `${frontBaseUrl}/firma-publica?token=${signatureToken}`;
+        console.log('📧 [DOC EMAIL] Invitación firmante:', {
+          to: firmante_email,
+          url: urlFirma,
         });
 
-	  emailPromises.push(
-            sendSigningInvitation(
-              firmante_email,
-   	      title,
-  	     urlFirma,
- 	     firmante_nombre_completo
-  	   )
-	  );
-          }
-        } catch (emailError) {
-          console.error('⚠️ [DOC EMAIL] Error al disparar emails:', emailError.message);
-        }
+        emailPromises.push(
+          sendSigningInvitation(
+            firmante_email,
+            title,
+            urlFirma,
+            firmante_nombre_completo
+          )
+        );
+      }
 
-        return res.status(201).json({
-          ...doc,
-          requiresVisado: doc.requires_visado === true,
-          file_url: doc.file_path,
-          message:
-            'Documento creado exitosamente. Los emails se envían en segundo plano.',
+      // Firmante adicional
+      if (firmante_adicional_email) {
+        const urlFirmaAdicional = `${frontBaseUrl}/firma-publica?token=${signatureToken}`;
+        console.log('📧 [DOC EMAIL] Invitación firmante adicional:', {
+          to: firmante_adicional_email,
+          url: urlFirmaAdicional,
         });
 
+        emailPromises.push(
+          sendSigningInvitation(
+            firmante_adicional_email,
+            title,
+            urlFirmaAdicional,
+            firmante_adicional_nombre_completo || ''
+          )
+        );
+      }
+
+      // Visador
+      if (requires_visado && visador_email) {
+        const urlVisado = `${frontBaseUrl}/firma-publica?token=${signatureToken}&mode=visado`;
+        console.log('📧 [DOC EMAIL] Invitación visador:', {
+          to: visador_email,
+          url: urlVisado,
+        });
+
+        emailPromises.push(
+          sendVisadoInvitation(
+            visador_email,
+            title,
+            urlVisado,
+            visador_nombre || ''
+          )
+        );
+      }
+
+      // Destinatario / empresa (notificación)
+      if (destinatario_email && destinatario_email !== firmante_email) {
+        const urlDest = `${frontBaseUrl}/documentos/${doc.id}`;
+        console.log('📧 [DOC EMAIL] Notificación destinatario:', {
+          to: destinatario_email,
+          url: urlDest,
+        });
+
+        emailPromises.push(
+          sendSigningInvitation(
+            destinatario_email,
+            title,
+            urlDest,
+            destinatario_nombre || ''
+          )
+        );
+      }
+
+      try {
+        await Promise.all(emailPromises);
+      } catch (emailError) {
+        console.error(
+          '⚠️ [DOC EMAIL] Algún correo falló al enviar:',
+          emailError.message
+        );
+      }
+
+      return res.status(201).json({
+        ...doc,
+        requiresVisado: doc.requires_visado === true,
+        file_url: doc.file_path,
+        message:
+          'Documento creado exitosamente. Correos enviados (o intentados enviar) antes de responder.',
+      });
     } catch (err) {
       console.error('❌ Error creando documento:', err);
       return res
@@ -548,6 +525,7 @@ router.post(
     }
   }
 );
+
 
 /* ================================
    GET: URL firmada solo para VER PDF
