@@ -6,7 +6,7 @@ const { getSignedUrl } = require('../services/s3');
 const router = express.Router();
 
 /* ================================
-   GET: Datos + PDF para enlace público
+   GET: Datos + PDF para enlace público (consulta/firma/visado)
    ================================ */
 router.get('/docs/:token', async (req, res) => {
   try {
@@ -38,13 +38,15 @@ router.get('/docs/:token', async (req, res) => {
 
     const doc = result.rows[0];
 
+    // Podrías permitir ver aunque el enlace de firma esté expirado,
+    // pero como mínimo devolvemos un mensaje claro.
     if (
       doc.signature_token_expires_at &&
       doc.signature_token_expires_at < new Date()
     ) {
-      return res
-        .status(400)
-        .json({ message: 'El enlace de firma ha expirado' });
+      return res.status(400).json({
+        message: 'El enlace público ha expirado, solicita uno nuevo al emisor',
+      });
     }
 
     if (!doc.file_path) {
@@ -76,7 +78,7 @@ router.get('/docs/:token', async (req, res) => {
 });
 
 /* ================================
-   POST: Firmar documento por token
+   POST: Firmar documento por token (firmante externo)
    ================================ */
 router.post('/docs/:token/firmar', async (req, res) => {
   try {
@@ -118,7 +120,7 @@ router.post('/docs/:token/firmar', async (req, res) => {
         .json({ message: 'Documento rechazado, no se puede firmar' });
     }
 
-    // OJO: aquí validas que no se pueda firmar si aún está pendiente de visado
+    // No permitir firmar si aún está pendiente de visado
     if (docActual.requires_visado === true && docActual.status === 'PENDIENTE_VISADO') {
       return res.status(400).json({
         message: 'Este documento requiere visación antes de firmar',
@@ -163,7 +165,7 @@ router.post('/docs/:token/firmar', async (req, res) => {
 });
 
 /* ================================
-   POST: Visar documento por token
+   POST: Visar documento por token (visador externo)
    ================================ */
 router.post('/docs/:token/visar', async (req, res) => {
   try {
@@ -190,7 +192,7 @@ router.post('/docs/:token/visar', async (req, res) => {
     ) {
       return res
         .status(400)
-        .json({ message: 'El enlace de firma ha expirado' });
+        .json({ message: 'El enlace de visado ha expirado' });
     }
 
     if (docActual.status === 'RECHAZADO') {

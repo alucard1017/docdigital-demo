@@ -129,26 +129,23 @@ function App() {
       setPublicSignLoading(false);
     }
   }
+// Detectar ?token= y mode= en la URL para firma/consulta pública
+useEffect(() => {
+  const params = new URLSearchParams(window.location.search);
+  const tokenUrl = params.get('token');
+  const modeUrl = params.get('mode'); // "visado" o null
+  const pathname = window.location.pathname;
 
-  // Ping para despertar el backend en Render
-  useEffect(() => {
-    fetch(`${API_URL}/api/health`).catch(() => {});
-  }, []);
+  const isFirmaPublica = pathname === '/firma-publica';
+  const isConsultaPublica = pathname === '/consulta-publica';
 
-  // Detectar ?token= y mode= en la URL para firma pública
-  useEffect(() => {
-    const params = new URLSearchParams(window.location.search);
-    const tokenUrl = params.get('token');
-    const modeUrl = params.get('mode'); // "visado" o null
-    const isFirmaPublica = window.location.pathname === '/firma-publica';
-
-    if (tokenUrl && isFirmaPublica) {
-      setView('public-sign');
-      setPublicSignToken(tokenUrl);
-      setPublicSignMode(modeUrl || null);
-      cargarFirmaPublica(tokenUrl);
-    }
-  }, []);
+  if (tokenUrl && (isFirmaPublica || isConsultaPublica)) {
+    setView('public-sign');
+    setPublicSignToken(tokenUrl);
+    setPublicSignMode(isFirmaPublica ? (modeUrl || null) : null);
+    cargarFirmaPublica(tokenUrl);
+  }
+}, []);
 
   // Cargar eventos del documento seleccionado
   useEffect(() => {
