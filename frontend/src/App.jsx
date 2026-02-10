@@ -112,15 +112,36 @@ function App() {
       setPublicSignLoading(true);
       setPublicSignError('');
 
-      const res = await fetch(`${API_URL}/api/public/docs/${token}`);
+      const params = new URLSearchParams(window.location.search);
+      const modeUrl = params.get('mode');
+      const pathname = window.location.pathname;
+
+      const isVisado = modeUrl === 'visado';
+      const isConsultaPublica = pathname === '/consulta-publica';
+
+      // Firma por firmante -> usa sign_token (document_signers)
+      // Visado / consulta pública -> usa signature_token del documento
+      const path =
+        isVisado || isConsultaPublica
+          ? `/api/public/docs/document/${token}`
+          : `/api/public/docs/${token}`;
+
+      const res = await fetch(`${API_URL}${path}`);
       const data = await res.json();
 
       if (!res.ok) {
         throw new Error(data.message || 'No se pudo cargar el documento');
       }
 
-      setPublicSignDoc(data);
-      setPublicSignPdfUrl(data.pdfUrl);
+      if (isVisado || isConsultaPublica) {
+        // data = { document, pdfUrl }
+        setPublicSignDoc({ document: data.document, signer: null });
+        setPublicSignPdfUrl(data.pdfUrl);
+      } else {
+        // data = { document, signer, pdfUrl }
+        setPublicSignDoc(data);
+        setPublicSignPdfUrl(data.pdfUrl);
+      }
     } catch (err) {
       setPublicSignError(err.message);
       setPublicSignDoc(null);
@@ -129,6 +150,7 @@ function App() {
       setPublicSignLoading(false);
     }
   }
+
 // Detectar ?token= y mode= en la URL para firma/consulta pública
 useEffect(() => {
   const params = new URLSearchParams(window.location.search);

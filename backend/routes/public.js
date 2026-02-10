@@ -6,13 +6,12 @@ const { getSignedUrl } = require('../services/s3');
 const router = express.Router();
 
 /* ================================
-   GET: Datos + PDF para enlace público de FIRMA (por firmante)
+   GET: Datos + PDF para enlace público de FIRMA (por firmante, sign_token)
    ================================ */
 router.get('/docs/:token', async (req, res) => {
   try {
     const { token } = req.params;
 
-    // Buscamos por token de firmante en document_signers
     const result = await db.query(
       `SELECT 
          d.id,
@@ -68,6 +67,8 @@ router.get('/docs/:token', async (req, res) => {
         empresa_rut: doc.empresa_rut,
         requires_visado: doc.requires_visado,
         signature_status: doc.signature_status,
+        firmante_nombre: doc.firmante_nombre,
+        firmante_run: doc.firmante_run,
       },
       signer: {
         id: doc.signer_id,
@@ -78,7 +79,68 @@ router.get('/docs/:token', async (req, res) => {
       pdfUrl,
     });
   } catch (err) {
-    console.error('❌ Error cargando documento público:', err);
+    console.error('❌ Error cargando documento público (firmante):', err);
+    return res.status(500).json({ message: 'Error interno del servidor' });
+  }
+});
+
+/* ================================
+   GET: Datos + PDF usando signature_token del DOCUMENTO
+   (para VISADO y consulta pública)
+   ================================ */
+router.get('/docs/document/:token', async (req, res) => {
+  try {
+    const { token } = req.params;
+
+    const result = await db.query(
+      `SELECT 
+         id,
+         title,
+         status,
+         file_path,
+         destinatario_nombre,
+         empresa_rut,
+         requires_visado,
+         signature_status,
+         signature_token_expires_at,
+         firmante_nombre,
+         firmante_run
+       FROM documents
+       WHERE signature_token = $1`,
+      [token]
+    );
+
+    if (result.rowCount === 0) {
+      return res
+        .status(404)
+        .json({ message: 'Enlace inválido o documento no encontrado' });
+    }
+
+    const doc = result.rows[0];
+
+    if (
+      doc.signature_token_expires_at &&
+      doc.signature_token_expires_at < new Date()
+    ) {
+      return res.status(400).json({
+        message: 'El enlace público ha expirado, solicita uno nuevo al emisor',
+      });
+    }
+
+    if (!doc.file_path) {
+      return res
+        .status(404)
+        .json({ message: 'Documento sin archivo asociado' });
+    }
+
+    const pdfUrl = await getSignedUrl(doc.file_path, 3600);
+
+    return res.json({
+      document: doc,
+      pdfUrl,
+    });
+  } catch (err) {
+    console.error('❌ Error cargando documento público (document):', err);
     return res.status(500).json({ message: 'Error interno del servidor' });
   }
 });
@@ -90,7 +152,6 @@ router.post('/docs/:token/firmar', async (req, res) => {
   try {
     const { token } = req.params;
 
-    // 1) Buscar firmante + documento por sign_token
     const current = await db.query(
       `SELECT 
          s.id AS signer_id,
@@ -112,7 +173,6 @@ router.post('/docs/:token/firmar', async (req, res) => {
 
     const row = current.rows[0];
 
-    // Validaciones de documento
     if (
       row.signature_token_expires_at &&
       row.signature_token_expires_at < new Date()
@@ -134,14 +194,12 @@ router.post('/docs/:token/firmar', async (req, res) => {
       });
     }
 
-    // Validación por firmante
     if (row.signer_status === 'FIRMADO') {
       return res
         .status(400)
         .json({ message: 'Este firmante ya firmó el documento' });
     }
 
-    // 2) Marcar este firmante como firmado
     await db.query(
       `UPDATE document_signers
        SET status = 'FIRMADO',
@@ -150,7 +208,6 @@ router.post('/docs/:token/firmar', async (req, res) => {
       [row.signer_id]
     );
 
-    // 3) Contar firmantes firmados vs totales
     const countRes = await db.query(
       `SELECT 
          COUNT(*) FILTER (WHERE status = 'FIRMADO') AS signed_count,
@@ -163,7 +220,6 @@ router.post('/docs/:token/firmar', async (req, res) => {
     const { signed_count, total_signers } = countRes.rows[0];
     const allSigned = Number(signed_count) >= Number(total_signers);
 
-    // 4) Actualizar documento según si todos firmaron
     let newDocStatus = row.status;
     let newSignatureStatus = row.signature_status;
 
@@ -186,7 +242,6 @@ router.post('/docs/:token/firmar', async (req, res) => {
     );
     const doc = docUpdateRes.rows[0];
 
-    // 5) Evento
     await db.query(
       `INSERT INTO document_events (
          document_id, actor, action, details, from_status, to_status
