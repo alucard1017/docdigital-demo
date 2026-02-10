@@ -690,6 +690,35 @@ router.get('/:id/timeline', async (req, res) => {
   }
 });
 
+// GET: Firmantes de un documento
+router.get('/:id/signers', requireAuth, async (req, res) => {
+  try {
+    const { id } = req.params;
+
+    // validar que el doc pertenezca al owner
+    const docRes = await db.query(
+      `SELECT id FROM documents WHERE id = $1 AND owner_id = $2`,
+      [id, req.user.id]
+    );
+    if (docRes.rowCount === 0) {
+      return res.status(404).json({ message: 'Documento no encontrado' });
+    }
+
+    const signersRes = await db.query(
+      `SELECT id, name, email, status
+       FROM document_signers
+       WHERE document_id = $1
+       ORDER BY id ASC`,
+      [id]
+    );
+
+    return res.json(signersRes.rows);
+  } catch (err) {
+    console.error('❌ Error obteniendo firmantes:', err);
+    return res.status(500).json({ message: 'Error interno del servidor' });
+  }
+});
+
 /* ================================
    POST: Firmar documento (propietario)
    ================================ */

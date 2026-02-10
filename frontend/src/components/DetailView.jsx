@@ -21,7 +21,11 @@ export function DetailView({
 }) {
   const [timeline, setTimeline] = useState(null);
   const [loadingTimeline, setLoadingTimeline] = useState(false);
-  const [reenviarLoading, setReenviarLoading] = useState(false);
+
+  const [signers, setSigners] = useState([]);
+  const [loadingSigners, setLoadingSigners] = useState(false);
+  const [reenviarLoadingVisado, setReenviarLoadingVisado] = useState(false);
+  const [reenviarSignerId, setReenviarSignerId] = useState(null);
 
   useEffect(() => {
     if (!selectedDoc) return;
@@ -45,7 +49,29 @@ export function DetailView({
       }
     };
 
+    const fetchSigners = async () => {
+      try {
+        setLoadingSigners(true);
+        const res = await fetch(`${API_URL}/api/docs/${selectedDoc.id}/signers`, {
+          credentials: "include",
+        });
+        if (!res.ok) {
+          setSigners([]);
+          return;
+        }
+        const data = await res.json();
+        setSigners(Array.isArray(data) ? data : []);
+      } catch (err) {
+        console.error("Error fetching signers:", err);
+        setSigners([]);
+      } finally {
+        setLoadingSigners(false);
+      }
+    };
+
     fetchTimeline();
+    fetchSigners();
+
     const interval = setInterval(fetchTimeline, 5000);
     return () => clearInterval(interval);
   }, [selectedDoc]);
@@ -62,13 +88,12 @@ export function DetailView({
   async function handleReenviarVisado() {
     if (!selectedDoc) return;
     try {
-      setReenviarLoading(true);
+      setReenviarLoadingVisado(true);
       const res = await fetch(`${API_URL}/api/docs/${selectedDoc.id}/reenviar`, {
         method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-        },
+        headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ tipo: "VISADO" }),
+        credentials: "include",
       });
       const data = await res.json();
       if (!res.ok) {
@@ -78,7 +103,29 @@ export function DetailView({
     } catch (err) {
       alert("❌ " + err.message);
     } finally {
-      setReenviarLoading(false);
+      setReenviarLoadingVisado(false);
+    }
+  }
+
+  async function handleReenviarFirma(signerId) {
+    if (!selectedDoc || !signerId) return;
+    try {
+      setReenviarSignerId(signerId);
+      const res = await fetch(`${API_URL}/api/docs/${selectedDoc.id}/reenviar`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ tipo: "FIRMA", signerId }),
+        credentials: "include",
+      });
+      const data = await res.json();
+      if (!res.ok) {
+        throw new Error(data.message || "No se pudo reenviar el correo de firma");
+      }
+      alert(data.message || "Recordatorio de firma reenviado");
+    } catch (err) {
+      alert("❌ " + err.message);
+    } finally {
+      setReenviarSignerId(null);
     }
   }
 
@@ -199,7 +246,7 @@ export function DetailView({
                     type="button"
                     className="btn-main"
                     onClick={handleReenviarVisado}
-                    disabled={reenviarLoading}
+                    disabled={reenviarLoadingVisado}
                     style={{
                       background: "#fbbf24",
                       color: "#92400e",
@@ -209,7 +256,7 @@ export function DetailView({
                       fontWeight: 600,
                     }}
                   >
-                    {reenviarLoading
+                    {reenviarLoadingVisado
                       ? "Reenviando visado..."
                       : "Reenviar correo de visado"}
                   </button>
@@ -283,6 +330,87 @@ export function DetailView({
               )}
             </div>
 
+            {/* Sección firmantes */}
+            <div
+              style={{
+                marginBottom: 24,
+                padding: 16,
+                borderRadius: 12,
+                border: "1px solid #e5e7eb",
+                background: "#f9fafb",
+              }}
+            >
+              <h3
+                style={{
+                  fontSize: "1rem",
+                  fontWeight: 700,
+                  marginBottom: 8,
+                }}
+              >
+                Firmantes
+              </h3>
+
+              {loadingSigners ? (
+                <p style={{ fontSize: "0.9rem", color: "#94a3b8" }}>
+                  Cargando firmantes...
+                </p>
+              ) : signers.length === 0 ? (
+                <p style={{ fontSize: "0.9rem", color: "#94a3b8" }}>
+                  No hay firmantes registrados para este documento.
+                </p>
+              ) : (
+                <ul style={{ listStyle: "none", padding: 0, margin: 0 }}>
+                  {signers.map((s) => (
+                    <li
+                      key={s.id}
+                      style={{
+                        display: "flex",
+                        justifyContent: "space-between",
+                        alignItems: "center",
+                        padding: "6px 0",
+                        borderBottom: "1px solid #e5e7eb",
+                      }}
+                    >
+                      <div>
+                        <div style={{ fontSize: "0.9rem", fontWeight: 600 }}>
+                          {s.name || "Firmante"}
+                        </div>
+                        <div
+                          style={{
+                            fontSize: "0.8rem",
+                            color: "#64748b",
+                          }}
+                        >
+                          {s.email} · Estado: {s.status}
+                        </div>
+                      </div>
+
+                      {s.status !== "FIRMADO" && (
+                        <button
+                          type="button"
+                          className="btn-main"
+                          onClick={() => handleReenviarFirma(s.id)}
+                          disabled={reenviarSignerId === s.id}
+                          style={{
+                            background: "#e0f2fe",
+                            color: "#0369a1",
+                            fontSize: "0.8rem",
+                            padding: "6px 10px",
+                            borderRadius: 6,
+                            fontWeight: 600,
+                          }}
+                        >
+                          {reenviarSignerId === s.id
+                            ? "Reenviando..."
+                            : "Reenviar correo"}
+                        </button>
+                      )}
+                    </li>
+                  ))}
+                </ul>
+              )}
+            </div>
+
             {/* Timeline */}
             <div style={{ marginTop: 32, marginBottom: 32 }}>
               {loadingTimeline ? (
@@ -336,7 +464,7 @@ export function DetailView({
               )}
             </div>
 
-            {/* Acciones principales (firmar / visar / rechazar) */}
+            {/* Acciones principales */}
             <DetailActions
               puedeFirmar={puedeFirmar}
               puedeVisar={puedeVisar}
