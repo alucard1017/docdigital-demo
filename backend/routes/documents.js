@@ -940,7 +940,3 @@ router.get('/:id/download', async (req, res) => {
    EXPORTAR ROUTER
    ================================ */
 module.exports = router;
-
-
-
-reescribelo por favor
