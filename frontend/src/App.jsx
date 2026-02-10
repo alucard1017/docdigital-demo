@@ -119,7 +119,7 @@ function App() {
         throw new Error(data.message || 'No se pudo cargar el documento');
       }
 
-      setPublicSignDoc(data.document);
+      setPublicSignDoc(data);
       setPublicSignPdfUrl(data.pdfUrl);
     } catch (err) {
       setPublicSignError(err.message);

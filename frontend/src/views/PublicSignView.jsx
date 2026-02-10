@@ -4,18 +4,17 @@ import React from 'react';
 export function PublicSignView({
   publicSignLoading,
   publicSignError,
-  publicSignDoc,      // ahora será "document"
+  publicSignDoc,      // { document, signer }
   publicSignPdfUrl,
   publicSignToken,    // token = sign_token del firmante, o signature_token para visado
   publicSignMode,     // "visado" o null
   API_URL,
-  cargarFirmaPublica, // debe seguir llamando GET /api/public/docs/:token
+  cargarFirmaPublica, // GET /api/public/docs/:token
 }) {
   const pdfUrl = publicSignPdfUrl || '';
   const isVisado = publicSignMode === 'visado';
 
-  // publicSignDoc debe venir del backend como:
-  // { document: {...}, signer: {...} }
+  // publicSignDoc viene del backend como: { document: {...}, signer: {...} }
   const document = publicSignDoc?.document || null;
   const signer = publicSignDoc?.signer || null;
 
@@ -45,7 +44,9 @@ export function PublicSignView({
           ? '✅ Visado registrado correctamente'
           : '✅ Firma registrada correctamente'
       );
-      cargarFirmaPublica(publicSignToken);
+
+      // Recargar datos actualizados del backend (estado documento/firmante)
+      await cargarFirmaPublica(publicSignToken);
     } catch (err) {
       alert('❌ ' + err.message);
     }
