@@ -89,9 +89,6 @@ export function NewDocumentForm({
             formData.append('requiere_firma_notarial', 'true');
           }
 
-          const firmanteRun = firmanteRunValue;
-          const empresaRut = empresaRutValue;
-
           const firmanteRunClean = firmanteRunValue.replace(/[^0-9kK]/g, '');
           const empresaRutClean = empresaRutValue.replace(/[^0-9kK]/g, '');
 
@@ -189,6 +186,32 @@ export function NewDocumentForm({
             'requiresVisado',
             showVisador ? 'true' : 'false'
           );
+
+          // Firmante adicional (por ahora solo el primero)
+          if (extraSigners.length > 0) {
+            const idx = 0;
+            const nombreExtra =
+              form[`extra_nombre_${idx}`]?.value.trim() || '';
+            const emailExtra =
+              form[`extra_email_${idx}`]?.value.trim() || '';
+            const movilExtra =
+              form[`extra_movil_${idx}`]?.value.trim() || '';
+
+            if (emailExtra) {
+              formData.append(
+                'firmante_adicional_nombre_completo',
+                nombreExtra
+              );
+              formData.append(
+                'firmante_adicional_email',
+                emailExtra
+              );
+              formData.append(
+                'firmante_adicional_movil',
+                movilExtra
+              );
+            }
+          }
 
           try {
             const res = await fetch(`${API_URL}/api/docs`, {
@@ -329,7 +352,7 @@ export function NewDocumentForm({
             padding: 24,
             borderRadius: 22,
             marginBottom: 32,
-            border: '1px solid #e2e8f0',
+            border: '1px solid '#e2e8f0',
           }}
         >
           <label
