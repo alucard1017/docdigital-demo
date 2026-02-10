@@ -485,20 +485,20 @@ router.post(
 
       // Destinatario / empresa (notificación)
       if (destinatario_email && destinatario_email !== firmante_email) {
-        const urlDest = `${frontBaseUrl}/documentos/${doc.id}`;
-        console.log('📧 [DOC EMAIL] Notificación destinatario:', {
-          to: destinatario_email,
-          url: urlDest,
-        });
+  	const urlDest = `${frontBaseUrl}/consulta-publica?token=${signatureToken}`;
+  	console.log('📧 [DOC EMAIL] Notificación destinatario:', {
+    	  to: destinatario_email,
+    	  url: urlDest,
+  	});
 
-        emailPromises.push(
-          sendSigningInvitation(
-            destinatario_email,
-            title,
-            urlDest,
-            destinatario_nombre || ''
-          )
-        );
+  	emailPromises.push(
+    	  sendSigningInvitation(
+      	    destinatario_email,
+     	    title,
+      	    urlDest,
+      	    destinatario_nombre || ''
+    	  )
+  	);
       }
 
       try {
