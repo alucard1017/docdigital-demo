@@ -1,3 +1,4 @@
+// backend/server.js
 require('dotenv').config();
 const express = require('express');
 const cors = require('cors');
@@ -11,8 +12,6 @@ console.log('🚀 INICIANDO SERVER.JS');
 console.log('=====================================');
 
 const app = express();
-
-// ✅ Confiar en proxy de Render
 app.set('trust proxy', 1);
 
 /* ================================
@@ -56,7 +55,7 @@ app.use(generalLimiter);
    MIDDLEWARES
    ================================ */
 const allowedOrigins = [
-  process.env.FRONTEND_URL, // Render
+  process.env.FRONTEND_URL,
   'http://localhost:5173',
   'http://localhost:5174',
   'http://localhost:3000',
@@ -65,7 +64,7 @@ const allowedOrigins = [
 app.use(
   cors({
     origin(origin, callback) {
-      if (!origin) return callback(null, true); // Postman, curl, etc.
+      if (!origin) return callback(null, true);
       if (allowedOrigins.includes(origin)) {
         return callback(null, true);
       }
@@ -125,24 +124,28 @@ console.log('✓ Ruta GET / registrada');
 const authRoutes = require('./routes/auth');
 const docRoutes = require('./routes/documents');
 const publicRoutes = require('./routes/public');
-const usersRouter = require('./routes/users');         // 👈 NUEVO
+const usersRouter = require('./routes/users');
 const publicRegisterRoutes = require('./routes/publicRegister');
 const { requireAuth, requireRole } = require('./routes/auth');
 
 app.use('/api/auth', loginLimiter, authRoutes);
 console.log('✓ Rutas /api/auth registradas');
 
-app.use('/api/users', usersRouter);                    // 👈 NUEVO
+app.use('/api/users', usersRouter);
 console.log('✓ Rutas /api/users registradas');
 
-// Wrap para loguear cualquier request a /api/docs
+// Log para cualquier request a /api/docs
 app.use('/api/docs', (req, res, next) => {
   console.log(`DEBUG DOCS >> ${req.method} ${req.originalUrl} llamado`);
   next();
 }, docRoutes);
 console.log('✓ Rutas /api/docs registradas');
 
-app.use('/api/public', publicRoutes);
+// Log para requests públicas
+app.use('/api/public', (req, res, next) => {
+  console.log(`DEBUG PUBLIC >> ${req.method} ${req.originalUrl} llamado`);
+  next();
+}, publicRoutes);
 console.log('✓ Rutas /api/public registradas');
 
 app.use('/api/public', publicRegisterRoutes);
