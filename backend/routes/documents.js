@@ -448,9 +448,8 @@ router.post(
 
         // Firmante adicional
         if (firmante_adicional_email) {
-	  // Usar el mismo token público guardado en documents.signature_token
-          const urlFirmaAdicional = `${frontBaseUrl}/firma-publica?
-	  token=${signatureToken}`;
+          // Usar el mismo token público guardado en documents.signature_token
+          const urlFirmaAdicional = `${frontBaseUrl}/firma-publica?token=${signatureToken}`;
           console.log('📧 [DOC EMAIL] Invitación firmante adicional:', {
             to: firmante_adicional_email,
             url: urlFirmaAdicional,
@@ -471,9 +470,8 @@ router.post(
 
         // Visador
         if (requires_visado && visador_email) {
-	  // Usar el mismo token público guardado en documents.signature_token
-          const urlVisado = `${frontBaseUrl}/firma-publica?
-	  token=${signatureToken}&mode=visado`;
+          // Usar el mismo token público guardado en documents.signature_token
+          const urlVisado = `${frontBaseUrl}/firma-publica?token=${signatureToken}&mode=visado`;
           console.log('📧 [DOC EMAIL] Invitación visador:', {
             to: visador_email,
             url: urlVisado,
