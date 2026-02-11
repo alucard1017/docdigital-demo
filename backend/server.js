@@ -122,7 +122,7 @@ console.log('✓ Ruta GET / registrada');
    RUTAS PRINCIPALES
    ================================ */
 const authRoutes = require('./routes/auth');
-const docRoutes = require('./routes/documents');
+const docRoutes = require('./routes/documents'); // usa tu nuevo controller
 const publicRoutes = require('./routes/public');
 const usersRouter = require('./routes/users');
 const publicRegisterRoutes = require('./routes/publicRegister');
@@ -158,50 +158,6 @@ console.log('✓ Rutas /api/public registradas');
 
 app.use('/api/public', publicRegisterRoutes);
 console.log('✓ Rutas /api/public/register registradas');
-
-/* ================================
-   DESCARGA DE DOCUMENTOS (PDF) INTERNA
-   ================================ */
-app.get('/api/docs/:id/download', requireAuth, async (req, res) => {
-  try {
-    const db = require('./db');
-    const { getSignedUrl } = require('./services/s3');
-
-    const docId = req.params.id;
-
-    const docRes = await db.query(
-      `SELECT file_path, title 
-       FROM documents 
-       WHERE id = $1 AND owner_id = $2`,
-      [docId, req.user.id]
-    );
-
-    if (docRes.rows.length === 0) {
-      return res.status(404).json({ message: 'Documento no encontrado' });
-    }
-
-    const doc = docRes.rows[0];
-    const signedUrl = await getSignedUrl(doc.file_path, 3600);
-
-    https
-      .get(signedUrl, (s3Res) => {
-        res.setHeader('Content-Type', 'application/pdf');
-        res.setHeader(
-          'Content-Disposition',
-          `attachment; filename="${doc.title || 'documento'}.pdf"`
-        );
-        s3Res.pipe(res);
-      })
-      .on('error', (err) => {
-        console.error('❌ Error descargando de S3:', err);
-        res.status(500).json({ message: 'Error descargando archivo' });
-      });
-  } catch (error) {
-    console.error('❌ Error en descarga:', error);
-    res.status(500).json({ message: 'Error interno' });
-  }
-});
-console.log('✓ Ruta GET /api/docs/:id/download registrada');
 
 /* ================================
    RUTA S3 / URLs FIRMADAS
@@ -388,6 +344,7 @@ const server = app.listen(PORT, () => {
   console.log('   DELETE /api/users/:id');
   console.log('   GET  /api/docs');
   console.log('   POST /api/docs');
+  console.log('   GET  /api/docs/:id/pdf');
   console.log('   GET  /api/docs/:id/timeline');
   console.log('   POST /api/docs/:id/firmar');
   console.log('   POST /api/docs/:id/visar');
@@ -395,7 +352,7 @@ const server = app.listen(PORT, () => {
   console.log('   GET  /api/docs/:id/download');
   console.log('   GET  /api/public/docs/:token');
   console.log('   POST /api/public/docs/:token/firmar');
-  console.log('   POST /api/public/docs/:token/visar'); // <- añadida
+  console.log('   POST /api/public/docs/:token/visar');
   console.log('   GET  /api/s3/download/:fileKey');
   console.log('   POST /api/recordatorios/pendientes');
   console.log('=====================================');
