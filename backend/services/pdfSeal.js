@@ -38,7 +38,8 @@ async function sellarPdfConQr({
   const logoWidth = 90;
   const logoHeight = (logoImage.height / logoImage.width) * logoWidth;
 
-  const logoX = width - logoWidth - 40;
+  // un poco más pegado al borde derecho
+  const logoX = width - logoWidth - 20;
   const logoY = height - logoHeight - 40;
 
   lastPage.drawImage(logoImage, {
@@ -48,10 +49,21 @@ async function sellarPdfConQr({
     height: logoHeight,
   });
 
-  // ID de contrato debajo del logo
-  lastPage.drawText(`Contrato ID: ${documentoId}`, {
+  // ID de contrato debajo del logo, en dos líneas
+  const contratoLabel = 'Contrato ID:';
+  const contratoValor = documentoId;
+
+  lastPage.drawText(contratoLabel, {
     x: logoX,
     y: logoY - 15,
+    size: 9,
+    font,
+    color: rgb(0, 0, 0),
+  });
+
+  lastPage.drawText(contratoValor, {
+    x: logoX,
+    y: logoY - 30,
     size: 9,
     font,
     color: rgb(0, 0, 0),
@@ -76,17 +88,20 @@ async function sellarPdfConQr({
     height: qrSize,
   });
 
-  // Microtexto bajo el QR
-  const textoBajoQr =
-    'Verifique este documento escaneando el código QR o visitando verifirma.cl';
+  // Microtexto bajo el QR (2 líneas para que quepa completo)
+  const textoBajoQr = [
+    'Verifique este documento escaneando el código QR',
+    'o visitando verifirma.cl',
+  ].join('\n');
   const textoBajoQrSize = 7;
 
   lastPage.drawText(textoBajoQr, {
-    x: qrX + 2,
-    y: qrY - 12,
+    x: qrX,
+    y: qrY - 18,
     size: textoBajoQrSize,
     font,
     color: rgb(0.25, 0.25, 0.25),
+    lineHeight: 9,
   });
 
   // 3.1) Lateral derecho: código de barras vertical + texto girado
@@ -123,7 +138,7 @@ async function sellarPdfConQr({
       height: barcodeHeight,
     });
 
-    // Texto continuo girado 90° a la derecha, alineado con la barra
+    // Texto lateral, con posible salto para que no se corte
     const textoLateral = [
       'Certificado de firma electrónica',
       `Documento ID: ${documentoId}`,
@@ -141,6 +156,8 @@ async function sellarPdfConQr({
       font,
       color: rgb(0.2, 0.2, 0.2),
       rotate: degrees(90),
+      maxWidth: height - 80,
+      lineHeight: lateralSize + 2,
     });
   }
 
