@@ -276,8 +276,7 @@ router.post('/docs/:token/firmar', async (req, res) => {
           const docNuevo = docNuevoRes.rows[0];
 
           // Usar PDF original limpio si existe; si no, caer a file_path
-          const baseKey = doc.original_file_path;
-	  const baseKey = doc.pdf_original_url || doc.file_path;
+          const baseKey = doc.pdf_original_url || doc.file_path;
 
           const newKey = await sellarPdfConQr({
             s3Key: baseKey,
