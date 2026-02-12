@@ -26,6 +26,7 @@ router.get('/docs/:token', async (req, res) => {
          d.signature_token_expires_at,
          d.firmante_nombre,
          d.firmante_run,
+         d.numero_contrato_interno,
          s.id AS signer_id,
          s.name AS signer_name,
          s.email AS signer_email,
@@ -72,6 +73,7 @@ router.get('/docs/:token', async (req, res) => {
         signature_status: doc.signature_status,
         firmante_nombre: doc.firmante_nombre,
         firmante_run: doc.firmante_run,
+        numero_contrato_interno: doc.numero_contrato_interno,
       },
       signer: {
         id: doc.signer_id,
@@ -107,7 +109,8 @@ router.get('/docs/document/:token', async (req, res) => {
          signature_status,
          signature_token_expires_at,
          firmante_nombre,
-         firmante_run
+         firmante_run,
+         numero_contrato_interno
        FROM documents
        WHERE signature_token = $1`,
       [token]
@@ -275,7 +278,6 @@ router.post('/docs/:token/firmar', async (req, res) => {
         if (docNuevoRes.rowCount > 0) {
           const docNuevo = docNuevoRes.rows[0];
 
-          // Usar PDF original limpio si existe; si no, caer a file_path
           const baseKey = doc.pdf_original_url || doc.file_path;
 
           const newKey = await sellarPdfConQr({
@@ -283,6 +285,7 @@ router.post('/docs/:token/firmar', async (req, res) => {
             documentoId: docNuevo.id,
             codigoVerificacion: docNuevo.codigo_verificacion,
             categoriaFirma: docNuevo.categoria_firma || 'SIMPLE',
+            numeroContratoInterno: doc.numero_contrato_interno,
           });
 
           await db.query(
@@ -312,7 +315,6 @@ router.post('/docs/:token/firmar', async (req, res) => {
 
 /* ================================
    POST: Visar documento por token (visador externo)
-   (sigue usando signature_token del DOCUMENTO)
    ================================ */
 router.post('/docs/:token/visar', async (req, res) => {
   try {
@@ -397,7 +399,7 @@ router.post('/docs/:token/visar', async (req, res) => {
 });
 
 /* ================================
-   NUEVA RUTA: Verificación por código (tabla documentos/firmantes/eventos_firma)
+   GET: Verificación por código
    ================================ */
 router.get('/verificar/:codigo', async (req, res) => {
   try {
@@ -455,7 +457,4 @@ router.get('/verificar/:codigo', async (req, res) => {
   }
 });
 
-/* ================================
-   EXPORTAR ROUTER
-   ================================ */
 module.exports = router;

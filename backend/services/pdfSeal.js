@@ -26,9 +26,7 @@ async function sellarPdfConQr({
     throw new Error('codigoVerificacion es obligatorio para sellar el PDF');
   }
 
-  // DEBUG: verifica que está llegando el número interno
   console.log('DEBUG SELLO >> numeroContratoInterno recibido:', numeroContratoInterno);
-console.log('DEBUG SELLO >> numeroInternoTexto pintado:', numeroInternoTexto);
 
   // 1) Descargar y cargar PDF base
   const pdfBytes = await getObjectBuffer(s3Key);
@@ -39,7 +37,6 @@ console.log('DEBUG SELLO >> numeroInternoTexto pintado:', numeroInternoTexto);
   const lastPage = pages[pages.length - 1];
   const { width, height } = lastPage.getSize();
 
-  // Fuente base
   const font = await pdfDoc.embedFont(StandardFonts.Helvetica);
 
   // 2) Logo VeriFirma arriba a la derecha
@@ -60,7 +57,7 @@ console.log('DEBUG SELLO >> numeroInternoTexto pintado:', numeroInternoTexto);
     height: logoHeight,
   });
 
-  // Número interno de contrato bajo el logo (no el UUID)
+  // Número interno de contrato bajo el logo
   const numeroInternoTexto = numeroContratoInterno || 'N° interno: —';
   console.log('DEBUG SELLO >> numeroInternoTexto pintado:', numeroInternoTexto);
 
@@ -91,7 +88,6 @@ console.log('DEBUG SELLO >> numeroInternoTexto pintado:', numeroInternoTexto);
     height: qrSize,
   });
 
-  // Microtexto bajo el QR (2 líneas)
   const textoBajoQr = [
     'Verifique este documento escaneando el código QR',
     'o visitando verifirma.cl',
@@ -107,7 +103,7 @@ console.log('DEBUG SELLO >> numeroInternoTexto pintado:', numeroInternoTexto);
     lineHeight: 9,
   });
 
-  // 3.1) Lateral derecho: código de barras vertical + branding girado
+  // 3.1) Lateral derecho: código de barras + branding
   let barcodePng;
   try {
     const barcodePngBuffer = await bwipjs.toBuffer({
@@ -160,7 +156,7 @@ console.log('DEBUG SELLO >> numeroInternoTexto pintado:', numeroInternoTexto);
     });
   }
 
-  // Línea divisoria suave sobre el bloque legal
+  // Línea divisoria sobre el bloque legal
   lastPage.drawLine({
     start: { x: 40, y: 75 },
     end: { x: width - 40, y: 75 },
@@ -168,7 +164,7 @@ console.log('DEBUG SELLO >> numeroInternoTexto pintado:', numeroInternoTexto);
     color: rgb(0.8, 0.8, 0.8),
   });
 
-  // 4) Bloque de texto legal en el pie
+  // 4) Bloque legal
   const esAvanzada = categoriaFirma === 'AVANZADA';
 
   const textoLegal = [
@@ -195,7 +191,7 @@ console.log('DEBUG SELLO >> numeroInternoTexto pintado:', numeroInternoTexto);
     lineHeight: 11,
   });
 
-  // 5) Guardar y subir nueva versión a R2/S3
+  // 5) Guardar y subir sellado
   const newPdfBytes = await pdfDoc.save();
   const newKey = s3Key.endsWith('.pdf')
     ? s3Key.replace(/\.pdf$/i, '_sellado.pdf')
