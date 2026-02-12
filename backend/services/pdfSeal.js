@@ -8,7 +8,7 @@ const { getObjectBuffer, uploadBuffer } = require('./storageR2');
 
 /**
  * s3Key: clave del PDF original en R2/S3
- * documentoId: UUID interno del documento
+ * documentoId: ID interno del documento (tabla documentos)
  * codigoVerificacion: código corto para verificación pública
  * categoriaFirma: 'AVANZADA' | 'SIMPLE'
  * numeroContratoInterno: código corto tipo VF-2026-000123 (ya generado afuera)
@@ -25,6 +25,9 @@ async function sellarPdfConQr({
   if (!codigoVerificacion) {
     throw new Error('codigoVerificacion es obligatorio para sellar el PDF');
   }
+
+  // DEBUG: verifica que está llegando el número interno
+  console.log('DEBUG SELLO >> numeroContratoInterno recibido:', numeroContratoInterno);
 
   // 1) Descargar y cargar PDF base
   const pdfBytes = await getObjectBuffer(s3Key);
@@ -46,7 +49,6 @@ async function sellarPdfConQr({
   const logoWidth = 90;
   const logoHeight = (logoImage.height / logoImage.width) * logoWidth;
 
-  // Más pegado al borde derecho
   const logoX = width - logoWidth - 15;
   const logoY = height - logoHeight - 40;
 
@@ -59,6 +61,7 @@ async function sellarPdfConQr({
 
   // Número interno de contrato bajo el logo (no el UUID)
   const numeroInternoTexto = numeroContratoInterno || 'N° interno: —';
+  console.log('DEBUG SELLO >> numeroInternoTexto pintado:', numeroInternoTexto);
 
   lastPage.drawText(numeroInternoTexto, {
     x: logoX,
@@ -129,7 +132,6 @@ async function sellarPdfConQr({
     const barcodeX = width - barcodeWidth - marginRight;
     const barcodeY = height / 2 - barcodeHeight / 2;
 
-    // Código de barras vertical en el borde derecho
     lastPage.drawImage(barcodePng, {
       x: barcodeX,
       y: barcodeY,
@@ -137,7 +139,6 @@ async function sellarPdfConQr({
       height: barcodeHeight,
     });
 
-    // Branding lateral: marca + eslogan + web (sin datos repetidos)
     const textoLateral = [
       'VeriFirma · Plataforma de firma electrónica',
       'Seguridad digital sin fronteras',
@@ -166,7 +167,7 @@ async function sellarPdfConQr({
     color: rgb(0.8, 0.8, 0.8),
   });
 
-  // 4) Bloque de texto legal en el pie (único lugar con Documento ID / Código)
+  // 4) Bloque de texto legal en el pie
   const esAvanzada = categoriaFirma === 'AVANZADA';
 
   const textoLegal = [
