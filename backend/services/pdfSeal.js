@@ -76,17 +76,17 @@ async function sellarPdfConQr({
     height: qrSize,
   });
 
-  // 3.1) Código de barras lateral derecho (vertical, pequeño) + eslogan
+  // 3.1) Código de barras lateral derecho (vertical, muy discreto) + eslogan
   let barcodePng;
   try {
     const barcodePngBuffer = await bwipjs.toBuffer({
       bcid: 'code128',
       text: codigoVerificacion,
-      scale: 1.2,      // más pequeño
-      height: 6,       // barras más cortas
+      scale: 0.8,      // barras más finas
+      height: 4,       // más bajo
       includetext: false,
       textxalign: 'center',
-      rotate: 'R',     // 90° derecha → vertical
+      rotate: 'R',     // vertical
     });
     barcodePng = await pdfDoc.embedPng(barcodePngBuffer);
   } catch (err) {
@@ -95,14 +95,14 @@ async function sellarPdfConQr({
   }
 
   if (barcodePng) {
-    const barcodeWidth = 60;
+    const barcodeWidth = 40; // corto y elegante
     const barcodeHeight = (barcodePng.height / barcodePng.width) * barcodeWidth;
 
     const marginRight = 30;
+    // medio-bajo, alineado con la zona del QR pero más hacia el centro
     const barcodeX = width - barcodeWidth - marginRight;
-    const barcodeY = height / 2 - barcodeHeight / 2 + 40;
+    const barcodeY = qrY + qrSize + 10;
 
-    // Código de barras
     lastPage.drawImage(barcodePng, {
       x: barcodeX,
       y: barcodeY,
@@ -110,13 +110,12 @@ async function sellarPdfConQr({
       height: barcodeHeight,
     });
 
-    // Eslogan alineado al centro del código de barras
     const eslogan = 'Seguridad digital sin fronteras';
-    const esloganSize = 8;
+    const esloganSize = 7;
     const esloganWidth = font.widthOfTextAtSize(eslogan, esloganSize);
 
     lastPage.drawText(eslogan, {
-      x: barcodeX - 5 - esloganWidth,
+      x: barcodeX - 4 - esloganWidth,
       y: barcodeY + barcodeHeight / 2 - esloganSize / 2,
       size: esloganSize,
       font,
