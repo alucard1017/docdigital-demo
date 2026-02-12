@@ -531,8 +531,9 @@ async function getDocumentPdf(req, res) {
   try {
     const { id } = req.params;
 
+    // 1) Traer también status
     const result = await db.query(
-      `SELECT file_path, pdf_original_url, pdf_final_url, estado
+      `SELECT file_path, pdf_original_url, pdf_final_url, estado, status
        FROM documents
        WHERE id = $1`,
       [id]
@@ -544,11 +545,13 @@ async function getDocumentPdf(req, res) {
         .json({ message: 'Documento no encontrado' });
     }
 
+    // 2) Desestructurar incluyendo status
     const {
       file_path,
       pdf_original_url,
       pdf_final_url,
       estado,
+      status,
     } = result.rows[0];
 
     if (!file_path && !pdf_original_url) {
@@ -557,11 +560,13 @@ async function getDocumentPdf(req, res) {
         .json({ message: 'Documento sin archivo asociado' });
     }
 
-    if (estado === 'completado' && pdf_final_url) {
+    // 3) Si está firmado y hay PDF sellado, devolver el sellado
+    if (status === 'FIRMADO' && pdf_final_url) {
       const signedUrlFinal = await getSignedUrl(pdf_final_url, 3600);
       return res.json({ url: signedUrlFinal, final: true });
     }
 
+    // 4) Si no, devolver el original
     const key = pdf_original_url || file_path;
     const signedUrl = await getSignedUrl(key, 3600);
 
