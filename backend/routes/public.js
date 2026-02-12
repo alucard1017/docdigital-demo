@@ -262,11 +262,11 @@ router.post('/docs/:token/firmar', async (req, res) => {
       ]
     );
 
-    // Si TODOS firmaron y el documento está vinculado al flujo nuevo, sellar PDF FINAL (sin marca)
+    // Si TODOS firmaron y el documento está vinculado al flujo nuevo, sellar PDF FINAL
     if (allSigned && doc.nuevo_documento_id) {
       try {
         const docNuevoRes = await db.query(
-          `SELECT id, codigo_verificacion, categoria_firma, pdf_original_url
+          `SELECT id, codigo_verificacion, categoria_firma
            FROM documentos
            WHERE id = $1`,
           [doc.nuevo_documento_id]
@@ -275,8 +275,9 @@ router.post('/docs/:token/firmar', async (req, res) => {
         if (docNuevoRes.rowCount > 0) {
           const docNuevo = docNuevoRes.rows[0];
 
-          // Usar el PDF ORIGINAL sin marca si existe, si no, caer al file_path actual
-          const baseKey = docNuevo.pdf_original_url || doc.file_path;
+          // Por ahora usamos el mismo file_path (PDF actual con marca)
+          // Más adelante aquí apuntaremos al original sin marca
+          const baseKey = doc.file_path;
 
           const newKey = await sellarPdfConQr({
             s3Key: baseKey,
@@ -291,8 +292,6 @@ router.post('/docs/:token/firmar', async (req, res) => {
              WHERE id = $2`,
             [newKey, doc.id]
           );
-
-          // En el futuro: evento PDF_SELLADO en eventos_firma si quieres
         }
       } catch (sealError) {
         console.error('⚠️ Error sellando PDF con QR (firma pública):', sealError);
