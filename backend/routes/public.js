@@ -359,6 +359,68 @@ router.post('/docs/:token/visar', async (req, res) => {
 });
 
 /* ================================
+   NUEVA RUTA: Verificación por código (tabla documentos/firmantes/eventos_firma)
+   ================================ */
+router.get('/verificar/:codigo', async (req, res) => {
+  try {
+    const { codigo } = req.params;
+
+    // Busca el documento en la nueva tabla `documentos`
+    const docResult = await db.query(
+      `SELECT *
+       FROM documentos
+       WHERE codigo_verificacion = $1`,
+      [codigo]
+    );
+
+    if (docResult.rowCount === 0) {
+      return res
+        .status(404)
+        .json({ message: 'Documento no encontrado para este código' });
+    }
+
+    const documento = docResult.rows[0];
+
+    // Trae firmantes
+    const signersResult = await db.query(
+      `SELECT id, nombre, email, rut, rol, orden_firma, estado, fecha_firma, tipo_firma
+       FROM firmantes
+       WHERE documento_id = $1
+       ORDER BY orden_firma ASC`,
+      [documento.id]
+    );
+
+    // Trae eventos
+    const eventosResult = await db.query(
+      `SELECT id, tipo_evento, ip, user_agent, metadata, created_at
+       FROM eventos_firma
+       WHERE documento_id = $1
+       ORDER BY created_at ASC`,
+      [documento.id]
+    );
+
+    return res.json({
+      codigoVerificacion: documento.codigo_verificacion,
+      documento: {
+        id: documento.id,
+        tipo: documento.tipo,
+        titulo: documento.titulo,
+        estado: documento.estado,
+        categoria_firma: documento.categoria_firma,
+        hash_pdf: documento.hash_pdf,
+        created_at: documento.created_at,
+        updated_at: documento.updated_at,
+      },
+      firmantes: signersResult.rows,
+      eventos: eventosResult.rows,
+    });
+  } catch (err) {
+    console.error('❌ Error en verificación por código:', err);
+    return res.status(500).json({ message: 'Error interno del servidor' });
+  }
+});
+
+/* ================================
    EXPORTAR ROUTER
    ================================ */
 module.exports = router;
