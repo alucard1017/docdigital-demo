@@ -12,17 +12,7 @@ const { getObjectBuffer, uploadBuffer } = require('./storageR2');
  * - ID de contrato
  * - Bloque legal con datos de verificación
  * - QR a la URL pública de verificación
- * - Código de barras + eslogan
- *
- * OJO: este servicio NO decide si el PDF tiene marca de agua o no.
- * Eso se controla desde quien lo llama, según el estado del documento.
- *
- * @param {Object} params
- * @param {string} params.s3Key              Clave del PDF en R2/S3 (con o sin marca, según flujo)
- * @param {string} params.documentoId        UUID de la tabla `documentos`
- * @param {string} params.codigoVerificacion Código público de verificación
- * @param {string} params.categoriaFirma     'SIMPLE' | 'AVANZADA'
- * @returns {Promise<string>} newKey         Nueva clave del PDF sellado
+ * - Código de barras lateral + eslogan
  */
 async function sellarPdfConQr({
   s3Key,
@@ -30,12 +20,8 @@ async function sellarPdfConQr({
   codigoVerificacion,
   categoriaFirma,
 }) {
-  if (!s3Key) {
-    throw new Error('s3Key es obligatorio para sellar el PDF');
-  }
-  if (!documentoId) {
-    throw new Error('documentoId es obligatorio para sellar el PDF');
-  }
+  if (!s3Key) throw new Error('s3Key es obligatorio para sellar el PDF');
+  if (!documentoId) throw new Error('documentoId es obligatorio para sellar el PDF');
   if (!codigoVerificacion) {
     throw new Error('codigoVerificacion es obligatorio para sellar el PDF');
   }
@@ -71,7 +57,7 @@ async function sellarPdfConQr({
   // Fuente para textos
   const font = await pdfDoc.embedFont(StandardFonts.Helvetica);
 
-  // Solo ID de contrato debajo del logo
+  // ID de contrato debajo del logo
   lastPage.drawText(`Contrato ID: ${documentoId}`, {
     x: width - logoWidth - 40,
     y: height - logoHeight - 55,
@@ -100,15 +86,15 @@ async function sellarPdfConQr({
     height: qrSize,
   });
 
-  // 3.1) Código de barras (usamos el código de verificación como valor)
+  // 3.1) Código de barras (usamos el código de verificación como valor) en lateral derecho
   let barcodePng;
   try {
     const barcodePngBuffer = await bwipjs.toBuffer({
       bcid: 'code128',          // tipo de código de barras
       text: codigoVerificacion, // contenido
       scale: 2,                 // escala
-      height: 10,               // altura en mm aprox
-      includetext: false,       // sin texto renderizado bajo el código
+      height: 10,               // altura aprox.
+      includetext: false,
       textxalign: 'center',
     });
     barcodePng = await pdfDoc.embedPng(barcodePngBuffer);
@@ -118,12 +104,13 @@ async function sellarPdfConQr({
   }
 
   if (barcodePng) {
-    const barcodeWidth = 140;
+    const barcodeWidth = 120;
     const barcodeHeight = (barcodePng.height / barcodePng.width) * barcodeWidth;
 
-    // Posicionamos el código de barras justo encima del QR
-    const barcodeX = width - barcodeWidth - 40;
-    const barcodeY = qrY + qrSize + 10;
+    // Lateral derecho, centrado verticalmente
+    const marginRight = 40;
+    const barcodeX = width - barcodeWidth - marginRight;
+    const barcodeY = height / 2 - barcodeHeight / 2;
 
     lastPage.drawImage(barcodePng, {
       x: barcodeX,
@@ -132,11 +119,15 @@ async function sellarPdfConQr({
       height: barcodeHeight,
     });
 
-    // Eslogan encima del código de barras
-    lastPage.drawText('Seguridad digital sin fronteras', {
-      x: barcodeX,
-      y: barcodeY + barcodeHeight + 5,
-      size: 9,
+    // Eslogan a la izquierda del código de barras
+    const eslogan = 'Seguridad digital sin fronteras';
+    const esloganSize = 9;
+    const esloganWidth = font.widthOfTextAtSize(eslogan, esloganSize);
+
+    lastPage.drawText(eslogan, {
+      x: barcodeX - 10 - esloganWidth,
+      y: barcodeY + barcodeHeight / 2 - esloganSize / 2,
+      size: esloganSize,
       font,
       color: rgb(0, 0, 0),
     });
@@ -156,7 +147,8 @@ async function sellarPdfConQr({
       ? 'Este documento ha sido firmado mediante Firma Electrónica Avanzada conforme a la Ley N° 19.799 y su normativa complementaria.'
       : 'Este documento ha sido firmado mediante Firma Electrónica Simple conforme a la Ley N° 19.799 y su normativa complementaria.',
     'La validez del presente documento puede ser verificada en el sitio indicado utilizando el código de verificación.',
-    // Futuro: razón social, RUT, fecha/hora, IP, hash SHA-256, etc.
+    'Proveedor de servicios de firma: VeriFirma SpA – RUT 77.777.777-7.',
+    'Zona horaria de referencia: Chile/Continental.',
   ].join('\n');
 
   lastPage.drawText(textoLegal, {
