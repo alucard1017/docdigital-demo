@@ -86,7 +86,7 @@ async function sellarPdfConQr({
     height: qrSize,
   });
 
-  // 3.1) Código de barras (usamos el código de verificación como valor) en lateral derecho
+  // 3.1) Código de barras (usamos el código de verificación como valor) en lateral derecho, vertical
   let barcodePng;
   try {
     const barcodePngBuffer = await bwipjs.toBuffer({
@@ -96,6 +96,7 @@ async function sellarPdfConQr({
       height: 10,               // altura aprox.
       includetext: false,
       textxalign: 'center',
+      rotate: 'R',              // 90° a la derecha → vertical en el lateral
     });
     barcodePng = await pdfDoc.embedPng(barcodePngBuffer);
   } catch (err) {
