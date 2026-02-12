@@ -12,6 +12,7 @@ const { uploadPdfToS3, getSignedUrl } = require('../services/s3');
 const { isValidEmail, isValidRun, validateLength } = require('../utils/validators');
 const { PDFDocument, rgb, degrees } = require('pdf-lib');
 const { sellarPdfConQr } = require('../services/pdfSeal');
+const { generarNumeroContratoInterno } = require('../utils/numeroContratoInterno');
 
 function generarCodigoVerificacion() {
   return crypto
@@ -301,6 +302,35 @@ async function createDocument(req, res) {
     );
 
     const doc = result.rows[0];
+    // ======== Número interno de contrato VF-AAAA-###### =========
+    // 1) Obtener último correlativo desde la BD
+    const correlativoRes = await db.query(
+      `SELECT valor::bigint AS ultimo
+       FROM configuraciones
+       WHERE clave = 'ultimo_correlativo_contrato'`
+    );
+
+    const ultimoCorrelativo =
+      correlativoRes.rowCount > 0 ? Number(correlativoRes.rows[0].ultimo) : 0;
+
+    // 2) Generar nuevo número interno
+    const numeroContratoInterno = generarNumeroContratoInterno(ultimoCorrelativo);
+
+    // 3) Guardar correlativo actualizado
+    await db.query(
+      `INSERT INTO configuraciones (clave, valor)
+       VALUES ('ultimo_correlativo_contrato', $1)
+       ON CONFLICT (clave) DO UPDATE SET valor = EXCLUDED.valor`,
+      [String(ultimoCorrelativo + 1)]
+    );
+
+    // 4) Guardar número interno en documents (para poder verlo en la app)
+    await db.query(
+      `UPDATE documents
+       SET numero_contrato_interno = $1
+       WHERE id = $2`,
+      [numeroContratoInterno, doc.id]
+    );
 
     // ======== ENGANCHE CON TABLA documentos =========
     const codigoVerificacion = generarCodigoVerificacion();
