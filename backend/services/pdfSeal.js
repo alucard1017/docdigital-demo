@@ -7,13 +7,17 @@ const { getObjectBuffer, uploadBuffer } = require('./storageR2');
 
 /**
  * Sella un PDF existente en R2/S3 añadiendo:
- * - Logo + eslogan VeriFirma
+ * - Logo VeriFirma
  * - ID de contrato
  * - Bloque legal con datos de verificación
  * - QR a la URL pública de verificación
+ * - (Opcional) zona para código de barras + eslogan
+ *
+ * OJO: este servicio NO decide si el PDF tiene marca de agua o no.
+ * Eso se controla desde quien lo llama, según el estado del documento.
  *
  * @param {Object} params
- * @param {string} params.s3Key              Clave del PDF original en R2/S3
+ * @param {string} params.s3Key              Clave del PDF en R2/S3 (con o sin marca, según flujo)
  * @param {string} params.documentoId        UUID de la tabla `documentos`
  * @param {string} params.codigoVerificacion Código público de verificación
  * @param {string} params.categoriaFirma     'SIMPLE' | 'AVANZADA'
@@ -35,7 +39,7 @@ async function sellarPdfConQr({
     throw new Error('codigoVerificacion es obligatorio para sellar el PDF');
   }
 
-  // 1) Descargar PDF original como buffer
+  // 1) Descargar PDF base como buffer
   const pdfBytes = await getObjectBuffer(s3Key);
 
   // 2) Cargar PDF
@@ -66,8 +70,8 @@ async function sellarPdfConQr({
   // Fuente para textos
   const font = await pdfDoc.embedFont(StandardFonts.Helvetica);
 
-  // Eslogan debajo del logo
-  lastPage.drawText('Seguridad digital sin fronteras', {
+  // Solo ID de contrato debajo del logo
+  lastPage.drawText(`Contrato ID: ${documentoId}`, {
     x: width - logoWidth - 40,
     y: height - logoHeight - 55,
     size: 9,
@@ -75,16 +79,7 @@ async function sellarPdfConQr({
     color: rgb(0, 0, 0),
   });
 
-  // ID de contrato debajo del eslogan
-  lastPage.drawText(`Contrato ID: ${documentoId}`, {
-    x: width - logoWidth - 40,
-    y: height - logoHeight - 70,
-    size: 9,
-    font,
-    color: rgb(0, 0, 0),
-  });
-
-  // 3) Generar QR con la URL pública de verificación (dominio real)
+  // 3) Generar QR con la URL pública de verificación
   const urlVerificacion = `https://verifirma.cl/verificar/${codigoVerificacion}`;
 
   const qrDataUrl = await QRCode.toDataURL(urlVerificacion, {
@@ -93,6 +88,7 @@ async function sellarPdfConQr({
   const qrImage = await pdfDoc.embedPng(qrDataUrl);
   const qrSize = 80;
 
+  // QR en la parte baja derecha
   lastPage.drawImage(qrImage, {
     x: width - qrSize - 40,
     y: 40,
@@ -100,7 +96,34 @@ async function sellarPdfConQr({
     height: qrSize,
   });
 
-  // 4) Bloque de texto legal en el pie (redactado más formal)
+  // 3.1) Zona reservada para código de barras + eslogan
+  // Cuando tengas el PNG del código de barras, aquí lo dibujas
+  // y a su lado el eslogan "Seguridad digital sin fronteras".
+  //
+  // Ejemplo futuro:
+  // const barcodePngBytes = await fs.promises.readFile(
+  //   path.join(__dirname, '../assets/barcode.png')
+  // );
+  // const barcodeImage = await pdfDoc.embedPng(barcodePngBytes);
+  // const barcodeWidth = 120;
+  // const barcodeHeight = (barcodeImage.height / barcodeImage.width) * barcodeWidth;
+  //
+  // lastPage.drawImage(barcodeImage, {
+  //   x: width - barcodeWidth - 40,
+  //   y: 40 + qrSize + 10,
+  //   width: barcodeWidth,
+  //   height: barcodeHeight,
+  // });
+  //
+  // lastPage.drawText('Seguridad digital sin fronteras', {
+  //   x: width - barcodeWidth - 40,
+  //   y: 40 + qrSize + barcodeHeight + 5,
+  //   size: 9,
+  //   font,
+  //   color: rgb(0, 0, 0),
+  // });
+
+  // 4) Bloque de texto legal en el pie
   const esAvanzada = categoriaFirma === 'AVANZADA';
 
   const textoLegal = [
@@ -114,11 +137,7 @@ async function sellarPdfConQr({
       ? 'Este documento ha sido firmado mediante Firma Electrónica Avanzada conforme a la Ley N° 19.799 y su normativa complementaria.'
       : 'Este documento ha sido firmado mediante Firma Electrónica Simple conforme a la Ley N° 19.799 y su normativa complementaria.',
     'La validez del presente documento puede ser verificada en el sitio indicado utilizando el código de verificación.',
-    // TODO: más adelante añadir:
-    // - Razón social / RUT de la empresa emisora
-    // - Fecha y hora de completitud
-    // - IP del último firmante
-    // - Huella digital (hash SHA-256) del PDF final
+    // Futuro: razón social, RUT, fecha/hora, IP, hash SHA-256, etc.
   ].join('\n');
 
   lastPage.drawText(textoLegal, {
