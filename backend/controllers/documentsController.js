@@ -95,7 +95,8 @@ async function getUserDocuments(req, res) {
          visador_nombre, visador_email, visador_movil,
          firmante_nombre, firmante_email, firmante_movil, firmante_run,
          empresa_rut, signature_status, requires_visado, reject_reason,
-         tipo_tramite, requiere_firma_notarial, created_at, updated_at
+         tipo_tramite, requiere_firma_notarial, created_at, updated_at,
+         numero_contrato_interno
        FROM documents 
        WHERE owner_id = $1 
        ORDER BY ${orderByClause}`,
@@ -629,7 +630,8 @@ async function getTimeline(req, res) {
       `SELECT 
          id, title, status, destinatario_nombre,
          empresa_rut, created_at, updated_at,
-         requires_visado, firmante_nombre, visador_nombre 
+         requires_visado, firmante_nombre, visador_nombre,
+         numero_contrato_interno
        FROM documents 
        WHERE id = $1`,
       [docId]
@@ -696,6 +698,7 @@ async function getTimeline(req, res) {
         created_at: doc.created_at,
         updated_at: doc.updated_at,
         requires_visado: doc.requires_visado,
+        numero_contrato_interno: doc.numero_contrato_interno,
       },
       timeline: {
         currentStep,

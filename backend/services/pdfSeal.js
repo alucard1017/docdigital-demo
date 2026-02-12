@@ -32,14 +32,42 @@ async function sellarPdfConQr({
   const pdfBytes = await getObjectBuffer(s3Key);
   const pdfDoc = await PDFDocument.load(pdfBytes);
   const pages = pdfDoc.getPages();
-  if (!pages || pages.length === 0) throw new Error('El PDF no tiene páginas');
-
-  const lastPage = pages[pages.length - 1];
-  const { width, height } = lastPage.getSize();
+  const totalPages = pages.length;
+  if (!pages || totalPages === 0) throw new Error('El PDF no tiene páginas');
 
   const font = await pdfDoc.embedFont(StandardFonts.Helvetica);
 
-  // 2) Logo VeriFirma arriba a la derecha
+  // Número interno normalizado (para reutilizar en footer y bloque legal)
+  const numeroInternoTexto = numeroContratoInterno || 'N° interno: —';
+  console.log('DEBUG SELLO >> numeroInternoTexto pintado:', numeroInternoTexto);
+
+  // 1.1) Footer en todas las páginas: VF-AAAA-###### · Página X de Y · verifirma.cl
+  const footerFontSize = 8;
+  const footerMarginY = 30;
+  const footerColor = rgb(0.4, 0.4, 0.4);
+
+  pages.forEach((page, index) => {
+    const { width } = page.getSize();
+    const pageNumber = index + 1;
+
+    const footerText = `${numeroInternoTexto} · Página ${pageNumber} de ${totalPages} · verifirma.cl`;
+    const textWidth = font.widthOfTextAtSize(footerText, footerFontSize);
+    const x = (width - textWidth) / 2;
+
+    page.drawText(footerText, {
+      x,
+      y: footerMarginY,
+      size: footerFontSize,
+      font,
+      color: footerColor,
+    });
+  });
+
+  // 2) Trabajar sobre la última página para logo, QR y bloque legal
+  const lastPage = pages[pages.length - 1];
+  const { width, height } = lastPage.getSize();
+
+  // 2.1) Logo VeriFirma arriba a la derecha
   const logoPngBytes = await fs.promises.readFile(
     path.join(__dirname, '../assets/verifirma-logo.png')
   );
@@ -57,10 +85,7 @@ async function sellarPdfConQr({
     height: logoHeight,
   });
 
-  // Número interno de contrato bajo el logo
-  const numeroInternoTexto = numeroContratoInterno || 'N° interno: —';
-  console.log('DEBUG SELLO >> numeroInternoTexto pintado:', numeroInternoTexto);
-
+  // 2.2) Número interno de contrato bajo el logo
   lastPage.drawText(numeroInternoTexto, {
     x: logoX,
     y: logoY - 16,
@@ -170,6 +195,7 @@ async function sellarPdfConQr({
   const textoLegal = [
     'Certificado de firma electrónica',
     '',
+    `Número interno del contrato: ${numeroInternoTexto}`,
     `Documento ID (sistema): ${documentoId}`,
     `Código de verificación: ${codigoVerificacion}`,
     `Verificación en línea: ${urlVerificacion}`,
