@@ -4,7 +4,7 @@ const { PDFDocument, rgb, StandardFonts } = require('pdf-lib');
 const { getObjectBuffer, uploadBuffer } = require('./storageR2');
 
 /**
- * Sella un PDF existente en R2 añadiendo:
+ * Sella un PDF existente en R2/S3 añadiendo:
  * - Bloque legal con ID y código de verificación
  * - QR a la URL pública de verificación
  *
@@ -24,6 +24,12 @@ async function sellarPdfConQr({
   if (!s3Key) {
     throw new Error('s3Key es obligatorio para sellar el PDF');
   }
+  if (!documentoId) {
+    throw new Error('documentoId es obligatorio para sellar el PDF');
+  }
+  if (!codigoVerificacion) {
+    throw new Error('codigoVerificacion es obligatorio para sellar el PDF');
+  }
 
   // 1) Descargar PDF original como buffer
   const pdfBytes = await getObjectBuffer(s3Key);
@@ -31,11 +37,16 @@ async function sellarPdfConQr({
   // 2) Cargar PDF
   const pdfDoc = await PDFDocument.load(pdfBytes);
   const pages = pdfDoc.getPages();
+  if (!pages || pages.length === 0) {
+    throw new Error('El PDF no tiene páginas');
+  }
+
   const lastPage = pages[pages.length - 1];
   const { width, height } = lastPage.getSize();
 
-  // 3) Generar QR con la URL pública de verificación
-  const urlVerificacion = `https://tu-frontend.com/verificar/${codigoVerificacion}`;
+  // 3) Generar QR con la URL pública de verificación (dominio real)
+  const urlVerificacion = `https://verifirma.cl/verificar/${codigoVerificacion}`;
+
   const qrDataUrl = await QRCode.toDataURL(urlVerificacion, {
     errorCorrectionLevel: 'M',
   });
@@ -55,7 +66,7 @@ async function sellarPdfConQr({
   const textoLegal = [
     `Documento ID: ${documentoId}`,
     `Código de verificación: ${codigoVerificacion}`,
-    `Verificación en: https://tu-frontend.com/verificar`,
+    `Verificación en: ${urlVerificacion}`,
     categoriaFirma === 'AVANZADA'
       ? 'Este documento ha sido firmado mediante Firma Electrónica Avanzada conforme a la Ley N° 19.799.'
       : 'Este documento ha sido firmado mediante Firma Electrónica Simple conforme a la Ley N° 19.799.',
@@ -70,7 +81,7 @@ async function sellarPdfConQr({
     lineHeight: 11,
   });
 
-  // 5) Guardar y subir nueva versión a R2
+  // 5) Guardar y subir nueva versión a R2/S3
   const newPdfBytes = await pdfDoc.save();
   const newKey = s3Key.endsWith('.pdf')
     ? s3Key.replace(/\.pdf$/i, '_sellado.pdf')

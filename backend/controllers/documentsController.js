@@ -11,6 +11,16 @@ const {
 const { uploadPdfToS3, getSignedUrl } = require('../services/s3');
 const { isValidEmail, isValidRun, validateLength } = require('../utils/validators');
 const { PDFDocument, rgb, degrees } = require('pdf-lib');
+const { sellarPdfConQr } = require('../services/pdfSeal');
+
+function generarCodigoVerificacion() {
+  return crypto
+    .randomBytes(6)
+    .toString('base64')
+    .replace(/[^A-Z0-9]/gi, '')
+    .slice(0, 10)
+    .toUpperCase();
+}
 
 /* ================================
    FUNCION: APLICAR MARCA DE AGUA
@@ -284,6 +294,45 @@ async function createDocument(req, res) {
 
     const doc = result.rows[0];
 
+    // ======== ENGANCHE CON TABLA documentos =========
+    const codigoVerificacion = generarCodigoVerificacion();
+    const categoriaFirma = 'SIMPLE'; // o lo que quieras usar
+
+    // 1) Crear fila en documentos
+    const documentosResult = await db.query(
+      `INSERT INTO documentos (
+         titulo,
+         tipo,
+         estado,
+         categoria_firma,
+         codigo_verificacion,
+         creado_por,
+         created_at,
+         updated_at
+       ) VALUES (
+         $1, $2, $3, $4, $5, $6, NOW(), NOW()
+       )
+       RETURNING id, codigo_verificacion, categoria_firma`,
+      [
+        doc.title,
+        tipo_tramite || 'propio',
+        'BORRADOR',
+        categoriaFirma,
+        codigoVerificacion,
+        req.user.id,
+      ]
+    );
+
+    const documentoNuevo = documentosResult.rows[0];
+
+    // 2) Guardar el vínculo en documents.nuevo_documento_id
+    await db.query(
+      `UPDATE documents
+       SET nuevo_documento_id = $1
+       WHERE id = $2`,
+      [documentoNuevo.id, doc.id]
+    );
+
     // Firmantes en document_signers con token propio
     const signerMainToken = crypto.randomUUID();
     await db.query(
@@ -460,9 +509,13 @@ async function createDocument(req, res) {
       ...doc,
       requiresVisado: doc.requires_visado === true,
       file_url: doc.file_path,
+      documentoId: documentoNuevo.id,
+      codigoVerificacion: documentoNuevo.codigo_verificacion,
+      categoriaFirma: documentoNuevo.categoria_firma,
       message:
         'Documento creado exitosamente. Correos enviados (o intentados enviar) antes de responder.',
     });
+
   } catch (err) {
     console.error('❌ Error creando documento:', err);
     return res
@@ -678,6 +731,7 @@ async function signDocument(req, res) {
       });
     }
 
+    // 1) Marcar documento como FIRMADO
     const result = await db.query(
       `UPDATE documents 
        SET status = $1, updated_at = NOW()
@@ -687,6 +741,7 @@ async function signDocument(req, res) {
     );
     const doc = result.rows[0];
 
+    // 2) Registrar evento FIRMADO (flujo viejo)
     await db.query(
       `INSERT INTO document_events (
          document_id, actor, action, details, from_status, to_status
@@ -702,6 +757,40 @@ async function signDocument(req, res) {
       ]
     );
 
+    // 3) Si existe vínculo con flujo nuevo, sellar PDF
+    if (doc.nuevo_documento_id) {
+      try {
+        const docNuevoRes = await db.query(
+          `SELECT id, codigo_verificacion, categoria_firma
+           FROM documentos
+           WHERE id = $1`,
+          [doc.nuevo_documento_id]
+        );
+
+        if (docNuevoRes.rowCount > 0) {
+          const docNuevo = docNuevoRes.rows[0];
+
+          const newKey = await sellarPdfConQr({
+            s3Key: doc.file_path,
+            documentoId: docNuevo.id,
+            codigoVerificacion: docNuevo.codigo_verificacion,
+            categoriaFirma: docNuevo.categoria_firma || 'SIMPLE',
+          });
+
+          await db.query(
+            `UPDATE documents
+             SET pdf_final_url = $1
+             WHERE id = $2`,
+            [newKey, doc.id]
+          );
+
+          // Aquí después podemos agregar registro en eventos_firma tipo PDF_SELLADO
+        }
+      } catch (sealError) {
+        console.error('⚠️ Error sellando PDF con QR:', sealError);
+      }
+    }
+
     return res.json({
       ...doc,
       file_url: doc.file_path,
@@ -712,7 +801,6 @@ async function signDocument(req, res) {
     return res.status(500).json({ message: 'Error interno del servidor' });
   }
 }
-
 /* ================================
    POST: Visar documento (propietario)
    ================================ */
