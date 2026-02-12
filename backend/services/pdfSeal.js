@@ -11,7 +11,7 @@ const { getObjectBuffer, uploadBuffer } = require('./storageR2');
  * documentoId: UUID interno del documento
  * codigoVerificacion: código corto para verificación pública
  * categoriaFirma: 'AVANZADA' | 'SIMPLE'
- * numeroContratoInterno: código corto tipo VF-2025-000123
+ * numeroContratoInterno: código corto tipo VF-2026-000123 (ya generado afuera)
  */
 async function sellarPdfConQr({
   s3Key,

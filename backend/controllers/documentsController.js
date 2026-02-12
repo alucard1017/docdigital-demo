@@ -788,6 +788,7 @@ async function signDocument(req, res) {
             documentoId: docNuevo.id,
             codigoVerificacion: docNuevo.codigo_verificacion,
             categoriaFirma: docNuevo.categoria_firma || 'SIMPLE',
+	    numeroContratoInterno: doc.numero_contrato_interno,
           });
 
           await db.query(
