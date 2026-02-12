@@ -2,6 +2,7 @@
 const express = require('express');
 const db = require('../db');
 const { getSignedUrl } = require('../services/s3');
+const { sellarPdfConQr } = require('../services/pdfSeal');
 
 const router = express.Router();
 
@@ -259,6 +260,40 @@ router.post('/docs/:token/firmar', async (req, res) => {
       ]
     );
 
+    // Si TODOS firmaron y el documento está vinculado al flujo nuevo, sellar PDF con QR
+    if (allSigned && doc.nuevo_documento_id) {
+      try {
+        const docNuevoRes = await db.query(
+          `SELECT id, codigo_verificacion, categoria_firma
+           FROM documentos
+           WHERE id = $1`,
+          [doc.nuevo_documento_id]
+        );
+
+        if (docNuevoRes.rowCount > 0) {
+          const docNuevo = docNuevoRes.rows[0];
+
+          const newKey = await sellarPdfConQr({
+            s3Key: doc.file_path, // o doc.pdf_original_url si prefieres
+            documentoId: docNuevo.id,
+            codigoVerificacion: docNuevo.codigo_verificacion,
+            categoriaFirma: docNuevo.categoria_firma || 'SIMPLE',
+          });
+
+          await db.query(
+            `UPDATE documents
+             SET pdf_final_url = $1
+             WHERE id = $2`,
+            [newKey, doc.id]
+          );
+
+          // Aquí en el futuro puedes registrar un evento PDF_SELLADO en eventos_firma
+        }
+      } catch (sealError) {
+        console.error('⚠️ Error sellando PDF con QR (firma pública):', sealError);
+      }
+    }
+
     return res.json({
       ...doc,
       file_url: doc.file_path,
@@ -365,7 +400,6 @@ router.get('/verificar/:codigo', async (req, res) => {
   try {
     const { codigo } = req.params;
 
-    // Busca el documento en la nueva tabla `documentos`
     const docResult = await db.query(
       `SELECT *
        FROM documentos
@@ -381,7 +415,6 @@ router.get('/verificar/:codigo', async (req, res) => {
 
     const documento = docResult.rows[0];
 
-    // Trae firmantes
     const signersResult = await db.query(
       `SELECT id, nombre, email, rut, rol, orden_firma, estado, fecha_firma, tipo_firma
        FROM firmantes
@@ -390,7 +423,6 @@ router.get('/verificar/:codigo', async (req, res) => {
       [documento.id]
     );
 
-    // Trae eventos
     const eventosResult = await db.query(
       `SELECT id, tipo_evento, ip, user_agent, metadata, created_at
        FROM eventos_firma
