@@ -33,7 +33,9 @@ export function DetailView({
     const fetchTimeline = async () => {
       try {
         setLoadingTimeline(true);
-        const res = await fetch(`${API_URL}/api/docs/${selectedDoc.id}/timeline`);
+        const res = await fetch(
+          `${API_URL}/api/docs/${selectedDoc.id}/timeline`
+        );
         const data = await res.json();
 
         if (res.ok && data && data.timeline) {
@@ -52,9 +54,12 @@ export function DetailView({
     const fetchSigners = async () => {
       try {
         setLoadingSigners(true);
-        const res = await fetch(`${API_URL}/api/docs/${selectedDoc.id}/signers`, {
-          credentials: "include",
-        });
+        const res = await fetch(
+          `${API_URL}/api/docs/${selectedDoc.id}/signers`,
+          {
+            credentials: "include",
+          }
+        );
         if (!res.ok) {
           setSigners([]);
           return;
@@ -89,15 +94,20 @@ export function DetailView({
     if (!selectedDoc) return;
     try {
       setReenviarLoadingVisado(true);
-      const res = await fetch(`${API_URL}/api/docs/${selectedDoc.id}/reenviar`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ tipo: "VISADO" }),
-        credentials: "include",
-      });
+      const res = await fetch(
+        `${API_URL}/api/docs/${selectedDoc.id}/reenviar`,
+        {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ tipo: "VISADO" }),
+          credentials: "include",
+        }
+      );
       const data = await res.json();
       if (!res.ok) {
-        throw new Error(data.message || "No se pudo reenviar el correo de visado");
+        throw new Error(
+          data.message || "No se pudo reenviar el correo de visado"
+        );
       }
       alert(data.message || "Recordatorio de visado reenviado");
     } catch (err) {
@@ -111,15 +121,20 @@ export function DetailView({
     if (!selectedDoc || !signerId) return;
     try {
       setReenviarSignerId(signerId);
-      const res = await fetch(`${API_URL}/api/docs/${selectedDoc.id}/reenviar`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ tipo: "FIRMA", signerId }),
-        credentials: "include",
-      });
+      const res = await fetch(
+        `${API_URL}/api/docs/${selectedDoc.id}/reenviar`,
+        {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ tipo: "FIRMA", signerId }),
+          credentials: "include",
+        }
+      );
       const data = await res.json();
       if (!res.ok) {
-        throw new Error(data.message || "No se pudo reenviar el correo de firma");
+        throw new Error(
+          data.message || "No se pudo reenviar el correo de firma"
+        );
       }
       alert(data.message || "Recordatorio de firma reenviado");
     } catch (err) {
@@ -128,6 +143,12 @@ export function DetailView({
       setReenviarSignerId(null);
     }
   }
+
+  const numeroInterno =
+    (timeline &&
+      timeline.document &&
+      timeline.document.numero_contrato_interno) ||
+    selectedDoc.numero_contrato_interno;
 
   return (
     <div className="dashboard-layout">
@@ -162,7 +183,8 @@ export function DetailView({
               fontSize: "0.9rem",
             }}
           >
-            Revisión de Documento #{selectedDoc.id} - Estado{" "}
+            Revisión de Documento{" "}
+            {numeroInterno ? `(${numeroInterno})` : `#${selectedDoc.id}`} - Estado{" "}
             {selectedDoc.status}
           </span>
           <span style={{ fontWeight: 700, fontSize: "1.1rem" }}>
@@ -189,8 +211,11 @@ export function DetailView({
                 fontSize: "0.95rem",
               }}
             >
-              N° de contrato #{selectedDoc.id} · Estado:{" "}
-              <strong>{selectedDoc.status}</strong>
+              N° interno:{" "}
+              <strong>
+                {numeroInterno || `#${selectedDoc.id}`}
+              </strong>{" "}
+              · Estado: <strong>{selectedDoc.status}</strong>
             </p>
 
             {selectedDoc.description && (
@@ -372,7 +397,9 @@ export function DetailView({
                       }}
                     >
                       <div>
-                        <div style={{ fontSize: "0.9rem", fontWeight: 600 }}>
+                        <div
+                          style={{ fontSize: "0.9rem", fontWeight: 600 }}
+                        >
                           {s.name || "Firmante"}
                         </div>
                         <div

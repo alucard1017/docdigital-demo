@@ -34,15 +34,14 @@ export function ListHeader({
             padding: "8px 12px",
             borderRadius: 999,
             border: "1px solid #e5e7eb",
-            background:
-              statusFilter === "TODOS" ? "#111827" : "#f3f4f6",
-            color:
-              statusFilter === "TODOS" ? "#f9fafb" : "#111827",
+            background: statusFilter === "TODOS" ? "#111827" : "#f3f4f6",
+            color: statusFilter === "TODOS" ? "#f9fafb" : "#111827",
             cursor: "pointer",
           }}
         >
           Todos: <strong>{pendientes + visados + firmados + rechazados}</strong>
-	</button>
+        </button>
+
         {/* Pendientes */}
         <button
           type="button"
@@ -52,13 +51,9 @@ export function ListHeader({
             borderRadius: 999,
             border: "1px solid #e5e7eb",
             background:
-              statusFilter === "PENDIENTES"
-                ? "#3730a3"
-                : "#eef2ff",
+              statusFilter === "PENDIENTES" ? "#3730a3" : "#eef2ff",
             color:
-              statusFilter === "PENDIENTES"
-                ? "#eef2ff"
-                : "#3730a3",
+              statusFilter === "PENDIENTES" ? "#eef2ff" : "#3730a3",
             cursor: "pointer",
           }}
         >
@@ -92,13 +87,9 @@ export function ListHeader({
             borderRadius: 999,
             border: "1px solid #e5e7eb",
             background:
-              statusFilter === "FIRMADOS"
-                ? "#166534"
-                : "#ecfdf3",
+              statusFilter === "FIRMADOS" ? "#166534" : "#ecfdf3",
             color:
-              statusFilter === "FIRMADOS"
-                ? "#ecfdf3"
-                : "#166534",
+              statusFilter === "FIRMADOS" ? "#ecfdf3" : "#166534",
             cursor: "pointer",
           }}
         >
@@ -114,13 +105,9 @@ export function ListHeader({
             borderRadius: 999,
             border: "1px solid #e5e7eb",
             background:
-              statusFilter === "RECHAZADOS"
-                ? "#b91c1c"
-                : "#fef2f2",
+              statusFilter === "RECHAZADOS" ? "#b91c1c" : "#fef2f2",
             color:
-              statusFilter === "RECHAZADOS"
-                ? "#fef2f2"
-                : "#b91c1c",
+              statusFilter === "RECHAZADOS" ? "#fef2f2" : "#b91c1c",
             cursor: "pointer",
           }}
         >
@@ -181,18 +168,10 @@ export function ListHeader({
               >
                 <option value="title_asc">Título (A → Z)</option>
                 <option value="title_desc">Título (Z → A)</option>
-                <option value="fecha_desc">
-                  Fecha (más reciente)
-                </option>
-                <option value="fecha_asc">
-                  Fecha (más antigua)
-                </option>
-                <option value="id_asc">
-                  N° contrato (ascendente)
-                </option>
-                <option value="id_desc">
-                  N° contrato (descendente)
-                </option>
+                <option value="fecha_desc">Fecha (más reciente)</option>
+                <option value="fecha_asc">Fecha (más antigua)</option>
+                <option value="numero_asc">N° interno (ascendente)</option>
+                <option value="numero_desc">N° interno (descendente)</option>
               </select>
             </div>
 

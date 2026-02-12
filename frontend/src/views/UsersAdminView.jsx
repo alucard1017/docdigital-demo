@@ -1,3 +1,4 @@
+// src/views/UsersAdminView.jsx
 import { useEffect, useState } from "react";
 import { UserForm } from "../components/UserForm";
 
@@ -73,8 +74,7 @@ export function UsersAdminView({ API_URL, token }) {
     setShowForm(true);
   }
 
-  function handleUserSaved(updatedOrNew) {
-    // Refrescar lista completa para evitar inconsistencias de permisos
+  function handleUserSaved() {
     cargarUsuarios();
   }
 
@@ -141,10 +141,7 @@ export function UsersAdminView({ API_URL, token }) {
           Ocurrió un problema al cargar los usuarios.
         </p>
         <p style={{ marginBottom: 16, fontSize: "0.9rem" }}>{error}</p>
-        <button
-          className="btn-main btn-primary"
-          onClick={cargarUsuarios}
-        >
+        <button className="btn-main btn-primary" onClick={cargarUsuarios}>
           Reintentar carga
         </button>
       </div>
@@ -165,7 +162,6 @@ export function UsersAdminView({ API_URL, token }) {
         Administración de usuarios
       </h2>
 
-      {/* Stats rápidas */}
       {stats && stats.documentos && (
         <div
           style={{
@@ -177,27 +173,19 @@ export function UsersAdminView({ API_URL, token }) {
         >
           <div className="kpi-card">
             <div className="kpi-label">Total documentos</div>
-            <div className="kpi-value">
-              {stats.documentos.total || 0}
-            </div>
+            <div className="kpi-value">{stats.documentos.total || 0}</div>
           </div>
           <div className="kpi-card">
             <div className="kpi-label">Pendientes</div>
-            <div className="kpi-value">
-              {stats.documentos.pendientes || 0}
-            </div>
+            <div className="kpi-value">{stats.documentos.pendientes || 0}</div>
           </div>
           <div className="kpi-card">
             <div className="kpi-label">Firmados</div>
-            <div className="kpi-value">
-              {stats.documentos.firmados || 0}
-            </div>
+            <div className="kpi-value">{stats.documentos.firmados || 0}</div>
           </div>
           <div className="kpi-card">
             <div className="kpi-label">Visados</div>
-            <div className="kpi-value">
-              {stats.documentos.visados || 0}
-            </div>
+            <div className="kpi-value">{stats.documentos.visados || 0}</div>
           </div>
           <div className="kpi-card">
             <div className="kpi-label">Rechazados</div>
@@ -217,10 +205,7 @@ export function UsersAdminView({ API_URL, token }) {
           gap: 8,
         }}
       >
-        <button
-          className="btn-main btn-primary"
-          onClick={handleNewUser}
-        >
+        <button className="btn-main btn-primary" onClick={handleNewUser}>
           + Nuevo usuario
         </button>
 

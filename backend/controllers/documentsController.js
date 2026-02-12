@@ -87,6 +87,8 @@ async function getUserDocuments(req, res) {
 
     if (sort === 'fecha_desc') orderByClause = 'created_at DESC';
     if (sort === 'fecha_asc') orderByClause = 'created_at ASC';
+    if (sort === 'numero_asc') orderByClause = 'numero_contrato_interno ASC';
+    if (sort === 'numero_desc') orderByClause = 'numero_contrato_interno DESC';
 
     const result = await db.query(
       `SELECT 

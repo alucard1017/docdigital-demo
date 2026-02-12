@@ -10,7 +10,7 @@ function getTipoTramiteLabel(tipo) {
   if (tipo === "notaria") return "Trámite Notarial";
   if (tipo === "propio") return "Trámite Propio";
   return "N/D";
-} 
+}
 
 export function DocumentRow({ doc, onOpenDetail, token }) {
   const tipoTramite = doc.tipo_tramite || doc.tipoTramite || null;
@@ -41,8 +41,10 @@ export function DocumentRow({ doc, onOpenDetail, token }) {
 
   return (
     <tr>
-      {/* N° de contrato */}
-      <td style={{ color: "#94a3b8", fontWeight: 600 }}>#{doc.id}</td>
+      {/* N° interno de contrato */}
+      <td style={{ color: "#94a3b8", fontWeight: 600 }}>
+        {doc.numero_contrato_interno || `#${doc.id}`}
+      </td>
 
       {/* Título */}
       <td style={{ fontWeight: 700, color: "#1e293b" }}>
@@ -58,8 +60,7 @@ export function DocumentRow({ doc, onOpenDetail, token }) {
             fontSize: 12,
             backgroundColor:
               tipoTramite === "notaria" ? "#eef2ff" : "#ecfeff",
-            color:
-              tipoTramite === "notaria" ? "#4f46e5" : "#0f766e",
+            color: tipoTramite === "notaria" ? "#4f46e5" : "#0f766e",
             whiteSpace: "nowrap",
           }}
         >
@@ -114,11 +115,7 @@ export function DocumentRow({ doc, onOpenDetail, token }) {
             </button>
           )}
 
-          <button
-            type="button"
-            className="btn-main"
-            onClick={handleVerPdf}
-          >
+          <button type="button" className="btn-main" onClick={handleVerPdf}>
             Ver PDF
           </button>
 

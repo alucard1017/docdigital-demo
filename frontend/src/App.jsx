@@ -530,7 +530,11 @@ useEffect(() => {
       <div className="content-body">
         <ListHeader
           sort={sort}
-          setSort={setSort}
+          setSort={(value) => {
+	    setSort(value);
+            setPage(1);          // reset de página cuando cambias el orden
+            cargarDocs(value);   // recarga usando el nuevo sort
+    }}
           statusFilter={statusFilter}
           setStatusFilter={setStatusFilter}
           search={search}
