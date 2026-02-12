@@ -209,14 +209,22 @@ async function createDocument(req, res) {
       return res.status(400).json({ message: err.message });
     }
 
-    await aplicarMarcaAguaLocal(req.file.path);
-
-    let s3Key = null;
+    let originalKey = null;
+    let watermarkedKey = null;
 
     try {
-      s3Key = `documentos/${req.user.id}/${Date.now()}-${req.file.originalname}`;
-      await uploadPdfToS3(req.file.path, s3Key);
-      console.log(`✅ Archivo subido a S3: ${s3Key}`);
+      // 1) Subir ORIGINAL limpio
+      originalKey = `documentos/${req.user.id}/original-${Date.now()}-${req.file.originalname}`;
+      await uploadPdfToS3(req.file.path, originalKey);
+      console.log(`✅ Archivo ORIGINAL subido a S3: ${originalKey}`);
+
+      // 2) Aplicar marca de agua sobre el archivo local
+      await aplicarMarcaAguaLocal(req.file.path);
+
+      // 3) Subir VERSIÓN CON MARCA
+      watermarkedKey = `documentos/${req.user.id}/watermark-${Date.now()}-${req.file.originalname}`;
+      await uploadPdfToS3(req.file.path, watermarkedKey);
+      console.log(`✅ Archivo CON MARCA subido a S3: ${watermarkedKey}`);
     } catch (s3Error) {
       console.error('⚠️ Error subiendo a S3:', s3Error.message);
       return res
@@ -267,7 +275,7 @@ async function createDocument(req, res) {
         req.user.id,
         title,
         description,
-        s3Key,
+	watermarkedKey,
         initialStatus,
         destinatario_nombre,
         destinatario_email,
@@ -286,7 +294,7 @@ async function createDocument(req, res) {
         'PENDIENTE',
         tipo_tramite,
         'borrador',
-        s3Key,
+	originalKey,
         null,
         requiereNotaria,
       ]
@@ -776,7 +784,6 @@ async function signDocument(req, res) {
           const docNuevo = docNuevoRes.rows[0];
 
           const newKey = await sellarPdfConQr({
-            s3Key: doc.file_path,
 	    s3Key: doc.pdf_original_url || doc.file_path,
             documentoId: docNuevo.id,
             codigoVerificacion: docNuevo.codigo_verificacion,
