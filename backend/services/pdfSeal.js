@@ -6,11 +6,19 @@ const bwipjs = require('@bwip-js/node');
 const { PDFDocument, rgb, StandardFonts, degrees } = require('pdf-lib');
 const { getObjectBuffer, uploadBuffer } = require('./storageR2');
 
+/**
+ * s3Key: clave del PDF original en R2/S3
+ * documentoId: UUID interno del documento
+ * codigoVerificacion: código corto para verificación pública
+ * categoriaFirma: 'AVANZADA' | 'SIMPLE'
+ * numeroContratoInterno: código corto tipo VF-2025-000123
+ */
 async function sellarPdfConQr({
   s3Key,
   documentoId,
   codigoVerificacion,
   categoriaFirma,
+  numeroContratoInterno,
 }) {
   if (!s3Key) throw new Error('s3Key es obligatorio para sellar el PDF');
   if (!documentoId) throw new Error('documentoId es obligatorio para sellar el PDF');
@@ -38,8 +46,8 @@ async function sellarPdfConQr({
   const logoWidth = 90;
   const logoHeight = (logoImage.height / logoImage.width) * logoWidth;
 
-  // un poco más pegado al borde derecho
-  const logoX = width - logoWidth - 20;
+  // Más pegado al borde derecho
+  const logoX = width - logoWidth - 15;
   const logoY = height - logoHeight - 40;
 
   lastPage.drawImage(logoImage, {
@@ -49,24 +57,15 @@ async function sellarPdfConQr({
     height: logoHeight,
   });
 
-  // ID de contrato debajo del logo, en dos líneas
-  const contratoLabel = 'Contrato ID:';
-  const contratoValor = documentoId;
+  // Número interno de contrato bajo el logo (no el UUID)
+  const numeroInternoTexto = numeroContratoInterno || 'N° interno: —';
 
-  lastPage.drawText(contratoLabel, {
+  lastPage.drawText(numeroInternoTexto, {
     x: logoX,
-    y: logoY - 15,
+    y: logoY - 16,
     size: 9,
     font,
-    color: rgb(0, 0, 0),
-  });
-
-  lastPage.drawText(contratoValor, {
-    x: logoX,
-    y: logoY - 30,
-    size: 9,
-    font,
-    color: rgb(0, 0, 0),
+    color: rgb(0.1, 0.1, 0.1),
   });
 
   // 3) QR con URL pública de verificación
@@ -88,7 +87,7 @@ async function sellarPdfConQr({
     height: qrSize,
   });
 
-  // Microtexto bajo el QR (2 líneas para que quepa completo)
+  // Microtexto bajo el QR (2 líneas)
   const textoBajoQr = [
     'Verifique este documento escaneando el código QR',
     'o visitando verifirma.cl',
@@ -104,17 +103,17 @@ async function sellarPdfConQr({
     lineHeight: 9,
   });
 
-  // 3.1) Lateral derecho: código de barras vertical + texto girado
+  // 3.1) Lateral derecho: código de barras vertical + branding girado
   let barcodePng;
   try {
     const barcodePngBuffer = await bwipjs.toBuffer({
       bcid: 'code128',
       text: codigoVerificacion,
-      scale: 1.1,      // grosor moderado
-      height: 12,      // barra alargada
+      scale: 1.1,
+      height: 12,
       includetext: false,
       textxalign: 'center',
-      rotate: 'R',     // vertical
+      rotate: 'R',
     });
     barcodePng = await pdfDoc.embedPng(barcodePngBuffer);
   } catch (err) {
@@ -123,7 +122,7 @@ async function sellarPdfConQr({
   }
 
   if (barcodePng) {
-    const barcodeWidth = 35; // estrecho
+    const barcodeWidth = 35;
     const barcodeHeight = (barcodePng.height / barcodePng.width) * barcodeWidth;
 
     const marginRight = 15;
@@ -138,20 +137,18 @@ async function sellarPdfConQr({
       height: barcodeHeight,
     });
 
-    // Texto lateral, con posible salto para que no se corte
+    // Branding lateral: marca + eslogan + web (sin datos repetidos)
     const textoLateral = [
-      'Certificado de firma electrónica',
-      `Documento ID: ${documentoId}`,
-      `Código de verificación: ${codigoVerificacion}`,
+      'VeriFirma · Plataforma de firma electrónica',
       'Seguridad digital sin fronteras',
-      'Verificación en verifirma.cl',
+      'verifirma.cl',
     ].join('  ·  ');
 
     const lateralSize = 7;
 
     lastPage.drawText(textoLateral, {
-      x: width - 5,                                   // casi el borde
-      y: barcodeY + barcodeHeight / 2 - lateralSize, // centrado respecto a la barra
+      x: width - 5,
+      y: barcodeY + barcodeHeight / 2 - lateralSize,
       size: lateralSize,
       font,
       color: rgb(0.2, 0.2, 0.2),
@@ -169,7 +166,7 @@ async function sellarPdfConQr({
     color: rgb(0.8, 0.8, 0.8),
   });
 
-  // 4) Bloque de texto legal en el pie
+  // 4) Bloque de texto legal en el pie (único lugar con Documento ID / Código)
   const esAvanzada = categoriaFirma === 'AVANZADA';
 
   const textoLegal = [
