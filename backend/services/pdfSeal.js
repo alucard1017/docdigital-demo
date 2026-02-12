@@ -3,7 +3,7 @@ const fs = require('fs');
 const path = require('path');
 const QRCode = require('qrcode');
 const bwipjs = require('@bwip-js/node');
-const { PDFDocument, rgb, StandardFonts } = require('pdf-lib');
+const { PDFDocument, rgb, StandardFonts, degrees } = require('pdf-lib');
 const { getObjectBuffer, uploadBuffer } = require('./storageR2');
 
 async function sellarPdfConQr({
@@ -76,17 +76,30 @@ async function sellarPdfConQr({
     height: qrSize,
   });
 
-  // 3.1) Código de barras micro (0.5–1 cm) + eslogan discreto
+  // Microtexto bajo el QR
+  const textoBajoQr =
+    'Verifique este documento escaneando el código QR o visitando verifirma.cl';
+  const textoBajoQrSize = 7;
+
+  lastPage.drawText(textoBajoQr, {
+    x: qrX + 2,
+    y: qrY - 12,
+    size: textoBajoQrSize,
+    font,
+    color: rgb(0.25, 0.25, 0.25),
+  });
+
+  // 3.1) Lateral derecho: código de barras vertical + texto girado
   let barcodePng;
   try {
     const barcodePngBuffer = await bwipjs.toBuffer({
       bcid: 'code128',
       text: codigoVerificacion,
-      scale: 0.5,      // muy fino
-      height: 3,       // barras muy bajas
+      scale: 1.1,      // grosor moderado
+      height: 12,      // barra alargada
       includetext: false,
       textxalign: 'center',
-      rotate: 'R',
+      rotate: 'R',     // vertical
     });
     barcodePng = await pdfDoc.embedPng(barcodePngBuffer);
   } catch (err) {
@@ -95,13 +108,14 @@ async function sellarPdfConQr({
   }
 
   if (barcodePng) {
-    const barcodeWidth = 25; // ~1 cm
+    const barcodeWidth = 35; // estrecho
     const barcodeHeight = (barcodePng.height / barcodePng.width) * barcodeWidth;
 
-    // pegado al lado izquierdo del QR, centrado verticalmente respecto al QR
-    const barcodeX = qrX - 10 - barcodeWidth;
-    const barcodeY = qrY + qrSize / 2 - barcodeHeight / 2;
+    const marginRight = 15;
+    const barcodeX = width - barcodeWidth - marginRight;
+    const barcodeY = height / 2 - barcodeHeight / 2;
 
+    // Código de barras vertical en el borde derecho
     lastPage.drawImage(barcodePng, {
       x: barcodeX,
       y: barcodeY,
@@ -109,18 +123,34 @@ async function sellarPdfConQr({
       height: barcodeHeight,
     });
 
-    const eslogan = 'Seguridad digital sin fronteras';
-    const esloganSize = 6;
-    const esloganWidth = font.widthOfTextAtSize(eslogan, esloganSize);
+    // Texto continuo girado 90° a la derecha, alineado con la barra
+    const textoLateral = [
+      'Certificado de firma electrónica',
+      `Documento ID: ${documentoId}`,
+      `Código de verificación: ${codigoVerificacion}`,
+      'Seguridad digital sin fronteras',
+      'Verificación en verifirma.cl',
+    ].join('  ·  ');
 
-    lastPage.drawText(eslogan, {
-      x: barcodeX - 4 - esloganWidth,
-      y: barcodeY + barcodeHeight / 2 - esloganSize / 2,
-      size: esloganSize,
+    const lateralSize = 7;
+
+    lastPage.drawText(textoLateral, {
+      x: width - 5,                                   // casi el borde
+      y: barcodeY + barcodeHeight / 2 - lateralSize, // centrado respecto a la barra
+      size: lateralSize,
       font,
-      color: rgb(0.3, 0.3, 0.3),
+      color: rgb(0.2, 0.2, 0.2),
+      rotate: degrees(90),
     });
   }
+
+  // Línea divisoria suave sobre el bloque legal
+  lastPage.drawLine({
+    start: { x: 40, y: 75 },
+    end: { x: width - 40, y: 75 },
+    thickness: 0.5,
+    color: rgb(0.8, 0.8, 0.8),
+  });
 
   // 4) Bloque de texto legal en el pie
   const esAvanzada = categoriaFirma === 'AVANZADA';
