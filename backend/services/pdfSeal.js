@@ -6,14 +6,6 @@ const bwipjs = require('@bwip-js/node');
 const { PDFDocument, rgb, StandardFonts } = require('pdf-lib');
 const { getObjectBuffer, uploadBuffer } = require('./storageR2');
 
-/**
- * Sella un PDF existente en R2/S3 añadiendo:
- * - Logo VeriFirma
- * - ID de contrato
- * - Bloque legal con datos de verificación
- * - QR a la URL pública de verificación
- * - Código de barras lateral + eslogan
- */
 async function sellarPdfConQr({
   s3Key,
   documentoId,
@@ -26,20 +18,19 @@ async function sellarPdfConQr({
     throw new Error('codigoVerificacion es obligatorio para sellar el PDF');
   }
 
-  // 1) Descargar PDF base como buffer
+  // 1) Descargar y cargar PDF base
   const pdfBytes = await getObjectBuffer(s3Key);
-
-  // 2) Cargar PDF
   const pdfDoc = await PDFDocument.load(pdfBytes);
   const pages = pdfDoc.getPages();
-  if (!pages || pages.length === 0) {
-    throw new Error('El PDF no tiene páginas');
-  }
+  if (!pages || pages.length === 0) throw new Error('El PDF no tiene páginas');
 
   const lastPage = pages[pages.length - 1];
   const { width, height } = lastPage.getSize();
 
-  // 2.1) Logo VeriFirma arriba a la derecha
+  // Fuente base
+  const font = await pdfDoc.embedFont(StandardFonts.Helvetica);
+
+  // 2) Logo VeriFirma arriba a la derecha
   const logoPngBytes = await fs.promises.readFile(
     path.join(__dirname, '../assets/verifirma-logo.png')
   );
@@ -47,26 +38,26 @@ async function sellarPdfConQr({
   const logoWidth = 90;
   const logoHeight = (logoImage.height / logoImage.width) * logoWidth;
 
+  const logoX = width - logoWidth - 40;
+  const logoY = height - logoHeight - 40;
+
   lastPage.drawImage(logoImage, {
-    x: width - logoWidth - 40,
-    y: height - logoHeight - 40,
+    x: logoX,
+    y: logoY,
     width: logoWidth,
     height: logoHeight,
   });
 
-  // Fuente para textos
-  const font = await pdfDoc.embedFont(StandardFonts.Helvetica);
-
   // ID de contrato debajo del logo
   lastPage.drawText(`Contrato ID: ${documentoId}`, {
-    x: width - logoWidth - 40,
-    y: height - logoHeight - 55,
+    x: logoX,
+    y: logoY - 15,
     size: 9,
     font,
     color: rgb(0, 0, 0),
   });
 
-  // 3) Generar QR con la URL pública de verificación
+  // 3) QR con URL pública de verificación
   const urlVerificacion = `https://verifirma.cl/verificar/${codigoVerificacion}`;
 
   const qrDataUrl = await QRCode.toDataURL(urlVerificacion, {
@@ -75,7 +66,6 @@ async function sellarPdfConQr({
   const qrImage = await pdfDoc.embedPng(qrDataUrl);
   const qrSize = 80;
 
-  // QR en la parte baja derecha
   const qrX = width - qrSize - 40;
   const qrY = 40;
 
@@ -86,17 +76,17 @@ async function sellarPdfConQr({
     height: qrSize,
   });
 
-  // 3.1) Código de barras (usamos el código de verificación como valor) en lateral derecho, vertical
+  // 3.1) Código de barras lateral derecho (vertical, pequeño) + eslogan
   let barcodePng;
   try {
     const barcodePngBuffer = await bwipjs.toBuffer({
-      bcid: 'code128',          // tipo de código de barras
-      text: codigoVerificacion, // contenido
-      scale: 2,                 // escala
-      height: 10,               // altura aprox.
+      bcid: 'code128',
+      text: codigoVerificacion,
+      scale: 1.2,      // más pequeño
+      height: 6,       // barras más cortas
       includetext: false,
       textxalign: 'center',
-      rotate: 'R',              // 90° a la derecha → vertical en el lateral
+      rotate: 'R',     // 90° derecha → vertical
     });
     barcodePng = await pdfDoc.embedPng(barcodePngBuffer);
   } catch (err) {
@@ -105,14 +95,14 @@ async function sellarPdfConQr({
   }
 
   if (barcodePng) {
-    const barcodeWidth = 120;
+    const barcodeWidth = 60;
     const barcodeHeight = (barcodePng.height / barcodePng.width) * barcodeWidth;
 
-    // Lateral derecho, centrado verticalmente
-    const marginRight = 40;
+    const marginRight = 30;
     const barcodeX = width - barcodeWidth - marginRight;
-    const barcodeY = height / 2 - barcodeHeight / 2;
+    const barcodeY = height / 2 - barcodeHeight / 2 + 40;
 
+    // Código de barras
     lastPage.drawImage(barcodePng, {
       x: barcodeX,
       y: barcodeY,
@@ -120,17 +110,17 @@ async function sellarPdfConQr({
       height: barcodeHeight,
     });
 
-    // Eslogan a la izquierda del código de barras
+    // Eslogan alineado al centro del código de barras
     const eslogan = 'Seguridad digital sin fronteras';
-    const esloganSize = 9;
+    const esloganSize = 8;
     const esloganWidth = font.widthOfTextAtSize(eslogan, esloganSize);
 
     lastPage.drawText(eslogan, {
-      x: barcodeX - 10 - esloganWidth,
+      x: barcodeX - 5 - esloganWidth,
       y: barcodeY + barcodeHeight / 2 - esloganSize / 2,
       size: esloganSize,
       font,
-      color: rgb(0, 0, 0),
+      color: rgb(0.2, 0.2, 0.2),
     });
   }
 
