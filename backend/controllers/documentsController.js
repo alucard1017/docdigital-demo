@@ -777,6 +777,7 @@ async function signDocument(req, res) {
 
           const newKey = await sellarPdfConQr({
             s3Key: doc.file_path,
+	    s3Key: doc.pdf_original_url || doc.file_path,
             documentoId: docNuevo.id,
             codigoVerificacion: docNuevo.codigo_verificacion,
             categoriaFirma: docNuevo.categoria_firma || 'SIMPLE',

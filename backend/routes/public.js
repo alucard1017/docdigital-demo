@@ -275,9 +275,9 @@ router.post('/docs/:token/firmar', async (req, res) => {
         if (docNuevoRes.rowCount > 0) {
           const docNuevo = docNuevoRes.rows[0];
 
-          // Por ahora usamos el mismo file_path (PDF actual con marca)
-          // Más adelante aquí apuntaremos al original sin marca
-          const baseKey = doc.file_path;
+          // Usar PDF original limpio si existe; si no, caer a file_path
+          const baseKey = doc.original_file_path;
+	  const baseKey = doc.pdf_original_url || doc.file_path;
 
           const newKey = await sellarPdfConQr({
             s3Key: baseKey,
