@@ -2,6 +2,7 @@
 const fs = require('fs');
 const path = require('path');
 const QRCode = require('qrcode');
+const bwipjs = require('@bwip-js/node');
 const { PDFDocument, rgb, StandardFonts } = require('pdf-lib');
 const { getObjectBuffer, uploadBuffer } = require('./storageR2');
 
@@ -11,7 +12,7 @@ const { getObjectBuffer, uploadBuffer } = require('./storageR2');
  * - ID de contrato
  * - Bloque legal con datos de verificación
  * - QR a la URL pública de verificación
- * - (Opcional) zona para código de barras + eslogan
+ * - Código de barras + eslogan
  *
  * OJO: este servicio NO decide si el PDF tiene marca de agua o no.
  * Eso se controla desde quien lo llama, según el estado del documento.
@@ -89,39 +90,57 @@ async function sellarPdfConQr({
   const qrSize = 80;
 
   // QR en la parte baja derecha
+  const qrX = width - qrSize - 40;
+  const qrY = 40;
+
   lastPage.drawImage(qrImage, {
-    x: width - qrSize - 40,
-    y: 40,
+    x: qrX,
+    y: qrY,
     width: qrSize,
     height: qrSize,
   });
 
-  // 3.1) Zona reservada para código de barras + eslogan
-  // Cuando tengas el PNG del código de barras, aquí lo dibujas
-  // y a su lado el eslogan "Seguridad digital sin fronteras".
-  //
-  // Ejemplo futuro:
-  // const barcodePngBytes = await fs.promises.readFile(
-  //   path.join(__dirname, '../assets/barcode.png')
-  // );
-  // const barcodeImage = await pdfDoc.embedPng(barcodePngBytes);
-  // const barcodeWidth = 120;
-  // const barcodeHeight = (barcodeImage.height / barcodeImage.width) * barcodeWidth;
-  //
-  // lastPage.drawImage(barcodeImage, {
-  //   x: width - barcodeWidth - 40,
-  //   y: 40 + qrSize + 10,
-  //   width: barcodeWidth,
-  //   height: barcodeHeight,
-  // });
-  //
-  // lastPage.drawText('Seguridad digital sin fronteras', {
-  //   x: width - barcodeWidth - 40,
-  //   y: 40 + qrSize + barcodeHeight + 5,
-  //   size: 9,
-  //   font,
-  //   color: rgb(0, 0, 0),
-  // });
+  // 3.1) Código de barras (usamos el código de verificación como valor)
+  let barcodePng;
+  try {
+    const barcodePngBuffer = await bwipjs.toBuffer({
+      bcid: 'code128',          // tipo de código de barras
+      text: codigoVerificacion, // contenido
+      scale: 2,                 // escala
+      height: 10,               // altura en mm aprox
+      includetext: false,       // sin texto renderizado bajo el código
+      textxalign: 'center',
+    });
+    barcodePng = await pdfDoc.embedPng(barcodePngBuffer);
+  } catch (err) {
+    console.error('⚠️ Error generando código de barras:', err);
+    barcodePng = null;
+  }
+
+  if (barcodePng) {
+    const barcodeWidth = 140;
+    const barcodeHeight = (barcodePng.height / barcodePng.width) * barcodeWidth;
+
+    // Posicionamos el código de barras justo encima del QR
+    const barcodeX = width - barcodeWidth - 40;
+    const barcodeY = qrY + qrSize + 10;
+
+    lastPage.drawImage(barcodePng, {
+      x: barcodeX,
+      y: barcodeY,
+      width: barcodeWidth,
+      height: barcodeHeight,
+    });
+
+    // Eslogan encima del código de barras
+    lastPage.drawText('Seguridad digital sin fronteras', {
+      x: barcodeX,
+      y: barcodeY + barcodeHeight + 5,
+      size: 9,
+      font,
+      color: rgb(0, 0, 0),
+    });
+  }
 
   // 4) Bloque de texto legal en el pie
   const esAvanzada = categoriaFirma === 'AVANZADA';
