@@ -28,6 +28,7 @@ async function sellarPdfConQr({
 
   // DEBUG: verifica que está llegando el número interno
   console.log('DEBUG SELLO >> numeroContratoInterno recibido:', numeroContratoInterno);
+console.log('DEBUG SELLO >> numeroInternoTexto pintado:', numeroInternoTexto);
 
   // 1) Descargar y cargar PDF base
   const pdfBytes = await getObjectBuffer(s3Key);
