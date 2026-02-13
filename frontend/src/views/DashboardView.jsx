@@ -1,11 +1,13 @@
 // src/views/DashboardView.jsx
-import React, { useState, useEffect } from "react";
+import React, { useMemo } from "react";
 import {
   BarChart,
   Bar,
   PieChart,
   Pie,
   Cell,
+  LineChart,
+  Line,
   XAxis,
   YAxis,
   CartesianGrid,
@@ -13,219 +15,286 @@ import {
   Legend,
   ResponsiveContainer,
 } from "recharts";
-import { API_BASE_URL } from "../constants";
 
-const API_URL = API_BASE_URL;
+/**
+ * Dashboard de VeriFirma.
+ * Recibe la lista completa de docs desde App.jsx.
+ */
+export function DashboardView({ docs, user }) {
+  const COLORS = ["#4f46e5", "#22c55e", "#f97316", "#ef4444", "#0ea5e9", "#a855f7"];
 
-export function DashboardView({ token, setView }) {
-  const [stats, setStats] = useState(null);
-  const [loading, setLoading] = useState(true);
+  // KPIs base
+  const kpis = useMemo(() => {
+    const total = docs.length;
+    const pendientes = docs.filter(
+      (d) => d.status === "PENDIENTE" || d.status === "PENDIENTE_VISADO"
+    ).length;
+    const firmados = docs.filter((d) => d.status === "FIRMADO").length;
+    const rechazados = docs.filter((d) => d.status === "RECHAZADO").length;
 
-  useEffect(() => {
-    const fetchStats = async () => {
-      try {
-        setLoading(true);
-        const res = await fetch(`${API_URL}/api/stats`, {
-          headers: { Authorization: `Bearer ${token}` },
-        });
-        const data = await res.json();
-        setStats(data.documentos);
-      } catch (err) {
-        console.error("Error cargando stats:", err);
-      } finally {
-        setLoading(false);
-      }
-    };
+    return { total, pendientes, firmados, rechazados };
+  }, [docs]);
 
-    fetchStats();
-  }, [token]);
+  // Documentos por status
+  const statusData = useMemo(() => {
+    const counts = {};
+    docs.forEach((d) => {
+      const key = d.status || "SIN_ESTADO";
+      counts[key] = (counts[key] || 0) + 1;
+    });
+    return Object.entries(counts).map(([status, count]) => ({ status, count }));
+  }, [docs]);
 
-  if (loading) {
-    return (
-      <div style={{ padding: 40, textAlign: "center", color: "#64748b" }}>
-        Cargando estadísticas...
-      </div>
-    );
-  }
+  // Documentos creados por día (created_at)
+  const perDayData = useMemo(() => {
+    const byDate = {};
+    docs.forEach((d) => {
+      if (!d.created_at) return;
+      const date = new Date(d.created_at);
+      if (Number.isNaN(date.getTime())) return;
+      const key = date.toISOString().slice(0, 10); // YYYY-MM-DD
+      byDate[key] = (byDate[key] || 0) + 1;
+    });
+    return Object.entries(byDate)
+      .map(([date, count]) => ({ date, count }))
+      .sort((a, b) => (a.date < b.date ? -1 : 1));
+  }, [docs]);
 
-  if (!stats) {
-    return (
-      <div style={{ padding: 40, textAlign: "center", color: "red" }}>
-        Error cargando datos
-      </div>
-    );
-  }
-
-  const pieData = [
-    { name: "Pendientes", value: Number(stats.pendientes) || 0, fill: "#3730a3" },
-    { name: "Visados", value: Number(stats.visados) || 0, fill: "#0f766e" },
-    { name: "Firmados", value: Number(stats.firmados) || 0, fill: "#166534" },
-    { name: "Rechazados", value: Number(stats.rechazados) || 0, fill: "#b91c1c" },
-  ];
-
-  const barData = [
-    { name: "Total", count: Number(stats.total) || 0 },
-    { name: "Pendientes", count: Number(stats.pendientes) || 0 },
-    { name: "Visados", count: Number(stats.visados) || 0 },
-    { name: "Firmados", count: Number(stats.firmados) || 0 },
-  ];
+  // Por tipo_tramite
+  const tipoTramiteData = useMemo(() => {
+    const counts = {};
+    docs.forEach((d) => {
+      const key = d.tipo_tramite || "SIN_TIPO";
+      counts[key] = (counts[key] || 0) + 1;
+    });
+    return Object.entries(counts).map(([name, value]) => ({ name, value }));
+  }, [docs]);
 
   return (
-    <div style={{ padding: 40, background: "#f9fafb", minHeight: "100vh" }}>
-      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 40 }}>
-        <h1 style={{ fontSize: "2.5rem", fontWeight: 800, margin: 0 }}>
-          📊 Dashboard
-        </h1>
-        <button
-          className="btn-main"
-          onClick={() => setView("list")}
-          style={{
-            background: "#e5e7eb",
-            color: "#111827",
-            padding: "8px 16px",
-            borderRadius: "6px",
-            fontWeight: 600,
-            cursor: "pointer",
-          }}
-        >
-          ⬅️ Volver
-        </button>
+    <div style={{ padding: 24, display: "flex", flexDirection: "column", gap: 24 }}>
+      {/* Header */}
+      <div>
+        <h1 style={{ margin: 0, fontSize: "1.6rem", color: "#0f172a" }}>📊 Dashboard</h1>
+        <p style={{ marginTop: 4, fontSize: "0.9rem", color: "#64748b" }}>
+          Hola {user?.name || "usuario"}, aquí ves un resumen visual de tus trámites recientes.
+        </p>
       </div>
 
       {/* KPIs */}
       <div
         style={{
-          display: "grid",
-          gridTemplateColumns: "repeat(auto-fit, minmax(200px, 1fr))",
-          gap: 20,
-          marginBottom: 40,
+          display: "flex",
+          flexWrap: "wrap",
+          gap: 16,
         }}
       >
-        <div
-          style={{
-            padding: 24,
-            background: "white",
-            borderRadius: 12,
-            boxShadow: "0 1px 3px rgba(0,0,0,0.1)",
-          }}
-        >
-          <p style={{ color: "#64748b", margin: 0, fontSize: "0.9rem" }}>
-            Total Documentos
-          </p>
-          <p style={{ fontSize: "2rem", fontWeight: 800, color: "#111827", margin: "8px 0 0 0" }}>
-            {stats.total || 0}
-          </p>
-        </div>
-
-        <div
-          style={{
-            padding: 24,
-            background: "white",
-            borderRadius: 12,
-            boxShadow: "0 1px 3px rgba(0,0,0,0.1)",
-          }}
-        >
-          <p style={{ color: "#64748b", margin: 0, fontSize: "0.9rem" }}>
-            Pendientes
-          </p>
-          <p style={{ fontSize: "2rem", fontWeight: 800, color: "#3730a3", margin: "8px 0 0 0" }}>
-            {stats.pendientes || 0}
-          </p>
-        </div>
-
-        <div
-          style={{
-            padding: 24,
-            background: "white",
-            borderRadius: 12,
-            boxShadow: "0 1px 3px rgba(0,0,0,0.1)",
-          }}
-        >
-          <p style={{ color: "#64748b", margin: 0, fontSize: "0.9rem" }}>
-            Firmados
-          </p>
-          <p style={{ fontSize: "2rem", fontWeight: 800, color: "#166534", margin: "8px 0 0 0" }}>
-            {stats.firmados || 0}
-          </p>
-        </div>
-
-        <div
-          style={{
-            padding: 24,
-            background: "white",
-            borderRadius: 12,
-            boxShadow: "0 1px 3px rgba(0,0,0,0.1)",
-          }}
-        >
-          <p style={{ color: "#64748b", margin: 0, fontSize: "0.9rem" }}>
-            Rechazados
-          </p>
-          <p style={{ fontSize: "2rem", fontWeight: 800, color: "#b91c1c", margin: "8px 0 0 0" }}>
-            {stats.rechazados || 0}
-          </p>
-        </div>
+        <KpiCard
+          label="Total documentos"
+          value={kpis.total}
+          color="#0f172a"
+          bg="rgba(15, 23, 42, 0.04)"
+        />
+        <KpiCard
+          label="Pendientes"
+          value={kpis.pendientes}
+          color="#f97316"
+          bg="rgba(249, 115, 22, 0.08)"
+        />
+        <KpiCard
+          label="Firmados"
+          value={kpis.firmados}
+          color="#22c55e"
+          bg="rgba(34, 197, 94, 0.08)"
+        />
+        <KpiCard
+          label="Rechazados"
+          value={kpis.rechazados}
+          color="#ef4444"
+          bg="rgba(239, 68, 68, 0.08)"
+        />
       </div>
 
-      {/* Gráficos */}
+      {/* Fila 1: barras por estado + línea por día */}
       <div
         style={{
           display: "grid",
-          gridTemplateColumns: "repeat(auto-fit, minmax(500px, 1fr))",
-          gap: 20,
+          gridTemplateColumns: "minmax(0, 1.1fr) minmax(0, 1fr)",
+          gap: 24,
         }}
       >
-        {/* Pie Chart */}
-        <div
-          style={{
-            padding: 24,
-            background: "white",
-            borderRadius: 12,
-            boxShadow: "0 1px 3px rgba(0,0,0,0.1)",
-          }}
+        <ChartCard
+          title="Documentos por estado"
+          description="Distribución según el estado actual del trámite."
         >
-          <h3 style={{ marginTop: 0, marginBottom: 20 }}>Distribución de Estados</h3>
-          <ResponsiveContainer width="100%" height={300}>
-            <PieChart>
-              <Pie
-                data={pieData}
-                cx="50%"
-                cy="50%"
-                labelLine={false}
-                label={({ name, value }) => `${name}: ${value}`}
-                outerRadius={100}
-                fill="#8884d8"
-                dataKey="value"
-              >
-                {pieData.map((entry, index) => (
-                  <Cell key={`cell-${index}`} fill={entry.fill} />
-                ))}
-              </Pie>
+          <ResponsiveContainer width="100%" height={260}>
+            <BarChart data={statusData} margin={{ top: 10, right: 20, left: 0, bottom: 0 }}>
+              <CartesianGrid strokeDasharray="3 3" stroke="#e5e7eb" />
+              <XAxis dataKey="status" tick={{ fontSize: 12 }} />
+              <YAxis allowDecimals={false} />
               <Tooltip />
-            </PieChart>
-          </ResponsiveContainer>
-        </div>
-
-        {/* Bar Chart */}
-        <div
-          style={{
-            padding: 24,
-            background: "white",
-            borderRadius: 12,
-            boxShadow: "0 1px 3px rgba(0,0,0,0.1)",
-          }}
-        >
-          <h3 style={{ marginTop: 0, marginBottom: 20 }}>Resumen por Estado</h3>
-          <ResponsiveContainer width="100%" height={300}>
-            <BarChart data={barData}>
-              <CartesianGrid strokeDasharray="3 3" />
-              <XAxis dataKey="name" />
-              <YAxis />
-              <Tooltip />
-              <Bar dataKey="count" fill="#3730a3" />
+              <Legend />
+              <Bar dataKey="count" name="Cantidad" fill="#4f46e5" radius={[6, 6, 0, 0]} />
             </BarChart>
           </ResponsiveContainer>
+        </ChartCard>
+
+        <ChartCard
+          title="Documentos creados por día"
+          description="Actividad según fecha de creación."
+        >
+          <ResponsiveContainer width="100%" height={260}>
+            <LineChart data={perDayData} margin={{ top: 10, right: 20, left: 0, bottom: 0 }}>
+              <CartesianGrid strokeDasharray="3 3" stroke="#e5e7eb" />
+              <XAxis dataKey="date" tick={{ fontSize: 11 }} />
+              <YAxis allowDecimals={false} />
+              <Tooltip />
+              <Legend />
+              <Line
+                type="monotone"
+                dataKey="count"
+                name="Documentos"
+                stroke="#0ea5e9"
+                strokeWidth={2}
+                dot={{ r: 3 }}
+                activeDot={{ r: 5 }}
+              />
+            </LineChart>
+          </ResponsiveContainer>
+        </ChartCard>
+      </div>
+
+      {/* Fila 2: pie por tipo_tramite + panel lateral */}
+      <div
+        style={{
+          display: "grid",
+          gridTemplateColumns: "minmax(0, 1.2fr) minmax(0, 0.8fr)",
+          gap: 24,
+        }}
+      >
+        <ChartCard
+          title="Tipos de trámite"
+          description="Proporción de documentos según el tipo de trámite."
+        >
+          <ResponsiveContainer width="100%" height={260}>
+            <PieChart>
+              <Tooltip />
+              <Legend />
+              <Pie
+                data={tipoTramiteData}
+                dataKey="value"
+                nameKey="name"
+                cx="50%"
+                cy="50%"
+                outerRadius={80}
+                label={({ name, percent }) =>
+                  `${name} ${(percent * 100).toFixed(0)}%`
+                }
+              >
+                {tipoTramiteData.map((entry, index) => (
+                  <Cell
+                    key={`cell-${entry.name}-${index}`}
+                    fill={COLORS[index % COLORS.length]}
+                  />
+                ))}
+              </Pie>
+            </PieChart>
+          </ResponsiveContainer>
+        </ChartCard>
+
+        <div
+          style={{
+            borderRadius: 16,
+            border: "1px solid #e5e7eb",
+            padding: 16,
+            background:
+              "radial-gradient(circle at 0 0, rgba(56, 189, 248, 0.1), transparent 55%), radial-gradient(circle at 100% 100%, rgba(129, 140, 248, 0.12), transparent 55%)",
+          }}
+        >
+          <h3
+            style={{
+              marginTop: 0,
+              marginBottom: 8,
+              fontSize: "1rem",
+              color: "#0f172a",
+            }}
+          >
+            Siguiente paso sugerido
+          </h3>
+          <p style={{ fontSize: "0.85rem", color: "#475569", marginBottom: 8 }}>
+            Usa este panel para detectar cuellos de botella: muchos{" "}
+            <strong>PENDIENTE_VISADO</strong> o <strong>PENDIENTE</strong> indican trámites detenidos.
+          </p>
+          <p style={{ fontSize: "0.85rem", color: "#475569" }}>
+            Si ves poca creación en los últimos días, prueba un flujo completo
+            con un cliente real para validar la experiencia de punta a punta.
+          </p>
         </div>
       </div>
+    </div>
+  );
+}
+
+function KpiCard({ label, value, color, bg }) {
+  return (
+    <div
+      style={{
+        flex: "1 1 160px",
+        minWidth: 160,
+        padding: 14,
+        borderRadius: 16,
+        border: "1px solid #e5e7eb",
+        background: bg || "#ffffff",
+        display: "flex",
+        flexDirection: "column",
+        gap: 4,
+      }}
+    >
+      <span style={{ fontSize: "0.8rem", color: "#6b7280" }}>{label}</span>
+      <span style={{ fontSize: "1.4rem", fontWeight: 700, color: color || "#0f172a" }}>
+        {value}
+      </span>
+    </div>
+  );
+}
+
+function ChartCard({ title, description, children }) {
+  return (
+    <div
+      style={{
+        borderRadius: 16,
+        border: "1px solid #e5e7eb",
+        padding: 16,
+        backgroundColor: "#ffffff",
+        display: "flex",
+        flexDirection: "column",
+        gap: 12,
+        minHeight: 260,
+      }}
+    >
+      <div>
+        <h2
+          style={{
+            margin: 0,
+            marginBottom: 4,
+            fontSize: "0.95rem",
+            color: "#0f172a",
+          }}
+        >
+          {title}
+        </h2>
+        {description && (
+          <p
+            style={{
+              margin: 0,
+              fontSize: "0.8rem",
+              color: "#6b7280",
+            }}
+          >
+            {description}
+          </p>
+        )}
+      </div>
+      <div style={{ flex: 1, minHeight: 180 }}>{children}</div>
     </div>
   );
 }

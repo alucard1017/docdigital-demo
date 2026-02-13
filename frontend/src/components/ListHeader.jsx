@@ -17,7 +17,41 @@ export function ListHeader({
   firmados,
   rechazados,
   onSync,
+  token, // <-- nuevo prop
 }) {
+  const handleDownloadReport = async () => {
+    try {
+      const res = await fetch(`${API_URL}/api/docs/export/excel`, {
+        headers: {
+          Authorization: `Bearer ${token}`,
+        },
+      });
+
+      if (!res.ok) {
+        let msg = "Error descargando reporte";
+        try {
+          const data = await res.json();
+          msg = data.message || msg;
+        } catch (_) {}
+        alert(msg);
+        return;
+      }
+
+      const blob = await res.blob();
+      const url = window.URL.createObjectURL(blob);
+      const a = document.createElement("a");
+      a.href = url;
+      a.download = `documentos-${new Date().toISOString().slice(0, 10)}.xlsx`;
+      document.body.appendChild(a);
+      a.click();
+      a.remove();
+      window.URL.revokeObjectURL(url);
+    } catch (err) {
+      console.error("Error descargando reporte:", err);
+      alert("Error de conexión al descargar reporte");
+    }
+  };
+
   return (
     <>
       {/* Resumen de estados */}
@@ -235,21 +269,22 @@ export function ListHeader({
 
         {/* Botones de acciones */}
         <div style={{ display: "flex", gap: 8 }}>
-          <a
-            href={`${API_URL}/api/docs/export/excel`}
+          <button
+            type="button"
             className="btn-main"
+            onClick={handleDownloadReport}
             style={{
               background: "#059669",
               color: "#ffffff",
-              textDecoration: "none",
               fontSize: "0.85rem",
               padding: "8px 16px",
               borderRadius: "6px",
               fontWeight: 600,
+              cursor: "pointer",
             }}
           >
             📊 Descargar Reporte
-          </a>
+          </button>
 
           <button className="btn-sync" onClick={onSync}>
             <span>🔄</span> Sincronizar Bandeja

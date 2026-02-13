@@ -544,6 +544,7 @@ function App() {
             firmados={firmados}
             rechazados={rechazados}
             onSync={cargarDocs}
+	    token={token}
           />
         )}
 
