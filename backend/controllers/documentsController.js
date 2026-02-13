@@ -93,12 +93,12 @@ async function getUserDocuments(req, res) {
     const result = await db.query(
       `SELECT 
          id, owner_id, title, description, file_path, status,
-         destinatario_nombre, destinatario_email, destinatario_movil,
-         visador_nombre, visador_email, visador_movil,
-         firmante_nombre, firmante_email, firmante_movil, firmante_run,
-         empresa_rut, signature_status, requires_visado, reject_reason,
-         tipo_tramite, requiere_firma_notarial, created_at, updated_at,
-         numero_contrato_interno
+     destinatario_nombre, destinatario_email, destinatario_movil,
+     visador_nombre, visador_email, visador_movil,
+     firmante_nombre, firmante_email, firmante_movil, firmante_run,
+     empresa_rut, signature_status, requires_visado, reject_reason,
+     tipo_tramite, tipo_documento, requiere_firma_notarial, created_at, updated_at,
+     numero_contrato_interno
        FROM documents 
        WHERE owner_id = $1 
        ORDER BY ${orderByClause}`,
@@ -153,7 +153,8 @@ async function createDocument(req, res) {
       firmante_adicional_nombre_completo,
       firmante_adicional_email,
       firmante_adicional_movil,
-      tipoTramite,
+      tipo_tramite,
+      tipo_documento,
       requiere_firma_notarial,
       // futuro: doc_type
     } = req.body;
@@ -262,16 +263,17 @@ async function createDocument(req, res) {
          firmante_nombre, firmante_email, firmante_movil, firmante_run,
          empresa_rut, requires_visado, signature_token,
          signature_token_expires_at, signature_status,
-         tipo_tramite, estado, pdf_original_url, pdf_final_url, requiere_firma_notarial,
+         tipo_tramite, tipo_documento, estado,
+         pdf_original_url, pdf_final_url, requiere_firma_notarial,
          created_at, updated_at
        ) VALUES (
          $1, $2, $3, $4, $5,
          $6, $7, $8,
          $9, $10, $11,
          $12, $13, $14, $15,
-         $16, $17, $18, $19,
+         $$16, $17, $18, $19,
          $20,
-         $21, $22, $23, $24, $25,
+         $21, $22, $23, $24, $25, $26,
          NOW(), NOW()
        )
        RETURNING *`,
@@ -296,7 +298,8 @@ async function createDocument(req, res) {
         signatureToken,
         signatureExpiresAt,
         'PENDIENTE',
-        tipo_tramite,
+        tipoTramiteNormalizado,
+        tipoDocumentoNormalizado,
         'borrador',
 	originalKey,
         null,
