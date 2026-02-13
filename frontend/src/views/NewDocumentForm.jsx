@@ -141,9 +141,9 @@ export function NewDocumentForm({
               "Selecciona si es Poderes y autorizaciones o Solo contratos.";
           }
 
-          // tipo de trámite
-          formData.append("tipoTramite", tipoTramite);
-          formData.append("tipoDocumento", tipoDocumento);
+          // tipo de trámite -> snake_case para backend
+          formData.append("tipo_tramite", tipoTramite);
+          formData.append("tipo_documento", tipoDocumento);
           if (tipoTramite === "notaria") {
             formData.append("requiere_firma_notarial", "true");
           }
@@ -158,7 +158,8 @@ export function NewDocumentForm({
           const firmanteNombre1 = form.firmante_nombre1.value.trim();
           const firmanteNombre2 = (form.firmante_nombre2?.value || "").trim();
           const firmanteApellido1 = form.firmante_apellido1.value.trim();
-          const firmanteApellido2 = (form.firmante_apellido2?.value || "").trim();
+          const firmanteApellido2 =
+            (form.firmante_apellido2?.value || "").trim();
           const firmanteMovil = form.firmante_movil.value.trim();
 
           // Destinatario / empresa
@@ -648,7 +649,9 @@ export function NewDocumentForm({
               <button
                 type="button"
                 onClick={() =>
-                  setExtraSigners(extraSigners.filter((s) => s.id !== signer.id))
+                  setExtraSigners(
+                    extraSigners.filter((s) => s.id !== signer.id)
+                  )
                 }
                 style={{
                   color: "#ef4444",

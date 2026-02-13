@@ -36,8 +36,8 @@ const STATUS_COLORS = {
 };
 
 export function DocumentRow({ doc, onOpenDetail, token }) {
-  const tipoTramite = doc.tipo_tramite || doc.tipoTramite || null;
-  const tipoDocumento = doc.tipo_documento || doc.tipoDocumento || null;
+  const tipoTramite = doc.tipo_tramite || null;
+  const tipoDocumento = doc.tipo_documento || null;
 
   const handleVerPdf = async () => {
     try {
