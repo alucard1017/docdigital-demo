@@ -25,7 +25,6 @@ function generarCodigoVerificacion() {
 
 /* ================================
    FUNCION: APLICAR MARCA DE AGUA
-   (luego aquí añadiremos ID contrato, código y URL)
    ================================ */
 async function aplicarMarcaAguaLocal(filePath) {
   try {
@@ -93,12 +92,12 @@ async function getUserDocuments(req, res) {
     const result = await db.query(
       `SELECT 
          id, owner_id, title, description, file_path, status,
-     destinatario_nombre, destinatario_email, destinatario_movil,
-     visador_nombre, visador_email, visador_movil,
-     firmante_nombre, firmante_email, firmante_movil, firmante_run,
-     empresa_rut, signature_status, requires_visado, reject_reason,
-     tipo_tramite, tipo_documento, requiere_firma_notarial, created_at, updated_at,
-     numero_contrato_interno
+         destinatario_nombre, destinatario_email, destinatario_movil,
+         visador_nombre, visador_email, visador_movil,
+         firmante_nombre, firmante_email, firmante_movil, firmante_run,
+         empresa_rut, signature_status, requires_visado, reject_reason,
+         tipo_tramite, tipo_documento, requiere_firma_notarial, created_at, updated_at,
+         numero_contrato_interno
        FROM documents 
        WHERE owner_id = $1 
        ORDER BY ${orderByClause}`,
@@ -130,7 +129,8 @@ async function createDocument(req, res) {
       firmante_email: req.body.firmante_email,
       visador_email: req.body.visador_email,
       requiresVisado: req.body.requiresVisado,
-      tipoTramite: req.body.tipoTramite,
+      tipo_tramite: req.body.tipo_tramite,
+      tipo_documento: req.body.tipo_documento,
       requiere_firma_notarial: req.body.requiere_firma_notarial,
       firmante_adicional_email: req.body.firmante_adicional_email,
     });
@@ -156,10 +156,13 @@ async function createDocument(req, res) {
       tipo_tramite,
       tipo_documento,
       requiere_firma_notarial,
-      // futuro: doc_type
     } = req.body;
 
-    const tipo_tramite = tipoTramite === 'notaria' ? 'notaria' : 'propio';
+    const tipoTramiteNormalizado =
+      tipo_tramite === 'notaria' ? 'notaria' : 'propio';
+    const tipoDocumentoNormalizado =
+      tipo_documento === 'contratos' ? 'contratos' : 'poderes';
+
     const requiereNotaria =
       requiere_firma_notarial === 'true' || requiere_firma_notarial === true;
 
@@ -194,7 +197,9 @@ async function createDocument(req, res) {
     }
 
     if (firmante_adicional_email && !isValidEmail(firmante_adicional_email)) {
-      return res.status(400).json({ message: 'Email del firmante adicional inválido' });
+      return res
+        .status(400)
+        .json({ message: 'Email del firmante adicional inválido' });
     }
 
     console.log('DEBUG RUN ORIGINAL:', firmante_run, typeof firmante_run);
@@ -271,45 +276,45 @@ async function createDocument(req, res) {
          $6, $7, $8,
          $9, $10, $11,
          $12, $13, $14, $15,
-         $$16, $17, $18, $19,
+         $16, $17, $18, $19,
          $20,
          $21, $22, $23, $24, $25, $26,
          NOW(), NOW()
        )
        RETURNING *`,
       [
-        req.user.id,
-        title,
-        description,
-	watermarkedKey,
-        initialStatus,
-        destinatario_nombre,
-        destinatario_email,
-        destinatario_movil,
-        visador_nombre,
-        visador_email,
-        visador_movil,
-        firmante_nombre_completo,
-        firmante_email,
-        firmante_movil,
-        runValue,
-        empresa_rut,
-        requires_visado,
-        signatureToken,
-        signatureExpiresAt,
-        'PENDIENTE',
-        tipoTramiteNormalizado,
-        tipoDocumentoNormalizado,
-        'borrador',
-	originalKey,
-        null,
-        requiereNotaria,
+        req.user.id,               // 1
+        title,                     // 2
+        description,               // 3
+        watermarkedKey,            // 4
+        initialStatus,             // 5
+        destinatario_nombre,       // 6
+        destinatario_email,        // 7
+        destinatario_movil,        // 8
+        visador_nombre,            // 9
+        visador_email,             // 10
+        visador_movil,             // 11
+        firmante_nombre_completo,  // 12
+        firmante_email,            // 13
+        firmante_movil,            // 14
+        runValue,                  // 15
+        empresa_rut,               // 16
+        requires_visado,           // 17
+        signatureToken,            // 18
+        signatureExpiresAt,        // 19
+        'PENDIENTE',               // 20
+        tipoTramiteNormalizado,    // 21
+        tipoDocumentoNormalizado,  // 22
+        'borrador',                // 23
+        originalKey,               // 24
+        null,                      // 25
+        requiereNotaria,           // 26
       ]
     );
 
     const doc = result.rows[0];
+
     // ======== Número interno de contrato VF-AAAA-###### =========
-    // 1) Obtener último correlativo desde la BD
     const correlativoRes = await db.query(
       `SELECT valor::bigint AS ultimo
        FROM configuraciones
@@ -319,10 +324,8 @@ async function createDocument(req, res) {
     const ultimoCorrelativo =
       correlativoRes.rowCount > 0 ? Number(correlativoRes.rows[0].ultimo) : 0;
 
-    // 2) Generar nuevo número interno
     const numeroContratoInterno = generarNumeroContratoInterno(ultimoCorrelativo);
 
-    // 3) Guardar correlativo actualizado
     await db.query(
       `INSERT INTO configuraciones (clave, valor)
        VALUES ('ultimo_correlativo_contrato', $1)
@@ -330,7 +333,6 @@ async function createDocument(req, res) {
       [String(ultimoCorrelativo + 1)]
     );
 
-    // 4) Guardar número interno en documents (para poder verlo en la app)
     await db.query(
       `UPDATE documents
        SET numero_contrato_interno = $1
@@ -340,9 +342,8 @@ async function createDocument(req, res) {
 
     // ======== ENGANCHE CON TABLA documentos =========
     const codigoVerificacion = generarCodigoVerificacion();
-    const categoriaFirma = 'SIMPLE'; // o lo que quieras usar
+    const categoriaFirma = 'SIMPLE';
 
-    // 1) Crear fila en documentos
     const documentosResult = await db.query(
       `INSERT INTO documentos (
          titulo,
@@ -359,7 +360,7 @@ async function createDocument(req, res) {
        RETURNING id, codigo_verificacion, categoria_firma`,
       [
         doc.title,
-        tipo_tramite || 'propio',
+        tipoTramiteNormalizado || 'propio',
         'BORRADOR',
         categoriaFirma,
         codigoVerificacion,
@@ -369,7 +370,6 @@ async function createDocument(req, res) {
 
     const documentoNuevo = documentosResult.rows[0];
 
-    // 2) Guardar el vínculo en documents.nuevo_documento_id
     await db.query(
       `UPDATE documents
        SET nuevo_documento_id = $1
@@ -447,7 +447,8 @@ async function createDocument(req, res) {
         JSON.stringify({
           titulo: title,
           creadoPor: req.user.id,
-          tipo_tramite,
+          tipo_tramite: tipoTramiteNormalizado,
+          tipo_documento: tipoDocumentoNormalizado,
         }),
         req.ip,
         req.headers['user-agent'] || null,
@@ -559,7 +560,6 @@ async function createDocument(req, res) {
       message:
         'Documento creado exitosamente. Correos enviados (o intentados enviar) antes de responder.',
     });
-
   } catch (err) {
     console.error('❌ Error creando documento:', err);
     return res
@@ -575,7 +575,6 @@ async function getDocumentPdf(req, res) {
   try {
     const { id } = req.params;
 
-    // 1) Traer también status
     const result = await db.query(
       `SELECT file_path, pdf_original_url, pdf_final_url, estado, status
        FROM documents
@@ -589,7 +588,6 @@ async function getDocumentPdf(req, res) {
         .json({ message: 'Documento no encontrado' });
     }
 
-    // 2) Desestructurar incluyendo status
     const {
       file_path,
       pdf_original_url,
@@ -604,13 +602,11 @@ async function getDocumentPdf(req, res) {
         .json({ message: 'Documento sin archivo asociado' });
     }
 
-    // 3) Si está firmado y hay PDF sellado, devolver el sellado
     if (status === 'FIRMADO' && pdf_final_url) {
       const signedUrlFinal = await getSignedUrl(pdf_final_url, 3600);
       return res.json({ url: signedUrlFinal, final: true });
     }
 
-    // 4) Si no, devolver el original
     const key = pdf_original_url || file_path;
     const signedUrl = await getSignedUrl(key, 3600);
 
@@ -776,13 +772,15 @@ async function signDocument(req, res) {
       return res.status(400).json({ message: 'Documento rechazado' });
     }
 
-    if (docActual.requires_visado === true && docActual.status === 'PENDIENTE_VISADO') {
+    if (
+      docActual.requires_visado === true &&
+      docActual.status === 'PENDIENTE_VISADO'
+    ) {
       return res.status(400).json({
         message: 'Este documento requiere visación antes de firmar',
       });
     }
 
-    // 1) Marcar documento como FIRMADO
     const result = await db.query(
       `UPDATE documents 
        SET status = $1, updated_at = NOW()
@@ -792,7 +790,6 @@ async function signDocument(req, res) {
     );
     const doc = result.rows[0];
 
-    // 2) Registrar evento FIRMADO (flujo viejo)
     await db.query(
       `INSERT INTO document_events (
          document_id, actor, action, details, from_status, to_status
@@ -808,7 +805,6 @@ async function signDocument(req, res) {
       ]
     );
 
-    // 3) Si existe vínculo con flujo nuevo, sellar PDF
     if (doc.nuevo_documento_id) {
       try {
         const docNuevoRes = await db.query(
@@ -822,11 +818,11 @@ async function signDocument(req, res) {
           const docNuevo = docNuevoRes.rows[0];
 
           const newKey = await sellarPdfConQr({
-	    s3Key: doc.pdf_original_url || doc.file_path,
+            s3Key: doc.pdf_original_url || doc.file_path,
             documentoId: docNuevo.id,
             codigoVerificacion: docNuevo.codigo_verificacion,
             categoriaFirma: docNuevo.categoria_firma || 'SIMPLE',
-	    numeroContratoInterno: doc.numero_contrato_interno,
+            numeroContratoInterno: doc.numero_contrato_interno,
           });
 
           await db.query(
@@ -835,8 +831,6 @@ async function signDocument(req, res) {
              WHERE id = $2`,
             [newKey, doc.id]
           );
-
-          // Aquí después podemos agregar registro en eventos_firma tipo PDF_SELLADO
         }
       } catch (sealError) {
         console.error('⚠️ Error sellando PDF con QR:', sealError);
@@ -853,6 +847,7 @@ async function signDocument(req, res) {
     return res.status(500).json({ message: 'Error interno del servidor' });
   }
 }
+
 /* ================================
    POST: Visar documento (propietario)
    ================================ */
@@ -996,7 +991,7 @@ async function rejectDocument(req, res) {
 }
 
 /* ================================
-   POST: Reenviar recordatorio (visado o firma)
+   POST: Reenviar recordatorio
    ================================ */
 async function resendReminder(req, res) {
   try {
@@ -1094,7 +1089,7 @@ async function resendReminder(req, res) {
 }
 
 /* ================================
-   GET: Descargar PDF (FORZAR DESCARGA)
+   GET: Descargar PDF
    ================================ */
 async function downloadDocument(req, res) {
   try {
