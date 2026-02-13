@@ -453,9 +453,16 @@ function App() {
   /* ===============================
      FILTRO EN MEMORIA PARA LA BANDEJA
      =============================== */
-  const docsFiltrados = docs.filter((d) => {
-    if (statusFilter === "PENDIENTES" && d.status !== DOC_STATUS.PENDIENTE) {
-      return false;
+   const docsFiltrados = docs.filter((d) => {
+     if (
+       statusFilter === "PENDIENTES" &&
+       ![DOC_STATUS.PENDIENTE, DOC_STATUS.PENDIENTE_VISADO, DOC_STATUS.PENDIENTE_FIRMA].includes(
+         d.status
+       )
+     ) {
+       return false;
+     }
+
     }
     if (statusFilter === "VISADOS" && d.status !== DOC_STATUS.VISADO) {
       return false;
@@ -479,8 +486,9 @@ function App() {
   });
 
   const pendientes = docs.filter(
-    (d) => d.status === DOC_STATUS.PENDIENTE
-  ).length;
+    (d) => d.status === [DOC_STATUS.PENDIENTE, DOC_STATUS.PENDIENTE_VISADO, DOC_STATUS.PENDIENTE_FIRMA].includes(
+    d.status
+  )
   const visados = docs.filter(
     (d) => d.status === DOC_STATUS.VISADO
   ).length;

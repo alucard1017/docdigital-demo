@@ -1,6 +1,5 @@
 // src/components/DocumentRow.jsx
 import React from "react";
-import { DocStatusBadge } from "./DocStatusBadge";
 import { DOC_STATUS } from "../constants";
 import { API_BASE_URL } from "../constants";
 
@@ -9,8 +8,28 @@ const API_URL = API_BASE_URL;
 function getTipoTramiteLabel(tipo) {
   if (tipo === "notaria") return "Trámite Notarial";
   if (tipo === "propio") return "Trámite Propio";
+  if (tipo === "poderes") return "Poderes y autorizaciones";
+  if (tipo === "contratos") return "Contratos";
   return "N/D";
 }
+
+const STATUS_LABELS = {
+  PENDIENTE: "Pendiente",
+  PENDIENTE_FIRMA: "Pendiente firma",
+  PENDIENTE_VISADO: "Pendiente visado",
+  VISADO: "Visado",
+  FIRMADO: "Firmado",
+  RECHAZADO: "Rechazado",
+};
+
+const STATUS_COLORS = {
+  PENDIENTE: "#f59e0b",
+  PENDIENTE_FIRMA: "#f59e0b",
+  PENDIENTE_VISADO: "#f59e0b",
+  VISADO: "#0f766e",
+  FIRMADO: "#16a34a",
+  RECHAZADO: "#b91c1c",
+};
 
 export function DocumentRow({ doc, onOpenDetail, token }) {
   const tipoTramite = doc.tipo_tramite || doc.tipoTramite || null;
@@ -59,8 +78,21 @@ export function DocumentRow({ doc, onOpenDetail, token }) {
             borderRadius: 999,
             fontSize: 12,
             backgroundColor:
-              tipoTramite === "notaria" ? "#eef2ff" : "#ecfeff",
-            color: tipoTramite === "notaria" ? "#4f46e5" : "#0f766e",
+              tipoTramite === "notaria"
+                ? "#eef2ff"
+                : tipoTramite === "poderes"
+                ? "#f5f3ff"
+                : tipoTramite === "contratos"
+                ? "#fef2f2"
+                : "#ecfeff",
+            color:
+              tipoTramite === "notaria"
+                ? "#4f46e5"
+                : tipoTramite === "poderes"
+                ? "#7c3aed"
+                : tipoTramite === "contratos"
+                ? "#dc2626"
+                : "#0f766e",
             whiteSpace: "nowrap",
           }}
         >
@@ -83,7 +115,20 @@ export function DocumentRow({ doc, onOpenDetail, token }) {
 
       {/* Estado */}
       <td style={{ textAlign: "center" }}>
-        <DocStatusBadge status={doc.status} />
+        <span
+          style={{
+            display: "inline-block",
+            padding: "4px 10px",
+            borderRadius: 999,
+            fontSize: "0.75rem",
+            fontWeight: 600,
+            color: "#ffffff",
+            backgroundColor: STATUS_COLORS[doc.status] || "#6b7280",
+            whiteSpace: "nowrap",
+          }}
+        >
+          {STATUS_LABELS[doc.status] || doc.status || "Sin estado"}
+        </span>
       </td>
 
       {/* Firmante principal */}

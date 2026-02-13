@@ -1,5 +1,5 @@
 // src/views/NewDocumentForm.jsx
-import React from 'react';
+import React from "react";
 
 export function NewDocumentForm({
   API_URL,
@@ -24,7 +24,7 @@ export function NewDocumentForm({
     <div className="card-premium">
       <h1
         style={{
-          fontSize: '1.4rem',
+          fontSize: "1.4rem",
           marginBottom: 8,
         }}
       >
@@ -32,18 +32,19 @@ export function NewDocumentForm({
       </h1>
       <p
         style={{
-          color: '#64748b',
+          color: "#64748b",
           marginBottom: 16,
-          fontSize: '1.05rem',
+          fontSize: "1.05rem",
         }}
       >
-        Configure los participantes y cargue el PDF.
+        Configure el tipo de trámite, los participantes y cargue el PDF.
       </p>
 
       {/* Botones de tipo de trámite */}
       <div
         style={{
-          display: 'flex',
+          display: "flex",
+          flexWrap: "wrap",
           gap: 12,
           marginBottom: 24,
         }}
@@ -52,11 +53,10 @@ export function NewDocumentForm({
           type="button"
           className="btn-main"
           style={{
-            backgroundColor:
-              tipoTramite === 'propio' ? '#0f766e' : '#e5e7eb',
-            color: tipoTramite === 'propio' ? '#ffffff' : '#111827',
+            backgroundColor: tipoTramite === "propio" ? "#0f766e" : "#e5e7eb",
+            color: tipoTramite === "propio" ? "#ffffff" : "#111827",
           }}
-          onClick={() => setTipoTramite('propio')}
+          onClick={() => setTipoTramite("propio")}
         >
           Trámite propio (sin notaría)
         </button>
@@ -65,13 +65,36 @@ export function NewDocumentForm({
           type="button"
           className="btn-main"
           style={{
-            backgroundColor:
-              tipoTramite === 'notaria' ? '#1d4ed8' : '#e5e7eb',
-            color: tipoTramite === 'notaria' ? '#ffffff' : '#111827',
+            backgroundColor: tipoTramite === "notaria" ? "#1d4ed8" : "#e5e7eb",
+            color: tipoTramite === "notaria" ? "#ffffff" : "#111827",
           }}
-          onClick={() => setTipoTramite('notaria')}
+          onClick={() => setTipoTramite("notaria")}
         >
           Trámite con notaría
+        </button>
+
+        <button
+          type="button"
+          className="btn-main"
+          style={{
+            backgroundColor: tipoTramite === "poderes" ? "#7c3aed" : "#e5e7eb",
+            color: tipoTramite === "poderes" ? "#ffffff" : "#111827",
+          }}
+          onClick={() => setTipoTramite("poderes")}
+        >
+          Poderes y autorizaciones
+        </button>
+
+        <button
+          type="button"
+          className="btn-main"
+          style={{
+            backgroundColor: tipoTramite === "contratos" ? "#dc2626" : "#e5e7eb",
+            color: tipoTramite === "contratos" ? "#ffffff" : "#111827",
+          }}
+          onClick={() => setTipoTramite("contratos")}
+        >
+          Solo contratos
         </button>
       </div>
 
@@ -84,81 +107,60 @@ export function NewDocumentForm({
           const formData = new FormData(form);
 
           // tipo de trámite
-          formData.append('tipoTramite', tipoTramite);
-          if (tipoTramite === 'notaria') {
-            formData.append('requiere_firma_notarial', 'true');
+          formData.append("tipoTramite", tipoTramite);
+          if (tipoTramite === "notaria") {
+            formData.append("requiere_firma_notarial", "true");
           }
 
-          const firmanteRunClean = firmanteRunValue.replace(/[^0-9kK]/g, '');
-          const empresaRutClean = empresaRutValue.replace(/[^0-9kK]/g, '');
+          const firmanteRunClean = firmanteRunValue.replace(/[^0-9kK]/g, "");
+          const empresaRutClean = empresaRutValue.replace(/[^0-9kK]/g, "");
 
           const title = form.title.value.trim();
           const firmanteEmail = form.firmante_email.value.trim();
 
           // Campos firmante
           const firmanteNombre1 = form.firmante_nombre1.value.trim();
-          const firmanteNombre2 =
-            (form.firmante_nombre2?.value || '').trim();
-          const firmanteApellido1 =
-            form.firmante_apellido1.value.trim();
-          const firmanteApellido2 =
-            (form.firmante_apellido2?.value || '').trim();
+          const firmanteNombre2 = (form.firmante_nombre2?.value || "").trim();
+          const firmanteApellido1 = form.firmante_apellido1.value.trim();
+          const firmanteApellido2 = (form.firmante_apellido2?.value || "").trim();
           const firmanteMovil = form.firmante_movil.value.trim();
 
           // Destinatario / empresa
           const destinatarioNombre =
-            form.destinatario_nombre?.value.trim() || '';
-          const destinatarioEmail =
-            form.destinatario_email.value.trim();
+            form.destinatario_nombre?.value.trim() || "";
+          const destinatarioEmail = form.destinatario_email.value.trim();
 
           const file = form.file?.files?.[0];
 
           const newErrors = {};
 
-          if (!title)
-            newErrors.title = 'Este campo es obligatorio.';
-          if (!file)
-            newErrors.file = 'Adjunta un archivo PDF.';
+          if (!title) newErrors.title = "Este campo es obligatorio.";
+          if (!file) newErrors.file = "Adjunta un archivo PDF.";
 
           // Validaciones firmante
           if (!firmanteNombre1)
-            newErrors.firmante_nombre1 =
-              'Este campo es obligatorio.';
+            newErrors.firmante_nombre1 = "Este campo es obligatorio.";
           if (!firmanteApellido1)
-            newErrors.firmante_apellido1 =
-              'Este campo es obligatorio.';
+            newErrors.firmante_apellido1 = "Este campo es obligatorio.";
           if (!firmanteEmail)
-            newErrors.firmante_email =
-              'Ingresa un correo válido.';
+            newErrors.firmante_email = "Ingresa un correo válido.";
           if (!firmanteRunClean)
-            newErrors.firmante_run = 'RUN / RUT es obligatorio.';
-          else if (
-            firmanteRunClean.length < 8 ||
-            firmanteRunClean.length > 10
-          ) {
-            newErrors.firmante_run =
-              'RUN inválido (ej: 12.345.678-9)';
+            newErrors.firmante_run = "RUN / RUT es obligatorio.";
+          else if (firmanteRunClean.length < 8 || firmanteRunClean.length > 10) {
+            newErrors.firmante_run = "RUN inválido (ej: 12.345.678-9)";
           }
           if (!firmanteMovil)
-            newErrors.firmante_movil =
-              'El teléfono es obligatorio.';
+            newErrors.firmante_movil = "El teléfono es obligatorio.";
 
           // Validaciones destinatario / empresa
           if (!destinatarioNombre)
-            newErrors.destinatario_nombre =
-              'Este campo es obligatorio.';
+            newErrors.destinatario_nombre = "Este campo es obligatorio.";
           if (!destinatarioEmail)
-            newErrors.destinatario_email =
-              'Ingresa un correo válido.';
+            newErrors.destinatario_email = "Ingresa un correo válido.";
           if (!empresaRutClean)
-            newErrors.empresa_rut =
-              'El RUT de la empresa es obligatorio.';
-          else if (
-            empresaRutClean.length < 8 ||
-            empresaRutClean.length > 10
-          ) {
-            newErrors.empresa_rut =
-              'RUT inválido (ej: 12.345.678-9)';
+            newErrors.empresa_rut = "El RUT de la empresa es obligatorio.";
+          else if (empresaRutClean.length < 8 || empresaRutClean.length > 10) {
+            newErrors.empresa_rut = "RUT inválido (ej: 12.345.678-9)";
           }
 
           if (Object.keys(newErrors).length > 0) {
@@ -173,62 +175,50 @@ export function NewDocumentForm({
             firmanteApellido2,
           ]
             .filter(Boolean)
-            .join(' ');
+            .join(" ");
 
-          formData.append(
-            'firmante_nombre_completo',
-            firmanteNombreCompleto
-          );
-          formData.append('firmante_run', firmanteRunValue);
-          formData.append('firmante_movil', firmanteMovil);
-          formData.append('empresa_rut', empresaRutValue);
-          formData.append(
-            'requiresVisado',
-            showVisador ? 'true' : 'false'
-          );
+          formData.append("firmante_nombre_completo", firmanteNombreCompleto);
+          formData.append("firmante_run", firmanteRunValue);
+          formData.append("firmante_movil", firmanteMovil);
+          formData.append("empresa_rut", empresaRutValue);
+          formData.append("requiresVisado", showVisador ? "true" : "false");
 
           // Firmante adicional (por ahora solo el primero)
           if (extraSigners.length > 0) {
             const idx = 0;
             const nombreExtra =
-              form[`extra_nombre_${idx}`]?.value.trim() || '';
+              form[`extra_nombre_${idx}`]?.value.trim() || "";
             const emailExtra =
-              form[`extra_email_${idx}`]?.value.trim() || '';
+              form[`extra_email_${idx}`]?.value.trim() || "";
             const movilExtra =
-              form[`extra_movil_${idx}`]?.value.trim() || '';
+              form[`extra_movil_${idx}`]?.value.trim() || "";
 
             if (emailExtra) {
               formData.append(
-                'firmante_adicional_nombre_completo',
+                "firmante_adicional_nombre_completo",
                 nombreExtra
               );
-              formData.append(
-                'firmante_adicional_email',
-                emailExtra
-              );
-              formData.append(
-                'firmante_adicional_movil',
-                movilExtra
-              );
+              formData.append("firmante_adicional_email", emailExtra);
+              formData.append("firmante_adicional_movil", movilExtra);
             }
           }
 
           try {
             const res = await fetch(`${API_URL}/api/docs`, {
-              method: 'POST',
+              method: "POST",
               headers: {
                 Authorization: `Bearer ${token}`,
               },
               body: formData,
             });
-            if (!res.ok) throw new Error('Fallo en la subida');
-            alert('✅ ¡Documento procesado correctamente!');
+            if (!res.ok) throw new Error("Fallo en la subida");
+            alert("✅ ¡Documento procesado correctamente!");
             form.reset();
             setShowVisador(false);
             setExtraSigners([]);
-            setFirmanteRunValue('');
-            setEmpresaRutValue('');
-            setView('list');
+            setFirmanteRunValue("");
+            setEmpresaRutValue("");
+            setView("list");
             cargarDocs();
           } catch (err) {
             alert(err.message);
@@ -239,17 +229,17 @@ export function NewDocumentForm({
         <div
           style={{
             marginBottom: 20,
-            display: 'flex',
+            display: "flex",
             gap: 16,
-            alignItems: 'flex-end',
+            alignItems: "flex-end",
           }}
         >
           <div style={{ flex: 1 }}>
             <label
               style={{
                 fontWeight: 700,
-                fontSize: '0.9rem',
-                display: 'block',
+                fontSize: "0.9rem",
+                display: "block",
                 marginBottom: 8,
               }}
             >
@@ -263,8 +253,8 @@ export function NewDocumentForm({
             {formErrors.title && (
               <p
                 style={{
-                  color: '#b91c1c',
-                  fontSize: '0.8rem',
+                  color: "#b91c1c",
+                  fontSize: "0.8rem",
                   marginTop: 4,
                 }}
               >
@@ -279,7 +269,7 @@ export function NewDocumentForm({
             name="file"
             accept="application/pdf"
             id="file-input-contrato"
-            style={{ display: 'none' }}
+            style={{ display: "none" }}
           />
 
           {/* botón visible al lado del título */}
@@ -287,8 +277,8 @@ export function NewDocumentForm({
             <label
               style={{
                 fontWeight: 700,
-                fontSize: '0.9rem',
-                display: 'block',
+                fontSize: "0.9rem",
+                display: "block",
                 marginBottom: 8,
               }}
             >
@@ -298,14 +288,14 @@ export function NewDocumentForm({
               type="button"
               className="btn-main"
               style={{
-                background: '#0f766e',
-                color: '#ffffff',
-                padding: '10px 24px',
+                background: "#0f766e",
+                color: "#ffffff",
+                padding: "10px 24px",
                 fontWeight: 600,
-                whiteSpace: 'nowrap',
+                whiteSpace: "nowrap",
               }}
               onClick={() => {
-                const el = document.getElementById('file-input-contrato');
+                const el = document.getElementById("file-input-contrato");
                 if (el) el.click();
               }}
             >
@@ -314,8 +304,8 @@ export function NewDocumentForm({
             {formErrors.file && (
               <p
                 style={{
-                  color: '#b91c1c',
-                  fontSize: '0.8rem',
+                  color: "#b91c1c",
+                  fontSize: "0.8rem",
                   marginTop: 4,
                 }}
               >
@@ -330,8 +320,8 @@ export function NewDocumentForm({
           <label
             style={{
               fontWeight: 700,
-              fontSize: '0.9rem',
-              display: 'block',
+              fontSize: "0.9rem",
+              display: "block",
               marginBottom: 10,
             }}
           >
@@ -348,21 +338,21 @@ export function NewDocumentForm({
         {/* === VISADOR === */}
         <div
           style={{
-            background: '#f1f5f9',
+            background: "#f1f5f9",
             padding: 24,
             borderRadius: 22,
             marginBottom: 32,
-            border: '1px solid #e2e8f0',
+            border: "1px solid #e2e8f0",
           }}
         >
           <label
             style={{
               fontWeight: 800,
-              display: 'flex',
-              alignItems: 'center',
-              cursor: 'pointer',
-              fontSize: '1.05rem',
-              color: '#1e293b',
+              display: "flex",
+              alignItems: "center",
+              cursor: "pointer",
+              fontSize: "1.05rem",
+              color: "#1e293b",
             }}
           >
             <input
@@ -381,8 +371,8 @@ export function NewDocumentForm({
           {showVisador && (
             <div
               style={{
-                display: 'grid',
-                gridTemplateColumns: '1fr 1fr 1fr',
+                display: "grid",
+                gridTemplateColumns: "1fr 1fr 1fr",
                 gap: 20,
                 marginTop: 24,
               }}
@@ -412,8 +402,8 @@ export function NewDocumentForm({
         {/* === FIRMANTE Y DESTINATARIO === */}
         <div
           style={{
-            display: 'grid',
-            gridTemplateColumns: '1fr 1fr',
+            display: "grid",
+            gridTemplateColumns: "1fr 1fr",
             gap: 24,
           }}
         >
@@ -430,8 +420,8 @@ export function NewDocumentForm({
               {formErrors.firmante_nombre1 && (
                 <p
                   style={{
-                    color: '#b91c1c',
-                    fontSize: '0.8rem',
+                    color: "#b91c1c",
+                    fontSize: "0.8rem",
                     marginTop: 4,
                   }}
                 >
@@ -454,8 +444,8 @@ export function NewDocumentForm({
               {formErrors.firmante_apellido1 && (
                 <p
                   style={{
-                    color: '#b91c1c',
-                    fontSize: '0.8rem',
+                    color: "#b91c1c",
+                    fontSize: "0.8rem",
                     marginTop: 4,
                   }}
                 >
@@ -479,8 +469,8 @@ export function NewDocumentForm({
               {formErrors.firmante_email && (
                 <p
                   style={{
-                    color: '#b91c1c',
-                    fontSize: '0.8rem',
+                    color: "#b91c1c",
+                    fontSize: "0.8rem",
                     marginTop: 4,
                   }}
                 >
@@ -501,8 +491,8 @@ export function NewDocumentForm({
               {formErrors.firmante_run && (
                 <p
                   style={{
-                    color: '#b91c1c',
-                    fontSize: '0.8rem',
+                    color: "#b91c1c",
+                    fontSize: "0.8rem",
                     marginTop: 4,
                   }}
                 >
@@ -519,8 +509,8 @@ export function NewDocumentForm({
               {formErrors.firmante_movil && (
                 <p
                   style={{
-                    color: '#b91c1c',
-                    fontSize: '0.8rem',
+                    color: "#b91c1c",
+                    fontSize: "0.8rem",
                     marginTop: 4,
                   }}
                 >
@@ -543,8 +533,8 @@ export function NewDocumentForm({
               {formErrors.destinatario_nombre && (
                 <p
                   style={{
-                    color: '#b91c1c',
-                    fontSize: '0.8rem',
+                    color: "#b91c1c",
+                    fontSize: "0.8rem",
                     marginTop: 4,
                   }}
                 >
@@ -565,8 +555,8 @@ export function NewDocumentForm({
               {formErrors.empresa_rut && (
                 <p
                   style={{
-                    color: '#b91c1c',
-                    fontSize: '0.8rem',
+                    color: "#b91c1c",
+                    fontSize: "0.8rem",
                     marginTop: 4,
                   }}
                 >
@@ -584,8 +574,8 @@ export function NewDocumentForm({
               {formErrors.destinatario_email && (
                 <p
                   style={{
-                    color: '#b91c1c',
-                    fontSize: '0.8rem',
+                    color: "#b91c1c",
+                    fontSize: "0.8rem",
                     marginTop: 4,
                   }}
                 >
@@ -604,17 +594,15 @@ export function NewDocumentForm({
               <button
                 type="button"
                 onClick={() =>
-                  setExtraSigners(
-                    extraSigners.filter((s) => s.id !== signer.id)
-                  )
+                  setExtraSigners(extraSigners.filter((s) => s.id !== signer.id))
                 }
                 style={{
-                  color: '#ef4444',
-                  border: 'none',
-                  background: 'none',
-                  cursor: 'pointer',
+                  color: "#ef4444",
+                  border: "none",
+                  background: "none",
+                  cursor: "pointer",
                   fontWeight: 800,
-                  fontSize: '0.85rem',
+                  fontSize: "0.85rem",
                 }}
               >
                 ELIMINAR
@@ -623,8 +611,8 @@ export function NewDocumentForm({
             <div
               className="card-content"
               style={{
-                display: 'grid',
-                gridTemplateColumns: '1fr 1fr 1fr',
+                display: "grid",
+                gridTemplateColumns: "1fr 1fr 1fr",
                 gap: 20,
               }}
             >
@@ -654,9 +642,9 @@ export function NewDocumentForm({
         <div
           style={{
             marginTop: 32,
-            display: 'flex',
+            display: "flex",
             gap: 16,
-            borderTop: '1px solid #f1f5f9',
+            borderTop: "1px solid #f1f5f9",
             paddingTop: 24,
           }}
         >
@@ -664,15 +652,12 @@ export function NewDocumentForm({
             type="button"
             className="btn-main"
             onClick={() =>
-              setExtraSigners([
-                ...extraSigners,
-                { id: Date.now() },
-              ])
+              setExtraSigners([...extraSigners, { id: Date.now() }])
             }
             style={{
-              background: '#e2e8f0',
-              color: '#475569',
-              padding: '12px 26px',
+              background: "#e2e8f0",
+              color: "#475569",
+              padding: "12px 26px",
             }}
           >
             + Añadir firmante adicional
@@ -681,8 +666,8 @@ export function NewDocumentForm({
             type="submit"
             className="btn-main btn-primary"
             style={{
-              padding: '12px 80px',
-              fontSize: '1rem',
+              padding: "12px 80px",
+              fontSize: "1rem",
               flexGrow: 1,
             }}
           >

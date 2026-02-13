@@ -27,7 +27,10 @@ export function DashboardView({ docs, user }) {
   const kpis = useMemo(() => {
     const total = docs.length;
     const pendientes = docs.filter(
-      (d) => d.status === "PENDIENTE" || d.status === "PENDIENTE_VISADO"
+      (d) =>
+        d.status === "PENDIENTE" ||
+        d.status === "PENDIENTE_VISADO" ||
+        d.status === "PENDIENTE_FIRMA"
     ).length;
     const firmados = docs.filter((d) => d.status === "FIRMADO").length;
     const rechazados = docs.filter((d) => d.status === "RECHAZADO").length;
@@ -35,14 +38,45 @@ export function DashboardView({ docs, user }) {
     return { total, pendientes, firmados, rechazados };
   }, [docs]);
 
-  // Documentos por status
+  // Documentos por status (agrupando pendientes)
   const statusData = useMemo(() => {
-    const counts = {};
+    let pendientesCount = 0;
+    const other = {};
+
     docs.forEach((d) => {
-      const key = d.status || "SIN_ESTADO";
-      counts[key] = (counts[key] || 0) + 1;
+      const s = d.status || "SIN_ESTADO";
+      if (
+        s === "PENDIENTE" ||
+        s === "PENDIENTE_FIRMA" ||
+        s === "PENDIENTE_VISADO"
+      ) {
+        pendientesCount += 1;
+      } else {
+        other[s] = (other[s] || 0) + 1;
+      }
     });
-    return Object.entries(counts).map(([status, count]) => ({ status, count }));
+
+    const result = [];
+
+    if (pendientesCount > 0) {
+      result.push({ status: "PENDIENTES", count: pendientesCount });
+    }
+
+    Object.entries(other).forEach(([status, count]) => {
+      result.push({ status, count });
+    });
+
+    const order = ["PENDIENTES", "VISADO", "FIRMADO", "RECHAZADO"];
+    result.sort((a, b) => {
+      const ia = order.indexOf(a.status);
+      const ib = order.indexOf(b.status);
+      if (ia === -1 && ib === -1) return a.status.localeCompare(b.status);
+      if (ia === -1) return 1;
+      if (ib === -1) return -1;
+      return ia - ib;
+    });
+
+    return result;
   }, [docs]);
 
   // Documentos creados por día (created_at)
@@ -140,7 +174,7 @@ export function DashboardView({ docs, user }) {
 
         <ChartCard
           title="Documentos creados por día"
-          description="Actividad según fecha de creación."
+          description="Actividad según fecha de creación (últimos movimientos)."
         >
           <ResponsiveContainer width="100%" height={260}>
             <LineChart data={perDayData} margin={{ top: 10, right: 20, left: 0, bottom: 0 }}>
@@ -222,7 +256,8 @@ export function DashboardView({ docs, user }) {
           </h3>
           <p style={{ fontSize: "0.85rem", color: "#475569", marginBottom: 8 }}>
             Usa este panel para detectar cuellos de botella: muchos{" "}
-            <strong>PENDIENTE_VISADO</strong> o <strong>PENDIENTE</strong> indican trámites detenidos.
+            <strong>PENDIENTE_VISADO</strong> o <strong>PENDIENTE_FIRMA</strong> indican trámites
+            detenidos antes de la firma final.
           </p>
           <p style={{ fontSize: "0.85rem", color: "#475569" }}>
             Si ves poca creación en los últimos días, prueba un flujo completo
