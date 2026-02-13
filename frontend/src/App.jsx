@@ -450,71 +450,35 @@ function App() {
     );
   }
 
-  /* ===============================
+    /* ===============================
      FILTRO EN MEMORIA PARA LA BANDEJA
      =============================== */
-   const docsFiltrados = docs.filter((d) => {
-     if (
-       statusFilter === "PENDIENTES" &&
-       ![DOC_STATUS.PENDIENTE, DOC_STATUS.PENDIENTE_VISADO, DOC_STATUS.PENDIENTE_FIRMA].includes(
-         d.status
-       )
-     ) {
-       return false;
-     }
+  const docsFiltrados = docs.filter((d) => {
+    const esPendiente =
+      d.status === DOC_STATUS.PENDIENTE ||
+      d.status === DOC_STATUS.PENDIENTE_VISADO ||
+      d.status === DOC_STATUS.PENDIENTE_FIRMA;
 
-    }
-    if (statusFilter === "VISADOS" && d.status !== DOC_STATUS.VISADO) {
-      return false;
-    }
-    if (statusFilter === "FIRMADOS" && d.status !== DOC_STATUS.FIRMADO) {
-      return false;
-    }
-    if (statusFilter === "RECHAZADOS" && d.status !== DOC_STATUS.RECHAZADO) {
-      return false;
-    }
+    if (statusFilter === "PENDIENTES" && !esPendiente) return false;
+    if (statusFilter === "VISADOS" && d.status !== DOC_STATUS.VISADO) return false;
+    if (statusFilter === "FIRMADOS" && d.status !== DOC_STATUS.FIRMADO) return false;
+    if (statusFilter === "RECHAZADOS" && d.status !== DOC_STATUS.RECHAZADO) return false;
 
     if (search.trim() !== "") {
       const q = search.toLowerCase();
       const titulo = (d.title || "").toLowerCase();
       const empresa = (d.destinatario_nombre || "").toLowerCase();
-      if (!titulo.includes(q) && !empresa.includes(q)) {
-        return false;
-      }
+      if (!titulo.includes(q) && !empresa.includes(q)) return false;
     }
+
     return true;
   });
 
-  const pendientes = docs.filter(
-    (d) => d.status === [DOC_STATUS.PENDIENTE, DOC_STATUS.PENDIENTE_VISADO, DOC_STATUS.PENDIENTE_FIRMA].includes(
-    d.status
-  )
-  const visados = docs.filter(
-    (d) => d.status === DOC_STATUS.VISADO
+  const pendientes = docs.filter((d) =>
+    d.status === DOC_STATUS.PENDIENTE ||
+    d.status === DOC_STATUS.PENDIENTE_VISADO ||
+    d.status === DOC_STATUS.PENDIENTE_FIRMA
   ).length;
-  const firmados = docs.filter(
-    (d) => d.status === DOC_STATUS.FIRMADO
-  ).length;
-  const rechazados = docs.filter(
-    (d) => d.status === DOC_STATUS.RECHAZADO
-  ).length;
-
-  const totalFiltrado = docsFiltrados.length;
-  const totalPaginas = Math.ceil(docsFiltrados.length / pageSize);
-  const docsPaginados = docsFiltrados.slice(
-    (page - 1) * pageSize,
-    page * pageSize
-  );
-
-  console.log("DEBUG SUPER MEGA SIMPLE v3");
-  console.log("DEBUG ESTADO:", {
-    view,
-    loadingDocs,
-    errorDocs,
-    docsPaginadosLength: docsPaginados.length,
-  });
-  console.log("DEBUG USER:", user);
-  console.log("DEBUG tipoTramite:", tipoTramite);
 
   /* ===============================
      LAYOUT PRINCIPAL (SIDEBAR + CONTENIDO)
@@ -552,7 +516,7 @@ function App() {
             firmados={firmados}
             rechazados={rechazados}
             onSync={cargarDocs}
-	    token={token}
+            token={token}
           />
         )}
 
