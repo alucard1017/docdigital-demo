@@ -97,6 +97,13 @@ export function DetailView({
     selectedDoc.status === DOC_STATUS.PENDIENTE_VISADO ||
     selectedDoc.status === DOC_STATUS.PENDIENTE_FIRMA;
 
+console.log("DEBUG mostrarBotonRecordatorio:", {
+  status: selectedDoc.status,
+  PENDIENTE_VISADO: DOC_STATUS.PENDIENTE_VISADO,
+  PENDIENTE_FIRMA: DOC_STATUS.PENDIENTE_FIRMA,
+  mostrar: mostrarBotonRecordatorio,
+});
+
   async function handleReenviarVisado() {
     if (!selectedDoc) return;
     try {
