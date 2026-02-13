@@ -9,11 +9,45 @@ const { sellarPdfConQr } = require('../services/pdfSeal');
 
 const router = express.Router();
 
-/**
- * RUTAS EXISTENTES
- */
+/* ================================
+   RUTAS GET - LECTURA
+   ================================ */
 router.get('/', requireAuth, documentsController.getUserDocuments);
+router.get('/:id/pdf', documentsController.getDocumentPdf);
+router.get('/:id/timeline', documentsController.getTimeline);
+router.get('/:id/signers', requireAuth, documentsController.getSigners);
+router.get('/:id/download', documentsController.downloadDocument);
 
+/* ================================
+   RUTAS ESPECÍFICAS - ANTES DE :id
+   ================================ */
+router.get('/export/excel', requireAuth, async (req, res) => {
+  try {
+    const { generarExcelDocumentos } = require('../services/excelExport');
+
+    const excelBuffer = await generarExcelDocumentos(req.user.id);
+
+    const filename = `documentos-${new Date().toISOString().slice(0, 10)}.xlsx`;
+
+    res.setHeader(
+      'Content-Type',
+      'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet'
+    );
+    res.setHeader(
+      'Content-Disposition',
+      `attachment; filename="${filename}"`
+    );
+
+    res.send(excelBuffer);
+  } catch (err) {
+    console.error('❌ Error exportando Excel:', err);
+    return res.status(500).json({ message: 'Error exportando reporte' });
+  }
+});
+
+/* ================================
+   RUTAS POST - CREACIÓN / MODIFICACIÓN
+   ================================ */
 router.post(
   '/',
   requireAuth,
@@ -22,18 +56,46 @@ router.post(
   documentsController.createDocument
 );
 
-router.get('/:id/pdf', documentsController.getDocumentPdf);
-router.get('/:id/timeline', documentsController.getTimeline);
-router.get('/:id/signers', requireAuth, documentsController.getSigners);
 router.post('/:id/firmar', requireAuth, documentsController.signDocument);
 router.post('/:id/visar', requireAuth, documentsController.visarDocument);
 router.post('/:id/rechazar', requireAuth, documentsController.rejectDocument);
 router.post('/:id/reenviar', requireAuth, documentsController.resendReminder);
-router.get('/:id/download', documentsController.downloadDocument);
 
-/**
- * NUEVO flujo: crear registro en documentos/firmantes/eventos_firma
- */
+/* ================================
+   POST: Enviar recordatorio manual
+   ================================ */
+router.post('/:id/recordatorio', requireAuth, async (req, res) => {
+  try {
+    const { id } = req.params;
+
+    const docRes = await db.query(
+      `SELECT owner_id FROM documents WHERE id = $1`,
+      [id]
+    );
+
+    if (docRes.rowCount === 0) {
+      return res.status(404).json({ message: 'Documento no encontrado' });
+    }
+
+    if (docRes.rows[0].owner_id !== req.user.id) {
+      return res.status(403).json({ message: 'No tienes permisos' });
+    }
+
+    const { enviarRecordatorioManual } = require('../services/reminderService');
+    const result = await enviarRecordatorioManual(id);
+
+    return res.json(result);
+  } catch (err) {
+    console.error('❌ Error enviando recordatorio:', err);
+    return res
+      .status(500)
+      .json({ message: err.message || 'Error enviando recordatorio' });
+  }
+});
+
+/* ================================
+   FLUJO NUEVO: crear registro documentos/firmantes
+   ================================ */
 router.post('/crear-flujo', requireAuth, async (req, res) => {
   console.log('DEBUG crear-flujo body >>>', req.body);
 
@@ -80,21 +142,20 @@ router.post('/crear-flujo', requireAuth, async (req, res) => {
 
     await db.query('COMMIT');
 
-    return res
-      .status(201)
-      .json({ documentoId: documento.id, codigoVerificacion });
+    return res.status(201).json({
+      documentoId: documento.id,
+      codigoVerificacion,
+    });
   } catch (error) {
     await db.query('ROLLBACK');
     console.error('Error creando flujo de documento', error);
-    return res
-      .status(500)
-      .json({ error: 'Error creando flujo de documento' });
+    return res.status(500).json({ error: 'Error creando flujo de documento' });
   }
 });
 
-/**
- * NUEVA RUTA: firmar en el nuevo flujo
- */
+/* ================================
+   FLUJO NUEVO: firmar en el nuevo flujo
+   ================================ */
 router.post('/firmar-flujo/:firmanteId', requireAuth, async (req, res) => {
   const { firmanteId } = req.params;
 
@@ -169,28 +230,6 @@ router.post('/firmar-flujo/:firmanteId', requireAuth, async (req, res) => {
           { descripcion: 'Todos los firmantes han firmado' },
         ]
       );
-
-      // Aquí más adelante engancharás el sellado de PDF cuando tengas el s3Key
-      // const s3Key = ... (file_path en otra tabla)
-      // const docRes = await db.query(
-      //   `SELECT id, categoria_firma, codigo_verificacion
-      //    FROM documentos
-      //    WHERE id = $1`,
-      //   [firmante.documento_id]
-      // );
-      // const docDatos = docRes.rows[0];
-      // const newKey = await sellarPdfConQr({
-      //   s3Key,
-      //   documentoId: docDatos.id,
-      //   codigoVerificacion: docDatos.codigo_verificacion,
-      //   categoriaFirma: docDatos.categoria_firma,
-      // });
-      // await db.query(
-      //   `UPDATE documents
-      //    SET file_path = $1, updated_at = NOW()
-      //    WHERE id = $2`,
-      //   [newKey, /* id del documento viejo */]
-      // );
     }
 
     await db.query('COMMIT');
@@ -206,9 +245,7 @@ router.post('/firmar-flujo/:firmanteId', requireAuth, async (req, res) => {
   } catch (error) {
     await db.query('ROLLBACK');
     console.error('Error firmando flujo de documento:', error);
-    return res
-      .status(500)
-      .json({ error: 'Error firmando flujo de documento' });
+    return res.status(500).json({ error: 'Error firmando flujo de documento' });
   }
 });
 

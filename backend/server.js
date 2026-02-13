@@ -5,7 +5,6 @@ const cors = require('cors');
 const path = require('path');
 const fs = require('fs');
 const rateLimit = require('express-rate-limit');
-const https = require('https');
 
 console.log('=====================================');
 console.log('🚀 INICIANDO SERVER.JS');
@@ -122,7 +121,7 @@ console.log('✓ Ruta GET / registrada');
    RUTAS PRINCIPALES
    ================================ */
 const authRoutes = require('./routes/auth');
-const docRoutes = require('./routes/documents'); // usa tu nuevo controller
+const docRoutes = require('./routes/documents');
 const publicRoutes = require('./routes/public');
 const usersRouter = require('./routes/users');
 const publicRegisterRoutes = require('./routes/publicRegister');
@@ -134,7 +133,6 @@ console.log('✓ Rutas /api/auth registradas');
 app.use('/api/users', usersRouter);
 console.log('✓ Rutas /api/users registradas');
 
-// Log para cualquier request a /api/docs
 app.use(
   '/api/docs',
   (req, res, next) => {
@@ -145,7 +143,6 @@ app.use(
 );
 console.log('✓ Rutas /api/docs registradas');
 
-// Log para requests públicas
 app.use(
   '/api/public',
   (req, res, next) => {
@@ -283,7 +280,7 @@ app.get('/api/stats', requireAuth, async (req, res) => {
     const docsResult = await db.query(
       `SELECT 
          COUNT(*) as total,
-         SUM(CASE WHEN status = 'PENDIENTE' THEN 1 ELSE 0 END) as pendientes,
+         SUM(CASE WHEN status = 'PENDIENTE_VISADO' OR status = 'PENDIENTE_FIRMA' THEN 1 ELSE 0 END) as pendientes,
          SUM(CASE WHEN status = 'VISADO' THEN 1 ELSE 0 END) as visados,
          SUM(CASE WHEN status = 'FIRMADO' THEN 1 ELSE 0 END) as firmados,
          SUM(CASE WHEN status = 'RECHAZADO' THEN 1 ELSE 0 END) as rechazados
@@ -326,6 +323,13 @@ app.use((req, res) => {
 console.log('✓ Middleware 404 registrado');
 
 /* ================================
+   INICIAR SCHEDULED TASKS
+   ================================ */
+const { iniciarReminderScheduler } = require('./jobs/reminderScheduler');
+iniciarReminderScheduler();
+console.log('✓ Scheduled tasks iniciados');
+
+/* ================================
    INICIAR SERVIDOR
    ================================ */
 const PORT = process.env.PORT || 4000;
@@ -350,6 +354,8 @@ const server = app.listen(PORT, () => {
   console.log('   POST /api/docs/:id/visar');
   console.log('   POST /api/docs/:id/rechazar');
   console.log('   GET  /api/docs/:id/download');
+  console.log('   GET  /api/docs/export/excel');
+  console.log('   POST /api/docs/:id/recordatorio');
   console.log('   GET  /api/public/docs/:token');
   console.log('   POST /api/public/docs/:token/firmar');
   console.log('   POST /api/public/docs/:token/visar');
