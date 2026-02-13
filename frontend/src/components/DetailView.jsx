@@ -59,6 +59,7 @@ export function DetailView({
         const res = await fetch(
           `${API_URL}/api/docs/${selectedDoc.id}/signers`,
           {
+            headers: { Authorization: `Bearer ${token}` },
             credentials: "include",
           }
         );
