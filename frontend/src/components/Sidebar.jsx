@@ -129,7 +129,7 @@ export function Sidebar({
         </>
       )}
 
-      {/* Mini resumen + logout */}
+      {/* Mini resumen */}
       <div
         style={{
           marginTop: "auto",
@@ -149,10 +149,22 @@ export function Sidebar({
         </div>
       </div>
 
+      {/* Dashboard */}
       <div
-        style={{ marginTop: 0 }}
+        className="nav-item"
+        onClick={() => setView("dashboard")}
+        style={{
+          background: view === "dashboard" ? "#e0e7ff" : "transparent",
+        }}
+      >
+        <span>📊</span> Dashboard
+      </div>
+
+      {/* Logout */}
+      <div
         className="nav-item"
         onClick={logout}
+        style={{ marginTop: 0 }}
       >
         <span>🚪</span> Cerrar sesión
       </div>

@@ -88,6 +88,13 @@ console.log('✓ Middlewares JSON configurados');
 console.log('✓ Directorio de uploads verificado');
 
 /* ================================
+   SWAGGER / DOCUMENTACIÓN API
+   ================================ */
+const { swaggerUi, specs } = require('./swagger');
+app.use('/api-docs', swaggerUi.serve, swaggerUi.setup(specs));
+console.log('✓ Swagger UI disponible en /api-docs');
+
+/* ================================
    RUTAS DE SALUD / PING
    ================================ */
 app.get('/api/health', (req, res) => {
@@ -111,7 +118,7 @@ app.get('/', (req, res) => {
   res.json({
     message: 'API de VeriFirma funcionando',
     version: '2.0',
-    features: ['autenticación', 'documentos', 'firma digital', 'S3 storage'],
+    features: ['autenticación', 'documentos', 'firma digital', 'S3 storage', 'swagger docs'],
     timestamp: new Date().toISOString(),
   });
 });
@@ -339,6 +346,7 @@ const server = app.listen(PORT, () => {
   console.log(`✅ API ESCUCHANDO EN PUERTO ${PORT}`);
   console.log('=====================================');
   console.log('📋 Rutas disponibles:');
+  console.log('   GET  /api-docs (Documentación Swagger)');
   console.log('   GET  /api/health');
   console.log('   GET  /api/stats');
   console.log('   GET  /api/auth/...');

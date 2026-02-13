@@ -9,18 +9,110 @@ const { sellarPdfConQr } = require('../services/pdfSeal');
 
 const router = express.Router();
 
-/* ================================
-   RUTAS GET - LECTURA
-   ================================ */
+/**
+ * @swagger
+ * /api/docs:
+ *   get:
+ *     summary: Listar documentos del usuario
+ *     description: Obtiene todos los documentos del usuario autenticado
+ *     security:
+ *       - bearerAuth: []
+ *     parameters:
+ *       - in: query
+ *         name: sort
+ *         schema:
+ *           type: string
+ *           enum: [title_asc, title_desc, fecha_desc, fecha_asc, numero_asc, numero_desc]
+ *     responses:
+ *       200:
+ *         description: Lista de documentos
+ */
 router.get('/', requireAuth, documentsController.getUserDocuments);
+
+/**
+ * @swagger
+ * /api/docs/{id}/pdf:
+ *   get:
+ *     summary: Obtener URL firmada del PDF
+ *     parameters:
+ *       - in: path
+ *         name: id
+ *         required: true
+ *         schema:
+ *           type: integer
+ *     responses:
+ *       200:
+ *         description: URL firmada del PDF
+ */
 router.get('/:id/pdf', documentsController.getDocumentPdf);
+
+/**
+ * @swagger
+ * /api/docs/{id}/timeline:
+ *   get:
+ *     summary: Obtener timeline del documento
+ *     parameters:
+ *       - in: path
+ *         name: id
+ *         required: true
+ *         schema:
+ *           type: integer
+ *     responses:
+ *       200:
+ *         description: Timeline con eventos
+ */
 router.get('/:id/timeline', documentsController.getTimeline);
+
+/**
+ * @swagger
+ * /api/docs/{id}/signers:
+ *   get:
+ *     summary: Listar firmantes de un documento
+ *     security:
+ *       - bearerAuth: []
+ *     parameters:
+ *       - in: path
+ *         name: id
+ *         required: true
+ *         schema:
+ *           type: integer
+ */
 router.get('/:id/signers', requireAuth, documentsController.getSigners);
+
+/**
+ * @swagger
+ * /api/docs/{id}/download:
+ *   get:
+ *     summary: Descargar PDF del documento
+ *     parameters:
+ *       - in: path
+ *         name: id
+ *         required: true
+ *         schema:
+ *           type: integer
+ */
 router.get('/:id/download', documentsController.downloadDocument);
 
 /* ================================
    RUTAS ESPECÍFICAS - ANTES DE :id
    ================================ */
+
+/**
+ * @swagger
+ * /api/docs/export/excel:
+ *   get:
+ *     summary: Exportar documentos a Excel
+ *     security:
+ *       - bearerAuth: []
+ *     responses:
+ *       200:
+ *         description: Archivo Excel con los documentos
+ *         content:
+ *           application/vnd.openxmlformats-officedocument.spreadsheetml.sheet:
+ *             schema:
+ *               type: string
+ *               format: binary
+ */
 router.get('/export/excel', requireAuth, async (req, res) => {
   try {
     const { generarExcelDocumentos } = require('../services/excelExport');
@@ -48,6 +140,32 @@ router.get('/export/excel', requireAuth, async (req, res) => {
 /* ================================
    RUTAS POST - CREACIÓN / MODIFICACIÓN
    ================================ */
+
+/**
+ * @swagger
+ * /api/docs:
+ *   post:
+ *     summary: Crear nuevo documento
+ *     security:
+ *       - bearerAuth: []
+ *     requestBody:
+ *       required: true
+ *       content:
+ *         multipart/form-data:
+ *           schema:
+ *             type: object
+ *             properties:
+ *               title:
+ *                 type: string
+ *               file:
+ *                 type: string
+ *                 format: binary
+ *               firmante_email:
+ *                 type: string
+ *     responses:
+ *       201:
+ *         description: Documento creado exitosamente
+ */
 router.post(
   '/',
   requireAuth,
@@ -56,14 +174,111 @@ router.post(
   documentsController.createDocument
 );
 
+/**
+ * @swagger
+ * /api/docs/{id}/firmar:
+ *   post:
+ *     summary: Firmar documento
+ *     security:
+ *       - bearerAuth: []
+ *     parameters:
+ *       - in: path
+ *         name: id
+ *         required: true
+ *         schema:
+ *           type: integer
+ *     responses:
+ *       200:
+ *         description: Documento firmado
+ */
 router.post('/:id/firmar', requireAuth, documentsController.signDocument);
+
+/**
+ * @swagger
+ * /api/docs/{id}/visar:
+ *   post:
+ *     summary: Visar documento
+ *     security:
+ *       - bearerAuth: []
+ *     parameters:
+ *       - in: path
+ *         name: id
+ *         required: true
+ *         schema:
+ *           type: integer
+ */
 router.post('/:id/visar', requireAuth, documentsController.visarDocument);
+
+/**
+ * @swagger
+ * /api/docs/{id}/rechazar:
+ *   post:
+ *     summary: Rechazar documento
+ *     security:
+ *       - bearerAuth: []
+ *     parameters:
+ *       - in: path
+ *         name: id
+ *         required: true
+ *         schema:
+ *           type: integer
+ *     requestBody:
+ *       required: true
+ *       content:
+ *         application/json:
+ *           schema:
+ *             type: object
+ *             properties:
+ *               motivo:
+ *                 type: string
+ */
 router.post('/:id/rechazar', requireAuth, documentsController.rejectDocument);
+
+/**
+ * @swagger
+ * /api/docs/{id}/reenviar:
+ *   post:
+ *     summary: Reenviar recordatorio
+ *     security:
+ *       - bearerAuth: []
+ *     parameters:
+ *       - in: path
+ *         name: id
+ *         required: true
+ *         schema:
+ *           type: integer
+ *     requestBody:
+ *       required: true
+ *       content:
+ *         application/json:
+ *           schema:
+ *             type: object
+ *             properties:
+ *               tipo:
+ *                 type: string
+ *                 enum: [VISADO, FIRMA]
+ *               signerId:
+ *                 type: integer
+ */
 router.post('/:id/reenviar', requireAuth, documentsController.resendReminder);
 
-/* ================================
-   POST: Enviar recordatorio manual
-   ================================ */
+/**
+ * @swagger
+ * /api/docs/{id}/recordatorio:
+ *   post:
+ *     summary: Enviar recordatorio manual a todos
+ *     security:
+ *       - bearerAuth: []
+ *     parameters:
+ *       - in: path
+ *         name: id
+ *         required: true
+ *         schema:
+ *           type: integer
+ *     responses:
+ *       200:
+ *         description: Recordatorio(s) enviado(s)
+ */
 router.post('/:id/recordatorio', requireAuth, async (req, res) => {
   try {
     const { id } = req.params;
@@ -93,9 +308,29 @@ router.post('/:id/recordatorio', requireAuth, async (req, res) => {
   }
 });
 
-/* ================================
-   FLUJO NUEVO: crear registro documentos/firmantes
-   ================================ */
+/**
+ * @swagger
+ * /api/docs/crear-flujo:
+ *   post:
+ *     summary: Crear nuevo flujo de firma (tabla documentos)
+ *     security:
+ *       - bearerAuth: []
+ *     requestBody:
+ *       required: true
+ *       content:
+ *         application/json:
+ *           schema:
+ *             type: object
+ *             properties:
+ *               tipo:
+ *                 type: string
+ *               titulo:
+ *                 type: string
+ *               categoriaFirma:
+ *                 type: string
+ *               firmantes:
+ *                 type: array
+ */
 router.post('/crear-flujo', requireAuth, async (req, res) => {
   console.log('DEBUG crear-flujo body >>>', req.body);
 
@@ -153,9 +388,20 @@ router.post('/crear-flujo', requireAuth, async (req, res) => {
   }
 });
 
-/* ================================
-   FLUJO NUEVO: firmar en el nuevo flujo
-   ================================ */
+/**
+ * @swagger
+ * /api/docs/firmar-flujo/{firmanteId}:
+ *   post:
+ *     summary: Firmar en nuevo flujo
+ *     security:
+ *       - bearerAuth: []
+ *     parameters:
+ *       - in: path
+ *         name: firmanteId
+ *         required: true
+ *         schema:
+ *           type: integer
+ */
 router.post('/firmar-flujo/:firmanteId', requireAuth, async (req, res) => {
   const { firmanteId } = req.params;
 
@@ -239,14 +485,3 @@ router.post('/firmar-flujo/:firmanteId', requireAuth, async (req, res) => {
         ? 'Firma registrada y documento completado'
         : 'Firma registrada',
       documentoId: firmante.documento_id,
-      firmanteId,
-      allSigned,
-    });
-  } catch (error) {
-    await db.query('ROLLBACK');
-    console.error('Error firmando flujo de documento:', error);
-    return res.status(500).json({ error: 'Error firmando flujo de documento' });
-  }
-});
-
-module.exports = router;

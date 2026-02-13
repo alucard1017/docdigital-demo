@@ -1,40 +1,38 @@
-import { useState, useEffect } from 'react';
-import './App.css';
-import { Sidebar } from './components/Sidebar';
-import { DetailView } from './components/DetailView';
-import { ListHeader } from './components/ListHeader';
-import { DocumentRow } from './components/DocumentRow';
-import { DOC_STATUS } from './constants';
-import { API_BASE_URL } from "./constants";
-import { LoginView } from './views/LoginView';
-import { PublicSignView } from './views/PublicSignView';
-import { NewDocumentForm } from './views/NewDocumentForm';
-import { UsersAdminView } from './views/UsersAdminView';
-import { UserForm } from "./components/admin/UserForm";
+import { useState, useEffect } from "react";
+import "./App.css";
+import { Sidebar } from "./components/Sidebar";
+import { DetailView } from "./components/DetailView";
+import { ListHeader } from "./components/ListHeader";
+import { DocumentRow } from "./components/DocumentRow";
+import { DOC_STATUS, API_BASE_URL } from "./constants";
+import { LoginView } from "./views/LoginView";
+import { PublicSignView } from "./views/PublicSignView";
+import { NewDocumentForm } from "./views/NewDocumentForm";
+import { UsersAdminView } from "./views/UsersAdminView";
+import { DashboardView } from "./views/DashboardView";
 
 const API_URL = API_BASE_URL;
 
 /**
- * FUNCIÓN DE FORMATEO DE RUN DETALLADA
- * Mantiene el orden y añade puntos y guion: 10.538.065-6
+ * Formatea RUN con puntos y guion: 10.538.065-6
  */
 function formatRun(value) {
-  let clean = value.replace(/[^0-9kK]/g, '');
-  if (!clean) return '';
+  let clean = value.replace(/[^0-9kK]/g, "");
+  if (!clean) return "";
   const MAX_LEN = 10;
   if (clean.length > MAX_LEN) clean = clean.slice(0, MAX_LEN);
   if (clean.length < 2) return clean;
 
   const body = clean.slice(0, -1);
   const dv = clean.slice(-1);
-  const formattedBody = body.replace(/\B(?=(\d{3})+(?!\d))/g, '.');
+  const formattedBody = body.replace(/\B(?=(\d{3})+(?!\d))/g, ".");
   if (!body) return dv;
-  return formattedBody + '-' + dv;
+  return formattedBody + "-" + dv;
 }
 
 function formatRunDoc(value) {
-  let clean = value.replace(/[^0-9kK]/g, '');
-  if (clean.length === 0) return '';
+  let clean = value.replace(/[^0-9kK]/g, "");
+  if (clean.length === 0) return "";
   if (clean.length > 10) clean = clean.slice(0, 10);
 
   if (clean.length <= 1) return clean;
@@ -44,7 +42,7 @@ function formatRunDoc(value) {
 
   if (!body) return dv;
 
-  return body.replace(/\B(?=(\d{3})+(?!\d))/g, '.') + '-' + dv;
+  return body.replace(/\B(?=(\d{3})+(?!\d))/g, ".") + "-" + dv;
 }
 
 function App() {
@@ -53,27 +51,28 @@ function App() {
      =============================== */
 
   // Login
-  const [run, setRun] = useState(formatRun('1053806586'));
-  const [password, setPassword] = useState('kmzwa8awaa');
+  const [run, setRun] = useState(formatRun("1053806586"));
+  const [password, setPassword] = useState("kmzwa8awaa");
 
   // UI
   const [showPassword, setShowPassword] = useState(false);
   const [showHelp, setShowHelp] = useState(false);
-  const [message, setMessage] = useState('');
+  const [message, setMessage] = useState("");
   const [isLoggingIn, setIsLoggingIn] = useState(false);
-  const [view, setView] = useState('list'); // 'list' | 'upload' | 'detail' | 'public-sign'
+  // 'list' | 'upload' | 'detail' | 'public-sign' | 'dashboard' | 'users'
+  const [view, setView] = useState("list");
 
   // Errores del formulario de subida
   const [formErrors, setFormErrors] = useState({});
   const [tipoTramite, setTipoTramite] = useState("propio");
 
   // Sesión
-  const [token, setToken] = useState(localStorage.getItem('token') || '');
+  const [token, setToken] = useState(localStorage.getItem("token") || "");
   const [user, setUser] = useState(
-    JSON.parse(localStorage.getItem('user'))
+    JSON.parse(localStorage.getItem("user"))
   );
   const [loadingDocs, setLoadingDocs] = useState(false);
-  const [errorDocs, setErrorDocs] = useState('');
+  const [errorDocs, setErrorDocs] = useState("");
   const [docs, setDocs] = useState([]);
 
   // Configuración de firma
@@ -81,9 +80,9 @@ function App() {
   const [extraSigners, setExtraSigners] = useState([]);
 
   // Orden y filtros de la bandeja
-  const [sort, setSort] = useState('title_asc');
-  const [statusFilter, setStatusFilter] = useState('TODOS');
-  const [search, setSearch] = useState('');
+  const [sort, setSort] = useState("title_asc");
+  const [statusFilter, setStatusFilter] = useState("TODOS");
+  const [search, setSearch] = useState("");
 
   // Paginación
   const [page, setPage] = useState(1);
@@ -98,29 +97,29 @@ function App() {
 
   // Firma pública por token
   const [publicSignDoc, setPublicSignDoc] = useState(null);
-  const [publicSignError, setPublicSignError] = useState('');
+  const [publicSignError, setPublicSignError] = useState("");
   const [publicSignLoading, setPublicSignLoading] = useState(false);
-  const [publicSignToken, setPublicSignToken] = useState('');
-  const [publicSignPdfUrl, setPublicSignPdfUrl] = useState('');
+  const [publicSignToken, setPublicSignToken] = useState("");
+  const [publicSignPdfUrl, setPublicSignPdfUrl] = useState("");
   const [publicSignMode, setPublicSignMode] = useState(null); // "visado" o null
 
-  const [firmanteRunValue, setFirmanteRunValue] = useState('');
-  const [empresaRutValue, setEmpresaRutValue] = useState('');
+  const [firmanteRunValue, setFirmanteRunValue] = useState("");
+  const [empresaRutValue, setEmpresaRutValue] = useState("");
 
   async function cargarFirmaPublica(token) {
     try {
       setPublicSignLoading(true);
-      setPublicSignError('');
+      setPublicSignError("");
 
       const params = new URLSearchParams(window.location.search);
-      const modeUrl = params.get('mode');
+      const modeUrl = params.get("mode");
       const pathname = window.location.pathname;
 
-      const isVisado = modeUrl === 'visado';
-      const isConsultaPublica = pathname === '/consulta-publica';
+      const isVisado = modeUrl === "visado";
+      const isConsultaPublica = pathname === "/consulta-publica";
 
-      // Firma por firmante -> usa sign_token (document_signers)
-      // Visado / consulta pública -> usa signature_token del documento
+      // Firma por firmante -> sign_token (document_signers)
+      // Visado / consulta pública -> signature_token del documento
       const path =
         isVisado || isConsultaPublica
           ? `/api/public/docs/document/${token}`
@@ -130,44 +129,42 @@ function App() {
       const data = await res.json();
 
       if (!res.ok) {
-        throw new Error(data.message || 'No se pudo cargar el documento');
+        throw new Error(data.message || "No se pudo cargar el documento");
       }
 
       if (isVisado || isConsultaPublica) {
-        // data = { document, pdfUrl }
         setPublicSignDoc({ document: data.document, signer: null });
         setPublicSignPdfUrl(data.pdfUrl);
       } else {
-        // data = { document, signer, pdfUrl }
         setPublicSignDoc(data);
         setPublicSignPdfUrl(data.pdfUrl);
       }
     } catch (err) {
       setPublicSignError(err.message);
       setPublicSignDoc(null);
-      setPublicSignPdfUrl('');
+      setPublicSignPdfUrl("");
     } finally {
       setPublicSignLoading(false);
     }
   }
 
-// Detectar ?token= y mode= en la URL para firma/consulta pública
-useEffect(() => {
-  const params = new URLSearchParams(window.location.search);
-  const tokenUrl = params.get('token');
-  const modeUrl = params.get('mode'); // "visado" o null
-  const pathname = window.location.pathname;
+  // Detectar ?token= y mode= en la URL para firma/consulta pública
+  useEffect(() => {
+    const params = new URLSearchParams(window.location.search);
+    const tokenUrl = params.get("token");
+    const modeUrl = params.get("mode"); // "visado" o null
+    const pathname = window.location.pathname;
 
-  const isFirmaPublica = pathname === '/firma-publica';
-  const isConsultaPublica = pathname === '/consulta-publica';
+    const isFirmaPublica = pathname === "/firma-publica";
+    const isConsultaPublica = pathname === "/consulta-publica";
 
-  if (tokenUrl && (isFirmaPublica || isConsultaPublica)) {
-    setView('public-sign');
-    setPublicSignToken(tokenUrl);
-    setPublicSignMode(isFirmaPublica ? (modeUrl || null) : null);
-    cargarFirmaPublica(tokenUrl);
-  }
-}, []);
+    if (tokenUrl && (isFirmaPublica || isConsultaPublica)) {
+      setView("public-sign");
+      setPublicSignToken(tokenUrl);
+      setPublicSignMode(isFirmaPublica ? modeUrl || null : null);
+      cargarFirmaPublica(tokenUrl);
+    }
+  }, []);
 
   // Cargar eventos del documento seleccionado
   useEffect(() => {
@@ -183,11 +180,11 @@ useEffect(() => {
         const data = await res.json();
         setEvents(data);
       } catch (err) {
-        console.error('Error cargando eventos:', err);
+        console.error("Error cargando eventos:", err);
       }
     }
 
-    if (view === 'detail') {
+    if (view === "detail") {
       cargarEventos();
     } else {
       setEvents([]);
@@ -208,11 +205,11 @@ useEffect(() => {
         });
         const data = await res.json();
         if (!res.ok) {
-          throw new Error(data.message || 'No se pudo obtener el PDF');
+          throw new Error(data.message || "No se pudo obtener el PDF");
         }
-        setPdfUrl(data.url); // URL firmada desde S3
+        setPdfUrl(data.url);
       } catch (err) {
-        console.error('Error obteniendo URL de PDF:', err);
+        console.error("Error obteniendo URL de PDF:", err);
         setPdfUrl(null);
       }
     };
@@ -223,7 +220,7 @@ useEffect(() => {
   // Cargar documentos automáticamente cuando haya token y vista lista
   useEffect(() => {
     if (!token) return;
-    if (view !== 'list') return;
+    if (view !== "list") return;
     cargarDocs();
   }, [token, view, sort]);
 
@@ -233,31 +230,31 @@ useEffect(() => {
   async function handleLogin(e) {
     e.preventDefault();
     setIsLoggingIn(true);
-    setMessage('🚀 Conectando con el servidor seguro...');
+    setMessage("🚀 Conectando con el servidor seguro...");
 
-    const cleanRun = run.replace(/[^0-9kK]/g, '');
+    const cleanRun = run.replace(/[^0-9kK]/g, "");
 
     try {
       const res = await fetch(`${API_URL}/api/auth/login`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ run: cleanRun, password }),
       });
 
       const data = await res.json();
 
       if (!res.ok) {
-        throw new Error(data.message || 'Credenciales no válidas');
+        throw new Error(data.message || "Credenciales no válidas");
       }
 
       setToken(data.token);
       setUser(data.user);
-      localStorage.setItem('token', data.token);
-      localStorage.setItem('user', JSON.stringify(data.user));
-      setMessage('✅ Acceso concedido');
+      localStorage.setItem("token", data.token);
+      localStorage.setItem("user", JSON.stringify(data.user));
+      setMessage("✅ Acceso concedido");
     } catch (err) {
       setMessage(
-        '❌ Error de conexión, intenta nuevamente en unos segundos.'
+        "❌ Error de conexión, intenta nuevamente en unos segundos."
       );
     } finally {
       setIsLoggingIn(false);
@@ -270,7 +267,7 @@ useEffect(() => {
   async function cargarDocs(sortParam = sort) {
     if (!token) return;
     setLoadingDocs(true);
-    setErrorDocs('');
+    setErrorDocs("");
 
     try {
       const res = await fetch(
@@ -281,17 +278,17 @@ useEffect(() => {
       );
 
       if (res.status === 401) {
-        localStorage.removeItem('token');
-        localStorage.removeItem('user');
-        setToken('');
+        localStorage.removeItem("token");
+        localStorage.removeItem("user");
+        setToken("");
         setUser(null);
         return;
       }
 
       if (!res.ok) {
-        console.error('Error al cargar documentos:', res.status);
+        console.error("Error al cargar documentos:", res.status);
         setErrorDocs(
-          'No se pudieron cargar los documentos. Intenta nuevamente.'
+          "No se pudieron cargar los documentos. Intenta nuevamente."
         );
         return;
       }
@@ -299,8 +296,8 @@ useEffect(() => {
       const data = await res.json();
       setDocs(data);
     } catch (err) {
-      console.error('Fallo al cargar documentos:', err);
-      setErrorDocs('Error de conexión con el servidor.');
+      console.error("Fallo al cargar documentos:", err);
+      setErrorDocs("Error de conexión con el servidor.");
     } finally {
       setLoadingDocs(false);
     }
@@ -310,10 +307,10 @@ useEffect(() => {
      ACCIONES: FIRMAR / VISAR / VER
      =============================== */
   async function manejarAccionDocumento(id, accion, extraData = {}) {
-    if (accion === 'ver') {
+    if (accion === "ver") {
       const doc = docs.find((d) => d.id === id);
       if (!doc) {
-        alert('No se encontró el documento.');
+        alert("No se encontró el documento.");
         return;
       }
 
@@ -323,29 +320,29 @@ useEffect(() => {
         });
         const data = await res.json();
         if (!res.ok) {
-          throw new Error(data.message || 'No se pudo obtener el PDF');
+          throw new Error(data.message || "No se pudo obtener el PDF");
         }
-        window.open(data.url, '_blank'); // URL firmada desde el backend
+        window.open(data.url, "_blank");
       } catch (err) {
-        console.error('Error abriendo PDF:', err);
-        alert('❌ ' + err.message);
+        console.error("Error abriendo PDF:", err);
+        alert("❌ " + err.message);
       }
       return;
     }
 
     try {
-      let body = undefined;
-      let headers = {
+      let body;
+      const headers = {
         Authorization: `Bearer ${token}`,
       };
 
-      if (accion === 'rechazar') {
-        headers['Content-Type'] = 'application/json';
+      if (accion === "rechazar") {
+        headers["Content-Type"] = "application/json";
         body = JSON.stringify({ motivo: extraData.motivo });
       }
 
       const res = await fetch(`${API_URL}/api/docs/${id}/${accion}`, {
-        method: 'POST',
+        method: "POST",
         headers,
         body,
       });
@@ -353,22 +350,22 @@ useEffect(() => {
       const data = await res.json();
 
       if (!res.ok) {
-        throw new Error(data.message || 'No se pudo actualizar el documento');
+        throw new Error(data.message || "No se pudo actualizar el documento");
       }
 
-      if (accion === 'firmar') {
-        alert('✅ Documento firmado correctamente');
-      } else if (accion === 'visar') {
-        alert('✅ Documento visado correctamente');
-      } else if (accion === 'rechazar') {
-        alert('✅ Documento rechazado correctamente');
+      if (accion === "firmar") {
+        alert("✅ Documento firmado correctamente");
+      } else if (accion === "visar") {
+        alert("✅ Documento visado correctamente");
+      } else if (accion === "rechazar") {
+        alert("✅ Documento rechazado correctamente");
       }
 
       await cargarDocs();
-      setView('list');
+      setView("list");
       setSelectedDoc(null);
     } catch (err) {
-      alert('❌ ' + err.message);
+      alert("❌ " + err.message);
     }
   }
 
@@ -380,9 +377,9 @@ useEffect(() => {
   };
 
   // ===============================
-  // VISTA FIRMA/ VISADO PÚBLICO POR TOKEN
+  // VISTA FIRMA / VISADO PÚBLICO POR TOKEN
   // ===============================
-  if (view === 'public-sign') {
+  if (view === "public-sign") {
     return (
       <PublicSignView
         publicSignLoading={publicSignLoading}
@@ -390,7 +387,7 @@ useEffect(() => {
         publicSignDoc={publicSignDoc}
         publicSignPdfUrl={publicSignPdfUrl}
         publicSignToken={publicSignToken}
-        publicSignMode={publicSignMode}   // <-- aquí viaja "visado" o null
+        publicSignMode={publicSignMode}
         API_URL={API_URL}
         cargarFirmaPublica={cargarFirmaPublica}
       />
@@ -421,7 +418,7 @@ useEffect(() => {
   /* ===============================
      VISTA DETALLE DE DOCUMENTO
      =============================== */
-  if (view === 'detail' && selectedDoc) {
+  if (view === "detail" && selectedDoc) {
     const requiereVisado = selectedDoc.requires_visado === true;
 
     const puedeVisar =
@@ -448,7 +445,7 @@ useEffect(() => {
         setView={setView}
         setSelectedDoc={setSelectedDoc}
         logout={logout}
-	token={token}
+        token={token}
       />
     );
   }
@@ -457,23 +454,23 @@ useEffect(() => {
      FILTRO EN MEMORIA PARA LA BANDEJA
      =============================== */
   const docsFiltrados = docs.filter((d) => {
-    if (statusFilter === 'PENDIENTES' && d.status !== DOC_STATUS.PENDIENTE) {
+    if (statusFilter === "PENDIENTES" && d.status !== DOC_STATUS.PENDIENTE) {
       return false;
     }
-    if (statusFilter === 'VISADOS' && d.status !== DOC_STATUS.VISADO) {
+    if (statusFilter === "VISADOS" && d.status !== DOC_STATUS.VISADO) {
       return false;
     }
-    if (statusFilter === 'FIRMADOS' && d.status !== DOC_STATUS.FIRMADO) {
+    if (statusFilter === "FIRMADOS" && d.status !== DOC_STATUS.FIRMADO) {
       return false;
     }
-    if (statusFilter === 'RECHAZADOS' && d.status !== DOC_STATUS.RECHAZADO) {
+    if (statusFilter === "RECHAZADOS" && d.status !== DOC_STATUS.RECHAZADO) {
       return false;
     }
 
-    if (search.trim() !== '') {
+    if (search.trim() !== "") {
       const q = search.toLowerCase();
-      const titulo = (d.title || '').toLowerCase();
-      const empresa = (d.destinatario_nombre || '').toLowerCase();
+      const titulo = (d.title || "").toLowerCase();
+      const empresa = (d.destinatario_nombre || "").toLowerCase();
       if (!titulo.includes(q) && !empresa.includes(q)) {
         return false;
       }
@@ -493,28 +490,27 @@ useEffect(() => {
   const rechazados = docs.filter(
     (d) => d.status === DOC_STATUS.RECHAZADO
   ).length;
-  const totalFiltrado = docsFiltrados.length;
 
+  const totalFiltrado = docsFiltrados.length;
   const totalPaginas = Math.ceil(docsFiltrados.length / pageSize);
   const docsPaginados = docsFiltrados.slice(
     (page - 1) * pageSize,
     page * pageSize
   );
 
-  /* ===============================
-     VISTA DASHBOARD (LIST + UPLOAD)
-     =============================== */
-
-  console.log('DEBUG SUPER MEGA SIMPLE v3');
-  console.log('DEBUG ESTADO:', {
+  console.log("DEBUG SUPER MEGA SIMPLE v3");
+  console.log("DEBUG ESTADO:", {
     view,
     loadingDocs,
     errorDocs,
     docsPaginadosLength: docsPaginados.length,
   });
-  console.log('DEBUG USER:', user);
-  console.log('DEBUG tipoTramite:', tipoTramite);
+  console.log("DEBUG USER:", user);
+  console.log("DEBUG tipoTramite:", tipoTramite);
 
+  /* ===============================
+     LAYOUT PRINCIPAL (SIDEBAR + CONTENIDO)
+     =============================== */
   return (
     <div className="dashboard-layout">
       <Sidebar
@@ -529,46 +525,49 @@ useEffect(() => {
       />
 
       <div className="content-body">
-        <ListHeader
-          sort={sort}
-          setSort={(value) => {
-	    setSort(value);
-            setPage(1);          // reset de página cuando cambias el orden
-            cargarDocs(value);   // recarga usando el nuevo sort
-    }}
-          statusFilter={statusFilter}
-          setStatusFilter={setStatusFilter}
-          search={search}
-          setSearch={setSearch}
-          totalFiltrado={totalFiltrado}
-          pendientes={pendientes}
-          visados={visados}
-          firmados={firmados}
-          rechazados={rechazados}
-          onSync={cargarDocs}
-        />
+        {/* Header y filtros solo aplican a la bandeja/lista */}
+        {view === "list" && (
+          <ListHeader
+            sort={sort}
+            setSort={(value) => {
+              setSort(value);
+              setPage(1);
+              cargarDocs(value);
+            }}
+            statusFilter={statusFilter}
+            setStatusFilter={setStatusFilter}
+            search={search}
+            setSearch={setSearch}
+            totalFiltrado={totalFiltrado}
+            pendientes={pendientes}
+            visados={visados}
+            firmados={firmados}
+            rechazados={rechazados}
+            onSync={cargarDocs}
+          />
+        )}
 
         {/* ===============================
             VISTA LISTA DE DOCUMENTOS
-           ================================ */}
-        {view === 'list' && (
+           =============================== */}
+        {view === "list" && (
           <>
-            {/* HERO DASHBOARD */}
+            {/* Hero superior */}
             <div className="hero-dashboard">
               <div className="hero-dashboard-inner">
                 <h1 className="hero-dashboard-title">
                   Gestiona todas tus firmas digitales en un solo lugar
                 </h1>
                 <p className="hero-dashboard-text">
-                  Envía contratos, actas y documentos legales para firma electrónica
-                  avanzada en minutos. Sigue el estado en tiempo real y mantén un
-                  historial completo de cada trámite.
+                  Envía contratos, actas y documentos legales para firma
+                  electrónica avanzada en minutos. Sigue el estado en tiempo
+                  real y mantén un historial completo de cada trámite.
                 </p>
                 <div className="hero-dashboard-actions">
                   <button
                     type="button"
                     className="btn-main btn-primary"
-                    onClick={() => setView('upload')}
+                    onClick={() => setView("upload")}
                     style={{ paddingInline: 22 }}
                   >
                     + Nuevo documento para firma
@@ -578,9 +577,9 @@ useEffect(() => {
                     className="btn-main"
                     onClick={cargarDocs}
                     style={{
-                      backgroundColor: '#020617',
-                      color: '#e5e7eb',
-                      border: '1px solid #1e293b',
+                      backgroundColor: "#020617",
+                      color: "#e5e7eb",
+                      border: "1px solid #1e293b",
                       paddingInline: 22,
                     }}
                   >
@@ -590,43 +589,43 @@ useEffect(() => {
               </div>
             </div>
 
-            {/* (por ahora oculto) Resumen rápido */}
+            {/* Resumen rápido (por ahora oculto) */}
             <div
               style={{
-                display: 'none',
+                display: "none",
                 minWidth: 200,
                 height: 130,
                 borderRadius: 18,
-                border: '1px solid rgba(148, 163, 184, 0.25)',
+                border: "1px solid rgba(148, 163, 184, 0.25)",
                 background:
-                  'radial-gradient(circle at 0 0, rgba(56, 189, 248, 0.25), transparent 55%), radial-gradient(circle at 100% 100%, rgba(129, 140, 248, 0.18), transparent 55%)',
+                  "radial-gradient(circle at 0 0, rgba(56, 189, 248, 0.25), transparent 55%), radial-gradient(circle at 100% 100%, rgba(129, 140, 248, 0.18), transparent 55%)",
                 padding: 14,
               }}
             >
               <p
                 style={{
-                  fontSize: '0.8rem',
-                  color: '#e5e7eb',
+                  fontSize: "0.8rem",
+                  color: "#e5e7eb",
                   marginBottom: 8,
                   fontWeight: 600,
                 }}
               >
                 Resumen rápido
               </p>
-              <p style={{ fontSize: '0.8rem', color: '#cbd5f5' }}>
-                Próximo paso: conecta tu dominio{' '}
-                <span style={{ color: '#a5b4fc' }}>app.verifirma.cl</span> y
+              <p style={{ fontSize: "0.8rem", color: "#cbd5f5" }}>
+                Próximo paso: conecta tu dominio{" "}
+                <span style={{ color: "#a5b4fc" }}>app.verifirma.cl</span> y
                 completa tu primer flujo de firma real.
               </p>
             </div>
 
             {loadingDocs ? (
-              // LOADER
+              // Loader
               <div
                 style={{
                   padding: 40,
-                  textAlign: 'center',
-                  color: '#64748b',
+                  textAlign: "center",
+                  color: "#64748b",
                 }}
               >
                 <div style={{ marginBottom: 12, fontWeight: 600 }}>
@@ -634,8 +633,8 @@ useEffect(() => {
                 </div>
                 <p
                   style={{
-                    fontSize: '0.9rem',
-                    color: '#9ca3af',
+                    fontSize: "0.9rem",
+                    color: "#9ca3af",
                     marginTop: 4,
                   }}
                 >
@@ -644,12 +643,12 @@ useEffect(() => {
                 <div className="spinner" />
               </div>
             ) : errorDocs ? (
-              // ERROR BONITO
+              // Error
               <div
                 style={{
                   padding: 40,
-                  textAlign: 'center',
-                  color: '#b91c1c',
+                  textAlign: "center",
+                  color: "#b91c1c",
                 }}
               >
                 <p style={{ marginBottom: 8, fontWeight: 700 }}>
@@ -658,12 +657,12 @@ useEffect(() => {
                 <p
                   style={{
                     marginBottom: 16,
-                    fontSize: '0.9rem',
-                    color: '#b91c1c',
+                    fontSize: "0.9rem",
+                    color: "#b91c1c",
                   }}
                 >
                   {errorDocs ||
-                    'Por favor, revisa tu conexión e inténtalo nuevamente.'}
+                    "Por favor, revisa tu conexión e inténtalo nuevamente."}
                 </p>
                 <button
                   className="btn-main btn-primary"
@@ -673,12 +672,12 @@ useEffect(() => {
                 </button>
               </div>
             ) : docsPaginados.length === 0 ? (
-              // ESTADO VACÍO
+              // Estado vacío
               <div
                 style={{
                   padding: 40,
-                  textAlign: 'center',
-                  color: '#64748b',
+                  textAlign: "center",
+                  color: "#64748b",
                 }}
               >
                 <h3 style={{ marginBottom: 8 }}>
@@ -687,29 +686,27 @@ useEffect(() => {
                 <p
                   style={{
                     marginBottom: 4,
-                    fontSize: '0.9rem',
-                    color: '#94a3b8',
+                    fontSize: "0.9rem",
+                    color: "#94a3b8",
                   }}
                 >
-                  Puede que no existan documentos con los filtros
-                  actuales.
+                  Puede que no existan documentos con los filtros actuales.
                 </p>
                 <p
                   style={{
                     marginBottom: 16,
-                    fontSize: '0.9rem',
-                    color: '#94a3b8',
+                    fontSize: "0.9rem",
+                    color: "#94a3b8",
                   }}
                 >
-                  Ajusta los filtros o crea un nuevo flujo de firma
-                  digital.
+                  Ajusta los filtros o crea un nuevo flujo de firma digital.
                 </p>
                 <button
                   className="btn-main"
-                  onClick={() => setView('upload')}
+                  onClick={() => setView("upload")}
                   style={{
-                    background: '#e2e8f0',
-                    color: '#1e293b',
+                    background: "#e2e8f0",
+                    color: "#1e293b",
                   }}
                 >
                   Crear nuevo trámite
@@ -726,11 +723,11 @@ useEffect(() => {
                         <th>Título del Documento</th>
                         <th>Tipo de trámite</th>
                         <th>Fecha de creación</th>
-                        <th style={{ textAlign: 'center' }}>
+                        <th style={{ textAlign: "center" }}>
                           Estado Actual
                         </th>
                         <th>Firmante Final</th>
-                        <th style={{ textAlign: 'center' }}>Acciones</th>
+                        <th style={{ textAlign: "center" }}>Acciones</th>
                       </tr>
                     </thead>
                     <tbody>
@@ -741,7 +738,7 @@ useEffect(() => {
                           token={token}
                           onOpenDetail={(doc) => {
                             setSelectedDoc(doc);
-                            setView('detail');
+                            setView("detail");
                           }}
                         />
                       ))}
@@ -752,17 +749,17 @@ useEffect(() => {
                 {/* Paginación */}
                 <div
                   style={{
-                    display: 'flex',
-                    justifyContent: 'space-between',
-                    alignItems: 'center',
+                    display: "flex",
+                    justifyContent: "space-between",
+                    alignItems: "center",
                     marginTop: 16,
-                    fontSize: '0.85rem',
+                    fontSize: "0.85rem",
                   }}
                 >
                   <span>
                     Página {page} de {totalPaginas || 1}
                   </span>
-                  <div style={{ display: 'flex', gap: 8 }}>
+                  <div style={{ display: "flex", gap: 8 }}>
                     <button
                       type="button"
                       className="btn-main"
@@ -797,7 +794,7 @@ useEffect(() => {
         {/* ===============================
             VISTA SUBIDA NUEVO DOCUMENTO
            =============================== */}
-        {view === 'upload' && (
+        {view === "upload" && (
           <NewDocumentForm
             API_URL={API_URL}
             token={token}
@@ -818,11 +815,19 @@ useEffect(() => {
             cargarDocs={cargarDocs}
           />
         )}
+
         {/* ===============================
-              VISTA ADMIN USUARIOS
-          =============================== */}
-        {view === 'users' && (
+            VISTA ADMIN USUARIOS
+           =============================== */}
+        {view === "users" && (
           <UsersAdminView API_URL={API_URL} token={token} />
+        )}
+
+        {/* ===============================
+            VISTA DASHBOARD CON GRÁFICOS
+           =============================== */}
+        {view === "dashboard" && (
+          <DashboardView docs={docs} user={user} />
         )}
       </div>
     </div>
