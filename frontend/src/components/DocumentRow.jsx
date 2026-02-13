@@ -5,11 +5,15 @@ import { API_BASE_URL } from "../constants";
 
 const API_URL = API_BASE_URL;
 
-function getTipoTramiteLabel(tipo) {
-  if (tipo === "notaria") return "Trámite Notarial";
-  if (tipo === "propio") return "Trámite Propio";
-  if (tipo === "poderes") return "Poderes y autorizaciones";
-  if (tipo === "contratos") return "Contratos";
+function getTramiteLabel(value) {
+  if (value === "notaria") return "Notaría";
+  if (value === "propio") return "Propio";
+  return "N/D";
+}
+
+function getDocumentoLabel(value) {
+  if (value === "poderes") return "Poderes y autorizaciones";
+  if (value === "contratos") return "Solo contratos";
   return "N/D";
 }
 
@@ -33,6 +37,7 @@ const STATUS_COLORS = {
 
 export function DocumentRow({ doc, onOpenDetail, token }) {
   const tipoTramite = doc.tipo_tramite || doc.tipoTramite || null;
+  const tipoDocumento = doc.tipo_documento || doc.tipoDocumento || null;
 
   const handleVerPdf = async () => {
     try {
@@ -58,6 +63,27 @@ export function DocumentRow({ doc, onOpenDetail, token }) {
     alert("Motivo de rechazo:\n\n" + doc.reject_reason);
   };
 
+  const chipBgColor =
+    tipoTramite === "notaria"
+      ? "#eef2ff"
+      : tipoDocumento === "poderes"
+      ? "#f5f3ff"
+      : tipoDocumento === "contratos"
+      ? "#fef2f2"
+      : "#ecfeff";
+
+  const chipTextColor =
+    tipoTramite === "notaria"
+      ? "#4f46e5"
+      : tipoDocumento === "poderes"
+      ? "#7c3aed"
+      : tipoDocumento === "contratos"
+      ? "#dc2626"
+      : "#0f766e";
+
+  const labelTramite = getTramiteLabel(tipoTramite);
+  const labelDoc = getDocumentoLabel(tipoDocumento);
+
   return (
     <tr>
       {/* N° interno de contrato */}
@@ -70,33 +96,19 @@ export function DocumentRow({ doc, onOpenDetail, token }) {
         {doc.title || "Sin título"}
       </td>
 
-      {/* Tipo de trámite */}
+      {/* Tipo de trámite + tipo de documento */}
       <td>
         <span
           style={{
-            padding: "2px 8px",
+            padding: "2px 10px",
             borderRadius: 999,
             fontSize: 12,
-            backgroundColor:
-              tipoTramite === "notaria"
-                ? "#eef2ff"
-                : tipoTramite === "poderes"
-                ? "#f5f3ff"
-                : tipoTramite === "contratos"
-                ? "#fef2f2"
-                : "#ecfeff",
-            color:
-              tipoTramite === "notaria"
-                ? "#4f46e5"
-                : tipoTramite === "poderes"
-                ? "#7c3aed"
-                : tipoTramite === "contratos"
-                ? "#dc2626"
-                : "#0f766e",
+            backgroundColor: chipBgColor,
+            color: chipTextColor,
             whiteSpace: "nowrap",
           }}
         >
-          {getTipoTramiteLabel(tipoTramite)}
+          {labelTramite} – {labelDoc}
         </span>
       </td>
 

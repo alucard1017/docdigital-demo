@@ -31,6 +31,8 @@ export function NewDocumentForm({
   cargarDocs,
 }) {
   const [tipoDocumento, setTipoDocumento] = useState("");
+  const [fileName, setFileName] = useState("");
+  const [submitting, setSubmitting] = useState(false);
 
   return (
     <div className="card-premium">
@@ -126,6 +128,7 @@ export function NewDocumentForm({
         onSubmit={async (e) => {
           e.preventDefault();
           setFormErrors({});
+          setSubmitting(true);
 
           const form = e.target;
           const formData = new FormData(form);
@@ -196,6 +199,7 @@ export function NewDocumentForm({
 
           if (Object.keys(newErrors).length > 0) {
             setFormErrors(newErrors);
+            setSubmitting(false);
             return;
           }
 
@@ -250,10 +254,13 @@ export function NewDocumentForm({
             setFirmanteRunValue("");
             setEmpresaRutValue("");
             setTipoDocumento("");
+            setFileName("");
             setView("list");
             cargarDocs();
           } catch (err) {
             alert(err.message);
+          } finally {
+            setSubmitting(false);
           }
         }}
       >
@@ -302,6 +309,10 @@ export function NewDocumentForm({
             accept="application/pdf"
             id="file-input-contrato"
             style={{ display: "none" }}
+            onChange={(e) => {
+              const f = e.target.files?.[0];
+              setFileName(f ? f.name : "");
+            }}
           />
 
           {/* botón visible al lado del título */}
@@ -333,6 +344,17 @@ export function NewDocumentForm({
             >
               Subir contrato (PDF)
             </button>
+            {fileName && (
+              <p
+                style={{
+                  marginTop: 6,
+                  fontSize: "0.8rem",
+                  color: "#64748b",
+                }}
+              >
+                Archivo seleccionado: {fileName}
+              </p>
+            )}
             {formErrors.file && (
               <p
                 style={{
@@ -697,13 +719,18 @@ export function NewDocumentForm({
           <button
             type="submit"
             className="btn-main btn-primary"
+            disabled={submitting}
             style={{
               padding: "12px 80px",
               fontSize: "1rem",
               flexGrow: 1,
+              opacity: submitting ? 0.7 : 1,
+              cursor: submitting ? "not-allowed" : "pointer",
             }}
           >
-            INICIAR FLUJO DE FIRMA DIGITAL
+            {submitting
+              ? "ENVIANDO..."
+              : "INICIAR FLUJO DE FIRMA DIGITAL"}
           </button>
         </div>
       </form>

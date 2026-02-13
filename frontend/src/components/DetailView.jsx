@@ -7,6 +7,18 @@ import { DOC_STATUS, API_BASE_URL } from "../constants";
 
 const API_URL = API_BASE_URL;
 
+function getTramiteLabel(value) {
+  if (value === "notaria") return "Notaría";
+  if (value === "propio") return "Propio";
+  return "N/D";
+}
+
+function getDocumentoLabel(value) {
+  if (value === "poderes") return "Poderes y autorizaciones";
+  if (value === "contratos") return "Solo contratos";
+  return "N/D";
+}
+
 export function DetailView({
   selectedDoc,
   pdfUrl,
@@ -82,7 +94,7 @@ export function DetailView({
 
     const interval = setInterval(fetchTimeline, 5000);
     return () => clearInterval(interval);
-  }, [selectedDoc]);
+  }, [selectedDoc, token]);
 
   if (!selectedDoc) return null;
 
@@ -96,13 +108,6 @@ export function DetailView({
   const mostrarBotonRecordatorio =
     selectedDoc.status === DOC_STATUS.PENDIENTE_VISADO ||
     selectedDoc.status === DOC_STATUS.PENDIENTE_FIRMA;
-
-console.log("DEBUG mostrarBotonRecordatorio:", {
-  status: selectedDoc.status,
-  PENDIENTE_VISADO: DOC_STATUS.PENDIENTE_VISADO,
-  PENDIENTE_FIRMA: DOC_STATUS.PENDIENTE_FIRMA,
-  mostrar: mostrarBotonRecordatorio,
-});
 
   async function handleReenviarVisado() {
     if (!selectedDoc) return;
@@ -191,6 +196,13 @@ console.log("DEBUG mostrarBotonRecordatorio:", {
       timeline.document.numero_contrato_interno) ||
     selectedDoc.numero_contrato_interno;
 
+  const tramiteLabel = getTramiteLabel(
+    selectedDoc.tipo_tramite || selectedDoc.tipoTramite
+  );
+  const documentoLabel = getDocumentoLabel(
+    selectedDoc.tipo_documento || selectedDoc.tipoDocumento
+  );
+
   return (
     <div className="dashboard-layout">
       <aside className="sidebar">
@@ -225,8 +237,8 @@ console.log("DEBUG mostrarBotonRecordatorio:", {
             }}
           >
             Revisión de Documento{" "}
-            {numeroInterno ? `(${numeroInterno})` : `#${selectedDoc.id}`} -
-            Estado {selectedDoc.status}
+            {numeroInterno ? `(${numeroInterno})` : `#${selectedDoc.id}`} - Estado{" "}
+            {selectedDoc.status}
           </span>
           <span style={{ fontWeight: 700, fontSize: "1.1rem" }}>
             Hola, <span style={{ color: "var(--primary)" }}>Alucard</span>
@@ -245,17 +257,26 @@ console.log("DEBUG mostrarBotonRecordatorio:", {
               {selectedDoc.title}
             </h1>
 
-            <p
+            {/* Metadatos principales */}
+            <div
               style={{
-                color: "#64748b",
                 marginBottom: 16,
-                fontSize: "0.95rem",
+                fontSize: "0.9rem",
+                color: "#4b5563",
               }}
             >
-              N° interno:{" "}
-              <strong>{numeroInterno || `#${selectedDoc.id}`}</strong> · Estado:{" "}
-              <strong>{selectedDoc.status}</strong>
-            </p>
+              <p style={{ margin: 0 }}>
+                N° interno:{" "}
+                <strong>{numeroInterno || `#${selectedDoc.id}`}</strong> · Estado:{" "}
+                <strong>{selectedDoc.status}</strong>
+              </p>
+              <p style={{ margin: "4px 0 0 0" }}>
+                Tipo de trámite:{" "}
+                <strong>
+                  {tramiteLabel} – {documentoLabel}
+                </strong>
+              </p>
+            </div>
 
             {selectedDoc.description && (
               <div
@@ -305,7 +326,14 @@ console.log("DEBUG mostrarBotonRecordatorio:", {
                 Visualización del documento original
               </span>
 
-              <div style={{ display: "flex", gap: 8, alignItems: "center", flexWrap: "wrap" }}>
+              <div
+                style={{
+                  display: "flex",
+                  gap: 8,
+                  alignItems: "center",
+                  flexWrap: "wrap",
+                }}
+              >
                 {mostrarBotonRecordatorio && (
                   <button
                     type="button"
@@ -460,7 +488,9 @@ console.log("DEBUG mostrarBotonRecordatorio:", {
                       }}
                     >
                       <div>
-                        <div style={{ fontSize: "0.9rem", fontWeight: 600 }}>
+                        <div
+                          style={{ fontSize: "0.9rem", fontWeight: 600 }}
+                        >
                           {s.name || "Firmante"}
                         </div>
                         <div
