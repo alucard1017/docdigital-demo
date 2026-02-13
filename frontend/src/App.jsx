@@ -450,7 +450,7 @@ function App() {
     );
   }
 
-    /* ===============================
+  /* ===============================
      FILTRO EN MEMORIA PARA LA BANDEJA
      =============================== */
   const docsFiltrados = docs.filter((d) => {
@@ -474,18 +474,31 @@ function App() {
     return true;
   });
 
-  const pendientes = docs.filter((d) =>
-    d.status === DOC_STATUS.PENDIENTE ||
-    d.status === DOC_STATUS.PENDIENTE_VISADO ||
-    d.status === DOC_STATUS.PENDIENTE_FIRMA
+  const pendientes = docs.filter(
+    (d) =>
+      d.status === DOC_STATUS.PENDIENTE ||
+      d.status === DOC_STATUS.PENDIENTE_VISADO ||
+      d.status === DOC_STATUS.PENDIENTE_FIRMA
   ).length;
 
-const totalFiltrado = docsFiltrados.length;
-const totalPaginas = Math.ceil(totalFiltrado / pageSize) || 1;
-const docsPaginados = docsFiltrados.slice(
-  (page - 1) * pageSize,
-  page * pageSize
-);
+  const visados = docs.filter(
+    (d) => d.status === DOC_STATUS.VISADO
+  ).length;
+
+  const firmados = docs.filter(
+    (d) => d.status === DOC_STATUS.FIRMADO
+  ).length;
+
+  const rechazados = docs.filter(
+    (d) => d.status === DOC_STATUS.RECHAZADO
+  ).length;
+
+  const totalFiltrado = docsFiltrados.length;
+  const totalPaginas = Math.ceil(totalFiltrado / pageSize) || 1;
+  const docsPaginados = docsFiltrados.slice(
+    (page - 1) * pageSize,
+    page * pageSize
+  );
 
   /* ===============================
      LAYOUT PRINCIPAL (SIDEBAR + CONTENIDO)
