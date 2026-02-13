@@ -560,15 +560,3 @@ export function DetailView({
     </div>
   );
 }
-                      {s.status !== "FIRMADO" && (
-                        <button
-                          type="button"
-                          className="btn-main"
-                          onClick={() => handleReenviarFirma(s.id)}
-                          disabled={reenviarSignerId === s.id}
-                          style={{
-                            background: "#e0f2fe",
-                            color: "#0369a1",
-                            fontSize: "0.8rem",
-                            padding: "6px 10px",
-                            borderRadius: 6,

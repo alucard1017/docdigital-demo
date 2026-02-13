@@ -448,6 +448,7 @@ useEffect(() => {
         setView={setView}
         setSelectedDoc={setSelectedDoc}
         logout={logout}
+	token={token}
       />
     );
   }
