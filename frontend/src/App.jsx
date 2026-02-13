@@ -474,13 +474,20 @@ function App() {
     return true;
   });
 
+const docsFiltrados = docs.filter((d) => { ... });
+
   const pendientes = docs.filter((d) =>
     d.status === DOC_STATUS.PENDIENTE ||
     d.status === DOC_STATUS.PENDIENTE_VISADO ||
     d.status === DOC_STATUS.PENDIENTE_FIRMA
   ).length;
 
-// Versión deployable con filtro de pendientes unificado
+const totalFiltrado = docsFiltrados.length;
+const totalPaginas = Math.ceil(totalFiltrado / pageSize) || 1;
+const docsPaginados = docsFiltrados.slice(
+  (page - 1) * pageSize,
+  page * pageSize
+);
 
   /* ===============================
      LAYOUT PRINCIPAL (SIDEBAR + CONTENIDO)
