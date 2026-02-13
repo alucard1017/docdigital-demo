@@ -485,3 +485,17 @@ router.post('/firmar-flujo/:firmanteId', requireAuth, async (req, res) => {
         ? 'Firma registrada y documento completado'
         : 'Firma registrada',
       documentoId: firmante.documento_id,
+    });
+  } catch (error) {
+    await db.query('ROLLBACK');
+    console.error('Error firmando flujo de documento', error);
+    return res
+      .status(500)
+      .json({ error: 'Error firmando flujo de documento' });
+  }
+});
+
+/* ================================
+   EXPORTAR ROUTER
+   ================================ */
+module.exports = router;
