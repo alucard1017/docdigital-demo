@@ -632,9 +632,10 @@ async function getTimeline(req, res) {
          id, title, status, destinatario_nombre,
          empresa_rut, created_at, updated_at,
          requires_visado, firmante_nombre, visador_nombre,
-         numero_contrato_interno
-       FROM documents 
-       WHERE id = $1`,
+         numero_contrato_interno,
+         tipo_tramite, tipo_documento
+      FROM documents 
+      WHERE id = $1`,
       [docId]
     );
 
@@ -700,6 +701,8 @@ async function getTimeline(req, res) {
         updated_at: doc.updated_at,
         requires_visado: doc.requires_visado,
         numero_contrato_interno: doc.numero_contrato_interno,
+	tipo_tramite: doc.tipo_tramite,
+  	tipo_documento: doc.tipo_documento,
       },
       timeline: {
         currentStep,
