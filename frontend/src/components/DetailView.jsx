@@ -18,6 +18,7 @@ export function DetailView({
   setView,
   setSelectedDoc,
   logout,
+  token,
 }) {
   const [timeline, setTimeline] = useState(null);
   const [loadingTimeline, setLoadingTimeline] = useState(false);
@@ -26,6 +27,7 @@ export function DetailView({
   const [loadingSigners, setLoadingSigners] = useState(false);
   const [reenviarLoadingVisado, setReenviarLoadingVisado] = useState(false);
   const [reenviarSignerId, setReenviarSignerId] = useState(null);
+  const [recordatorioLoading, setRecordatorioLoading] = useState(false);
 
   useEffect(() => {
     if (!selectedDoc) return;
@@ -90,6 +92,10 @@ export function DetailView({
     selectedDoc.status === DOC_STATUS.PENDIENTE_VISADO &&
     selectedDoc.visador_email;
 
+  const mostrarBotonRecordatorio =
+    selectedDoc.status === DOC_STATUS.PENDIENTE_VISADO ||
+    selectedDoc.status === DOC_STATUS.PENDIENTE_FIRMA;
+
   async function handleReenviarVisado() {
     if (!selectedDoc) return;
     try {
@@ -144,6 +150,33 @@ export function DetailView({
     }
   }
 
+  async function handleEnviarRecordatorioATodos() {
+    if (!selectedDoc) return;
+    try {
+      setRecordatorioLoading(true);
+      const res = await fetch(
+        `${API_URL}/api/docs/${selectedDoc.id}/recordatorio`,
+        {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+            Authorization: `Bearer ${token}`,
+          },
+          credentials: "include",
+        }
+      );
+      const data = await res.json();
+      if (!res.ok) {
+        throw new Error(data.message || "No se pudo enviar el recordatorio");
+      }
+      alert(`✅ ${data.message}`);
+    } catch (err) {
+      alert("❌ " + err.message);
+    } finally {
+      setRecordatorioLoading(false);
+    }
+  }
+
   const numeroInterno =
     (timeline &&
       timeline.document &&
@@ -184,8 +217,8 @@ export function DetailView({
             }}
           >
             Revisión de Documento{" "}
-            {numeroInterno ? `(${numeroInterno})` : `#${selectedDoc.id}`} - Estado{" "}
-            {selectedDoc.status}
+            {numeroInterno ? `(${numeroInterno})` : `#${selectedDoc.id}`} -
+            Estado {selectedDoc.status}
           </span>
           <span style={{ fontWeight: 700, fontSize: "1.1rem" }}>
             Hola, <span style={{ color: "var(--primary)" }}>Alucard</span>
@@ -212,10 +245,8 @@ export function DetailView({
               }}
             >
               N° interno:{" "}
-              <strong>
-                {numeroInterno || `#${selectedDoc.id}`}
-              </strong>{" "}
-              · Estado: <strong>{selectedDoc.status}</strong>
+              <strong>{numeroInterno || `#${selectedDoc.id}`}</strong> · Estado:{" "}
+              <strong>{selectedDoc.status}</strong>
             </p>
 
             {selectedDoc.description && (
@@ -259,13 +290,37 @@ export function DetailView({
                 alignItems: "center",
                 marginBottom: 8,
                 gap: 12,
+                flexWrap: "wrap",
               }}
             >
               <span style={{ fontSize: "0.85rem", color: "#64748b" }}>
                 Visualización del documento original
               </span>
 
-              <div style={{ display: "flex", gap: 8, alignItems: "center" }}>
+              <div style={{ display: "flex", gap: 8, alignItems: "center", flexWrap: "wrap" }}>
+                {mostrarBotonRecordatorio && (
+                  <button
+                    type="button"
+                    className="btn-main"
+                    onClick={handleEnviarRecordatorioATodos}
+                    disabled={recordatorioLoading}
+                    style={{
+                      background: "#8b5cf6",
+                      color: "#ffffff",
+                      fontSize: "0.8rem",
+                      padding: "8px 12px",
+                      borderRadius: 6,
+                      fontWeight: 600,
+                      cursor: recordatorioLoading ? "not-allowed" : "pointer",
+                      opacity: recordatorioLoading ? 0.6 : 1,
+                    }}
+                  >
+                    {recordatorioLoading
+                      ? "Enviando recordatorio..."
+                      : "🔔 Enviar recordatorio"}
+                  </button>
+                )}
+
                 {mostrarBotonReenvioVisado && (
                   <button
                     type="button"
@@ -282,8 +337,8 @@ export function DetailView({
                     }}
                   >
                     {reenviarLoadingVisado
-                      ? "Reenviando visado..."
-                      : "Reenviar correo de visado"}
+                      ? "Reenviando..."
+                      : "Reenviar visado"}
                   </button>
                 )}
 
@@ -321,7 +376,7 @@ export function DetailView({
                       fontWeight: 600,
                     }}
                   >
-                    👁️ Ver en nueva pestaña
+                    👁️ Ver PDF
                   </a>
                 )}
               </div>
@@ -397,9 +452,7 @@ export function DetailView({
                       }}
                     >
                       <div>
-                        <div
-                          style={{ fontSize: "0.9rem", fontWeight: 600 }}
-                        >
+                        <div style={{ fontSize: "0.9rem", fontWeight: 600 }}>
                           {s.name || "Firmante"}
                         </div>
                         <div
@@ -507,3 +560,15 @@ export function DetailView({
     </div>
   );
 }
+                      {s.status !== "FIRMADO" && (
+                        <button
+                          type="button"
+                          className="btn-main"
+                          onClick={() => handleReenviarFirma(s.id)}
+                          disabled={reenviarSignerId === s.id}
+                          style={{
+                            background: "#e0f2fe",
+                            color: "#0369a1",
+                            fontSize: "0.8rem",
+                            padding: "6px 10px",
+                            borderRadius: 6,

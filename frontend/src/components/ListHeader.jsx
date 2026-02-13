@@ -230,11 +230,29 @@ export function ListHeader({
           </div>
         </div>
 
-        {/* Botón sincronizar */}
-        <button className="btn-sync" onClick={onSync}>
-          <span>🔄</span> Sincronizar Bandeja
-        </button>
-      </div>
+{/* Botones de acciones */}
+<div style={{ display: "flex", gap: 8 }}>
+  <a
+    href={`${API_URL}/api/docs/export/excel`}
+    className="btn-main"
+    style={{
+      background: "#059669",
+      color: "#ffffff",
+      textDecoration: "none",
+      fontSize: "0.85rem",
+      padding: "8px 16px",
+      borderRadius: "6px",
+      fontWeight: 600,
+    }}
+  >
+    📊 Descargar Reporte
+  </a>
+
+  <button className="btn-sync" onClick={onSync}>
+    <span>🔄</span> Sincronizar Bandeja
+  </button>
+</div>
+
     </>
   );
 }
