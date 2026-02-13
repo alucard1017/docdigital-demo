@@ -1,5 +1,15 @@
 // src/views/NewDocumentForm.jsx
-import React from "react";
+import React, { useState } from "react";
+
+const TIPOS_TRAMITE = [
+  { value: "propio", label: "Trámite propio (sin notaría)" },
+  { value: "notaria", label: "Trámite con notaría" },
+];
+
+const TIPOS_DOCUMENTO = [
+  { value: "poderes", label: "Poderes y autorizaciones" },
+  { value: "contratos", label: "Solo contratos" },
+];
 
 export function NewDocumentForm({
   API_URL,
@@ -20,6 +30,8 @@ export function NewDocumentForm({
   setView,
   cargarDocs,
 }) {
+  const [tipoDocumento, setTipoDocumento] = useState("");
+
   return (
     <div className="card-premium">
       <h1
@@ -40,62 +52,74 @@ export function NewDocumentForm({
         Configure el tipo de trámite, los participantes y cargue el PDF.
       </p>
 
-      {/* Botones de tipo de trámite */}
+      {/* Tipo de trámite + tipo de documento */}
       <div
         style={{
           display: "flex",
           flexWrap: "wrap",
-          gap: 12,
+          gap: 16,
           marginBottom: 24,
         }}
       >
-        <button
-          type="button"
-          className="btn-main"
-          style={{
-            backgroundColor: tipoTramite === "propio" ? "#0f766e" : "#e5e7eb",
-            color: tipoTramite === "propio" ? "#ffffff" : "#111827",
-          }}
-          onClick={() => setTipoTramite("propio")}
-        >
-          Trámite propio (sin notaría)
-        </button>
+        <div style={{ minWidth: 260 }}>
+          <label
+            style={{
+              fontWeight: 700,
+              fontSize: "0.9rem",
+              display: "block",
+              marginBottom: 8,
+            }}
+          >
+            Tipo de trámite
+          </label>
+          <select
+            className="input-field"
+            value={tipoTramite}
+            onChange={(e) => setTipoTramite(e.target.value)}
+          >
+            {TIPOS_TRAMITE.map((t) => (
+              <option key={t.value} value={t.value}>
+                {t.label}
+              </option>
+            ))}
+          </select>
+        </div>
 
-        <button
-          type="button"
-          className="btn-main"
-          style={{
-            backgroundColor: tipoTramite === "notaria" ? "#1d4ed8" : "#e5e7eb",
-            color: tipoTramite === "notaria" ? "#ffffff" : "#111827",
-          }}
-          onClick={() => setTipoTramite("notaria")}
-        >
-          Trámite con notaría
-        </button>
-
-        <button
-          type="button"
-          className="btn-main"
-          style={{
-            backgroundColor: tipoTramite === "poderes" ? "#7c3aed" : "#e5e7eb",
-            color: tipoTramite === "poderes" ? "#ffffff" : "#111827",
-          }}
-          onClick={() => setTipoTramite("poderes")}
-        >
-          Poderes y autorizaciones
-        </button>
-
-        <button
-          type="button"
-          className="btn-main"
-          style={{
-            backgroundColor: tipoTramite === "contratos" ? "#dc2626" : "#e5e7eb",
-            color: tipoTramite === "contratos" ? "#ffffff" : "#111827",
-          }}
-          onClick={() => setTipoTramite("contratos")}
-        >
-          Solo contratos
-        </button>
+        <div style={{ minWidth: 260 }}>
+          <label
+            style={{
+              fontWeight: 700,
+              fontSize: "0.9rem",
+              display: "block",
+              marginBottom: 8,
+            }}
+          >
+            Tipo de documento
+          </label>
+          <select
+            className="input-field"
+            value={tipoDocumento}
+            onChange={(e) => setTipoDocumento(e.target.value)}
+          >
+            <option value="">Selecciona una opción</option>
+            {TIPOS_DOCUMENTO.map((t) => (
+              <option key={t.value} value={t.value}>
+                {t.label}
+              </option>
+            ))}
+          </select>
+          {formErrors.tipo_documento && (
+            <p
+              style={{
+                color: "#b91c1c",
+                fontSize: "0.8rem",
+                marginTop: 4,
+              }}
+            >
+              {formErrors.tipo_documento}
+            </p>
+          )}
+        </div>
       </div>
 
       <form
@@ -106,8 +130,17 @@ export function NewDocumentForm({
           const form = e.target;
           const formData = new FormData(form);
 
+          const newErrors = {};
+
+          // Validar tipoDocumento
+          if (!tipoDocumento) {
+            newErrors.tipo_documento =
+              "Selecciona si es Poderes y autorizaciones o Solo contratos.";
+          }
+
           // tipo de trámite
           formData.append("tipoTramite", tipoTramite);
+          formData.append("tipoDocumento", tipoDocumento);
           if (tipoTramite === "notaria") {
             formData.append("requiere_firma_notarial", "true");
           }
@@ -131,8 +164,6 @@ export function NewDocumentForm({
           const destinatarioEmail = form.destinatario_email.value.trim();
 
           const file = form.file?.files?.[0];
-
-          const newErrors = {};
 
           if (!title) newErrors.title = "Este campo es obligatorio.";
           if (!file) newErrors.file = "Adjunta un archivo PDF.";
@@ -218,6 +249,7 @@ export function NewDocumentForm({
             setExtraSigners([]);
             setFirmanteRunValue("");
             setEmpresaRutValue("");
+            setTipoDocumento("");
             setView("list");
             cargarDocs();
           } catch (err) {
