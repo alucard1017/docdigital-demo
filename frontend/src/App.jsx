@@ -480,6 +480,8 @@ function App() {
     d.status === DOC_STATUS.PENDIENTE_FIRMA
   ).length;
 
+// Versión deployable con filtro de pendientes unificado
+
   /* ===============================
      LAYOUT PRINCIPAL (SIDEBAR + CONTENIDO)
      =============================== */
