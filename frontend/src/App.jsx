@@ -474,8 +474,6 @@ function App() {
     return true;
   });
 
-const docsFiltrados = docs.filter((d) => { ... });
-
   const pendientes = docs.filter((d) =>
     d.status === DOC_STATUS.PENDIENTE ||
     d.status === DOC_STATUS.PENDIENTE_VISADO ||
