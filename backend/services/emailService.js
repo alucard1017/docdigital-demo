@@ -1,5 +1,6 @@
 // backend/services/emailService.js
 const { MailtrapClient } = require('mailtrap');
+const QRCode = require('qrcode');
 
 console.log('📬 [EMAIL] Cargando emailService.js (Mailtrap API)');
 
@@ -22,11 +23,10 @@ if (!TOKEN || !SENDER_EMAIL) {
 }
 
 const client = new MailtrapClient({ token: TOKEN });
-
 const sender = { name: SENDER_NAME, email: SENDER_EMAIL };
 
 /**
- * Enviar email genérico HTML
+ * Enviar email genérico HTML con Mailtrap
  */
 async function sendEmail({ to, subject, html }) {
   if (!TOKEN || !SENDER_EMAIL) {
@@ -54,37 +54,131 @@ async function sendEmail({ to, subject, html }) {
 }
 
 /**
- * Invitación a firmar
+ * Genera un data URL (base64) con un QR que apunta a "url"
  */
-async function sendSigningInvitation(email, docTitle, signUrl, signerName = '') {
+async function generateQrDataUrl(url) {
+  if (!url) return '';
+  try {
+    const dataUrl = await QRCode.toDataURL(url, {
+      errorCorrectionLevel: 'M',
+      margin: 1,
+      width: 256,
+    });
+    return dataUrl; // "data:image/png;base64,...."
+  } catch (err) {
+    console.error('❌ [EMAIL] Error generando QR:', err.message);
+    return '';
+  }
+}
+
+/**
+ * Invitación a firmar
+ * Incluye:
+ * - Código de verificación del documento
+ * - Enlace a verificación pública
+ * - QR opcional (firma o verificación)
+ */
+async function sendSigningInvitation(
+  email,
+  docTitle,
+  signUrl,
+  signerName = '',
+  {
+    verificationCode = '',
+    publicVerifyUrl = '',
+    qrTargetUrl = '', // URL para el QR (si no se pasa, usa signUrl)
+  } = {}
+) {
   const subject = `Invitación a firmar: ${docTitle}`;
+
+  const qrUrl = qrTargetUrl || signUrl || publicVerifyUrl;
+  const qrImageDataUrl = await generateQrDataUrl(qrUrl);
 
   const html = `
     <!DOCTYPE html>
     <html>
       <head>
+        <meta charset="utf-8" />
         <style>
-          body { font-family: Arial, sans-serif; line-height: 1.6; color: #333; }
-          .container { max-width: 600px; margin: 0 auto; padding: 20px; }
-          .header { background-color: #3b82f6; color: white; padding: 20px; text-align: center; border-radius: 5px; }
-          .content { margin: 20px 0; }
-          .button { display: inline-block; background-color: #3b82f6; color: white; padding: 12px 24px; text-decoration: none; border-radius: 5px; margin: 20px 0; }
-          .footer { font-size: 12px; color: #999; margin-top: 30px; border-top: 1px solid #eee; padding-top: 10px; }
+          body { font-family: Arial, sans-serif; line-height: 1.6; color: #111827; background-color: #0f172a; padding: 24px 0; }
+          .container { max-width: 640px; margin: 0 auto; padding: 24px 24px 32px; background-color: #ffffff; border-radius: 12px; box-shadow: 0 20px 40px rgba(15, 23, 42, 0.35); }
+          .header { text-align: center; padding-bottom: 12px; border-bottom: 1px solid #e5e7eb; }
+          .badge { display: inline-block; font-size: 12px; text-transform: uppercase; letter-spacing: 0.08em; color: #60a5fa; background: #eff6ff; padding: 4px 10px; border-radius: 999px; margin-bottom: 4px; }
+          .title { font-size: 20px; font-weight: 700; color: #111827; margin: 4px 0 8px; }
+          .content { margin: 20px 0 8px; font-size: 14px; color: #374151; }
+          .doc-title { font-size: 16px; font-weight: 700; color: #111827; margin: 12px 0; }
+          .button { display: inline-block; background-color: #2563eb; color: white !important; padding: 12px 24px; text-decoration: none; border-radius: 999px; margin: 20px 0 8px; font-weight: 600; font-size: 14px; }
+          .meta { font-size: 12px; color: #6b7280; margin-top: 4px; }
+          .verify-box { margin-top: 24px; padding: 14px 16px; border-radius: 12px; background: #f9fafb; border: 1px dashed #d1d5db; font-size: 13px; color: #374151; }
+          .verify-code { font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", "Courier New", monospace; font-weight: 700; font-size: 14px; background: #111827; color: #e5e7eb; padding: 4px 8px; border-radius: 8px; display: inline-block; margin: 4px 0; }
+          .verify-link { color: #2563eb; text-decoration: underline; }
+          .qr-wrapper { margin-top: 16px; text-align: center; }
+          .qr-label { font-size: 12px; color: #6b7280; margin-bottom: 4px; }
+          .qr-img { display: inline-block; padding: 6px; border-radius: 12px; background: #111827; }
+          .qr-img img { display: block; width: 144px; height: 144px; }
+          .footer { font-size: 11px; color: #9ca3af; margin-top: 24px; border-top: 1px solid #e5e7eb; padding-top: 10px; text-align: center; }
         </style>
       </head>
       <body>
         <div class="container">
           <div class="header">
-            <h2>📄 Invitación a Firmar Documento</h2>
+            <div class="badge">VeriFirma</div>
+            <h2 class="title">Invitación a Firmar Documento</h2>
           </div>
+
           <div class="content">
             <p>Hola ${signerName || ''}</p>
-            <p>Has recibido una invitación para <strong>firmar</strong> el siguiente documento en <strong>VeriFirma</strong>:</p>
-            <p style="font-size: 16px; font-weight: bold; color: #1e293b;">${docTitle}</p>
-            <p>Haz clic en el botón siguiente para proceder con la firma electrónica:</p>
+            <p>
+              Has recibido una invitación para <strong>firmar electrónicamente</strong> el siguiente documento en
+              <strong>VeriFirma</strong>:
+            </p>
+
+            <p class="doc-title">${docTitle}</p>
+
             <a href="${signUrl}" class="button">Ir a Firmar Documento</a>
-            <p style="color: #666; font-size: 14px;">Este enlace es válido por 30 días.</p>
+            <p class="meta">Este enlace es válido por 30 días.</p>
           </div>
+
+          <div class="verify-box">
+            <p style="margin: 0 0 6px;"><strong>Verificación independiente del documento</strong></p>
+            ${
+              verificationCode
+                ? `
+              <p style="margin: 0;">
+                Código de verificación del documento:
+                <span class="verify-code">${verificationCode}</span>
+              </p>
+            `
+                : ''
+            }
+            ${
+              publicVerifyUrl
+                ? `
+              <p style="margin: 6px 0 0;">
+                En cualquier momento, puedes ir a
+                <a href="${publicVerifyUrl}" class="verify-link">${publicVerifyUrl}</a>
+                y pegar este código para consultar el estado del documento.
+              </p>
+            `
+                : ''
+            }
+
+            ${
+              qrImageDataUrl
+                ? `
+              <div class="qr-wrapper">
+                <div class="qr-label">
+                  También puedes escanear este código QR para ir directamente al documento:
+                </div>
+                <div class="qr-img">
+                  <img src="${qrImageDataUrl}" alt="QR de acceso al documento" />
+                </div>
+              </div>
+            `
+                : ''
+            }
+          </div>
+
           <div class="footer">
             <p>© 2026 VeriFirma - Plataforma de Firma Digital</p>
             <p>Este es un email automático, por favor no respondas.</p>
@@ -98,7 +192,7 @@ async function sendSigningInvitation(email, docTitle, signUrl, signerName = '') 
 }
 
 /**
- * Invitación a visar
+ * Invitación a visar (sin cambios estructurales, pero puedes ampliarla igual)
  */
 async function sendVisadoInvitation(email, docTitle, signUrl, visadorName = '') {
   const subject = `Invitación a visar: ${docTitle}`;

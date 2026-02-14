@@ -455,7 +455,7 @@ async function createDocument(req, res) {
       ]
     );
 
-    const frontBaseUrl =
+        const frontBaseUrl =
       process.env.FRONTEND_URL || 'https://docdigital-demo.onrender.com';
 
     console.log(
@@ -468,6 +468,9 @@ async function createDocument(req, res) {
     );
 
     const emailPromises = [];
+
+    const publicVerifyUrl = `${frontBaseUrl}/verificar`; // pantalla de verificación
+    const verificationCode = documentoNuevo.codigo_verificacion;
 
     // Firmante principal
     if (firmante_email) {
@@ -482,7 +485,11 @@ async function createDocument(req, res) {
           firmante_email,
           title,
           urlFirma,
-          firmante_nombre_completo
+          firmante_nombre_completo,
+          {
+            verificationCode,
+            publicVerifyUrl,
+          }
         )
       );
     }
@@ -500,7 +507,11 @@ async function createDocument(req, res) {
           firmante_adicional_email,
           title,
           urlFirmaAdicional,
-          firmante_adicional_nombre_completo || ''
+          firmante_adicional_nombre_completo || '',
+          {
+            verificationCode,
+            publicVerifyUrl,
+          }
         )
       );
     }
@@ -536,7 +547,11 @@ async function createDocument(req, res) {
           destinatario_email,
           title,
           urlDest,
-          destinatario_nombre || ''
+          destinatario_nombre || '',
+          {
+            verificationCode,
+            publicVerifyUrl,
+          }
         )
       );
     }
@@ -549,6 +564,7 @@ async function createDocument(req, res) {
         emailError.message
       );
     }
+
 
     return res.status(201).json({
       ...doc,
