@@ -1,11 +1,24 @@
 // src/views/VerificationView.jsx
-import React, { useState } from "react";
+import React, { useState, useEffect } from "react";
 
 export function VerificationView({ API_URL }) {
   const [code, setCode] = useState("");
   const [loading, setLoading] = useState(false);
   const [result, setResult] = useState(null);
   const [error, setError] = useState("");
+
+  // Prellenar el código si viene en la URL ?code=...
+  useEffect(() => {
+    try {
+      const params = new URLSearchParams(window.location.search);
+      const urlCode = params.get("code");
+      if (urlCode) {
+        setCode(urlCode);
+      }
+    } catch (_) {
+      // ignore
+    }
+  }, []);
 
   const handleSubmit = async (e) => {
     e.preventDefault();
@@ -19,13 +32,20 @@ export function VerificationView({ API_URL }) {
     setResult(null);
 
     try {
+      const cleanCode = code.trim();
       const res = await fetch(
-        `${API_URL}/api/public/verificar/${encodeURIComponent(code.trim())}`
+        `${API_URL}/api/public/verificar/${encodeURIComponent(cleanCode)}`
       );
       const data = await res.json();
 
       if (!res.ok) {
         throw new Error(data.message || "No se pudo verificar el documento.");
+      }
+
+      if (!data.document) {
+        throw new Error(
+          "No se encontraron datos del documento asociados a este código."
+        );
       }
 
       setResult(data);
@@ -49,6 +69,10 @@ export function VerificationView({ API_URL }) {
     };
     return map[status] || status;
   };
+
+  const doc = result?.document || null;
+  const signers = Array.isArray(result?.signers) ? result.signers : [];
+  const events = Array.isArray(result?.events) ? result.events : [];
 
   return (
     <div
@@ -121,7 +145,7 @@ export function VerificationView({ API_URL }) {
         </div>
       )}
 
-      {result && (
+      {result && doc && (
         <div
           style={{
             marginTop: 8,
@@ -148,7 +172,7 @@ export function VerificationView({ API_URL }) {
                 Título del documento
               </div>
               <div style={{ fontWeight: 600 }}>
-                {result.document?.title || "Sin título"}
+                {doc.title || doc.nombre || "Sin título"}
               </div>
             </div>
 
@@ -160,14 +184,14 @@ export function VerificationView({ API_URL }) {
                 style={{
                   fontWeight: 700,
                   color:
-                    result.document?.status === "FIRMADO"
+                    doc.status === "FIRMADO"
                       ? "#16a34a"
-                      : result.document?.status === "RECHAZADO"
+                      : doc.status === "RECHAZADO"
                       ? "#b91c1c"
                       : "#0369a1",
                 }}
               >
-                {statusLabel(result.document?.status)}
+                {statusLabel(doc.status)}
               </div>
             </div>
 
@@ -176,8 +200,8 @@ export function VerificationView({ API_URL }) {
                 Tipo de trámite
               </div>
               <div>
-                {result.document?.tipo_tramite_label ||
-                  result.document?.tipo_tramite ||
+                {doc.tipo_tramite_label ||
+                  doc.tipo_tramite ||
                   "No informado"}
               </div>
             </div>
@@ -187,10 +211,8 @@ export function VerificationView({ API_URL }) {
                 Fecha de creación
               </div>
               <div>
-                {result.document?.created_at
-                  ? new Date(result.document.created_at).toLocaleString(
-                      "es-CL"
-                    )
+                {doc.created_at
+                  ? new Date(doc.created_at).toLocaleString("es-CL")
                   : "No disponible"}
               </div>
             </div>
@@ -199,7 +221,7 @@ export function VerificationView({ API_URL }) {
               <div style={{ fontSize: "0.75rem", color: "#6b7280" }}>
                 Firmantes
               </div>
-              {Array.isArray(result.signers) && result.signers.length > 0 ? (
+              {signers.length > 0 ? (
                 <ul
                   style={{
                     marginTop: 6,
@@ -207,7 +229,7 @@ export function VerificationView({ API_URL }) {
                     color: "#0f172a",
                   }}
                 >
-                  {result.signers.map((s) => (
+                  {signers.map((s) => (
                     <li key={s.id || s.email}>
                       {s.name || s.email}{" "}
                       {s.signed_at
@@ -225,7 +247,7 @@ export function VerificationView({ API_URL }) {
               )}
             </div>
 
-            {Array.isArray(result.events) && result.events.length > 0 && (
+            {events.length > 0 && (
               <div style={{ gridColumn: "1 / -1", marginTop: 8 }}>
                 <div
                   style={{ fontSize: "0.75rem", color: "#6b7280" }}
@@ -239,7 +261,7 @@ export function VerificationView({ API_URL }) {
                     color: "#0f172a",
                   }}
                 >
-                  {result.events.map((ev, idx) => (
+                  {events.map((ev, idx) => (
                     <li key={idx}>
                       [{new Date(ev.created_at).toLocaleString("es-CL")}]{" "}
                       {ev.descripcion || ev.event_type}
@@ -250,10 +272,10 @@ export function VerificationView({ API_URL }) {
             )}
           </div>
 
-          {result.document?.pdf_final_url && (
+          {doc.pdf_final_url && (
             <div style={{ marginTop: 18 }}>
               <a
-                href={result.document.pdf_final_url}
+                href={doc.pdf_final_url}
                 target="_blank"
                 rel="noreferrer"
                 style={{
