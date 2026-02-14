@@ -394,6 +394,13 @@ function App() {
       />
     );
   }
+  // ===============================
+  // VISTA VERIFICACIÓN PÚBLICA (SIN LOGIN)
+  // ===============================
+  const isVerificationPublic = window.location.pathname === "/verificar";
+  if (isVerificationPublic) {
+    return <VerificationView API_URL={API_URL} />;
+  }
 
   /* ===============================
      VISTA LOGIN
