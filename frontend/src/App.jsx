@@ -10,6 +10,7 @@ import { PublicSignView } from "./views/PublicSignView";
 import { NewDocumentForm } from "./views/NewDocumentForm";
 import { UsersAdminView } from "./views/UsersAdminView";
 import { DashboardView } from "./views/DashboardView";
+import { VerificationView } from "./views/VerificationView";
 
 const API_URL = API_BASE_URL;
 
@@ -821,6 +822,12 @@ function App() {
            =============================== */}
         {view === "dashboard" && (
           <DashboardView docs={docs} user={user} />
+        )}
+	{/* ===============================
+	    VISTA VERIFICACIÓN PÚBLICA
+           =============================== */}
+	{view === "verification" && (
+          <VerificationView API_URL={API_URL} />
         )}
       </div>
     </div>

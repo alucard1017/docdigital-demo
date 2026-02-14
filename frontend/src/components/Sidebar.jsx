@@ -101,6 +101,14 @@ export function Sidebar({
         <span>✅</span> Solo firmados
       </div>
 
+      {/* Verificación pública */}
+      <div
+        className={`nav-item ${view === "verification" ? "active" : ""}`}
+        onClick={() => setView("verification")}
+      >
+        <span>🔍</span> Verificar documento
+      </div>
+
       {/* Sección Administración */}
       {showUsersMenu && (
         <>
