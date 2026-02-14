@@ -84,7 +84,7 @@ async function generateQrImageUrl(targetUrl) {
  * Invitación a firmar
  * Incluye:
  * - Código de verificación del documento
- * - Enlace a verificación pública
+ * - Texto explicando su uso
  * - QR hospedado en R2 (compatible con Gmail)
  */
 async function sendSigningInvitation(
@@ -94,6 +94,7 @@ async function sendSigningInvitation(
   signerName = '',
   {
     verificationCode = '',
+    // dejamos publicVerifyUrl para futuro, pero no lo usamos como link
     publicVerifyUrl = '',
     qrTargetUrl = '',
   } = {}
@@ -120,7 +121,6 @@ async function sendSigningInvitation(
           .meta { font-size: 12px; color: #6b7280; margin-top: 4px; }
           .verify-box { margin-top: 24px; padding: 14px 16px; border-radius: 12px; background: #f9fafb; border: 1px dashed #d1d5db; font-size: 13px; color: #374151; }
           .verify-code { font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", "Courier New", monospace; font-weight: 700; font-size: 14px; background: #111827; color: #e5e7eb; padding: 4px 8px; border-radius: 8px; display: inline-block; margin: 4px 0; }
-          .verify-link { color: #2563eb; text-decoration: underline; }
           .qr-wrapper { margin-top: 16px; text-align: center; }
           .qr-label { font-size: 12px; color: #6b7280; margin-bottom: 4px; }
           .qr-img { display: inline-block; padding: 6px; border-radius: 12px; background: #111827; }
@@ -157,19 +157,16 @@ async function sendSigningInvitation(
                 Código de verificación del documento:
                 <span class="verify-code">${verificationCode}</span>
               </p>
-            `
-                : ''
-            }
-            ${
-              publicVerifyUrl
-                ? `
               <p style="margin: 6px 0 0;">
-                En cualquier momento, puedes ir a
-                <a href="${publicVerifyUrl}" class="verify-link">${publicVerifyUrl}</a>
-                y pegar este código para consultar el estado del documento.
+                Conserva este código. Podrá ser utilizado por la entidad emisora o por tu contraparte
+                para verificar el estado del documento en VeriFirma.
               </p>
             `
-                : ''
+                : `
+              <p style="margin: 0;">
+                Este documento cuenta con un código de verificación interno en VeriFirma.
+              </p>
+            `
             }
 
             ${
