@@ -88,6 +88,21 @@ console.log('✓ Middlewares JSON configurados');
 console.log('✓ Directorio de uploads verificado');
 
 /* ================================
+   ARCHIVOS PÚBLICOS (VERIFICACIÓN)
+   ================================ */
+const publicDir = path.join(__dirname, 'public');
+if (!fs.existsSync(publicDir)) {
+  fs.mkdirSync(publicDir, { recursive: true });
+}
+app.use('/public', express.static(publicDir));
+
+// Página pública de verificación: /public/verificar
+app.get('/public/verificar', (req, res) => {
+  res.sendFile(path.join(publicDir, 'verificar.html'));
+});
+console.log('✓ Ruta pública /public/verificar registrada');
+
+/* ================================
    SWAGGER / DOCUMENTACIÓN API
    ================================ */
 const { swaggerUi, specs } = require('./swagger');
