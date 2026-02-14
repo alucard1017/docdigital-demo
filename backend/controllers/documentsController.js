@@ -455,7 +455,7 @@ async function createDocument(req, res) {
       ]
     );
 
-        const frontBaseUrl =
+     const frontBaseUrl =
       process.env.FRONTEND_URL || 'https://docdigital-demo.onrender.com';
 
     console.log(
@@ -564,7 +564,6 @@ async function createDocument(req, res) {
         emailError.message
       );
     }
-
 
     return res.status(201).json({
       ...doc,

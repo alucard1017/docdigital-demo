@@ -1,10 +1,12 @@
 // backend/services/emailService.js
 const { MailtrapClient } = require('mailtrap');
 const QRCode = require('qrcode');
+const crypto = require('crypto');
+const { uploadBufferToS3, getSignedUrl } = require('./storageR2');
 
 console.log('📬 [EMAIL] Cargando emailService.js (Mailtrap API)');
 
-const TOKEN = process.env.MAILTRAP_TOKEN;
+const TOKEN = process.env.MAILTRAP_TOKEN || process.env.MAILTRAP_API_TOKEN;
 const SENDER_EMAIL = process.env.MAILTRAP_SENDER_EMAIL;
 const SENDER_NAME = process.env.MAILTRAP_SENDER_NAME || 'VeriFirma';
 
@@ -54,19 +56,26 @@ async function sendEmail({ to, subject, html }) {
 }
 
 /**
- * Genera un data URL (base64) con un QR que apunta a "url"
+ * Genera un PNG de QR, lo sube a R2 y devuelve una URL firmada
  */
-async function generateQrDataUrl(url) {
-  if (!url) return '';
+async function generateQrImageUrl(targetUrl) {
+  if (!targetUrl) return '';
+
   try {
-    const dataUrl = await QRCode.toDataURL(url, {
+    const buffer = await QRCode.toBuffer(targetUrl, {
       errorCorrectionLevel: 'M',
       margin: 1,
       width: 256,
     });
-    return dataUrl; // "data:image/png;base64,...."
+
+    const key = `qrs/email-${crypto.randomUUID()}.png`;
+    await uploadBufferToS3(buffer, key, 'image/png');
+
+    // URL firmada por 7 días (puedes ajustar)
+    const url = await getSignedUrl(key, 7 * 24 * 3600);
+    return url;
   } catch (err) {
-    console.error('❌ [EMAIL] Error generando QR:', err.message);
+    console.error('❌ [EMAIL] Error generando/subiendo QR:', err.message);
     return '';
   }
 }
@@ -76,7 +85,7 @@ async function generateQrDataUrl(url) {
  * Incluye:
  * - Código de verificación del documento
  * - Enlace a verificación pública
- * - QR opcional (firma o verificación)
+ * - QR hospedado en R2 (compatible con Gmail)
  */
 async function sendSigningInvitation(
   email,
@@ -86,13 +95,13 @@ async function sendSigningInvitation(
   {
     verificationCode = '',
     publicVerifyUrl = '',
-    qrTargetUrl = '', // URL para el QR (si no se pasa, usa signUrl)
+    qrTargetUrl = '',
   } = {}
 ) {
   const subject = `Invitación a firmar: ${docTitle}`;
 
-  const qrUrl = qrTargetUrl || signUrl || publicVerifyUrl;
-  const qrImageDataUrl = await generateQrDataUrl(qrUrl);
+  const qrUrlTarget = qrTargetUrl || signUrl || publicVerifyUrl;
+  const qrImageUrl = await generateQrImageUrl(qrUrlTarget);
 
   const html = `
     <!DOCTYPE html>
@@ -164,14 +173,14 @@ async function sendSigningInvitation(
             }
 
             ${
-              qrImageDataUrl
+              qrImageUrl
                 ? `
               <div class="qr-wrapper">
                 <div class="qr-label">
                   También puedes escanear este código QR para ir directamente al documento:
                 </div>
                 <div class="qr-img">
-                  <img src="${qrImageDataUrl}" alt="QR de acceso al documento" />
+                  <img src="${qrImageUrl}" alt="QR de acceso al documento" />
                 </div>
               </div>
             `
@@ -192,7 +201,7 @@ async function sendSigningInvitation(
 }
 
 /**
- * Invitación a visar (sin cambios estructurales, pero puedes ampliarla igual)
+ * Invitación a visar
  */
 async function sendVisadoInvitation(email, docTitle, signUrl, visadorName = '') {
   const subject = `Invitación a visar: ${docTitle}`;
