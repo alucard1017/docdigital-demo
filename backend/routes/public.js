@@ -110,7 +110,8 @@ router.get('/docs/document/:token', async (req, res) => {
          signature_token_expires_at,
          firmante_nombre,
          firmante_run,
-         numero_contrato_interno
+         numero_contrato_interno,
+         pdf_final_url
        FROM documents
        WHERE signature_token = $1`,
       [token]
@@ -436,20 +437,45 @@ router.get('/verificar/:codigo', async (req, res) => {
       [documento.id]
     );
 
+    const document = {
+      id: documento.id,
+      title: documento.titulo,
+      status: documento.estado,
+      tipo_tramite: documento.tipo,
+      categoria_firma: documento.categoria_firma,
+      hash_pdf: documento.hash_pdf,
+      created_at: documento.created_at,
+      updated_at: documento.updated_at,
+      pdf_final_url: documento.pdf_final_url || null,
+    };
+
+    const signers = signersResult.rows.map((s) => ({
+      id: s.id,
+      name: s.nombre,
+      email: s.email,
+      rut: s.rut,
+      role: s.rol,
+      order: s.orden_firma,
+      status: s.estado,
+      signed_at: s.fecha_firma,
+      tipo_firma: s.tipo_firma,
+    }));
+
+    const events = eventosResult.rows.map((e) => ({
+      id: e.id,
+      event_type: e.tipo_evento,
+      ip: e.ip,
+      user_agent: e.user_agent,
+      metadata: e.metadata,
+      created_at: e.created_at,
+      descripcion: e.tipo_evento,
+    }));
+
     return res.json({
       codigoVerificacion: documento.codigo_verificacion,
-      documento: {
-        id: documento.id,
-        tipo: documento.tipo,
-        titulo: documento.titulo,
-        estado: documento.estado,
-        categoria_firma: documento.categoria_firma,
-        hash_pdf: documento.hash_pdf,
-        created_at: documento.created_at,
-        updated_at: documento.updated_at,
-      },
-      firmantes: signersResult.rows,
-      eventos: eventosResult.rows,
+      document,
+      signers,
+      events,
     });
   } catch (err) {
     console.error('❌ Error en verificación por código:', err);
