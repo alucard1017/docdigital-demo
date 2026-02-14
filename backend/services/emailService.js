@@ -10,6 +10,9 @@ const TOKEN = process.env.MAILTRAP_TOKEN || process.env.MAILTRAP_API_TOKEN;
 const SENDER_EMAIL = process.env.MAILTRAP_SENDER_EMAIL;
 const SENDER_NAME = process.env.MAILTRAP_SENDER_NAME || 'VeriFirma';
 
+// URL pública fija de verificación de documentos
+const PUBLIC_VERIFY_BASE_URL = 'https://docdigital-demo.onrender.com/verificar';
+
 // DEBUG: ver qué llega desde Render
 console.log('🔎 [EMAIL] DEBUG ENV:', {
   MAILTRAP_TOKEN: TOKEN ? '[OK] token presente' : '[FALTA]',
@@ -94,14 +97,20 @@ async function sendSigningInvitation(
   signerName = '',
   {
     verificationCode = '',
-    // dejamos publicVerifyUrl para futuro, pero no lo usamos como link
+    // dejamos publicVerifyUrl para futuro, pero la URL principal es fija
     publicVerifyUrl = '',
     qrTargetUrl = '',
   } = {}
 ) {
   const subject = `Invitación a firmar: ${docTitle}`;
 
-  const qrUrlTarget = qrTargetUrl || signUrl || publicVerifyUrl;
+  // URL de verificación pública (opcionalmente con query si quieres prellenar)
+  const verificationUrl = verificationCode
+    ? `${PUBLIC_VERIFY_BASE_URL}?code=${encodeURIComponent(verificationCode)}`
+    : PUBLIC_VERIFY_BASE_URL;
+
+  // El QR sigue apuntando a la URL de firma (o lo que pases en qrTargetUrl)
+  const qrUrlTarget = qrTargetUrl || signUrl || publicVerifyUrl || verificationUrl;
   const qrImageUrl = await generateQrImageUrl(qrUrlTarget);
 
   const html = `
@@ -120,12 +129,13 @@ async function sendSigningInvitation(
           .button { display: inline-block; background-color: #2563eb; color: white !important; padding: 12px 24px; text-decoration: none; border-radius: 999px; margin: 20px 0 8px; font-weight: 600; font-size: 14px; }
           .meta { font-size: 12px; color: #6b7280; margin-top: 4px; }
           .verify-box { margin-top: 24px; padding: 14px 16px; border-radius: 12px; background: #f9fafb; border: 1px dashed #d1d5db; font-size: 13px; color: #374151; }
-          .verify-code { font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", "Courier New", monospace; font-weight: 700; font-size: 14px; background: #111827; color: #e5e7eb; padding: 4px 8px; border-radius: 8px; display: inline-block; margin: 4px 0; }
+          .verify-code { font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", "Courier New", monospace; font-weight: 700; font-size: 14px; background: #111827; color: #e5e7eb; padding: 4px 8px; border-radius: 8px; display: inline-block; margin: 4px 0; letter-spacing: 2px; }
           .qr-wrapper { margin-top: 16px; text-align: center; }
           .qr-label { font-size: 12px; color: #6b7280; margin-bottom: 4px; }
           .qr-img { display: inline-block; padding: 6px; border-radius: 12px; background: #111827; }
           .qr-img img { display: block; width: 144px; height: 144px; }
           .footer { font-size: 11px; color: #9ca3af; margin-top: 24px; border-top: 1px solid #e5e7eb; padding-top: 10px; text-align: center; }
+          a { color: #2563eb; }
         </style>
       </head>
       <body>
@@ -153,13 +163,19 @@ async function sendSigningInvitation(
             ${
               verificationCode
                 ? `
-              <p style="margin: 0;">
+              <p style="margin: 0 0 4px;">
                 Código de verificación del documento:
                 <span class="verify-code">${verificationCode}</span>
               </p>
-              <p style="margin: 6px 0 0;">
-                Conserva este código. Podrá ser utilizado por la entidad emisora o por tu contraparte
-                para verificar el estado del documento en VeriFirma.
+              <p style="margin: 6px 0 4px;">
+                Puedes comprobar la validez de este documento en cualquier momento entrando a
+                <a href="${verificationUrl}" target="_blank" rel="noopener noreferrer">
+                  https://docdigital-demo.onrender.com/verificar
+                </a>
+                e ingresando el código anterior.
+              </p>
+              <p style="margin: 4px 0 0;">
+                Te recomendamos conservar este código junto al PDF firmado.
               </p>
             `
                 : `
@@ -174,7 +190,7 @@ async function sendSigningInvitation(
                 ? `
               <div class="qr-wrapper">
                 <div class="qr-label">
-                  También puedes escanear este código QR para ir directamente al documento:
+                  También puedes escanear este código QR para ir directamente al flujo del documento:
                 </div>
                 <div class="qr-img">
                   <img src="${qrImageUrl}" alt="QR de acceso al documento" />
