@@ -1,15 +1,15 @@
 // backend/routes/public.js
-const express = require('express');
-const db = require('../db');
-const { getSignedUrl } = require('../services/s3');
-const { sellarPdfConQr } = require('../services/pdfSeal');
+const express = require("express");
+const db = require("../db");
+const { getSignedUrl } = require("../services/s3");
+const { sellarPdfConQr } = require("../services/pdfSeal");
 
 const router = express.Router();
 
 /* ================================
    GET: Datos + PDF para enlace público de FIRMA (por firmante, sign_token)
    ================================ */
-router.get('/docs/:token', async (req, res) => {
+router.get("/docs/:token", async (req, res) => {
   try {
     const { token } = req.params;
 
@@ -40,7 +40,7 @@ router.get('/docs/:token', async (req, res) => {
     if (result.rowCount === 0) {
       return res
         .status(404)
-        .json({ message: 'Enlace inválido o documento no encontrado' });
+        .json({ message: "Enlace inválido o documento no encontrado" });
     }
 
     const doc = result.rows[0];
@@ -50,14 +50,14 @@ router.get('/docs/:token', async (req, res) => {
       doc.signature_token_expires_at < new Date()
     ) {
       return res.status(400).json({
-        message: 'El enlace público ha expirado, solicita uno nuevo al emisor',
+        message: "El enlace público ha expirado, solicita uno nuevo al emisor",
       });
     }
 
     if (!doc.file_path) {
       return res
         .status(404)
-        .json({ message: 'Documento sin archivo asociado' });
+        .json({ message: "Documento sin archivo asociado" });
     }
 
     const pdfUrl = await getSignedUrl(doc.file_path, 3600);
@@ -84,8 +84,8 @@ router.get('/docs/:token', async (req, res) => {
       pdfUrl,
     });
   } catch (err) {
-    console.error('❌ Error cargando documento público (firmante):', err);
-    return res.status(500).json({ message: 'Error interno del servidor' });
+    console.error("❌ Error cargando documento público (firmante):", err);
+    return res.status(500).json({ message: "Error interno del servidor" });
   }
 });
 
@@ -93,7 +93,7 @@ router.get('/docs/:token', async (req, res) => {
    GET: Datos + PDF usando signature_token del DOCUMENTO
    (para VISADO y consulta pública)
    ================================ */
-router.get('/docs/document/:token', async (req, res) => {
+router.get("/docs/document/:token", async (req, res) => {
   try {
     const { token } = req.params;
 
@@ -120,7 +120,7 @@ router.get('/docs/document/:token', async (req, res) => {
     if (result.rowCount === 0) {
       return res
         .status(404)
-        .json({ message: 'Enlace inválido o documento no encontrado' });
+        .json({ message: "Enlace inválido o documento no encontrado" });
     }
 
     const doc = result.rows[0];
@@ -130,14 +130,14 @@ router.get('/docs/document/:token', async (req, res) => {
       doc.signature_token_expires_at < new Date()
     ) {
       return res.status(400).json({
-        message: 'El enlace público ha expirado, solicita uno nuevo al emisor',
+        message: "El enlace público ha expirado, solicita uno nuevo al emisor",
       });
     }
 
     if (!doc.file_path) {
       return res
         .status(404)
-        .json({ message: 'Documento sin archivo asociado' });
+        .json({ message: "Documento sin archivo asociado" });
     }
 
     const pdfUrl = await getSignedUrl(doc.file_path, 3600);
@@ -147,15 +147,15 @@ router.get('/docs/document/:token', async (req, res) => {
       pdfUrl,
     });
   } catch (err) {
-    console.error('❌ Error cargando documento público (document):', err);
-    return res.status(500).json({ message: 'Error interno del servidor' });
+    console.error("❌ Error cargando documento público (document):", err);
+    return res.status(500).json({ message: "Error interno del servidor" });
   }
 });
 
 /* ================================
    POST: Firmar documento por token (firmante externo, por sign_token)
    ================================ */
-router.post('/docs/:token/firmar', async (req, res) => {
+router.post("/docs/:token/firmar", async (req, res) => {
   try {
     const { token } = req.params;
 
@@ -175,7 +175,7 @@ router.post('/docs/:token/firmar', async (req, res) => {
     if (current.rowCount === 0) {
       return res
         .status(404)
-        .json({ message: 'Enlace inválido o documento no encontrado' });
+        .json({ message: "Enlace inválido o documento no encontrado" });
     }
 
     const row = current.rows[0];
@@ -186,25 +186,25 @@ router.post('/docs/:token/firmar', async (req, res) => {
     ) {
       return res
         .status(400)
-        .json({ message: 'El enlace de firma ha expirado' });
+        .json({ message: "El enlace de firma ha expirado" });
     }
 
-    if (row.status === 'RECHAZADO') {
+    if (row.status === "RECHAZADO") {
       return res
         .status(400)
-        .json({ message: 'Documento rechazado, no se puede firmar' });
+        .json({ message: "Documento rechazado, no se puede firmar" });
     }
 
-    if (row.requires_visado === true && row.status === 'PENDIENTE_VISADO') {
+    if (row.requires_visado === true && row.status === "PENDIENTE_VISADO") {
       return res.status(400).json({
-        message: 'Este documento requiere visación antes de firmar',
+        message: "Este documento requiere visación antes de firmar",
       });
     }
 
-    if (row.signer_status === 'FIRMADO') {
+    if (row.signer_status === "FIRMADO") {
       return res
         .status(400)
-        .json({ message: 'Este firmante ya firmó el documento' });
+        .json({ message: "Este firmante ya firmó el documento" });
     }
 
     await db.query(
@@ -231,11 +231,11 @@ router.post('/docs/:token/firmar', async (req, res) => {
     let newSignatureStatus = row.signature_status;
 
     if (allSigned) {
-      newDocStatus = 'FIRMADO';
-      newSignatureStatus = 'FIRMADO';
+      newDocStatus = "FIRMADO";
+      newSignatureStatus = "FIRMADO";
     } else {
-      newDocStatus = 'PENDIENTE_FIRMA';
-      newSignatureStatus = 'PENDIENTE';
+      newDocStatus = "PENDIENTE_FIRMA";
+      newSignatureStatus = "PENDIENTE";
     }
 
     const docUpdateRes = await db.query(
@@ -256,10 +256,10 @@ router.post('/docs/:token/firmar', async (req, res) => {
        VALUES ($1, $2, $3, $4, $5, $6)`,
       [
         doc.id,
-        row.signer_name || 'Firmante externo',
-        'FIRMADO_PUBLICO',
+        row.signer_name || "Firmante externo",
+        "FIRMADO_PUBLICO",
         allSigned
-          ? 'Documento firmado por todos los firmantes desde enlace público'
+          ? "Documento firmado por todos los firmantes desde enlace público"
           : `Firma registrada para firmante ${row.signer_email}`,
         row.status,
         newDocStatus,
@@ -285,7 +285,7 @@ router.post('/docs/:token/firmar', async (req, res) => {
             s3Key: baseKey,
             documentoId: docNuevo.id,
             codigoVerificacion: docNuevo.codigo_verificacion,
-            categoriaFirma: docNuevo.categoria_firma || 'SIMPLE',
+            categoriaFirma: docNuevo.categoria_firma || "SIMPLE",
             numeroContratoInterno: doc.numero_contrato_interno,
           });
 
@@ -297,7 +297,10 @@ router.post('/docs/:token/firmar', async (req, res) => {
           );
         }
       } catch (sealError) {
-        console.error('⚠️ Error sellando PDF con QR (firma pública):', sealError);
+        console.error(
+          "⚠️ Error sellando PDF con QR (firma pública):",
+          sealError
+        );
       }
     }
 
@@ -305,19 +308,203 @@ router.post('/docs/:token/firmar', async (req, res) => {
       ...doc,
       file_url: doc.file_path,
       message: allSigned
-        ? 'Documento firmado correctamente por todos los firmantes'
-        : 'Firma registrada. Aún faltan firmantes por completar la firma',
+        ? "Documento firmado correctamente por todos los firmantes"
+        : "Firma registrada. Aún faltan firmantes por completar la firma",
     });
   } catch (err) {
-    console.error('❌ Error firmando documento público:', err);
-    return res.status(500).json({ message: 'Error interno del servidor' });
+    console.error("❌ Error firmando documento público:", err);
+    return res.status(500).json({ message: "Error interno del servidor" });
+  }
+});
+
+/* ================================
+   POST: Rechazar documento por token (firmante externo, por sign_token)
+   ================================ */
+router.post("/docs/:token/rechazar", async (req, res) => {
+  try {
+    const { token } = req.params;
+    const { motivo } = req.body || {};
+
+    if (!motivo || !motivo.trim()) {
+      return res
+        .status(400)
+        .json({ message: "Debes indicar un motivo de rechazo." });
+    }
+
+    const current = await db.query(
+      `SELECT 
+         s.id AS signer_id,
+         s.status AS signer_status,
+         s.name AS signer_name,
+         s.email AS signer_email,
+         d.*
+       FROM document_signers s
+       JOIN documents d ON d.id = s.document_id
+       WHERE s.sign_token = $1`,
+      [token]
+    );
+
+    if (current.rowCount === 0) {
+      return res
+        .status(404)
+        .json({ message: "Enlace inválido o documento no encontrado" });
+    }
+
+    const row = current.rows[0];
+
+    if (
+      row.signature_token_expires_at &&
+      row.signature_token_expires_at < new Date()
+    ) {
+      return res
+        .status(400)
+        .json({ message: "El enlace de firma ha expirado" });
+    }
+
+    if (row.status === "FIRMADO") {
+      return res
+        .status(400)
+        .json({ message: "Documento ya firmado, no se puede rechazar" });
+    }
+
+    if (row.status === "RECHAZADO") {
+      return res
+        .status(400)
+        .json({ message: "Documento ya fue rechazado anteriormente" });
+    }
+
+    if (row.signer_status === "FIRMADO") {
+      return res
+        .status(400)
+        .json({
+          message: "Este firmante ya firmó el documento, no puede rechazarlo",
+        });
+    }
+
+    if (row.signer_status === "RECHAZADO") {
+      return res
+        .status(400)
+        .json({ message: "Este firmante ya rechazó el documento" });
+    }
+
+    // Marcar firmante como RECHAZADO
+    await db.query(
+      `UPDATE document_signers
+       SET status = 'RECHAZADO',
+           rejected_at = NOW(),
+           rejection_reason = $2
+       WHERE id = $1`,
+      [row.signer_id, motivo]
+    );
+
+    // Actualizar documento como RECHAZADO (cortamos flujo)
+    const docUpdateRes = await db.query(
+      `UPDATE documents
+       SET status = 'RECHAZADO',
+           signature_status = 'RECHAZADO',
+           reject_reason = $2,
+           updated_at = NOW()
+       WHERE id = $1
+       RETURNING *`,
+      [row.id, motivo]
+    );
+    const doc = docUpdateRes.rows[0];
+
+    // Evento interno (document_events)
+    await db.query(
+      `INSERT INTO document_events (
+         document_id, actor, action, details, from_status, to_status
+       )
+       VALUES ($1, $2, $3, $4, $5, $6)`,
+      [
+        doc.id,
+        row.signer_name || "Firmante externo",
+        "RECHAZO_PUBLICO",
+        `Documento rechazado desde enlace público. Motivo: ${motivo}`,
+        row.status,
+        "RECHAZADO",
+      ]
+    );
+
+    // Evento en tabla eventos_firma (para verificación pública, si existe vínculo)
+    if (doc.nuevo_documento_id) {
+      try {
+        await db.query(
+          `INSERT INTO eventos_firma (
+             documento_id, tipo_evento, ip, user_agent, metadata, created_at
+           )
+           VALUES ($1, $2, $3, $4, $5, NOW())`,
+          [
+            doc.nuevo_documento_id,
+            "RECHAZO_PUBLICO",
+            null,
+            null,
+            JSON.stringify({
+              motivo,
+              firmante_nombre: row.signer_name,
+              firmante_email: row.signer_email,
+            }),
+          ]
+        );
+      } catch (e) {
+        console.error(
+          "⚠️ Error registrando evento de rechazo en eventos_firma:",
+          e
+        );
+      }
+    }
+
+    // Notificar al emisor por email
+    try {
+      const ownerRes = await db.query(
+        `SELECT u.name, u.email
+         FROM users u
+         JOIN documents d ON d.owner_id = u.id
+         WHERE d.id = $1`,
+        [doc.id]
+      );
+
+      if (ownerRes.rowCount > 0) {
+        const owner = ownerRes.rows[0];
+        const { sendRejectionNotification } = require("../services/emailService");
+
+        await sendRejectionNotification(
+          owner.email,
+          owner.name,
+          doc.title,
+          row.signer_name || "Firmante externo",
+          row.signer_email,
+          motivo,
+          new Date(),
+          doc.id
+        );
+
+        console.log(
+          `✅ Email de rechazo enviado a ${owner.email} para documento ${doc.id}`
+        );
+      }
+    } catch (emailErr) {
+      console.error(
+        "⚠️ Error enviando email de rechazo al emisor:",
+        emailErr.message
+      );
+    }
+
+    return res.json({
+      ...doc,
+      file_url: doc.file_path,
+      message: "Documento rechazado correctamente",
+    });
+  } catch (err) {
+    console.error("❌ Error rechazando documento público:", err);
+    return res.status(500).json({ message: "Error interno del servidor" });
   }
 });
 
 /* ================================
    POST: Visar documento por token (visador externo)
    ================================ */
-router.post('/docs/:token/visar', async (req, res) => {
+router.post("/docs/:token/visar", async (req, res) => {
   try {
     const { token } = req.params;
 
@@ -331,7 +518,7 @@ router.post('/docs/:token/visar', async (req, res) => {
     if (current.rowCount === 0) {
       return res
         .status(404)
-        .json({ message: 'Enlace inválido o documento no encontrado' });
+        .json({ message: "Enlace inválido o documento no encontrado" });
     }
 
     const docActual = current.rows[0];
@@ -342,24 +529,24 @@ router.post('/docs/:token/visar', async (req, res) => {
     ) {
       return res
         .status(400)
-        .json({ message: 'El enlace de visado ha expirado' });
+        .json({ message: "El enlace de visado ha expirado" });
     }
 
-    if (docActual.status === 'RECHAZADO') {
+    if (docActual.status === "RECHAZADO") {
       return res
         .status(400)
-        .json({ message: 'Documento rechazado, no se puede visar' });
+        .json({ message: "Documento rechazado, no se puede visar" });
     }
 
     if (docActual.requires_visado !== true) {
       return res
         .status(400)
-        .json({ message: 'Este documento no requiere visación' });
+        .json({ message: "Este documento no requiere visación" });
     }
 
-    if (docActual.status !== 'PENDIENTE_VISADO') {
+    if (docActual.status !== "PENDIENTE_VISADO") {
       return res.status(400).json({
-        message: 'Solo se pueden visar documentos en estado PENDIENTE_VISADO',
+        message: "Solo se pueden visar documentos en estado PENDIENTE_VISADO",
       });
     }
 
@@ -369,7 +556,7 @@ router.post('/docs/:token/visar', async (req, res) => {
            updated_at = NOW()
        WHERE id = $2
        RETURNING *`,
-      ['PENDIENTE_FIRMA', docActual.id]
+      ["PENDIENTE_FIRMA", docActual.id]
     );
     const doc = result.rows[0];
 
@@ -380,29 +567,29 @@ router.post('/docs/:token/visar', async (req, res) => {
        VALUES ($1, $2, $3, $4, $5, $6)`,
       [
         doc.id,
-        doc.visador_nombre || 'Visador externo',
-        'VISADO_PUBLICO',
-        'Documento visado desde enlace público',
+        doc.visador_nombre || "Visador externo",
+        "VISADO_PUBLICO",
+        "Documento visado desde enlace público",
         docActual.status,
-        'PENDIENTE_FIRMA',
+        "PENDIENTE_FIRMA",
       ]
     );
 
     return res.json({
       ...doc,
       file_url: doc.file_path,
-      message: 'Documento visado correctamente desde enlace público',
+      message: "Documento visado correctamente desde enlace público",
     });
   } catch (err) {
-    console.error('❌ Error visando documento público:', err);
-    return res.status(500).json({ message: 'Error interno del servidor' });
+    console.error("❌ Error visando documento público:", err);
+    return res.status(500).json({ message: "Error interno del servidor" });
   }
 });
 
 /* ================================
    GET: Verificación por código
    ================================ */
-router.get('/verificar/:codigo', async (req, res) => {
+router.get("/verificar/:codigo", async (req, res) => {
   try {
     const { codigo } = req.params;
 
@@ -416,7 +603,7 @@ router.get('/verificar/:codigo', async (req, res) => {
     if (docResult.rowCount === 0) {
       return res
         .status(404)
-        .json({ message: 'Documento no encontrado para este código' });
+        .json({ message: "Documento no encontrado para este código" });
     }
 
     const documento = docResult.rows[0];
@@ -478,8 +665,8 @@ router.get('/verificar/:codigo', async (req, res) => {
       events,
     });
   } catch (err) {
-    console.error('❌ Error en verificación por código:', err);
-    return res.status(500).json({ message: 'Error interno del servidor' });
+    console.error("❌ Error en verificación por código:", err);
+    return res.status(500).json({ message: "Error interno del servidor" });
   }
 });
 

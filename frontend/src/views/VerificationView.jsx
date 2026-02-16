@@ -15,13 +15,14 @@ export function VerificationView({ API_URL }) {
       if (urlCode) {
         setCode(urlCode);
       }
-    } catch (_) {
+    } catch {
       // ignore
     }
   }, []);
 
   const handleSubmit = async (e) => {
     e.preventDefault();
+
     if (!code.trim()) {
       setError("Ingresa un código de verificación.");
       return;
@@ -36,11 +37,26 @@ export function VerificationView({ API_URL }) {
       const res = await fetch(
         `${API_URL}/api/public/verificar/${encodeURIComponent(cleanCode)}`
       );
-      const data = await res.json();
 
+      // Manejo de mensajes según status
       if (!res.ok) {
-        throw new Error(data.message || "No se pudo verificar el documento.");
+        let message = "No se pudo verificar el documento.";
+        if (res.status === 404) {
+          message = "Código de verificación no válido o inexistente.";
+        } else if (res.status === 410) {
+          message = "El código de verificación ha expirado, solicita uno nuevo al emisor.";
+        }
+        let data;
+        try {
+          data = await res.json();
+          if (data?.message) message = data.message;
+        } catch {
+          // ignore parse error
+        }
+        throw new Error(message);
       }
+
+      const data = await res.json();
 
       if (!data.document) {
         throw new Error(
@@ -50,7 +66,7 @@ export function VerificationView({ API_URL }) {
 
       setResult(data);
     } catch (err) {
-      setError(err.message);
+      setError(err.message || "Error al verificar el documento.");
       setResult(null);
     } finally {
       setLoading(false);
@@ -73,6 +89,34 @@ export function VerificationView({ API_URL }) {
   const doc = result?.document || null;
   const signers = Array.isArray(result?.signers) ? result.signers : [];
   const events = Array.isArray(result?.events) ? result.events : [];
+
+  // Último evento de rechazo público (si existe)
+  let lastRejectEvent = null;
+  if (events.length > 0) {
+    const rejects = events.filter(
+      (ev) =>
+        ev.event_type === "RECHAZO_PUBLICO" ||
+        ev.descripcion === "RECHAZO_PUBLICO"
+    );
+    if (rejects.length > 0) {
+      lastRejectEvent = rejects[rejects.length - 1];
+    }
+  }
+
+  let rejectReason = "";
+  if (lastRejectEvent && lastRejectEvent.metadata) {
+    try {
+      const meta =
+        typeof lastRejectEvent.metadata === "string"
+          ? JSON.parse(lastRejectEvent.metadata)
+          : lastRejectEvent.metadata;
+      if (meta && meta.motivo) {
+        rejectReason = meta.motivo;
+      }
+    } catch {
+      // metadata no JSON o corrupta, ignorar
+    }
+  }
 
   return (
     <div
@@ -155,6 +199,41 @@ export function VerificationView({ API_URL }) {
             background: "#f9fafb",
           }}
         >
+          {/* Banner de rechazo si aplica */}
+          {doc.status === "RECHAZADO" && (
+            <div
+              style={{
+                marginBottom: 16,
+                padding: 12,
+                borderRadius: 10,
+                background: "#fef2f2",
+                border: "1px solid #fecaca",
+                color: "#7f1d1d",
+                fontSize: "0.9rem",
+              }}
+            >
+              <div
+                style={{
+                  fontWeight: 700,
+                  marginBottom: rejectReason ? 4 : 0,
+                }}
+              >
+                Documento rechazado.
+              </div>
+              {rejectReason && (
+                <div>
+                  Motivo: <strong>{rejectReason}</strong>
+                </div>
+              )}
+              {lastRejectEvent?.created_at && (
+                <div style={{ fontSize: "0.8rem", marginTop: 4 }}>
+                  Fecha de rechazo:{" "}
+                  {new Date(lastRejectEvent.created_at).toLocaleString("es-CL")}
+                </div>
+              )}
+            </div>
+          )}
+
           <h2 style={{ fontSize: "1.2rem", marginBottom: 12 }}>
             Detalles del documento
           </h2>
@@ -249,9 +328,7 @@ export function VerificationView({ API_URL }) {
 
             {events.length > 0 && (
               <div style={{ gridColumn: "1 / -1", marginTop: 8 }}>
-                <div
-                  style={{ fontSize: "0.75rem", color: "#6b7280" }}
-                >
+                <div style={{ fontSize: "0.75rem", color: "#6b7280" }}>
                   Historial de eventos
                 </div>
                 <ul

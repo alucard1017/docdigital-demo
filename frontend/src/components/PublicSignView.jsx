@@ -11,50 +11,73 @@ export function PublicSignView({ token }) {
   const [error, setError] = useState("");
   const [accepted, setAccepted] = useState(false);
   const [signing, setSigning] = useState(false);
-  const [mode, setMode] = useState(null);           // "visado" o null
+  const [mode, setMode] = useState(null); // "visado" o null
   const [showLegal, setShowLegal] = useState(false); // muestra banner y checkbox
 
   // Leer ?mode=visado desde la URL
   useEffect(() => {
     const params = new URLSearchParams(window.location.search);
-    const modeUrl = params.get("mode");
-    setMode(modeUrl || null);
+    const modeFromUrl = params.get("mode");
+    setMode(modeFromUrl || null);
   }, []);
 
   const isVisado = mode === "visado";
 
+  // Cargar documento público
   useEffect(() => {
     const fetchDoc = async () => {
       try {
         const res = await fetch(`${API_URL}/api/public/docs/${token}`);
         const data = await res.json();
-        if (!res.ok) throw new Error(data.message || "No se pudo cargar el documento");
+
+        if (!res.ok) {
+          throw new Error(data.message || "No se pudo cargar el documento");
+        }
+
         setDoc(data.document);
         setPdfUrl(data.pdfUrl);
       } catch (err) {
-        setError(err.message);
+        setError(err.message || "Error inesperado al cargar el documento");
       } finally {
         setLoading(false);
       }
     };
-    if (token) fetchDoc();
+
+    if (token) {
+      fetchDoc();
+    }
   }, [token]);
 
-  // Paso 2: confirmar (cuando ya vio el texto legal y marcó el checkbox)
+  const isSigned = doc?.status === "FIRMADO";
+
+  // Paso 1: botón principal que abre panel legal
+  const handlePrimaryClick = () => {
+    if (isSigned) return;
+    setShowLegal(true);
+  };
+
+  // Paso 2: confirmar firma/visado después de aceptar texto legal
   const handleConfirm = async () => {
     if (!accepted) {
       alert("Debes aceptar la declaración para continuar.");
       return;
     }
+
     setSigning(true);
+
     try {
       const actionPath = isVisado ? "visar" : "firmar";
 
-      const res = await fetch(`${API_URL}/api/public/docs/${token}/${actionPath}`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-      });
+      const res = await fetch(
+        `${API_URL}/api/public/docs/${token}/${actionPath}`,
+        {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+        }
+      );
+
       const data = await res.json();
+
       if (!res.ok) {
         throw new Error(
           data.message ||
@@ -71,28 +94,38 @@ export function PublicSignView({ token }) {
       );
 
       setDoc((prev) =>
-        prev ? { ...prev, status: isVisado ? "PENDIENTE_FIRMA" : "FIRMADO" } : prev
+        prev
+          ? {
+              ...prev,
+              status: isVisado ? "PENDIENTE_FIRMA" : "FIRMADO",
+            }
+          : prev
       );
+
       setShowLegal(false);
       setAccepted(false);
     } catch (err) {
-      alert(err.message);
+      alert(err.message || "Error inesperado al confirmar la acción.");
     } finally {
       setSigning(false);
     }
   };
 
-  // Paso 1: botón principal que solo abre el panel legal
-  const handlePrimaryClick = () => {
-    if (doc?.status === "FIRMADO") return;
-    setShowLegal(true);
-  };
+  if (loading) {
+    return <p style={{ padding: 24 }}>Cargando documento...</p>;
+  }
 
-  if (loading) return <p style={{ padding: 24 }}>Cargando documento...</p>;
-  if (error) return <p style={{ padding: 24, color: "red" }}>{error}</p>;
-  if (!doc) return <p style={{ padding: 24 }}>Documento no encontrado</p>;
+  if (error) {
+    return (
+      <p style={{ padding: 24, color: "red" }}>
+        {error || "Ocurrió un error al cargar el documento."}
+      </p>
+    );
+  }
 
-  const isSigned = doc.status === "FIRMADO";
+  if (!doc) {
+    return <p style={{ padding: 24 }}>Documento no encontrado</p>;
+  }
 
   return (
     <div
@@ -100,13 +133,15 @@ export function PublicSignView({ token }) {
         display: "flex",
         flexDirection: "column",
         gap: 24,
-        padding: 24,
+        padding: 16,
         maxWidth: 1200,
         margin: "0 auto",
       }}
     >
       <header>
-        <h1>{isVisado ? "Visado de documento" : "Firma de documento"}</h1>
+        <h1 style={{ fontSize: "1.5rem", marginBottom: 8 }}>
+          {isVisado ? "Visado de documento" : "Firma de documento"}
+        </h1>
         <p>
           Documento: <strong>{doc.title}</strong>
         </p>
@@ -141,7 +176,7 @@ export function PublicSignView({ token }) {
         <p>No se pudo cargar el PDF.</p>
       )}
 
-      {/* Botón principal: abrir panel legal */}
+      {/* Panel de acción principal */}
       <section
         style={{
           border: "1px solid #e5e7eb",
@@ -153,9 +188,21 @@ export function PublicSignView({ token }) {
         <button
           type="button"
           className="btn-main btn-primary"
-          style={{ width: "100%", opacity: isSigned ? 0.6 : 1 }}
+          style={{
+            width: "100%",
+            opacity: isSigned ? 0.6 : 1,
+          }}
           onClick={handlePrimaryClick}
           disabled={isSigned}
+          aria-label={
+            isVisado
+              ? isSigned
+                ? "Documento ya firmado"
+                : "Visar documento"
+              : isSigned
+              ? "Documento ya firmado"
+              : "Firmar documento"
+          }
         >
           {isVisado
             ? isSigned
@@ -166,7 +213,7 @@ export function PublicSignView({ token }) {
             : "FIRMAR DOCUMENTO"}
         </button>
 
-        {/* Panel legal que aparece solo después de hacer clic */}
+        {/* Panel legal (solo cuando se hace clic en el botón principal) */}
         {showLegal && !isSigned && (
           <div
             style={{
@@ -179,11 +226,12 @@ export function PublicSignView({ token }) {
               fontSize: 14,
             }}
           >
-            <h2 style={{ marginTop: 0, marginBottom: 8 }}>
+            <h2 style={{ marginTop: 0, marginBottom: 8, fontSize: "1rem" }}>
               {isVisado
                 ? "Declaración de visación del documento"
                 : "Confirmación de firma electrónica"}
             </h2>
+
             <p style={{ whiteSpace: "pre-line", marginBottom: 12 }}>
               {isVisado
                 ? `Mediante este acto, el visador declara que ha revisado íntegramente el documento individualizado y que su contenido se ajusta a las normas internas y a la legislación aplicable, para los fines de control y validación administrativa que correspondan.

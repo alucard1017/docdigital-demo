@@ -1159,6 +1159,727 @@ async function downloadDocument(req, res) {
   }
 }
 
+/* ================================
+   GET: Analytics del documento
+   ================================ */
+async function getDocumentAnalytics(req, res) {
+  try {
+    const userId = req.user.id;
+
+    const docsRes = await db.query(
+      `SELECT 
+         COUNT(*) AS total,
+         COUNT(*) FILTER (WHERE status = 'FIRMADO') AS firmados,
+         COUNT(*) FILTER (WHERE status = 'RECHAZADO') AS rechazados,
+         COUNT(*) FILTER (WHERE status IN ('PENDIENTE_FIRMA', 'PENDIENTE_VISADO')) AS pendientes,
+         AVG(EXTRACT(EPOCH FROM (updated_at - created_at)) / 3600) AS horas_promedio_firma
+       FROM documents
+       WHERE owner_id = $1`,
+      [userId]
+    );
+
+    const stats = docsRes.rows[0];
+
+    const eventsRes = await db.query(
+      `SELECT 
+         DATE(created_at) AS fecha,
+         COUNT(*) FILTER (WHERE action = 'FIRMADO_PUBLICO' OR action = 'FIRMADO') AS firmas_dia,
+         COUNT(*) FILTER (WHERE action = 'RECHAZO_PUBLICO' OR action = 'RECHAZADO') AS rechazos_dia
+       FROM document_events
+       WHERE document_id IN (
+         SELECT id FROM documents WHERE owner_id = $1
+       )
+       AND created_at >= NOW() - INTERVAL '30 days'
+       GROUP BY DATE(created_at)
+       ORDER BY fecha DESC`,
+      [userId]
+    );
+
+    const timeline = eventsRes.rows;
+
+    return res.json({
+      summary: {
+        total: Number(stats.total),
+        firmados: Number(stats.firmados),
+        rechazados: Number(stats.rechazados),
+        pendientes: Number(stats.pendientes),
+        tasa_firma_pct:
+          stats.total > 0
+            ? ((Number(stats.firmados) / Number(stats.total)) * 100).toFixed(1)
+            : 0,
+        tasa_rechazo_pct:
+          stats.total > 0
+            ? ((Number(stats.rechazados) / Number(stats.total)) * 100).toFixed(1)
+            : 0,
+        horas_promedio: stats.horas_promedio_firma
+          ? parseFloat(stats.horas_promedio_firma).toFixed(1)
+          : "N/A",
+      },
+      timeline,
+    });
+  } catch (err) {
+    console.error("❌ Error obteniendo analytics:", err);
+    return res.status(500).json({ message: "Error interno del servidor" });
+  }
+}
+
+/* ================================
+   POST: Enviar recordatorios automáticos (7 días)
+   ================================ */
+async function sendAutomaticReminders(req, res) {
+  try {
+    const userId = req.user.id;
+
+    // Documentos con más de 7 días sin actividad
+    const docsRes = await db.query(
+      `SELECT d.id, d.title, d.status, d.requires_visado, d.visador_email, d.signature_token
+       FROM documents d
+       WHERE d.owner_id = $1
+         AND d.status IN ('PENDIENTE_VISADO', 'PENDIENTE_FIRMA')
+         AND d.created_at < NOW() - INTERVAL '7 days'
+         AND (
+           d.last_reminder_sent_at IS NULL
+           OR d.last_reminder_sent_at < NOW() - INTERVAL '7 days'
+         )`,
+      [userId]
+    );
+
+    const docs = docsRes.rows;
+    let remindersCount = 0;
+
+    for (const doc of docs) {
+      try {
+        // Si está pendiente de visado
+        if (doc.requires_visado && doc.status === "PENDIENTE_VISADO") {
+          if (doc.visador_email) {
+            const frontBaseUrl =
+              process.env.FRONTEND_URL ||
+              "https://docdigital-demo.onrender.com";
+            const urlVisado = `${frontBaseUrl}/firma-publica?token=${doc.signature_token}&mode=visado`;
+
+            await sendVisadoInvitation(
+              doc.visador_email,
+              doc.title,
+              urlVisado,
+              "Visador"
+            );
+
+            remindersCount++;
+
+            await db.query(
+              `UPDATE documents
+               SET last_reminder_sent_at = NOW()
+               WHERE id = $1`,
+              [doc.id]
+            );
+          }
+        }
+
+        // Si está pendiente de firma
+        if (doc.status === "PENDIENTE_FIRMA") {
+          const signersRes = await db.query(
+            `SELECT * FROM document_signers
+             WHERE document_id = $1 AND status NOT IN ('FIRMADO', 'RECHAZADO')`,
+            [doc.id]
+          );
+
+          for (const signer of signersRes.rows) {
+            try {
+              const frontBaseUrl =
+                process.env.FRONTEND_URL ||
+                "https://docdigital-demo.onrender.com";
+              const urlFirma = `${frontBaseUrl}/firma-publica?token=${signer.sign_token}`;
+
+              await sendSigningInvitation(
+                signer.email,
+                doc.title,
+                urlFirma,
+                signer.name || ""
+              );
+
+              remindersCount++;
+            } catch (emailErr) {
+              console.error(
+                `⚠️ Error enviando recordatorio a ${signer.email}:`,
+                emailErr.message
+              );
+            }
+          }
+
+          await db.query(
+            `UPDATE documents
+             SET last_reminder_sent_at = NOW()
+             WHERE id = $1`,
+            [doc.id]
+          );
+        }
+      } catch (docErr) {
+        console.error(
+          `⚠️ Error procesando documento ${doc.id}:`,
+          docErr.message
+        );
+      }
+    }
+
+    // Registrar evento solo si hay documentos procesados
+    if (docs.length > 0) {
+      await db.query(
+        `INSERT INTO document_events (
+           document_id, actor, action, details, from_status, to_status
+         )
+         SELECT 
+           id, 'Sistema', 'RECORDATORIOS_AUTOMATICOS',
+           $1, status, status
+         FROM documents
+         WHERE id = ANY($2::int[])`,
+        [
+          `${remindersCount} recordatorio(s) enviado(s)`,
+          docs.map((d) => d.id),
+        ]
+      );
+    }
+
+    return res.json({
+      message: `${remindersCount} recordatorio(s) automático(s) enviado(s)`,
+      documentsProcessed: docs.length,
+    });
+  } catch (err) {
+    console.error("❌ Error enviando recordatorios automáticos:", err);
+    return res.status(500).json({ message: "Error interno del servidor" });
+  }
+}
+
+/* ================================
+   POST: Descargar reporte PDF con detalles
+   ================================ */
+async function downloadReportPdf(req, res) {
+  try {
+    const { id } = req.params;
+
+    const docRes = await db.query(
+      `SELECT * FROM documents WHERE id = $1 AND owner_id = $2`,
+      [id, req.user.id]
+    );
+
+    if (docRes.rowCount === 0) {
+      return res.status(404).json({ message: "Documento no encontrado" });
+    }
+
+    const doc = docRes.rows[0];
+
+    const signersRes = await db.query(
+      `SELECT * FROM document_signers WHERE document_id = $1`,
+      [id]
+    );
+
+    const eventsRes = await db.query(
+      `SELECT * FROM document_events WHERE document_id = $1 ORDER BY created_at ASC`,
+      [id]
+    );
+
+    const { PDFDocument, rgb, degrees } = require("pdf-lib");
+
+    const pdfDoc = await PDFDocument.create();
+    const page = pdfDoc.addPage([612, 792]);
+    const { height } = page.getSize();
+
+    let yPos = height - 50;
+
+    // Título
+    page.drawText(`REPORTE DEL DOCUMENTO: ${doc.title}`, {
+      x: 50,
+      y: yPos,
+      size: 18,
+      color: rgb(0.1, 0.1, 0.1),
+    });
+
+    yPos -= 30;
+
+    // Info general
+    page.drawText(
+      `Contrato: ${doc.numero_contrato_interno || "N/A"} | Estado: ${doc.status}`,
+      {
+        x: 50,
+        y: yPos,
+        size: 11,
+        color: rgb(0.4, 0.4, 0.4),
+      }
+    );
+
+    yPos -= 20;
+    page.drawText(`Creado: ${new Date(doc.created_at).toLocaleString("es-CL")}`, {
+      x: 50,
+      y: yPos,
+      size: 10,
+      color: rgb(0.5, 0.5, 0.5),
+    });
+
+    yPos -= 25;
+
+    // Sección Firmantes
+    page.drawText("FIRMANTES:", {
+      x: 50,
+      y: yPos,
+      size: 12,
+      color: rgb(0.1, 0.1, 0.1),
+    });
+
+    yPos -= 15;
+
+    for (const signer of signersRes.rows) {
+      const statusSymbol = signer.status === "FIRMADO" ? "✓" : "○";
+      const statusColor =
+        signer.status === "FIRMADO"
+          ? rgb(0.2, 0.7, 0.2)
+          : signer.status === "RECHAZADO"
+          ? rgb(0.8, 0.2, 0.2)
+          : rgb(0.5, 0.5, 0.5);
+
+      page.drawText(`${statusSymbol} ${signer.name} (${signer.email})`, {
+        x: 70,
+        y: yPos,
+        size: 10,
+        color: statusColor,
+      });
+
+      if (signer.signed_at) {
+        page.drawText(
+          `   Firmado: ${new Date(signer.signed_at).toLocaleString("es-CL")}`,
+          {
+            x: 70,
+            y: yPos - 12,
+            size: 9,
+            color: rgb(0.6, 0.6, 0.6),
+          }
+        );
+        yPos -= 24;
+      } else {
+        yPos -= 12;
+      }
+    }
+
+    yPos -= 20;
+
+    // Sección Eventos
+    page.drawText("HISTORIAL DE EVENTOS:", {
+      x: 50,
+      y: yPos,
+      size: 12,
+      color: rgb(0.1, 0.1, 0.1),
+    });
+
+    yPos -= 15;
+
+    for (const event of eventsRes.rows.slice(0, 10)) {
+      page.drawText(
+        `[${new Date(event.created_at).toLocaleString("es-CL")}] ${event.action}`,
+        {
+          x: 70,
+          y: yPos,
+          size: 9,
+          color: rgb(0.5, 0.5, 0.5),
+        }
+      );
+
+      if (event.details) {
+        page.drawText(`    ${event.details.substring(0, 60)}...`, {
+          x: 70,
+          y: yPos - 10,
+          size: 8,
+          color: rgb(0.7, 0.7, 0.7),
+        });
+        yPos -= 20;
+      } else {
+        yPos -= 12;
+      }
+    }
+
+    const pdfBytes = await pdfDoc.save();
+
+    const filename = `reporte-${doc.numero_contrato_interno || doc.id}-${new Date()
+      .toISOString()
+      .slice(0, 10)}.pdf`;
+
+    res.setHeader("Content-Type", "application/pdf");
+    res.setHeader("Content-Disposition", `attachment; filename="${filename}"`);
+    res.send(Buffer.from(pdfBytes));
+  } catch (err) {
+    console.error("❌ Error descargando reporte PDF:", err);
+    return res.status(500).json({ message: "Error interno del servidor" });
+  }
+}
+
+/* ================================
+   GET: Analytics del documento
+   ================================ */
+async function getDocumentAnalytics(req, res) {
+  try {
+    const userId = req.user.id;
+
+    const docsRes = await db.query(
+      `SELECT 
+         COUNT(*) AS total,
+         COUNT(*) FILTER (WHERE status = 'FIRMADO') AS firmados,
+         COUNT(*) FILTER (WHERE status = 'RECHAZADO') AS rechazados,
+         COUNT(*) FILTER (WHERE status IN ('PENDIENTE_FIRMA', 'PENDIENTE_VISADO')) AS pendientes,
+         AVG(EXTRACT(EPOCH FROM (updated_at - created_at)) / 3600) AS horas_promedio_firma
+       FROM documents
+       WHERE owner_id = $1`,
+      [userId]
+    );
+
+    const stats = docsRes.rows[0];
+
+    const eventsRes = await db.query(
+      `SELECT 
+         DATE(created_at) AS fecha,
+         COUNT(*) FILTER (WHERE action = 'FIRMADO_PUBLICO' OR action = 'FIRMADO') AS firmas_dia,
+         COUNT(*) FILTER (WHERE action = 'RECHAZO_PUBLICO' OR action = 'RECHAZADO') AS rechazos_dia
+       FROM document_events
+       WHERE document_id IN (
+         SELECT id FROM documents WHERE owner_id = $1
+       )
+       AND created_at >= NOW() - INTERVAL '30 days'
+       GROUP BY DATE(created_at)
+       ORDER BY fecha DESC`,
+      [userId]
+    );
+
+    const timeline = eventsRes.rows;
+
+    return res.json({
+      summary: {
+        total: Number(stats.total),
+        firmados: Number(stats.firmados),
+        rechazados: Number(stats.rechazados),
+        pendientes: Number(stats.pendientes),
+        tasa_firma_pct:
+          stats.total > 0
+            ? ((Number(stats.firmados) / Number(stats.total)) * 100).toFixed(1)
+            : 0,
+        tasa_rechazo_pct:
+          stats.total > 0
+            ? ((Number(stats.rechazados) / Number(stats.total)) * 100).toFixed(1)
+            : 0,
+        horas_promedio: stats.horas_promedio_firma
+          ? parseFloat(stats.horas_promedio_firma).toFixed(1)
+          : "N/A",
+      },
+      timeline,
+    });
+  } catch (err) {
+    console.error("❌ Error obteniendo analytics:", err);
+    return res.status(500).json({ message: "Error interno del servidor" });
+  }
+}
+
+/* ================================
+   POST: Enviar recordatorios automáticos (7 días)
+   ================================ */
+async function sendAutomaticReminders(req, res) {
+  try {
+    const userId = req.user.id;
+
+    const docsRes = await db.query(
+      `SELECT d.id, d.title, d.status, d.requires_visado, d.visador_email, d.signature_token
+       FROM documents d
+       WHERE d.owner_id = $1
+         AND d.status IN ('PENDIENTE_VISADO', 'PENDIENTE_FIRMA')
+         AND d.created_at < NOW() - INTERVAL '7 days'
+         AND (
+           d.last_reminder_sent_at IS NULL
+           OR d.last_reminder_sent_at < NOW() - INTERVAL '7 days'
+         )`,
+      [userId]
+    );
+
+    const docs = docsRes.rows;
+    let remindersCount = 0;
+
+    const { sendVisadoInvitation, sendSigningInvitation } = require("../services/emailService");
+
+    for (const doc of docs) {
+      try {
+        if (doc.requires_visado && doc.status === "PENDIENTE_VISADO") {
+          if (doc.visador_email) {
+            const frontBaseUrl =
+              process.env.FRONTEND_URL ||
+              "https://docdigital-demo.onrender.com";
+            const urlVisado = `${frontBaseUrl}/firma-publica?token=${doc.signature_token}&mode=visado`;
+
+            await sendVisadoInvitation(
+              doc.visador_email,
+              doc.title,
+              urlVisado,
+              "Visador"
+            );
+
+            remindersCount++;
+
+            await db.query(
+              `UPDATE documents
+               SET last_reminder_sent_at = NOW()
+               WHERE id = $1`,
+              [doc.id]
+            );
+          }
+        }
+
+        if (doc.status === "PENDIENTE_FIRMA") {
+          const signersRes = await db.query(
+            `SELECT * FROM document_signers
+             WHERE document_id = $1 AND status NOT IN ('FIRMADO', 'RECHAZADO')`,
+            [doc.id]
+          );
+
+          for (const signer of signersRes.rows) {
+            try {
+              const frontBaseUrl =
+                process.env.FRONTEND_URL ||
+                "https://docdigital-demo.onrender.com";
+              const urlFirma = `${frontBaseUrl}/firma-publica?token=${signer.sign_token}`;
+
+              await sendSigningInvitation(
+                signer.email,
+                doc.title,
+                urlFirma,
+                signer.name || ""
+              );
+
+              remindersCount++;
+            } catch (emailErr) {
+              console.error(
+                `⚠️ Error enviando recordatorio a ${signer.email}:`,
+                emailErr.message
+              );
+            }
+          }
+
+          await db.query(
+            `UPDATE documents
+             SET last_reminder_sent_at = NOW()
+             WHERE id = $1`,
+            [doc.id]
+          );
+        }
+      } catch (docErr) {
+        console.error(
+          `⚠️ Error procesando documento ${doc.id}:`,
+          docErr.message
+        );
+      }
+    }
+
+    if (docs.length > 0) {
+      await db.query(
+        `INSERT INTO document_events (
+           document_id, actor, action, details, from_status, to_status
+         )
+         SELECT 
+           id, 'Sistema', 'RECORDATORIOS_AUTOMATICOS',
+           $1, status, status
+         FROM documents
+         WHERE id = ANY($2::int[])`,
+        [
+          `${remindersCount} recordatorio(s) enviado(s)`,
+          docs.map((d) => d.id),
+        ]
+      );
+    }
+
+    return res.json({
+      message: `${remindersCount} recordatorio(s) automático(s) enviado(s)`,
+      documentsProcessed: docs.length,
+    });
+  } catch (err) {
+    console.error("❌ Error enviando recordatorios automáticos:", err);
+    return res.status(500).json({ message: "Error interno del servidor" });
+  }
+}
+
+/* ================================
+   POST: Descargar reporte PDF con detalles
+   ================================ */
+async function downloadReportPdf(req, res) {
+  try {
+    const { id } = req.params;
+
+    const docRes = await db.query(
+      `SELECT * FROM documents WHERE id = $1 AND owner_id = $2`,
+      [id, req.user.id]
+    );
+
+    if (docRes.rowCount === 0) {
+      return res.status(404).json({ message: "Documento no encontrado" });
+    }
+
+    const doc = docRes.rows[0];
+
+    const signersRes = await db.query(
+      `SELECT * FROM document_signers WHERE document_id = $1 ORDER BY id ASC`,
+      [id]
+    );
+
+    const eventsRes = await db.query(
+      `SELECT * FROM document_events WHERE document_id = $1 ORDER BY created_at ASC`,
+      [id]
+    );
+
+    const { PDFDocument, rgb } = require("pdf-lib");
+
+    const pdfDoc = await PDFDocument.create();
+    const page = pdfDoc.addPage([612, 792]);
+    const { height } = page.getSize();
+
+    let yPos = height - 50;
+
+    // Título
+    page.drawText(`REPORTE: ${doc.title}`, {
+      x: 50,
+      y: yPos,
+      size: 18,
+      color: rgb(0.1, 0.1, 0.1),
+    });
+
+    yPos -= 30;
+
+    // Info general
+    page.drawText(
+      `Contrato: ${doc.numero_contrato_interno || "N/A"} | Estado: ${doc.status}`,
+      {
+        x: 50,
+        y: yPos,
+        size: 11,
+        color: rgb(0.4, 0.4, 0.4),
+      }
+    );
+
+    yPos -= 20;
+    page.drawText(`Creado: ${new Date(doc.created_at).toLocaleString("es-CL")}`, {
+      x: 50,
+      y: yPos,
+      size: 10,
+      color: rgb(0.5, 0.5, 0.5),
+    });
+
+    yPos -= 25;
+
+    // Sección Firmantes
+    page.drawText("FIRMANTES:", {
+      x: 50,
+      y: yPos,
+      size: 12,
+      color: rgb(0.1, 0.1, 0.1),
+    });
+
+    yPos -= 15;
+
+    for (const signer of signersRes.rows) {
+      const statusSymbol = signer.status === "FIRMADO" ? "✓" : signer.status === "RECHAZADO" ? "✗" : "○";
+      const statusColor =
+        signer.status === "FIRMADO"
+          ? rgb(0.2, 0.7, 0.2)
+          : signer.status === "RECHAZADO"
+          ? rgb(0.8, 0.2, 0.2)
+          : rgb(0.5, 0.5, 0.5);
+
+      page.drawText(`${statusSymbol} ${signer.name} (${signer.email})`, {
+        x: 70,
+        y: yPos,
+        size: 10,
+        color: statusColor,
+      });
+
+      if (signer.signed_at) {
+        page.drawText(
+          `   Firmado: ${new Date(signer.signed_at).toLocaleString("es-CL")}`,
+          {
+            x: 70,
+            y: yPos - 12,
+            size: 9,
+            color: rgb(0.6, 0.6, 0.6),
+          }
+        );
+        yPos -= 24;
+      } else if (signer.rejected_at) {
+        page.drawText(
+          `   Rechazado: ${new Date(signer.rejected_at).toLocaleString("es-CL")}`,
+          {
+            x: 70,
+            y: yPos - 12,
+            size: 9,
+            color: rgb(0.8, 0.2, 0.2),
+          }
+        );
+        if (signer.rejection_reason) {
+          page.drawText(`   Motivo: ${signer.rejection_reason.substring(0, 50)}`, {
+            x: 70,
+            y: yPos - 24,
+            size: 8,
+            color: rgb(0.6, 0.6, 0.6),
+          });
+          yPos -= 36;
+        } else {
+          yPos -= 24;
+        }
+      } else {
+        yPos -= 12;
+      }
+    }
+
+    yPos -= 20;
+
+    // Sección Eventos
+    page.drawText("HISTORIAL DE EVENTOS:", {
+      x: 50,
+      y: yPos,
+      size: 12,
+      color: rgb(0.1, 0.1, 0.1),
+    });
+
+    yPos -= 15;
+
+    for (const event of eventsRes.rows.slice(0, 10)) {
+      page.drawText(
+        `[${new Date(event.created_at).toLocaleString("es-CL")}] ${event.action}`,
+        {
+          x: 70,
+          y: yPos,
+          size: 9,
+          color: rgb(0.5, 0.5, 0.5),
+        }
+      );
+
+      if (event.details) {
+        const detailText = event.details.substring(0, 60);
+        page.drawText(`    ${detailText}${event.details.length > 60 ? "..." : ""}`, {
+          x: 70,
+          y: yPos - 10,
+          size: 8,
+          color: rgb(0.7, 0.7, 0.7),
+        });
+        yPos -= 20;
+      } else {
+        yPos -= 12;
+      }
+    }
+
+    const pdfBytes = await pdfDoc.save();
+
+    const filename = `reporte-${doc.numero_contrato_interno || doc.id}-${new Date()
+      .toISOString()
+      .slice(0, 10)}.pdf`;
+
+    res.setHeader("Content-Type", "application/pdf");
+    res.setHeader("Content-Disposition", `attachment; filename="${filename}"`);
+    res.send(Buffer.from(pdfBytes));
+  } catch (err) {
+    console.error("❌ Error descargando reporte PDF:", err);
+    return res.status(500).json({ message: "Error interno del servidor" });
+  }
+}
+
+// Actualizar el module.exports
 module.exports = {
   getUserDocuments,
   createDocument,
@@ -1170,4 +1891,7 @@ module.exports = {
   rejectDocument,
   resendReminder,
   downloadDocument,
+  getDocumentAnalytics,      // ← NUEVO
+  sendAutomaticReminders,    // ← NUEVO
+  downloadReportPdf,         // ← NUEVO
 };

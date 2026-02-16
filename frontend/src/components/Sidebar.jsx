@@ -16,6 +16,14 @@ export function Sidebar({
   const isGlobalAdmin = user?.role === "admin_global";
   const showUsersMenu = isOwner || isGlobalAdmin;
 
+  const handleChangeView = (nextView) => {
+    setView(nextView);
+  };
+
+  const handleStatusFilter = (filter) => {
+    setStatusFilter(filter);
+  };
+
   return (
     <aside className="sidebar">
       <h2>VeriFirma</h2>
@@ -57,14 +65,14 @@ export function Sidebar({
 
       <div
         className={`nav-item ${view === "list" ? "active" : ""}`}
-        onClick={() => setView("list")}
+        onClick={() => handleChangeView("list")}
       >
         <span>📄</span> Mis trámites
       </div>
 
       <div
         className={`nav-item ${view === "upload" ? "active" : ""}`}
-        onClick={() => setView("upload")}
+        onClick={() => handleChangeView("upload")}
       >
         <span>📤</span> Crear nuevo trámite
       </div>
@@ -87,7 +95,7 @@ export function Sidebar({
         className={`nav-item ${
           statusFilter === "PENDIENTES" ? "active" : ""
         }`}
-        onClick={() => setStatusFilter("PENDIENTES")}
+        onClick={() => handleStatusFilter("PENDIENTES")}
       >
         <span>⏳</span> Solo pendientes
       </div>
@@ -96,7 +104,7 @@ export function Sidebar({
         className={`nav-item ${
           statusFilter === "FIRMADOS" ? "active" : ""
         }`}
-        onClick={() => setStatusFilter("FIRMADOS")}
+        onClick={() => handleStatusFilter("FIRMADOS")}
       >
         <span>✅</span> Solo firmados
       </div>
@@ -104,7 +112,7 @@ export function Sidebar({
       {/* Verificación pública */}
       <div
         className={`nav-item ${view === "verification" ? "active" : ""}`}
-        onClick={() => setView("verification")}
+        onClick={() => handleChangeView("verification")}
       >
         <span>🔍</span> Verificar documento
       </div>
@@ -129,7 +137,7 @@ export function Sidebar({
             className={`nav-item ${view === "users" ? "active" : ""}`}
             onClick={() => {
               console.log("CLICK USUARIOS");
-              setView("users");
+              handleChangeView("users");
             }}
           >
             <span>👥</span> Usuarios
@@ -159,21 +167,14 @@ export function Sidebar({
 
       {/* Dashboard */}
       <div
-        className="nav-item"
-        onClick={() => setView("dashboard")}
-        style={{
-          background: view === "dashboard" ? "#e0e7ff" : "transparent",
-        }}
+        className={`nav-item ${view === "dashboard" ? "active" : ""}`}
+        onClick={() => handleChangeView("dashboard")}
       >
         <span>📊</span> Dashboard
       </div>
 
       {/* Logout */}
-      <div
-        className="nav-item"
-        onClick={logout}
-        style={{ marginTop: 0 }}
-      >
+      <div className="nav-item" onClick={logout} style={{ marginTop: 0 }}>
         <span>🚪</span> Cerrar sesión
       </div>
     </aside>
