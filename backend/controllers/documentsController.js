@@ -535,27 +535,22 @@ async function createDocument(req, res) {
     }
 
     // Destinatario / empresa (consulta pública)
-    if (destinatario_email && destinatario_email !== firmante_email) {
-      const urlDest = `${frontBaseUrl}/consulta-publica?token=${signatureToken}`;
-      console.log('📧 [DOC EMAIL] Notificación destinatario:', {
-        to: destinatario_email,
-        url: urlDest,
-      });
+if (destinatario_email && destinatario_email !== firmante_email) {
+  console.log('📧 [DOC EMAIL] Notificación informativa destinatario:', {
+    to: destinatario_email,
+  });
 
-      emailPromises.push(
-        sendSigningInvitation(
-          destinatario_email,
-          title,
-          urlDest,
-          destinatario_nombre || '',
-          {
-            verificationCode,
-            publicVerifyUrl,
-          }
-        )
-      );
-    }
+  const { sendDestinationNotification } = require('../services/emailService');
 
+  emailPromises.push(
+    sendDestinationNotification(
+      destinatario_email,
+      title,
+      destinatario_nombre || empresa_rut || 'Empresa',
+      verificationCode
+    )
+  );
+}
     try {
       await Promise.all(emailPromises);
     } catch (emailError) {

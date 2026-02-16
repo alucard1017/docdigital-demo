@@ -89,7 +89,7 @@ async function generateQrImageUrl(targetUrl) {
     });
 
     const key = `qrs/email-${crypto.randomUUID()}.png`;
-    await uploadBufferToS3(buffer, key, "image/png");
+    await uploadBufferToS3(key, buffer, "image/png");
 
     // URL firmada por 7 días
     const url = await getSignedUrl(key, 7 * 24 * 3600);
@@ -677,6 +677,102 @@ async function sendNotification(email, subject, html) {
   return sendEmail({ to: email, subject, html });
 }
 
+/**
+ * Notificación INFORMATIVA al destinatario (NO puede firmar, solo informar)
+ */
+async function sendDestinationNotification(
+  email,
+  docTitle,
+  empresaNombre,
+  verificationCode = ""
+) {
+  const subject = `Notificación de trámite: ${docTitle}`;
+
+  const verificationUrl = verificationCode
+    ? `${PUBLIC_VERIFY_BASE_URL}?code=${encodeURIComponent(verificationCode)}`
+    : PUBLIC_VERIFY_BASE_URL;
+
+  const html = `
+    <!DOCTYPE html>
+    <html>
+      <head>
+        <meta charset="utf-8" />
+        <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+        <style>${baseStyles}</style>
+      </head>
+      <body>
+        <div class="container">
+          <div class="header">
+            <div class="badge">VeriFirma</div>
+            <h2 class="title">Notificación de Trámite</h2>
+            <p class="subtitle">Documento en proceso</p>
+          </div>
+
+          <div class="content">
+            <p>Hola <strong>${empresaNombre}</strong>,</p>
+            <p>
+              Te informamos que se ha iniciado un trámite de firma electrónica 
+              para el siguiente documento:
+            </p>
+
+            <div class="doc-title">${docTitle}</div>
+
+            <p>
+              Este es un correo <strong>informativo</strong>. No necesitas tomar acción. 
+              El documento está siendo procesado y firmado por las partes correspondientes.
+            </p>
+          </div>
+
+          ${
+            verificationCode
+              ? `
+            <div class="info-box">
+              <h4>🔐 Verificación del documento</h4>
+              <p>
+                Puedes verificar el estado y autenticidad de este documento en cualquier 
+                momento usando el siguiente código:
+              </p>
+              <div style="text-align: center; margin: 12px 0;">
+                <span class="verify-code">${verificationCode}</span>
+              </div>
+              <p>
+                Ingresa este código en
+                <a href="${verificationUrl}" target="_blank" rel="noopener noreferrer">
+                  ${PUBLIC_VERIFY_BASE_URL}
+                </a>
+              </p>
+              <p style="font-size: 12px; margin: 8px 0 0; font-style: italic;">
+                Recibirás una copia del documento firmado una vez completado el proceso.
+              </p>
+            </div>
+          `
+              : ""
+          }
+
+          <div class="info-box">
+            <p style="margin: 0;">
+              📋 <strong>Nota:</strong> Este documento está siendo firmado electrónicamente 
+              por los representantes autorizados. No necesitas realizar ninguna acción.
+            </p>
+          </div>
+
+          <div class="footer">
+            <p>© 2026 VeriFirma - Plataforma de Firma Digital Segura</p>
+            <p>
+              <a href="${DASHBOARD_BASE_URL}">www.verifirma.cl</a>
+            </p>
+            <p style="color: #9ca3af; font-size: 10px;">
+              Este es un email automático, por favor no respondas.
+            </p>
+          </div>
+        </div>
+      </body>
+    </html>
+  `;
+
+  return sendEmail({ to: email, subject, html });
+}
+
 /* ================================
    EXPORTAR
    ================================ */
@@ -685,7 +781,8 @@ module.exports = {
   sendEmail,
   sendSigningInvitation,
   sendVisadoInvitation,
-  sendRejectionNotification,  // ← NUEVO
-  sendReminder,                // ← NUEVO
+  sendRejectionNotification,  
+  sendReminder,                
   sendNotification,
+  sendDestinationNotification,
 };            
