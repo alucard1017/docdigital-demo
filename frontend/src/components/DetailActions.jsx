@@ -11,7 +11,8 @@ export function DetailActions({
   selectedDoc,
   setView,
   setSelectedDoc,
-  manejarAccionDocumento,
+  manejarAccionDocumento,,
+ isAdmin = false
 }) {
   if (!selectedDoc) return null;
 
@@ -58,7 +59,7 @@ export function DetailActions({
         Descargar PDF
       </button>
 
-      {puedeRechazar && (
+      {!isAdmin && puedeRechazar && (
         <button
           type="button"
           className="btn-main"
@@ -78,7 +79,7 @@ export function DetailActions({
         </button>
       )}
 
-      {puedeVisar && (
+      {!isAdmin && puedeVisar && (
         <button
           type="button"
           className="btn-main"
@@ -98,7 +99,7 @@ export function DetailActions({
         </button>
       )}
 
-      {puedeFirmar && (
+      {!isAdmin && puedeFirmar && (
         <button
           type="button"
           className="btn-main btn-primary"
