@@ -114,6 +114,26 @@ export function DetailActions({
           Firmar documento
         </button>
       )}
+ {isAdmin && (
+ <button
+ type="button"
+ className="btn-main"
+ style={{
+ background: "#ef4444",
+ color: "white",
+ }}
+ onClick={async () => {
+ const ok = window.confirm("¿Desea cancelar este trámite? Esta acción no se puede deshacer.");
+ if (!ok) return;
+ await manejarAccionDocumento(selectedDoc.id, "rechazar", {
+ motivo: "Cancelado por administrador",
+ });
+ }}
+ >
+ Cancelar trámite
+ </button>
+ )}
+ 
     </div>
   );
 }
