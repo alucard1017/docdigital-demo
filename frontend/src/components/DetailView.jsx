@@ -591,6 +591,7 @@ export function DetailView({
               setView={setView}
               setSelectedDoc={setSelectedDoc}
               manejarAccionDocumento={manejarAccionDocumento}
+ isAdmin={true}
             />
           </div>
         </div>

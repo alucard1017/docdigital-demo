@@ -11,7 +11,8 @@ export function DetailActions({
   selectedDoc,
   setView,
   setSelectedDoc,
-  manejarAccionDocumento,
+  manejarAccionDocumento,,
+ isAdmin = false
 }) {
   if (!selectedDoc) return null;
 
@@ -58,7 +59,7 @@ export function DetailActions({
         Descargar PDF
       </button>
 
-      {puedeRechazar && (
+      {!isAdmin && puedeRechazar && (
         <button
           type="button"
           className="btn-main"
@@ -78,7 +79,7 @@ export function DetailActions({
         </button>
       )}
 
-      {puedeVisar && (
+      {!isAdmin && puedeVisar && (
         <button
           type="button"
           className="btn-main"
@@ -98,7 +99,7 @@ export function DetailActions({
         </button>
       )}
 
-      {puedeFirmar && (
+      {!isAdmin && puedeFirmar && (
         <button
           type="button"
           className="btn-main btn-primary"
@@ -113,6 +114,26 @@ export function DetailActions({
           Firmar documento
         </button>
       )}
+ {isAdmin && (
+ <button
+ type="button"
+ className="btn-main"
+ style={{
+ background: "#ef4444",
+ color: "white",
+ }}
+ onClick={async () => {
+ const ok = window.confirm("¿Desea cancelar este trámite? Esta acción no se puede deshacer.");
+ if (!ok) return;
+ await manejarAccionDocumento(selectedDoc.id, "rechazar", {
+ motivo: "Cancelado por administrador",
+ });
+ }}
+ >
+ Cancelar trámite
+ </button>
+ )}
+ 
     </div>
   );
 }

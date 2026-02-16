@@ -109,12 +109,49 @@ export function Sidebar({
         <span>✅</span> Solo firmados
       </div>
 
+      <div
+        className={`nav-item ${
+          statusFilter === "RECHAZADOS" ? "active" : ""
+        }`}
+        onClick={() => handleStatusFilter("RECHAZADOS")}
+      >
+        <span>❌</span> Solo rechazados
+      </div>
+
       {/* Verificación pública */}
       <div
         className={`nav-item ${view === "verification" ? "active" : ""}`}
         onClick={() => handleChangeView("verification")}
       >
         <span>🔍</span> Verificar documento
+      </div>
+
+      {/* Sección Reportes */}
+      <h3
+        style={{
+          fontSize: "0.75rem",
+          textTransform: "uppercase",
+          letterSpacing: "0.08em",
+          color: "#6b7280",
+          marginTop: 24,
+          marginBottom: 8,
+        }}
+      >
+        Reportes
+      </h3>
+
+      <div
+        className={`nav-item ${view === "analytics" ? "active" : ""}`}
+        onClick={() => handleChangeView("analytics")}
+      >
+        <span>📊</span> Analytics
+      </div>
+
+      <div
+        className={`nav-item ${view === "dashboard" ? "active" : ""}`}
+        onClick={() => handleChangeView("dashboard")}
+      >
+        <span>📈</span> Dashboard
       </div>
 
       {/* Sección Administración */}
@@ -163,14 +200,6 @@ export function Sidebar({
         <div>
           Pendientes hoy: <strong>{pendientes}</strong>
         </div>
-      </div>
-
-      {/* Dashboard */}
-      <div
-        className={`nav-item ${view === "dashboard" ? "active" : ""}`}
-        onClick={() => handleChangeView("dashboard")}
-      >
-        <span>📊</span> Dashboard
       </div>
 
       {/* Logout */}
