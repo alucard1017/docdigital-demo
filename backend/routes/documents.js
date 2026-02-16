@@ -10,74 +10,105 @@ const { sellarPdfConQr } = require("../services/pdfSeal");
 const router = express.Router();
 
 /* ================================
+   RATE LIMITING SIMPLE
+   ================================ */
+
+const rateLimit = {};
+
+function checkRateLimit(key, maxAttempts = 5, windowMs = 60000) {
+  const now = Date.now();
+  
+  if (!rateLimit[key]) {
+    rateLimit[key] = { count: 1, resetAt: now + windowMs };
+    return true;
+  }
+  
+  if (now > rateLimit[key].resetAt) {
+    rateLimit[key] = { count: 1, resetAt: now + windowMs };
+    return true;
+  }
+  
+  if (rateLimit[key].count >= maxAttempts) {
+    return false;
+  }
+  
+  rateLimit[key].count++;
+  return true;
+}
+
+/* ================================
+   MIDDLEWARE DE PERMISOS
+   ================================ */
+
+async function checkDocumentOwnership(req, res, next) {
+  try {
+    const { id } = req.params;
+    
+    const docRes = await db.query(
+      `SELECT owner_id FROM documents WHERE id = $1`,
+      [id]
+    );
+
+    if (docRes.rowCount === 0) {
+      return res.status(404).json({ message: "Documento no encontrado" });
+    }
+
+    if (docRes.rows[0].owner_id !== req.user.id) {
+      return res.status(403).json({ message: "No tienes permisos sobre este documento" });
+    }
+
+    next();
+  } catch (err) {
+    console.error("❌ Error verificando permisos:", err);
+    return res.status(500).json({ message: "Error interno del servidor" });
+  }
+}
+
+/* ================================
+   MIDDLEWARE DE AUDITORÍA
+   ================================ */
+
+function logAuditAction(req, res, next) {
+  const originalJson = res.json.bind(res);
+  
+  res.json = function(data) {
+    // Log solo si la operación fue exitosa
+    if (res.statusCode < 400) {
+      db.query(
+        `INSERT INTO document_events (
+           document_id, actor, action, details, from_status, to_status, 
+           tipo_evento, ip, user_agent
+         )
+         VALUES ($1, $2, $3, $4, NULL, NULL, $5, $6, $7)`,
+        [
+          req.params.id || null,
+          req.user?.name || 'Sistema',
+          req.method + ' ' + req.route?.path,
+          JSON.stringify({ endpoint: req.originalUrl, method: req.method }),
+          'API_CALL',
+          req.ip,
+          req.headers['user-agent']
+        ]
+      ).catch(err => console.error("⚠️ Error logging audit:", err));
+    }
+    
+    return originalJson(data);
+  };
+  
+  next();
+}
+
+/* ================================
    RUTAS GET - ESPECÍFICAS (SIN PARÁMETROS)
    ================================ */
 
-/**
- * @swagger
- * /api/docs/analytics:
- *   get:
- *     summary: Obtener métricas de documentos del usuario autenticado
- *     tags:
- *       - Documentos
- *     security:
- *       - bearerAuth: []
- *     responses:
- *       200:
- *         description: Métricas de documentos
- */
 router.get("/analytics", requireAuth, documentsController.getDocumentAnalytics);
 
-/**
- * @swagger
- * /api/docs/export/reporte:
- *   get:
- *     summary: Descargar reporte PDF de documentos del usuario autenticado
- *     tags:
- *       - Documentos
- *     security:
- *       - bearerAuth: []
- *     responses:
- *       200:
- *         description: PDF generado
- *         content:
- *           application/pdf:
- *             schema:
- *               type: string
- *               format: binary
- */
-router.get(
-  "/export/reporte",
-  requireAuth,
-  documentsController.downloadReportPdf
-);
-
-/**
- * @swagger
- * /api/docs/export/excel:
- *   get:
- *     summary: Exportar listado de documentos a Excel
- *     tags:
- *       - Documentos
- *     security:
- *       - bearerAuth: []
- *     responses:
- *       200:
- *         description: Archivo Excel
- *         content:
- *           application/vnd.openxmlformats-officedocument.spreadsheetml.sheet:
- *             schema:
- *               type: string
- *               format: binary
- */
 router.get("/export/excel", requireAuth, async (req, res) => {
   try {
     const { generarExcelDocumentos } = require("../services/excelExport");
     const excelBuffer = await generarExcelDocumentos(req.user.id);
-
-    const filename = `documentos-${new Date()
-      .toISOString()
-      .slice(0, 10)}.xlsx`;
+    const filename = `documentos-${new Date().toISOString().slice(0, 10)}.xlsx`;
 
     res.setHeader(
       "Content-Type",
@@ -86,10 +117,8 @@ router.get("/export/excel", requireAuth, async (req, res) => {
     res.setHeader("Content-Disposition", `attachment; filename="${filename}"`);
     return res.send(excelBuffer);
   } catch (error) {
-    console.error("❌ Error exportando Excel de documentos:", error);
-    return res
-      .status(500)
-      .json({ error: "Error exportando Excel de documentos" });
+    console.error("❌ Error exportando Excel:", error);
+    return res.status(500).json({ error: "Error exportando Excel" });
   }
 });
 
@@ -97,52 +126,12 @@ router.get("/export/excel", requireAuth, async (req, res) => {
    RUTAS GET - LISTADOS (SIN PARÁMETROS)
    ================================ */
 
-/**
- * @swagger
- * /api/docs:
- *   get:
- *     summary: Listar documentos del usuario autenticado
- *     tags:
- *       - Documentos
- *     security:
- *       - bearerAuth: []
- *     responses:
- *       200:
- *         description: Lista de documentos
- */
-router.get("/", requireAuth, documentsController.listDocuments);
+router.get("/", requireAuth, documentsController.getUserDocuments);
 
 /* ================================
    RUTAS POST - ESPECIALES (SIN PARÁMETROS)
    ================================ */
 
-/**
- * @swagger
- * /api/docs:
- *   post:
- *     summary: Crear documento simple (subida de PDF)
- *     tags:
- *       - Documentos
- *     security:
- *       - bearerAuth: []
- *     requestBody:
- *       required: true
- *       content:
- *         multipart/form-data:
- *           schema:
- *             type: object
- *             properties:
- *               file:
- *                 type: string
- *                 format: binary
- *               title:
- *                 type: string
- *               description:
- *                 type: string
- *     responses:
- *       201:
- *         description: Documento creado
- */
 router.post(
   "/",
   requireAuth,
@@ -151,529 +140,215 @@ router.post(
   documentsController.createDocument
 );
 
-/**
- * @swagger
- * /api/docs/recordatorios-automaticos:
- *   post:
- *     summary: Ejecutar proceso de recordatorios automáticos (cron manual)
- *     tags:
- *       - Documentos
- *     security:
- *       - bearerAuth: []
- *     responses:
- *       200:
- *         description: Recordatorios procesados
- */
 router.post(
   "/recordatorios-automaticos",
   requireAuth,
+  (req, res, next) => {
+    const key = `reminders_${req.user.id}`;
+    if (!checkRateLimit(key, 3, 3600000)) { // 3 intentos por hora
+      return res.status(429).json({ 
+        message: "Demasiados intentos. Espera 1 hora antes de volver a enviar recordatorios." 
+      });
+    }
+    next();
+  },
   documentsController.sendAutomaticReminders
 );
 
-/* ================================
-   RUTAS POST - FLUJO DE FIRMA (tabla documents)
-   ================================ */
+router.post("/crear-flujo", requireAuth, async (req, res) => {
+  console.log("DEBUG crear-flujo body >>>", req.body);
 
-/**
- * @swagger
- * /api/docs/crear-flujo:
- *   post:
- *     summary: Crear nuevo flujo de firma (tabla documents + document_signers)
- *     tags:
- *       - Documentos
- *     security:
- *       - bearerAuth: []
- *     requestBody:
- *       required: true
- *       content:
- *         multipart/form-data:
- *           schema:
- *             type: object
- *             properties:
- *               file:
- *                 type: string
- *                 format: binary
- *               title:
- *                 type: string
- *               description:
- *                 type: string
- *               signers:
- *                 type: string
- *                 description: JSON de firmantes y visadores
- *     responses:
- *       201:
- *         description: Flujo de firma creado
- */
-router.post(
-  "/crear-flujo",
-  requireAuth,
-  upload.single("file"),
-  handleMulterError,
-  async (req, res) => {
-    const client = await db.connect();
+  const { tipo, titulo, categoriaFirma, firmantes } = req.body;
 
-    try {
-      await client.query("BEGIN");
-
-      const { title, description, signers } = req.body;
-      const userId = req.user.id;
-
-      if (!req.file) {
-        await client.query("ROLLBACK");
-        return res.status(400).json({ error: "Archivo PDF es requerido" });
-      }
-
-      const parsedSigners = JSON.parse(signers || "[]");
-      if (!parsedSigners.length) {
-        await client.query("ROLLBACK");
-        return res
-          .status(400)
-          .json({ error: "Debes enviar al menos un firmante/visador" });
-      }
-
-      const fileBuffer = req.file.buffer;
-      const fileHash = crypto
-        .createHash("sha256")
-        .update(fileBuffer)
-        .digest("hex");
-
-      const insertDocRes = await client.query(
-        `
-        INSERT INTO documents (
-          owner_id,
-          title,
-          description,
-          file_hash,
-          status,
-          created_at,
-          updated_at,
-          last_reminder_sent_at,
-          resend_count,
-          max_resends
-        )
-        VALUES ($1, $2, $3, $4, 'PENDIENTE_VISADO', NOW(), NOW(), NULL, 0, 3)
-        RETURNING id
-      `,
-        [userId, title, description, fileHash]
-      );
-
-      const documentId = insertDocRes.rows[0].id;
-
-      for (const signer of parsedSigners) {
-        await client.query(
-          `
-          INSERT INTO document_signers (
-            document_id,
-            name,
-            email,
-            role,
-            order_index,
-            status,
-            created_at,
-            updated_at
-          )
-          VALUES ($1, $2, $3, $4, $5, 'PENDIENTE', NOW(), NOW())
-        `,
-          [
-            documentId,
-            signer.name,
-            signer.email,
-            signer.role,
-            signer.order_index || 0,
-          ]
-        );
-      }
-
-      await client.query("COMMIT");
-
-      return res.status(201).json({
-        id: documentId,
-        message: "Flujo de firma creado correctamente",
-      });
-    } catch (error) {
-      await client.query("ROLLBACK");
-      console.error("❌ Error creando flujo de firma:", error);
-      return res
-        .status(500)
-        .json({ error: "Error creando flujo de firma de documento" });
-    } finally {
-      client.release();
-    }
+  if (!tipo || !titulo || !categoriaFirma || !Array.isArray(firmantes)) {
+    return res.status(400).json({ error: "Datos incompletos" });
   }
-);
-
-/**
- * @swagger
- * /api/docs/firmar-flujo/{id}:
- *   post:
- *     summary: Firmar/visar un paso del flujo de firma
- *     tags:
- *       - Documentos
- *     security:
- *       - bearerAuth: []
- *     parameters:
- *       - in: path
- *         name: id
- *         required: true
- *         schema:
- *           type: integer
- *     requestBody:
- *       required: true
- *       content:
- *         application/json:
- *           schema:
- *             type: object
- *             properties:
- *               signerId:
- *                 type: integer
- *               tipo:
- *                 type: string
- *                 enum: [VISADO, FIRMA]
- *     responses:
- *       200:
- *         description: Paso de flujo firmado/visado
- */
-router.post("/firmar-flujo/:id", requireAuth, async (req, res) => {
-  const { id } = req.params;
-  const { signerId, tipo } = req.body;
-  const userId = req.user.id;
-
-  const client = await db.connect();
 
   try {
-    await client.query("BEGIN");
+    await db.query("BEGIN");
 
-    const docRes = await client.query(
-      "SELECT * FROM documents WHERE id = $1 FOR UPDATE",
-      [id]
-    );
-    if (docRes.rowCount === 0) {
-      await client.query("ROLLBACK");
-      return res.status(404).json({ error: "Documento no encontrado" });
-    }
+    const codigoVerificacion = crypto.randomUUID().slice(0, 8);
 
-    const document = docRes.rows[0];
-
-    if (document.status === "RECHAZADO") {
-      await client.query("ROLLBACK");
-      return res
-        .status(400)
-        .json({ error: "No se puede firmar un documento rechazado" });
-    }
-
-    const signerRes = await client.query(
-      `
-        SELECT *
-        FROM document_signers
-        WHERE id = $1
-          AND document_id = $2
-        FOR UPDATE
-      `,
-      [signerId, id]
+    const docResult = await db.query(
+      `INSERT INTO documentos (
+         tipo, titulo, estado, hash_pdf, codigo_verificacion, 
+         categoria_firma, creado_por, created_at, updated_at
+       )
+       VALUES ($1, $2, 'BORRADOR', NULL, $3, $4, $5, NOW(), NOW())
+       RETURNING *`,
+      [tipo, titulo, codigoVerificacion, categoriaFirma, req.user.id]
     );
 
-    if (signerRes.rowCount === 0) {
-      await client.query("ROLLBACK");
-      return res.status(404).json({ error: "Firmante/visador no encontrado" });
-    }
+    const documento = docResult.rows[0];
 
-    const signer = signerRes.rows[0];
-
-    if (signer.status === "FIRMADO") {
-      await client.query("ROLLBACK");
-      return res
-        .status(400)
-        .json({ error: "Este paso ya fue firmado/visado" });
-    }
-
-    await client.query(
-      `
-        UPDATE document_signers
-        SET status = 'FIRMADO',
-            updated_at = NOW()
-        WHERE id = $1
-      `,
-      [signerId]
-    );
-
-    const allSignedRes = await client.query(
-      `
-        SELECT COUNT(*) FILTER (WHERE status = 'FIRMADO') AS firmados,
-               COUNT(*) AS total
-        FROM document_signers
-        WHERE document_id = $1
-      `,
-      [id]
-    );
-
-    const { firmados, total } = allSignedRes.rows[0];
-    const allSigned = Number(firmados) === Number(total);
-
-    if (allSigned) {
-      await client.query(
-        `
-          UPDATE documents
-          SET status = 'FIRMADO',
-              updated_at = NOW()
-          WHERE id = $1
-        `,
-        [id]
+    for (const [index, f] of firmantes.entries()) {
+      await db.query(
+        `INSERT INTO firmantes (
+           documento_id, nombre, email, rut, rol, orden_firma, 
+           created_at, updated_at
+         )
+         VALUES ($1, $2, $3, $4, $5, $6, NOW(), NOW())`,
+        [
+          documento.id,
+          f.nombre,
+          f.email,
+          f.rut || null,
+          f.rol || null,
+          f.ordenFirma ?? index + 1,
+        ]
       );
-
-      // aquí podrías llamar a sellarPdfConQr si quieres sellar al completar
-      // await sellarPdfConQr(id);
     }
 
-    await client.query("COMMIT");
+    await db.query(
+      `INSERT INTO eventos_firma (
+         documento_id, tipo_evento, metadata, created_at
+       )
+       VALUES ($1, 'CREADO', $2, NOW())`,
+      [documento.id, JSON.stringify({ fuente: "API", creado_por: req.user.id })]
+    );
 
-    return res.json({
-      message: "Paso del flujo firmado/visado correctamente",
-      allSigned,
-      progress: {
-        firmados: Number(firmados),
-        total: Number(total),
-      },
+    await db.query("COMMIT");
+
+    return res.status(201).json({
+      documentoId: documento.id,
+      codigoVerificacion,
+      message: "Flujo de documento creado exitosamente",
     });
   } catch (error) {
-    await client.query("ROLLBACK");
+    await db.query("ROLLBACK");
+    console.error("❌ Error creando flujo de documento:", error);
+    return res.status(500).json({ error: "Error creando flujo de documento" });
+  }
+});
+
+router.post("/firmar-flujo/:firmanteId", async (req, res) => {
+  const { firmanteId } = req.params;
+
+  try {
+    const firmanteRes = await db.query(
+      `SELECT f.*, d.id AS documento_id, d.estado AS documento_estado
+       FROM firmantes f
+       JOIN documentos d ON d.id = f.documento_id
+       WHERE f.id = $1`,
+      [firmanteId]
+    );
+
+    if (firmanteRes.rowCount === 0) {
+      return res.status(404).json({ error: "Firmante no encontrado" });
+    }
+
+    const firmante = firmanteRes.rows[0];
+
+    if (firmante.estado === "FIRMADO") {
+      return res.status(400).json({ error: "Este firmante ya firmó" });
+    }
+
+    if (firmante.estado === "RECHAZADO") {
+      return res.status(400).json({ error: "Este firmante rechazó el documento" });
+    }
+
+    await db.query("BEGIN");
+
+    await db.query(
+      `UPDATE firmantes
+       SET estado = 'FIRMADO',
+           fecha_firma = NOW(),
+           tipo_firma = 'SIMPLE',
+           updated_at = NOW()
+       WHERE id = $1`,
+      [firmanteId]
+    );
+
+    await db.query(
+      `INSERT INTO eventos_firma (
+         documento_id, firmante_id, tipo_evento, ip, user_agent, metadata, created_at
+       )
+       VALUES ($1, $2, 'FIRMADO', $3, $4, $5, NOW())`,
+      [
+        firmante.documento_id,
+        firmanteId,
+        req.ip || null,
+        req.headers["user-agent"] || null,
+        JSON.stringify({ fuente: "API", via: "firmar-flujo" }),
+      ]
+    );
+
+    const countRes = await db.query(
+      `SELECT 
+         COUNT(*) FILTER (WHERE estado = 'FIRMADO') AS firmados,
+         COUNT(*) AS total
+       FROM firmantes
+       WHERE documento_id = $1`,
+      [firmante.documento_id]
+    );
+
+    const { firmados, total } = countRes.rows[0];
+    const allSigned = Number(firmados) >= Number(total);
+
+    if (allSigned) {
+      await db.query(
+        `UPDATE documentos
+         SET estado = 'FIRMADO',
+             updated_at = NOW()
+         WHERE id = $1`,
+        [firmante.documento_id]
+      );
+
+      await db.query(
+        `INSERT INTO eventos_firma (
+           documento_id, tipo_evento, metadata, created_at
+         )
+         VALUES ($1, 'DOCUMENTO_FIRMADO_COMPLETO', $2, NOW())`,
+        [
+          firmante.documento_id,
+          JSON.stringify({
+            descripcion: "Todos los firmantes han firmado",
+            firmados: Number(firmados),
+            total: Number(total),
+          }),
+        ]
+      );
+    }
+
+    await db.query("COMMIT");
+
+    return res.json({
+      mensaje: allSigned
+        ? "Firma registrada y documento completado"
+        : "Firma registrada. Faltan firmantes",
+      documentoId: firmante.documento_id,
+      allSigned,
+      progress: ((Number(firmados) / Number(total)) * 100).toFixed(1) + "%",
+    });
+  } catch (error) {
+    await db.query("ROLLBACK");
     console.error("❌ Error firmando flujo de documento:", error);
-    return res
-      .status(500)
-      .json({ error: "Error firmando flujo de documento" });
-  } finally {
-    client.release();
+    return res.status(500).json({ error: "Error firmando flujo de documento" });
   }
 });
 
 /* ================================
-   RUTAS GET - CON PARÁMETROS
+   RUTAS GET - CON PARÁMETROS (:id/...)
    ================================ */
 
-/**
- * @swagger
- * /api/docs/{id}/pdf:
- *   get:
- *     summary: Obtener PDF del documento
- *     tags:
- *       - Documentos
- *     security:
- *       - bearerAuth: []
- *     parameters:
- *       - in: path
- *         name: id
- *         required: true
- *         schema:
- *           type: integer
- */
-router.get("/:id/pdf", requireAuth, documentsController.getDocumentPdf);
-
-/**
- * @swagger
- * /api/docs/{id}/timeline:
- *   get:
- *     summary: Obtener timeline de eventos del documento
- *     tags:
- *       - Documentos
- *     security:
- *       - bearerAuth: []
- *     parameters:
- *       - in: path
- *         name: id
- *         required: true
- *         schema:
- *           type: integer
- */
-router.get("/:id/timeline", requireAuth, documentsController.getTimeline);
-
-/**
- * @swagger
- * /api/docs/{id}/signers:
- *   get:
- *     summary: Obtener firmantes/visadores del documento
- *     tags:
- *       - Documentos
- *     security:
- *       - bearerAuth: []
- *     parameters:
- *       - in: path
- *         name: id
- *         required: true
- *         schema:
- *           type: integer
- */
+router.get("/:id/pdf", documentsController.getDocumentPdf);
+router.get("/:id/timeline", documentsController.getTimeline);
 router.get("/:id/signers", requireAuth, documentsController.getSigners);
-
-/**
- * @swagger
- * /api/docs/{id}/download:
- *   get:
- *     summary: Descargar PDF original del documento
- *     tags:
- *       - Documentos
- *     security:
- *       - bearerAuth: []
- *     parameters:
- *       - in: path
- *         name: id
- *         required: true
- *         schema:
- *           type: integer
- */
-router.get("/:id/download", requireAuth, documentsController.downloadDocument);
-
-/**
- * @swagger
- * /api/docs/{id}/reporte:
- *   get:
- *     summary: Descargar reporte PDF del documento
- *     tags:
- *       - Documentos
- *     security:
- *       - bearerAuth: []
- *     parameters:
- *       - in: path
- *         name: id
- *         required: true
- *         schema:
- *           type: integer
- */
-router.get(
-  "/:id/reporte",
-  requireAuth,
-  documentsController.downloadDocumentReport
-);
+router.get("/:id/download", documentsController.downloadDocument);
+router.get("/:id/reporte", requireAuth, checkDocumentOwnership, documentsController.downloadReportPdf);
 
 /* ================================
-   RUTAS POST - CON PARÁMETROS
+   RUTAS POST - CON PARÁMETROS (:id/...)
    ================================ */
 
-/**
- * @swagger
- * /api/docs/{id}/firmar:
- *   post:
- *     summary: Firmar documento
- *     tags:
- *       - Documentos
- *     security:
- *       - bearerAuth: []
- *     parameters:
- *       - in: path
- *         name: id
- *         required: true
- *         schema:
- *           type: integer
- */
-router.post("/:id/firmar", requireAuth, documentsController.signDocument);
+router.post("/:id/firmar", requireAuth, checkDocumentOwnership, logAuditAction, documentsController.signDocument);
+router.post("/:id/visar", requireAuth, checkDocumentOwnership, logAuditAction, documentsController.visarDocument);
+router.post("/:id/rechazar", requireAuth, checkDocumentOwnership, logAuditAction, documentsController.rejectDocument);
+router.post("/:id/reenviar", requireAuth, checkDocumentOwnership, documentsController.resendReminder);
 
-/**
- * @swagger
- * /api/docs/{id}/visar:
- *   post:
- *     summary: Visar documento
- *     tags:
- *       - Documentos
- *     security:
- *       - bearerAuth: []
- *     parameters:
- *       - in: path
- *         name: id
- *         required: true
- *         schema:
- *           type: integer
- */
-router.post("/:id/visar", requireAuth, documentsController.visarDocument);
-
-/**
- * @swagger
- * /api/docs/{id}/rechazar:
- *   post:
- *     summary: Rechazar documento
- *     tags:
- *       - Documentos
- *     security:
- *       - bearerAuth: []
- *     parameters:
- *       - in: path
- *         name: id
- *         required: true
- *         schema:
- *           type: integer
- *     requestBody:
- *       required: true
- *       content:
- *         application/json:
- *           schema:
- *             type: object
- *             properties:
- *               motivo:
- *                 type: string
- *                 description: Motivo del rechazo
- */
-router.post("/:id/rechazar", requireAuth, documentsController.rejectDocument);
-
-/**
- * @swagger
- * /api/docs/{id}/reenviar:
- *   post:
- *     summary: Reenviar recordatorio a firmante o visador
- *     tags:
- *       - Documentos
- *     security:
- *       - bearerAuth: []
- *     parameters:
- *       - in: path
- *         name: id
- *         required: true
- *         schema:
- *           type: integer
- *     requestBody:
- *       required: true
- *       content:
- *         application/json:
- *           schema:
- *             type: object
- *             properties:
- *               tipo:
- *                 type: string
- *                 enum: [VISADO, FIRMA]
- *               signerId:
- *                 type: integer
- */
-router.post("/:id/reenviar", requireAuth, documentsController.resendReminder);
-
-/**
- * @swagger
- * /api/docs/{id}/recordatorio:
- *   post:
- *     summary: Enviar recordatorio manual al siguiente firmante/visador
- *     tags:
- *       - Documentos
- *     security:
- *       - bearerAuth: []
- *     parameters:
- *       - in: path
- *         name: id
- *         required: true
- *         schema:
- *           type: integer
- */
-router.post("/:id/recordatorio", requireAuth, async (req, res) => {
-  const { id } = req.params;
-  const userId = req.user.id;
-
+router.post("/:id/recordatorio", requireAuth, checkDocumentOwnership, async (req, res) => {
   try {
-    const docRes = await db.query(
-      "SELECT owner_id FROM documents WHERE id = $1",
-      [id]
-    );
-
-    if (docRes.rowCount === 0) {
-      return res.status(404).json({ message: "Documento no encontrado" });
-    }
-
-    if (docRes.rows[0].owner_id !== userId) {
-      return res.status(403).json({ message: "No tienes permisos" });
-    }
+    const { id } = req.params;
 
     const { enviarRecordatorioManual } = require("../services/reminderService");
     const result = await enviarRecordatorioManual(id);
