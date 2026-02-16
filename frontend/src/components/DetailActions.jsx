@@ -11,7 +11,7 @@ export function DetailActions({
   selectedDoc,
   setView,
   setSelectedDoc,
-  manejarAccionDocumento,,
+  manejarAccionDocumento,
  isAdmin = false
 }) {
   if (!selectedDoc) return null;
