@@ -32,12 +32,12 @@ export function Sidebar({
       <div
         style={{
           marginTop: 10,
-          marginBottom: 16,
-          padding: 8,
-          borderRadius: 10,
+          marginBottom: 18,
+          padding: 9,
+          borderRadius: 12,
           background: "#0f172a",
           color: "#e5e7eb",
-          fontSize: "0.75rem",
+          fontSize: "0.78rem",
         }}
       >
         <div style={{ fontWeight: 700, marginBottom: 4 }}>Sesión activa</div>
@@ -53,11 +53,11 @@ export function Sidebar({
       {/* Sección Bandeja */}
       <h3
         style={{
-          fontSize: "0.7rem",
+          fontSize: "0.72rem",
           textTransform: "uppercase",
           letterSpacing: "0.08em",
           color: "#6b7280",
-          marginBottom: 4,
+          marginBottom: 5,
         }}
       >
         Bandeja
@@ -80,12 +80,12 @@ export function Sidebar({
       {/* Sección Atajos */}
       <h3
         style={{
-          fontSize: "0.7rem",
+          fontSize: "0.72rem",
           textTransform: "uppercase",
           letterSpacing: "0.08em",
           color: "#6b7280",
-          marginTop: 16,
-          marginBottom: 4,
+          marginTop: 18,
+          marginBottom: 5,
         }}
       >
         Atajos
@@ -129,12 +129,12 @@ export function Sidebar({
       {/* Sección Reportes */}
       <h3
         style={{
-          fontSize: "0.7rem",
+          fontSize: "0.72rem",
           textTransform: "uppercase",
           letterSpacing: "0.08em",
           color: "#6b7280",
-          marginTop: 16,
-          marginBottom: 4,
+          marginTop: 18,
+          marginBottom: 5,
         }}
       >
         Reportes
@@ -159,12 +159,12 @@ export function Sidebar({
         <>
           <h3
             style={{
-              fontSize: "0.7rem",
+              fontSize: "0.72rem",
               textTransform: "uppercase",
               letterSpacing: "0.08em",
               color: "#6b7280",
-              marginTop: 16,
-              marginBottom: 4,
+              marginTop: 18,
+              marginBottom: 5,
             }}
           >
             Administración
@@ -191,7 +191,7 @@ export function Sidebar({
           borderRadius: 10,
           background: "#020617",
           color: "#9ca3af",
-          fontSize: "0.7rem",
+          fontSize: "0.72rem",
         }}
       >
         <div style={{ marginBottom: 4 }}>

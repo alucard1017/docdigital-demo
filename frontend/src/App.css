@@ -42,10 +42,10 @@ html, body {
 /* -------- SIDEBAR -------- */
 
 .sidebar {
-  width: 200px;              /* más estrecho */
+  width: 230px;              /* muy parecido al original (250) pero un poco menor */
   background: var(--sidebar-bg);
   color: #ffffff;
-  padding: 16px 12px;
+  padding: 20px 14px;
   display: flex;
   flex-direction: column;
   flex-shrink: 0;
@@ -53,26 +53,26 @@ html, body {
 }
 
 .sidebar h2 {
-  font-size: 0.9rem;
+  font-size: 1rem;           /* algo menor que 1.2 */
   font-weight: 800;
   color: #38bdf8;
   letter-spacing: -0.02em;
-  margin-bottom: 16px;
+  margin-bottom: 22px;
   text-transform: uppercase;
   text-align: center;
 }
 
 .nav-item {
-  padding: 6px 8px;
+  padding: 8px 10px;
   border-radius: 10px;
   cursor: pointer;
-  margin-bottom: 4px;
+  margin-bottom: 6px;
   transition: all 0.3s ease;
   display: flex;
   align-items: center;
-  gap: 4px;
+  gap: 6px;
   font-weight: 500;
-  font-size: 0.85rem;
+  font-size: 0.88rem;
   color: #94a3b8;
 }
 
@@ -112,9 +112,9 @@ html, body {
 
 .content-body {
   width: 100%;
-  padding: 16px 10px 24px;
+  padding: 18px 12px 26px;
   box-sizing: border-box;
-  max-width: calc(100vw - 200px);
+  max-width: calc(100vw - 230px);
   overflow-x: auto;
 }
 
@@ -380,7 +380,7 @@ html, body {
   margin: 0;
   padding: 10px 16px;
   font-size: 0.98rem;
-  border-bottom: 1px solid #border;
+  border-bottom: 1px solid var(--border);
   display: flex;
   justify-content: space-between;
   align-items: center;
