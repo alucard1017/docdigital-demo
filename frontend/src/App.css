@@ -42,10 +42,10 @@ html, body {
 /* -------- SIDEBAR -------- */
 
 .sidebar {
-  width: 220px;                /* antes 250px */
+  width: 200px;              /* más estrecho */
   background: var(--sidebar-bg);
   color: #ffffff;
-  padding: 20px 14px;          /* antes 30px 18px */
+  padding: 16px 12px;
   display: flex;
   flex-direction: column;
   flex-shrink: 0;
@@ -53,26 +53,26 @@ html, body {
 }
 
 .sidebar h2 {
-  font-size: 1rem;             /* antes 1.2rem */
+  font-size: 0.9rem;
   font-weight: 800;
   color: #38bdf8;
   letter-spacing: -0.02em;
-  margin-bottom: 20px;         /* antes 32px */
+  margin-bottom: 16px;
   text-transform: uppercase;
   text-align: center;
 }
 
 .nav-item {
-  padding: 8px 10px;           /* antes 12px 16px */
+  padding: 6px 8px;
   border-radius: 10px;
   cursor: pointer;
-  margin-bottom: 6px;          /* antes 8px */
+  margin-bottom: 4px;
   transition: all 0.3s ease;
   display: flex;
   align-items: center;
-  gap: 6px;                    /* antes 10px */
+  gap: 4px;
   font-weight: 500;
-  font-size: 0.9rem;           /* más compacto */
+  font-size: 0.85rem;
   color: #94a3b8;
 }
 
@@ -112,9 +112,9 @@ html, body {
 
 .content-body {
   width: 100%;
-  padding: 16px 10px 24px;           /* antes 20px 12px 28px */
+  padding: 16px 10px 24px;
   box-sizing: border-box;
-  max-width: calc(100vw - 220px);    /* antes 250px */
+  max-width: calc(100vw - 200px);
   overflow-x: auto;
 }
 
@@ -380,7 +380,7 @@ html, body {
   margin: 0;
   padding: 10px 16px;
   font-size: 0.98rem;
-  border-bottom: 1px solid var(--border);
+  border-bottom: 1px solid #border;
   display: flex;
   justify-content: space-between;
   align-items: center;
