@@ -4,10 +4,10 @@ const {
   PutObjectCommand,
   GetObjectCommand,
   DeleteObjectCommand,
-} = require('@aws-sdk/client-s3');
-const { getSignedUrl: presign } = require('@aws-sdk/s3-request-presigner');
-const fs = require('fs');
-const path = require('path');
+} = require("@aws-sdk/client-s3");
+const { getSignedUrl: presign } = require("@aws-sdk/s3-request-presigner");
+const fs = require("fs");
+const path = require("path");
 
 const R2_BUCKET = process.env.R2_BUCKET;
 const R2_ACCESS_KEY_ID = process.env.R2_ACCESS_KEY_ID;
@@ -16,7 +16,7 @@ const R2_ENDPOINT = process.env.R2_ENDPOINT;
 
 // Cliente S3 apuntando a R2
 const r2Client = new S3Client({
-  region: 'auto',
+  region: "auto",
   endpoint: R2_ENDPOINT,
   credentials: {
     accessKeyId: R2_ACCESS_KEY_ID,
@@ -25,6 +25,10 @@ const r2Client = new S3Client({
 });
 
 const BUCKET = R2_BUCKET;
+
+/* ================================
+   FUNCIONES DE SUBIDA
+   ================================ */
 
 /**
  * Subir un PDF desde disco a R2
@@ -41,14 +45,14 @@ async function uploadPdfToS3(filePath, fileName) {
       Bucket: BUCKET,
       Key: fileName,
       Body: fileContent,
-      ContentType: 'application/pdf',
+      ContentType: "application/pdf",
     });
 
     await r2Client.send(command);
     console.log(`✅ PDF subido a R2: ${fileName}`);
     return fileName;
   } catch (error) {
-    console.error('❌ Error al subir PDF a R2:', error.message || error);
+    console.error("❌ Error al subir PDF a R2:", error.message || error);
     throw error;
   }
 }
@@ -56,7 +60,7 @@ async function uploadPdfToS3(filePath, fileName) {
 /**
  * Subir un Buffer genérico a R2 (ej: PNG del QR, PDFs generados, etc.)
  */
-async function uploadBufferToS3(buffer, fileName, contentType = 'application/octet-stream') {
+async function uploadBufferToS3(fileName, buffer, contentType = "application/octet-stream") {
   try {
     const command = new PutObjectCommand({
       Bucket: BUCKET,
@@ -69,10 +73,14 @@ async function uploadBufferToS3(buffer, fileName, contentType = 'application/oct
     console.log(`✅ Buffer subido a R2: ${fileName}`);
     return fileName;
   } catch (error) {
-    console.error('❌ Error al subir buffer a R2:', error.message || error);
+    console.error("❌ Error al subir buffer a R2:", error.message || error);
     throw error;
   }
 }
+
+/* ================================
+   FUNCIONES DE DESCARGA
+   ================================ */
 
 /**
  * Descargar un PDF de R2 a disco local
@@ -101,25 +109,7 @@ async function downloadPdfFromS3(fileName, savePath) {
     console.log(`✅ PDF descargado desde R2: ${fileName}`);
     return savePath;
   } catch (error) {
-    console.error('❌ Error al descargar PDF de R2:', error.message);
-    throw error;
-  }
-}
-
-/**
- * Obtener URL firmada temporal para ver/descargar
- */
-async function getSignedUrl(fileName, expiresIn = 3600) {
-  try {
-    const command = new GetObjectCommand({
-      Bucket: BUCKET,
-      Key: fileName,
-    });
-
-    const url = await presign(r2Client, command, { expiresIn });
-    return url;
-  } catch (error) {
-    console.error('❌ Error al generar URL firmada de R2:', error.message);
+    console.error("❌ Error al descargar PDF de R2:", error.message);
     throw error;
   }
 }
@@ -143,10 +133,36 @@ async function getObjectBuffer(fileName) {
 
     return Buffer.concat(chunks);
   } catch (error) {
-    console.error('❌ Error al obtener buffer desde R2:', error.message);
+    console.error("❌ Error al obtener buffer desde R2:", error.message);
     throw error;
   }
 }
+
+/* ================================
+   FUNCIONES DE URL
+   ================================ */
+
+/**
+ * Obtener URL firmada temporal para ver/descargar
+ */
+async function getSignedUrl(fileName, expiresIn = 3600) {
+  try {
+    const command = new GetObjectCommand({
+      Bucket: BUCKET,
+      Key: fileName,
+    });
+
+    const url = await presign(r2Client, command, { expiresIn });
+    return url;
+  } catch (error) {
+    console.error("❌ Error al generar URL firmada de R2:", error.message);
+    throw error;
+  }
+}
+
+/* ================================
+   EXPORTAR
+   ================================ */
 
 module.exports = {
   uploadPdfToS3,

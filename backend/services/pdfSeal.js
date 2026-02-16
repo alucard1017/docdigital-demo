@@ -223,7 +223,7 @@ async function sellarPdfConQr({
     ? s3Key.replace(/\.pdf$/i, '_sellado.pdf')
     : `${s3Key}_sellado.pdf`;
 
-  await uploadBuffer(newKey, newPdfBytes, 'application/pdf');
+  await uploadBufferToS3(newKey, newPdfBytes, 'application/pdf');
 
   return newKey;
 }
