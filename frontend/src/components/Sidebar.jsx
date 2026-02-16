@@ -32,12 +32,12 @@ export function Sidebar({
       <div
         style={{
           marginTop: 12,
-          marginBottom: 24,
-          padding: 12,
+          marginBottom: 20,
+          padding: 10,
           borderRadius: 12,
           background: "#0f172a",
           color: "#e5e7eb",
-          fontSize: "0.85rem",
+          fontSize: "0.8rem",
         }}
       >
         <div style={{ fontWeight: 700, marginBottom: 4 }}>Sesión activa</div>
@@ -57,7 +57,7 @@ export function Sidebar({
           textTransform: "uppercase",
           letterSpacing: "0.08em",
           color: "#6b7280",
-          marginBottom: 8,
+          marginBottom: 6,
         }}
       >
         Bandeja
@@ -84,8 +84,8 @@ export function Sidebar({
           textTransform: "uppercase",
           letterSpacing: "0.08em",
           color: "#6b7280",
-          marginTop: 24,
-          marginBottom: 8,
+          marginTop: 20,
+          marginBottom: 6,
         }}
       >
         Atajos
@@ -133,8 +133,8 @@ export function Sidebar({
           textTransform: "uppercase",
           letterSpacing: "0.08em",
           color: "#6b7280",
-          marginTop: 24,
-          marginBottom: 8,
+          marginTop: 20,
+          marginBottom: 6,
         }}
       >
         Reportes
@@ -163,8 +163,8 @@ export function Sidebar({
               textTransform: "uppercase",
               letterSpacing: "0.08em",
               color: "#6b7280",
-              marginTop: 24,
-              marginBottom: 8,
+              marginTop: 20,
+              marginBottom: 6,
             }}
           >
             Administración
@@ -186,12 +186,12 @@ export function Sidebar({
       <div
         style={{
           marginTop: "auto",
-          marginBottom: 12,
-          padding: 10,
+          marginBottom: 10,
+          padding: 9,
           borderRadius: 12,
           background: "#020617",
           color: "#9ca3af",
-          fontSize: "0.8rem",
+          fontSize: "0.75rem",
         }}
       >
         <div style={{ marginBottom: 4 }}>
