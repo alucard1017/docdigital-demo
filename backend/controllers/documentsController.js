@@ -386,6 +386,20 @@ async function createDocument(req, res) {
       [doc.id, firmante_nombre_completo, firmante_email, signerMainToken]
     );
 
+    // TAMBIÉN crear en tabla firmantes (para verificación pública)
+    try {
+      await db.query(
+        `INSERT INTO firmantes (
+           documento_id, nombre, email, rut, rol, orden_firma, estado, tipo_firma,
+           created_at, updated_at
+         )
+         VALUES ($1, $2, $3, $4, 'FIRMANTE', 1, 'PENDIENTE', 'SIMPLE', NOW(), NOW())`,
+        [documentoNuevo.id, firmante_nombre_completo, firmante_email, runValue]
+      );
+    } catch (firmErr) {
+      console.error('⚠️ Error creando firmante en tabla firmantes:', firmErr);
+    }
+
     let signerAdditionalToken = null;
     if (firmante_adicional_email) {
       signerAdditionalToken = crypto.randomUUID();
@@ -400,7 +414,25 @@ async function createDocument(req, res) {
           signerAdditionalToken,
         ]
       );
-    }
+
+      // TAMBIÉN en tabla firmantes
+      try {
+        await db.query(
+          `INSERT INTO firmantes (
+             documento_id, nombre, email, rut, rol, orden_firma, estado, tipo_firma,
+             created_at, updated_at
+           )
+           VALUES ($1, $2, $3, NULL, 'FIRMANTE', 2, 'PENDIENTE', 'SIMPLE', NOW(), NOW())`,
+          [
+            documentoNuevo.id,
+            firmante_adicional_nombre_completo || 'Firmante adicional',
+            firmante_adicional_email,
+          ]
+        );
+      } catch (firmErr) {
+        console.error('⚠️ Error creando firmante adicional en tabla firmantes:', firmErr);
+      }
+     }
 
     // document_participants (solo tracking)
     if (requires_visado && visador_email) {
