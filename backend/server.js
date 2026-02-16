@@ -55,10 +55,13 @@ app.use(generalLimiter);
    ================================ */
 const allowedOrigins = [
   process.env.FRONTEND_URL,
+  'https://app.verifirma.cl',
+  'https://docdigital-demo.onrender.com',
   'http://localhost:5173',
   'http://localhost:5174',
   'http://localhost:3000',
 ].filter(Boolean);
+
 
 app.use(
   cors({

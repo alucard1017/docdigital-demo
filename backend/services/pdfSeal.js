@@ -4,7 +4,7 @@ const path = require('path');
 const QRCode = require('qrcode');
 const bwipjs = require('@bwip-js/node');
 const { PDFDocument, rgb, StandardFonts, degrees } = require('pdf-lib');
-const { getObjectBuffer, uploadBuffer } = require('./storageR2');
+const { getObjectBuffer, uploadBufferToS3 } = require('./storageR2');
 
 /**
  * s3Key: clave del PDF original en R2/S3
