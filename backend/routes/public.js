@@ -413,7 +413,6 @@ router.post("/docs/:token/rechazar", async (req, res) => {
         .json({ message: "Este firmante ya rechazó el documento" });
     }
 
-    // Marcar firmante como RECHAZADO
     await db.query(
       `UPDATE document_signers
        SET status = 'RECHAZADO',
@@ -423,7 +422,6 @@ router.post("/docs/:token/rechazar", async (req, res) => {
       [row.signer_id, motivo]
     );
 
-    // Actualizar documento como RECHAZADO (cortamos flujo)
     const docUpdateRes = await db.query(
       `UPDATE documents
        SET status = 'RECHAZADO',
@@ -435,32 +433,33 @@ router.post("/docs/:token/rechazar", async (req, res) => {
       [row.id, motivo]
     );
     const doc = docUpdateRes.rows[0];
-// Sincronizar rechazo con tabla documentos (para verificación pública)
-if (doc.nuevo_documento_id) {
-  try {
-    await db.query(
-      `UPDATE documentos
-       SET estado = 'RECHAZADO',
-           updated_at = NOW()
-       WHERE id = $1`,
-      [doc.nuevo_documento_id]
-    );
 
-    // Marcar firmante como rechazado en tabla firmantes
-    await db.query(
-      `UPDATE firmantes
-       SET estado = 'RECHAZADO',
-           updated_at = NOW()
-       WHERE documento_id = $1
-         AND email = $2`,
-      [doc.nuevo_documento_id, row.signer_email]
-    );
-  } catch (syncErr) {
-    console.error('⚠️ Error sincronizando rechazo con tabla documentos:', syncErr);
-  }
-}
+    if (doc.nuevo_documento_id) {
+      try {
+        await db.query(
+          `UPDATE documentos
+           SET estado = 'RECHAZADO',
+               updated_at = NOW()
+           WHERE id = $1`,
+          [doc.nuevo_documento_id]
+        );
 
-    // Evento interno (document_events)
+        await db.query(
+          `UPDATE firmantes
+           SET estado = 'RECHAZADO',
+               updated_at = NOW()
+           WHERE documento_id = $1
+             AND email = $2`,
+          [doc.nuevo_documento_id, row.signer_email]
+        );
+      } catch (syncErr) {
+        console.error(
+          "⚠️ Error sincronizando rechazo con tabla documentos:",
+          syncErr
+        );
+      }
+    }
+
     await db.query(
       `INSERT INTO document_events (
          document_id, actor, action, details, from_status, to_status
@@ -476,35 +475,16 @@ if (doc.nuevo_documento_id) {
       ]
     );
 
-    // Evento en tabla eventos_firma (para verificación pública, si existe vínculo)
-    if (doc.nuevo_documento_id) {
-      try {
-        await db.query(
-          `INSERT INTO eventos_firma (
-             documento_id, tipo_evento, ip, user_agent, metadata, created_at
-           )
-           VALUES ($1, $2, $3, $4, $5, NOW())`,
-          [
-            doc.nuevo_documento_id,
-            "RECHAZO_PUBLICO",
-            null,
-            null,
-            JSON.stringify({
-              motivo,
-              firmante_nombre: row.signer_name,
-              firmante_email: row.signer_email,
-            }),
-          ]
-        );
-      } catch (e) {
-        console.error(
-          "⚠️ Error registrando evento de rechazo en eventos_firma:",
-          e
-        );
-      }
-    }
+    // ✅ Registrar en auditoría (SIN ENUM)
+    await registrarAuditoria({
+      documento_id: doc.id,
+      usuario_id: null,
+      evento_tipo: "RECHAZO_PUBLICO",
+      descripcion: `Documento rechazado por ${row.signer_email} (enlace público). Motivo: ${motivo}`,
+      ip_address: req.ip,
+      user_agent: req.headers["user-agent"] || null,
+    });
 
-    // Notificar al emisor por email
     try {
       const ownerRes = await db.query(
         `SELECT u.name, u.email
