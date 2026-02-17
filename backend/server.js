@@ -1,5 +1,7 @@
 // backend/server.js
 require("dotenv").config();
+require("./instrument"); // inicializa Sentry v8 antes de todo
+
 const express = require("express");
 const cors = require("cors");
 const path = require("path");
@@ -11,20 +13,6 @@ const Sentry = require("@sentry/node");
 console.log("=====================================");
 console.log("🚀 INICIANDO SERVER.JS");
 console.log("=====================================");
-
-// ========== SENTRY v8 ==========
-Sentry.init({
-  dsn: process.env.SENTRY_DSN,
-  sendDefaultPii: process.env.SENTRY_SEND_DEFAULT_PII === "true",
-  integrations: [
-    // integración específica para Express v8
-    Sentry.integrations.wrapExpress({ app: express }),
-  ],
-});
-
-Sentry.setTag("env", process.env.NODE_ENV || "development");
-Sentry.setTag("service", "verifirma-backend");
-// ============================
 
 const app = express();
 app.set("trust proxy", 1);
@@ -398,7 +386,7 @@ if (fs.existsSync(frontendDir)) {
 /* ================================
    MIDDLEWARE GLOBAL DE ERRORES
    ================================ */
-// En v8 ya no usamos Sentry.Handlers.errorHandler()
+Sentry.setupExpressErrorHandler(app); // v8
 const errorHandler = require("./middlewares/errorHandler");
 app.use(errorHandler);
 
