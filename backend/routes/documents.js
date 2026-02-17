@@ -65,7 +65,7 @@ async function checkDocumentOwnership(req, res, next) {
 }
 
 /* ================================
-   MIDDLEWARE DE AUDITORÍA
+   MIDDLEWARE DE AUDITORÍA (SIMPLIFICADO - SIN ENUM)
    ================================ */
 
 function logAuditAction(req, res, next) {
@@ -74,22 +74,16 @@ function logAuditAction(req, res, next) {
   res.json = function(data) {
     // Log solo si la operación fue exitosa
     if (res.statusCode < 400) {
-      db.query(
-        `INSERT INTO document_events (
-           document_id, actor, action, details, from_status, to_status, 
-           tipo_evento, ip, user_agent
-         )
-         VALUES ($1, $2, $3, $4, NULL, NULL, $5, $6, $7)`,
-        [
-          req.params.id || null,
-          req.user?.name || 'Sistema',
-          req.method + ' ' + req.route?.path,
-          JSON.stringify({ endpoint: req.originalUrl, method: req.method }),
-          'API_CALL',
-          req.ip,
-          req.headers['user-agent']
-        ]
-      ).catch(err => console.error("⚠️ Error logging audit:", err));
+      const { registrarAuditoria } = require("../utils/auditLog");
+      
+      registrarAuditoria({
+        documento_id: req.params.id || null,
+        usuario_id: req.user?.id || null,
+        evento_tipo: "API_ACTION",
+        descripcion: `${req.method} ${req.route?.path}`,
+        ip_address: req.ip,
+        user_agent: req.headers["user-agent"] || null,
+      }).catch(err => console.error("⚠️ Error logging audit:", err));
     }
     
     return originalJson(data);
