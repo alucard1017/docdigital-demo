@@ -248,32 +248,34 @@ router.post("/docs/:token/firmar", async (req, res) => {
       [newDocStatus, newSignatureStatus, row.id]
     );
     const doc = docUpdateRes.rows[0];
-// Sincronizar estado con tabla documentos (para verificación pública)
-if (doc.nuevo_documento_id) {
-  try {
-    await db.query(
-      `UPDATE documentos
-       SET estado = $1,
-           updated_at = NOW()
-       WHERE id = $2`,
-      [allSigned ? 'FIRMADO' : 'PENDIENTE_FIRMA', doc.nuevo_documento_id]
-    );
 
-    // Actualizar firmante individual en tabla firmantes
-    await db.query(
-      `UPDATE firmantes
-       SET estado = 'FIRMADO',
-           fecha_firma = NOW(),
-           tipo_firma = 'SIMPLE',
-           updated_at = NOW()
-       WHERE documento_id = $1
-         AND email = $2`,
-      [doc.nuevo_documento_id, row.signer_email]
-    );
-  } catch (syncErr) {
-    console.error('⚠️ Error sincronizando estado con tabla documentos:', syncErr);
-  }
-}
+    if (doc.nuevo_documento_id) {
+      try {
+        await db.query(
+          `UPDATE documentos
+           SET estado = $1,
+               updated_at = NOW()
+           WHERE id = $2`,
+          [allSigned ? "FIRMADO" : "PENDIENTE_FIRMA", doc.nuevo_documento_id]
+        );
+
+        await db.query(
+          `UPDATE firmantes
+           SET estado = 'FIRMADO',
+               fecha_firma = NOW(),
+               tipo_firma = 'SIMPLE',
+               updated_at = NOW()
+           WHERE documento_id = $1
+             AND email = $2`,
+          [doc.nuevo_documento_id, row.signer_email]
+        );
+      } catch (syncErr) {
+        console.error(
+          "⚠️ Error sincronizando estado con tabla documentos:",
+          syncErr
+        );
+      }
+    }
 
     await db.query(
       `INSERT INTO document_events (
@@ -292,7 +294,16 @@ if (doc.nuevo_documento_id) {
       ]
     );
 
-    // Si TODOS firmaron y el documento está vinculado al flujo nuevo, sellar PDF FINAL
+    // ✅ Registrar en auditoría (SIN ENUM)
+    await registrarAuditoria({
+      documento_id: doc.id,
+      usuario_id: null,
+      evento_tipo: "FIRMADO_PUBLICO",
+      descripcion: `Documento firmado por ${row.signer_email} (enlace público)${allSigned ? " - COMPLETAMENTE FIRMADO" : ""}`,
+      ip_address: req.ip,
+      user_agent: req.headers["user-agent"] || null,
+    });
+
     if (allSigned && doc.nuevo_documento_id) {
       try {
         const docNuevoRes = await db.query(
@@ -604,6 +615,16 @@ router.post("/docs/:token/visar", async (req, res) => {
         "PENDIENTE_FIRMA",
       ]
     );
+
+    // ✅ Registrar en auditoría (SIN ENUM)
+    await registrarAuditoria({
+      documento_id: doc.id,
+      usuario_id: null,
+      evento_tipo: "VISADO_PUBLICO",
+      descripcion: "Documento visado desde enlace público",
+      ip_address: req.ip,
+      user_agent: req.headers["user-agent"] || null,
+    });
 
     return res.json({
       ...doc,
