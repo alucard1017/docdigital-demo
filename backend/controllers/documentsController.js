@@ -13,6 +13,7 @@ const { isValidEmail, isValidRun, validateLength } = require('../utils/validator
 const { PDFDocument, rgb, degrees } = require('pdf-lib');
 const { sellarPdfConQr } = require('../services/pdfSeal');
 const { generarNumeroContratoInterno } = require('../utils/numeroContratoInterno');
+const { registrarAuditoria } = require('../utils/auditLog');
 
 function generarCodigoVerificacion() {
   return crypto
@@ -956,6 +957,205 @@ async function visarDocument(req, res) {
         'PENDIENTE_FIRMA',
       ]
     );
+
+    return res.json({
+      ...doc,
+      file_url: doc.file_path,
+      message: 'Documento visado exitosamente',
+    });
+  } catch (err) {
+    console.error('❌ Error visando documento:', err);
+    return res.status(500).json({ message: 'Error interno del servidor' });
+  }
+}
+
+/* ================================
+   POST: Firmar documento (propietario)
+   ================================ */
+async function signDocument(req, res) {
+  try {
+    const id = req.params.id;
+
+    const current = await db.query(
+      `SELECT * 
+       FROM documents 
+       WHERE id = $1 AND owner_id = $2`,
+      [id, req.user.id]
+    );
+
+    if (current.rowCount === 0) {
+      return res.status(404).json({ message: 'No encontrado' });
+    }
+
+    const docActual = current.rows[0];
+
+    if (docActual.status === 'FIRMADO') {
+      return res.status(400).json({ message: 'Ya firmado' });
+    }
+
+    if (docActual.status === 'RECHAZADO') {
+      return res.status(400).json({ message: 'Documento rechazado' });
+    }
+
+    if (
+      docActual.requires_visado === true &&
+      docActual.status === 'PENDIENTE_VISADO'
+    ) {
+      return res.status(400).json({
+        message: 'Este documento requiere visación antes de firmar',
+      });
+    }
+
+    const result = await db.query(
+      `UPDATE documents 
+       SET status = $1, updated_at = NOW()
+       WHERE id = $2 AND owner_id = $3
+       RETURNING *`,
+      ['FIRMADO', id, req.user.id]
+    );
+    const doc = result.rows[0];
+
+    await db.query(
+      `INSERT INTO document_events (
+         document_id, actor, action, details, from_status, to_status
+       )
+       VALUES ($1, $2, $3, $4, $5, $6)`,
+      [
+        doc.id,
+        req.user.name || 'Sistema',
+        'FIRMADO',
+        'Firmado por propietario',
+        docActual.status,
+        'FIRMADO',
+      ]
+    );
+
+    // ✅ Registrar en auditoría
+    await registrarAuditoria({
+      documento_id: doc.id,
+      usuario_id: req.user.id,
+      evento_tipo: 'FIRMADO',
+      descripcion: 'Documento firmado por propietario',
+      ip_address: req.ip,
+      user_agent: req.headers['user-agent'] || null,
+    });
+
+    if (doc.nuevo_documento_id) {
+      try {
+        const docNuevoRes = await db.query(
+          `SELECT id, codigo_verificacion, categoria_firma
+           FROM documentos
+           WHERE id = $1`,
+          [doc.nuevo_documento_id]
+        );
+
+        if (docNuevoRes.rowCount > 0) {
+          const docNuevo = docNuevoRes.rows[0];
+
+          const newKey = await sellarPdfConQr({
+            s3Key: doc.pdf_original_url || doc.file_path,
+            documentoId: docNuevo.id,
+            codigoVerificacion: docNuevo.codigo_verificacion,
+            categoriaFirma: docNuevo.categoria_firma || 'SIMPLE',
+            numeroContratoInterno: doc.numero_contrato_interno,
+          });
+
+          await db.query(
+            `UPDATE documents
+             SET pdf_final_url = $1
+             WHERE id = $2`,
+            [newKey, doc.id]
+          );
+        }
+      } catch (sealError) {
+        console.error('⚠️ Error sellando PDF con QR:', sealError);
+      }
+    }
+
+    return res.json({
+      ...doc,
+      file_url: doc.file_path,
+      message: 'Documento firmado exitosamente',
+    });
+  } catch (err) {
+    console.error('❌ Error firmando documento:', err);
+    return res.status(500).json({ message: 'Error interno del servidor' });
+  }
+}
+
+/* ================================
+   POST: Visar documento (propietario)
+   ================================ */
+async function visarDocument(req, res) {
+  try {
+    const id = req.params.id;
+
+    const current = await db.query(
+      `SELECT * 
+       FROM documents 
+       WHERE id = $1 AND owner_id = $2`,
+      [id, req.user.id]
+    );
+
+    if (current.rowCount === 0) {
+      return res.status(404).json({ message: 'No encontrado' });
+    }
+
+    const docActual = current.rows[0];
+
+    if (docActual.status === 'FIRMADO') {
+      return res.status(400).json({ message: 'Ya firmado' });
+    }
+
+    if (docActual.status === 'RECHAZADO') {
+      return res.status(400).json({ message: 'Documento rechazado' });
+    }
+
+    if (docActual.requires_visado !== true) {
+      return res.status(400).json({
+        message: 'Este documento no requiere visación',
+      });
+    }
+
+    if (docActual.status !== 'PENDIENTE_VISADO') {
+      return res.status(400).json({
+        message: 'Solo se pueden visar documentos en estado PENDIENTE_VISADO',
+      });
+    }
+
+    const result = await db.query(
+      `UPDATE documents 
+       SET status = $1, updated_at = NOW() 
+       WHERE id = $2 AND owner_id = $3 
+       RETURNING *`,
+      ['PENDIENTE_FIRMA', id, req.user.id]
+    );
+    const doc = result.rows[0];
+
+    await db.query(
+      `INSERT INTO document_events (
+         document_id, actor, action, details, from_status, to_status
+       ) 
+       VALUES ($1, $2, $3, $4, $5, $6)`,
+      [
+        doc.id,
+        req.user.name || 'Sistema',
+        'VISADO',
+        'Documento visado por el propietario',
+        docActual.status,
+        'PENDIENTE_FIRMA',
+      ]
+    );
+
+    // ✅ Registrar en auditoría
+    await registrarAuditoria({
+      documento_id: doc.id,
+      usuario_id: req.user.id,
+      evento_tipo: 'VISADO',
+      descripcion: 'Documento visado por propietario',
+      ip_address: req.ip,
+      user_agent: req.headers['user-agent'] || null,
+    });
 
     return res.json({
       ...doc,
