@@ -377,90 +377,90 @@ async function createDocument(req, res) {
       [documentoNuevo.id, doc.id]
     );
 
-    // Firmantes en document_signers con token propio
-    const signerMainToken = crypto.randomUUID();
+// Firmantes en document_signers con token propio
+const signerMainToken = crypto.randomUUID();
+await db.query(
+  `INSERT INTO document_signers (
+     document_id, role, name, email, sign_token
+   ) VALUES ($1, 'FIRMANTE', $2, $3, $4)`,
+  [doc.id, firmante_nombre_completo, firmante_email, signerMainToken]
+);
+
+// TAMBIÉN crear en tabla firmantes (para verificación pública)
+try {
+  await db.query(
+    `INSERT INTO firmantes (
+       documento_id, nombre, email, rut, rol, orden_firma, estado, tipo_firma,
+       created_at
+     )
+     VALUES ($1, $2, $3, $4, 'FIRMANTE', 1, 'PENDIENTE', 'SIMPLE', NOW())`,
+    [documentoNuevo.id, firmante_nombre_completo, firmante_email, runValue]
+  );
+} catch (firmErr) {
+  console.error('⚠️ Error creando firmante en tabla firmantes:', firmErr);
+}
+
+let signerAdditionalToken = null;
+if (firmante_adicional_email) {
+  signerAdditionalToken = crypto.randomUUID();
+  await db.query(
+    `INSERT INTO document_signers (
+       document_id, role, name, email, sign_token
+     ) VALUES ($1, 'FIRMANTE', $2, $3, $4)`,
+    [
+      doc.id,
+      firmante_adicional_nombre_completo || 'Firmante adicional',
+      firmante_adicional_email,
+      signerAdditionalToken,
+    ]
+  );
+
+  // TAMBIÉN en tabla firmantes
+  try {
     await db.query(
-      `INSERT INTO document_signers (
-         document_id, role, name, email, sign_token
-       ) VALUES ($1, 'FIRMANTE', $2, $3, $4)`,
-      [doc.id, firmante_nombre_completo, firmante_email, signerMainToken]
+      `INSERT INTO firmantes (
+         documento_id, nombre, email, rut, rol, orden_firma, estado, tipo_firma,
+         created_at
+       )
+       VALUES ($1, $2, $3, NULL, 'FIRMANTE', 2, 'PENDIENTE', 'SIMPLE', NOW())`,
+      [
+        documentoNuevo.id,
+        firmante_adicional_nombre_completo || 'Firmante adicional',
+        firmante_adicional_email,
+      ]
     );
+  } catch (firmErr) {
+    console.error('⚠️ Error creando firmante adicional en tabla firmantes:', firmErr);
+  }
+}
 
-    // TAMBIÉN crear en tabla firmantes (para verificación pública)
-    try {
-      await db.query(
-        `INSERT INTO firmantes (
-           documento_id, nombre, email, rut, rol, orden_firma, estado, tipo_firma,
-           created_at, updated_at
-         )
-         VALUES ($1, $2, $3, $4, 'FIRMANTE', 1, 'PENDIENTE', 'SIMPLE', NOW(), NOW())`,
-        [documentoNuevo.id, firmante_nombre_completo, firmante_email, runValue]
-      );
-    } catch (firmErr) {
-      console.error('⚠️ Error creando firmante en tabla firmantes:', firmErr);
-    }
-
-    let signerAdditionalToken = null;
-    if (firmante_adicional_email) {
-      signerAdditionalToken = crypto.randomUUID();
-      await db.query(
-        `INSERT INTO document_signers (
-           document_id, role, name, email, sign_token
-         ) VALUES ($1, 'FIRMANTE', $2, $3, $4)`,
-        [
-          doc.id,
-          firmante_adicional_nombre_completo || 'Firmante adicional',
-          firmante_adicional_email,
-          signerAdditionalToken,
-        ]
-      );
-
-      // TAMBIÉN en tabla firmantes
-      try {
-        await db.query(
-          `INSERT INTO firmantes (
-             documento_id, nombre, email, rut, rol, orden_firma, estado, tipo_firma,
-             created_at, updated_at
-           )
-           VALUES ($1, $2, $3, NULL, 'FIRMANTE', 2, 'PENDIENTE', 'SIMPLE', NOW(), NOW())`,
-          [
-            documentoNuevo.id,
-            firmante_adicional_nombre_completo || 'Firmante adicional',
-            firmante_adicional_email,
-          ]
-        );
-      } catch (firmErr) {
-        console.error('⚠️ Error creando firmante adicional en tabla firmantes:', firmErr);
-      }
-     }
-
-    // document_participants (solo tracking)
-    if (requires_visado && visador_email) {
-      await db.query(
-        `INSERT INTO document_participants (document_id, step_order, role, name, email)
-         VALUES 
-         ($1, 1, 'VISADOR', $2, $3),
-         ($1, 2, 'FIRMANTE', $4, $5)`,
-        [
-          doc.id,
-          visador_nombre || 'Visador',
-          visador_email,
-          firmante_nombre_completo,
-          firmante_email,
-        ]
-      );
-    } else {
-      await db.query(
-        `INSERT INTO document_participants (document_id, step_order, role, name, email)
-         VALUES 
-         ($1, 2, 'FIRMANTE', $2, $3)`,
-        [
-          doc.id,
-          firmante_nombre_completo,
-          firmante_email,
-        ]
-      );
-    }
+// document_participants (solo tracking)
+if (requires_visado && visador_email) {
+  await db.query(
+    `INSERT INTO document_participants (document_id, step_order, role, name, email)
+     VALUES 
+     ($1, 1, 'VISADOR', $2, $3),
+     ($1, 2, 'FIRMANTE', $4, $5)`,
+    [
+      doc.id,
+      visador_nombre || 'Visador',
+      visador_email,
+      firmante_nombre_completo,
+      firmante_email,
+    ]
+  );
+} else {
+  await db.query(
+    `INSERT INTO document_participants (document_id, step_order, role, name, email)
+     VALUES 
+     ($1, 2, 'FIRMANTE', $2, $3)`,
+    [
+      doc.id,
+      firmante_nombre_completo,
+      firmante_email,
+    ]
+  );
+}
 
     await db.query(
       `INSERT INTO document_events (
