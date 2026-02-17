@@ -5,13 +5,41 @@ const cors = require("cors");
 const path = require("path");
 const fs = require("fs");
 const rateLimit = require("express-rate-limit");
+const helmet = require("helmet");
+const Sentry = require("@sentry/node");
 
 console.log("=====================================");
 console.log("🚀 INICIANDO SERVER.JS");
 console.log("=====================================");
 
+// ========== SENTRY ==========
+Sentry.init({
+  dsn: process.env.SENTRY_DSN,
+  sendDefaultPii: process.env.SENTRY_SEND_DEFAULT_PII === "true",
+});
+
+Sentry.setTag("env", process.env.NODE_ENV || "development");
+Sentry.setTag("service", "verifirma-backend");
+// ============================
+
 const app = express();
 app.set("trust proxy", 1);
+
+// Sentry request handler (antes de tus middlewares/rutas)
+app.use(Sentry.Handlers.requestHandler());
+
+/* ================================
+   SECURITY HEADERS (HELMET)
+   ================================ */
+app.use(
+  helmet({
+    contentSecurityPolicy: false, // para no romper el frontend por ahora
+    crossOriginEmbedderPolicy: false,
+  })
+);
+app.use(helmet.hidePoweredBy());
+app.use(helmet.frameguard({ action: "sameorigin" }));
+app.use(helmet.noSniff());
 
 /* ================================
    VALIDAR VARIABLES DE ENTORNO
@@ -365,6 +393,9 @@ if (fs.existsSync(frontendDir)) {
 /* ================================
    MIDDLEWARE GLOBAL DE ERRORES
    ================================ */
+// Handler de errores de Sentry (antes de tu errorHandler)
+app.use(Sentry.Handlers.errorHandler());
+
 const errorHandler = require("./middlewares/errorHandler");
 app.use(errorHandler);
 
