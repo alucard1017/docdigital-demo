@@ -12,10 +12,14 @@ console.log("=====================================");
 console.log("🚀 INICIANDO SERVER.JS");
 console.log("=====================================");
 
-// ========== SENTRY ==========
+// ========== SENTRY v8 ==========
 Sentry.init({
   dsn: process.env.SENTRY_DSN,
   sendDefaultPii: process.env.SENTRY_SEND_DEFAULT_PII === "true",
+  integrations: [
+    // integración específica para Express v8
+    Sentry.integrations.wrapExpress({ app: express }),
+  ],
 });
 
 Sentry.setTag("env", process.env.NODE_ENV || "development");
@@ -25,15 +29,12 @@ Sentry.setTag("service", "verifirma-backend");
 const app = express();
 app.set("trust proxy", 1);
 
-// Sentry request handler (antes de tus middlewares/rutas)
-app.use(Sentry.Handlers.requestHandler());
-
 /* ================================
    SECURITY HEADERS (HELMET)
    ================================ */
 app.use(
   helmet({
-    contentSecurityPolicy: false, // para no romper el frontend por ahora
+    contentSecurityPolicy: false,
     crossOriginEmbedderPolicy: false,
   })
 );
@@ -160,7 +161,7 @@ app.get("/api/health", (req, res) => {
 console.log("✓ Ruta GET /api/health registrada");
 
 /* ================================
-   INFO API (ANTES ERA "/")
+   INFO API
    ================================ */
 app.get("/api/info", (req, res) => {
   res.json({
@@ -171,6 +172,14 @@ app.get("/api/info", (req, res) => {
   });
 });
 console.log("✓ Ruta GET /api/info registrada");
+
+/* ================================
+   RUTA DE PRUEBA SENTRY
+   ================================ */
+app.get("/api/sentry-test", (req, res) => {
+  throw new Error("Sentry test error");
+});
+console.log("✓ Ruta GET /api/sentry-test registrada");
 
 /* ================================
    RUTAS PRINCIPALES API
@@ -361,19 +370,15 @@ console.log("✓ Ruta GET /api/stats registrada");
 /* ================================
    SERVIR FRONTEND (REACT)
    ================================ */
-
-// IMPORTANTE: ajusta "dist" si tu build está en "build"
 const frontendDir = path.join(__dirname, "..", "frontend", "dist");
 
 if (fs.existsSync(frontendDir)) {
   app.use(express.static(frontendDir));
 
-  // Ruta raíz → frontend
   app.get("/", (req, res) => {
     res.sendFile(path.join(frontendDir, "index.html"));
   });
 
-  // Soporte para rutas del frontend (SPA)
   app.get("*", (req, res, next) => {
     if (
       req.path.startsWith("/api") ||
@@ -393,9 +398,7 @@ if (fs.existsSync(frontendDir)) {
 /* ================================
    MIDDLEWARE GLOBAL DE ERRORES
    ================================ */
-// Handler de errores de Sentry (antes de tu errorHandler)
-app.use(Sentry.Handlers.errorHandler());
-
+// En v8 ya no usamos Sentry.Handlers.errorHandler()
 const errorHandler = require("./middlewares/errorHandler");
 app.use(errorHandler);
 
@@ -432,6 +435,7 @@ const server = app.listen(PORT, () => {
   console.log("   GET  /api-docs (Documentación Swagger)");
   console.log("   GET  /api/health");
   console.log("   GET  /api/info");
+  console.log("   GET  /api/sentry-test");
   console.log("   GET  /api/stats");
   console.log("   GET  /api/auth/...");
   console.log("   POST /api/auth/...");
