@@ -1009,6 +1009,7 @@ async function rejectDocument(req, res) {
 
     const doc = result.rows[0];
 
+    // Registrar evento en document_events (para UI)
     await db.query(
       `INSERT INTO document_events (
          document_id, actor, action, details, from_status, to_status
@@ -1023,6 +1024,16 @@ async function rejectDocument(req, res) {
         'RECHAZADO',
       ]
     );
+
+    // ✅ Registrar en auditoría
+    await registrarAuditoria({
+      documento_id: doc.id,
+      usuario_id: req.user.id,
+      evento_tipo: 'RECHAZADO',
+      descripcion: `Documento rechazado. Motivo: ${motivo || 'Sin especificar'}`,
+      ip_address: req.ip,
+      user_agent: req.headers['user-agent'] || null,
+    });
 
     return res.json({
       ...doc,
