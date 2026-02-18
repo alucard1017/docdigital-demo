@@ -2,6 +2,7 @@ const express = require('express');
 const bcrypt = require('bcryptjs');
 const jwt = require('jsonwebtoken');
 const db = require('../db');
+const Sentry = require('@sentry/node');
 
 const router = express.Router();
 
@@ -59,6 +60,17 @@ function requireAuth(req, res, next) {
 
     const payload = jwt.verify(token, JWT_SECRET);
     req.user = payload;
+
+    // Contexto de usuario para Sentry
+    Sentry.setUser({
+      id: String(payload.id),
+      username: payload.name || undefined,
+      email: payload.run ? `${payload.run}@run.local` : undefined, // opcional si no tienes email real
+    });
+
+    Sentry.setTag('user_role', payload.role || 'unknown');
+    Sentry.setTag('user_plan', payload.plan || 'unknown');
+
     return next();
   } catch (err) {
     return res.status(401).json({ message: 'Token inválido o expirado' });

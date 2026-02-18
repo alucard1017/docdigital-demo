@@ -1,6 +1,7 @@
 // backend/routes/documents.js
 const express = require("express");
 const crypto = require("crypto");
+const Sentry = require("@sentry/node");
 const { requireAuth } = require("./auth");
 const { upload, handleMulterError } = require("../middlewares/uploadPdf");
 const documentsController = require("../controllers/documentsController");
@@ -45,7 +46,9 @@ async function checkDocumentOwnership(req, res, next) {
     const { id } = req.params;
     
     const docRes = await db.query(
-      `SELECT owner_id FROM documents WHERE id = $1`,
+      `SELECT id, owner_id, titulo, estado 
+       FROM documents 
+       WHERE id = $1`,
       [id]
     );
 
@@ -53,9 +56,19 @@ async function checkDocumentOwnership(req, res, next) {
       return res.status(404).json({ message: "Documento no encontrado" });
     }
 
-    if (docRes.rows[0].owner_id !== req.user.id) {
+    const doc = docRes.rows[0];
+
+    if (doc.owner_id !== req.user.id) {
       return res.status(403).json({ message: "No tienes permisos sobre este documento" });
     }
+
+    // Contexto de documento cuando verificas ownership
+    Sentry.setContext("document", {
+      id: doc.id,
+      owner_id: doc.owner_id,
+      title: doc.titulo || undefined,
+      status: doc.estado || undefined,
+    });
 
     next();
   } catch (err) {
@@ -175,6 +188,15 @@ router.post("/crear-flujo", requireAuth, async (req, res) => {
 
     const documento = docResult.rows[0];
 
+    // Contexto de documento recién creado
+    Sentry.setContext("document", {
+      id: documento.id,
+      title: documento.titulo,
+      status: documento.estado,
+      owner_id: documento.creado_por,
+      verification_code: documento.codigo_verificacion,
+    });
+
     for (const [index, f] of firmantes.entries()) {
       await db.query(
         `INSERT INTO firmantes (
@@ -220,7 +242,7 @@ router.post("/firmar-flujo/:firmanteId", async (req, res) => {
 
   try {
     const firmanteRes = await db.query(
-      `SELECT f.*, d.id AS documento_id, d.estado AS documento_estado
+      `SELECT f.*, d.id AS documento_id, d.estado AS documento_estado, d.titulo
        FROM firmantes f
        JOIN documentos d ON d.id = f.documento_id
        WHERE f.id = $1`,
@@ -232,6 +254,20 @@ router.post("/firmar-flujo/:firmanteId", async (req, res) => {
     }
 
     const firmante = firmanteRes.rows[0];
+
+    // Contexto de documento/firmante para errores aquí
+    Sentry.setContext("document", {
+      id: firmante.documento_id,
+      title: firmante.titulo,
+      status: firmante.documento_estado,
+    });
+    Sentry.setContext("firmante", {
+      id: firmante.id,
+      nombre: firmante.nombre,
+      email: firmante.email,
+      estado: firmante.estado,
+      orden_firma: firmante.orden_firma,
+    });
 
     if (firmante.estado === "FIRMADO") {
       return res.status(400).json({ error: "Este firmante ya firmó" });
@@ -325,20 +361,50 @@ router.post("/firmar-flujo/:firmanteId", async (req, res) => {
    RUTAS GET - CON PARÁMETROS (:id/...)
    ================================ */
 
+// En estos endpoints ya tienes ownership en algunos;
+// el contexto de documento se setea en checkDocumentOwnership
 router.get("/:id/pdf", documentsController.getDocumentPdf);
 router.get("/:id/timeline", documentsController.getTimeline);
 router.get("/:id/signers", requireAuth, documentsController.getSigners);
 router.get("/:id/download", documentsController.downloadDocument);
-router.get("/:id/reporte", requireAuth, checkDocumentOwnership, documentsController.downloadReportPdf);
+router.get(
+  "/:id/reporte",
+  requireAuth,
+  checkDocumentOwnership,
+  documentsController.downloadReportPdf
+);
 
 /* ================================
    RUTAS POST - CON PARÁMETROS (:id/...)
    ================================ */
 
-router.post("/:id/firmar", requireAuth, checkDocumentOwnership, logAuditAction, documentsController.signDocument);
-router.post("/:id/visar", requireAuth, checkDocumentOwnership, logAuditAction, documentsController.visarDocument);
-router.post("/:id/rechazar", requireAuth, checkDocumentOwnership, logAuditAction, documentsController.rejectDocument);
-router.post("/:id/reenviar", requireAuth, checkDocumentOwnership, documentsController.resendReminder);
+router.post(
+  "/:id/firmar",
+  requireAuth,
+  checkDocumentOwnership,
+  logAuditAction,
+  documentsController.signDocument
+);
+router.post(
+  "/:id/visar",
+  requireAuth,
+  checkDocumentOwnership,
+  logAuditAction,
+  documentsController.visarDocument
+);
+router.post(
+  "/:id/rechazar",
+  requireAuth,
+  checkDocumentOwnership,
+  logAuditAction,
+  documentsController.rejectDocument
+);
+router.post(
+  "/:id/reenviar",
+  requireAuth,
+  checkDocumentOwnership,
+  documentsController.resendReminder
+);
 
 router.post("/:id/recordatorio", requireAuth, checkDocumentOwnership, async (req, res) => {
   try {
