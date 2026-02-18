@@ -1,12 +1,17 @@
 // C:\Users\Usuario\Desktop\docdigital\frontend\src\main.jsx
-import React from 'react';
-import ReactDOM from 'react-dom/client';
-import App from './App.jsx';
-import './index.css';
-import './App.css';
+import "./sentry"; // inicializa Sentry antes que nada
 
-ReactDOM.createRoot(document.getElementById('root')).render(
+import React from "react";
+import ReactDOM from "react-dom/client";
+import * as Sentry from "@sentry/react";
+import App from "./App.jsx";
+import "./index.css";
+import "./App.css";
+
+ReactDOM.createRoot(document.getElementById("root")).render(
   <React.StrictMode>
-    <App />
+    <Sentry.ErrorBoundary fallback={<p>Ocurrió un error. Intenta recargar la página.</p>}>
+      <App />
+    </Sentry.ErrorBoundary>
   </React.StrictMode>
 );
