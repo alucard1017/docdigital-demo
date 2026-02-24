@@ -2,8 +2,8 @@
 import React from 'react';
 
 export function LoginView({
-  run,
-  setRun,
+  identifier,
+  setIdentifier,
   password,
   setPassword,
   showPassword,
@@ -28,6 +28,7 @@ export function LoginView({
         >
           VeriFirma
         </h1>
+
         <p
           style={{
             textAlign: 'center',
@@ -39,7 +40,7 @@ export function LoginView({
           Inicie sesión para gestionar sus documentos
         </p>
 
-        <form onSubmit={handleLogin}>
+        <form onSubmit={handleLogin} autoComplete="on">
           <div style={{ marginBottom: 20 }}>
             <label
               style={{
@@ -50,13 +51,16 @@ export function LoginView({
                 color: '#475569',
               }}
             >
-              RUN / USUARIO
+              RUN / CORREO
             </label>
             <input
               className="input-field"
-              value={run}
-              onChange={(e) => setRun(e.target.value)}
+              value={identifier}
+              onChange={(e) => setIdentifier(e.target.value)}
+              placeholder="Ingrese su RUT o correo"
               required
+              autoFocus
+              autoComplete="username"
             />
           </div>
 
@@ -80,6 +84,7 @@ export function LoginView({
                 onChange={(e) => setPassword(e.target.value)}
                 required
                 style={{ paddingRight: '70px' }}
+                autoComplete="current-password"
               />
               <button
                 type="button"
@@ -108,6 +113,7 @@ export function LoginView({
           >
             {isLoggingIn ? 'Conectando…' : 'ACCEDER AL PORTAL'}
           </button>
+
           <button
             type="button"
             style={{

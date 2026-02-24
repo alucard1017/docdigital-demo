@@ -29,6 +29,21 @@ app.use(
 app.use(helmet.hidePoweredBy());
 app.use(helmet.frameguard({ action: "sameorigin" }));
 app.use(helmet.noSniff());
+app.use(
+  helmet.referrerPolicy({
+    policy: "no-referrer",
+  })
+);
+
+if (process.env.NODE_ENV === "production") {
+  app.use(
+    helmet.hsts({
+      maxAge: 15552000, // 180 días
+      includeSubDomains: true,
+      preload: false,
+    })
+  );
+}
 
 /* ================================
    VALIDAR VARIABLES DE ENTORNO
@@ -66,6 +81,12 @@ const loginLimiter = rateLimit({
 });
 
 app.use(generalLimiter);
+
+const publicLimiter = rateLimit({
+  windowMs: 10 * 60 * 1000,
+  max: 60,
+  message: "Demasiadas solicitudes desde este origen. Intenta más tarde.",
+});
 
 /* ================================
    MIDDLEWARES
@@ -197,6 +218,7 @@ console.log("✓ Rutas /api/docs registradas");
 
 app.use(
   "/api/public",
+  publicLimiter,
   (req, res, next) => {
     console.log(`DEBUG PUBLIC >> ${req.method} ${req.originalUrl} llamado`);
     next();
@@ -278,7 +300,7 @@ app.post(
         `SELECT id, firmante_email, firmante_nombre, title, signature_token_expires_at
          FROM documents 
          WHERE signature_status = 'PENDIENTE' 
-           AND created_at > NOW() - INTERVAL '30 days'
+           AND created_at > NOW() - INTERVAL '30 días'
          ORDER BY created_at DESC`
       );
 

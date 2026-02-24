@@ -1,20 +1,14 @@
-// o .js si tu proyecto no usa TS
 import * as Sentry from "@sentry/react";
-
 Sentry.init({
   dsn: import.meta.env.VITE_SENTRY_DSN,
-  environment: import.meta.env.VITE_SENTRY_ENV || "production",
-
-  // Captura errores de UI + performance
+  environment: import.meta.env.VITE_SENTRY_ENV || "development",
+  release: "verifirma-frontend@1.0.0", // nombre que tú quieras
   integrations: [
     Sentry.browserTracingIntegration(),
-    Sentry.replayIntegration(), // opcional: session replay
+    Sentry.replayIntegration(),
   ],
-
-  // Performance (frontend)
-  tracesSampleRate: 0.3, // 30% de las navegaciones; ajusta según tráfico
-
-  // Session Replay
-  replaysSessionSampleRate: 0.0, // 0% usuarios sin errores
-  replaysOnErrorSampleRate: 1.0, // 100% de sesiones con error
+  tracesSampleRate: 0.3,
+  replaysSessionSampleRate: 0.0,
+  replaysOnErrorSampleRate: 1.0,
+  debug: true,
 });

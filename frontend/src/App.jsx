@@ -51,8 +51,8 @@ function App() {
      ESTADOS DE LA APLICACIÓN
      =============================== */
 
-  // Login
-  const [run, setRun] = useState(formatRun("1053806586"));
+  // Login: ahora usamos identifier (RUN o correo)
+  const [identifier, setIdentifier] = useState("105380658-6");
   const [password, setPassword] = useState("kmzwa8awaa");
 
   // UI
@@ -119,8 +119,6 @@ function App() {
       const isVisado = modeUrl === "visado";
       const isConsultaPublica = pathname === "/consulta-publica";
 
-      // Firma por firmante -> sign_token (document_signers)
-      // Visado / consulta pública -> signature_token del documento
       const path =
         isVisado || isConsultaPublica
           ? `/api/public/docs/document/${token}`
@@ -153,7 +151,7 @@ function App() {
   useEffect(() => {
     const params = new URLSearchParams(window.location.search);
     const tokenUrl = params.get("token");
-    const modeUrl = params.get("mode"); // "visado" o null
+    const modeUrl = params.get("mode");
     const pathname = window.location.pathname;
 
     const isFirmaPublica = pathname === "/firma-publica";
@@ -192,7 +190,7 @@ function App() {
     }
   }, [token, selectedDoc, view]);
 
-  // Cargar URL firmada del PDF para el documento seleccionado
+  // Cargar URL firmada del PDF
   useEffect(() => {
     if (!token || !selectedDoc) {
       setPdfUrl(null);
@@ -218,12 +216,16 @@ function App() {
     fetchPdfUrl();
   }, [token, selectedDoc]);
 
-  // Cargar documentos automáticamente cuando haya token y vista lista
+  // Cargar documentos
   useEffect(() => {
     if (!token) return;
     if (view !== "list") return;
     cargarDocs();
   }, [token, view, sort]);
+
+  const handleTestError = () => {
+    throw new Error("Frontend test error");
+  };
 
   /* ===============================
      LOGIN
@@ -233,13 +235,16 @@ function App() {
     setIsLoggingIn(true);
     setMessage("🚀 Conectando con el servidor seguro...");
 
-    const cleanRun = run.replace(/[^0-9kK]/g, "");
+    // Si el usuario escribió un RUN, lo formatea y limpia; si escribió email, lo dejamos igual
+    const value = identifier.includes("@")
+      ? identifier.trim()
+      : formatRun(identifier).replace(/[^0-9kK]/g, "");
 
     try {
       const res = await fetch(`${API_URL}/api/auth/login`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ run: cleanRun, password }),
+        body: JSON.stringify({ identifier: value, password }),
       });
 
       const data = await res.json();
@@ -394,6 +399,7 @@ function App() {
       />
     );
   }
+
   // ===============================
   // VISTA VERIFICACIÓN PÚBLICA (SIN LOGIN)
   // ===============================
@@ -408,8 +414,8 @@ function App() {
   if (!token) {
     return (
       <LoginView
-        run={run}
-        setRun={(value) => setRun(formatRun(value))}
+        identifier={identifier}
+        setIdentifier={setIdentifier}
         password={password}
         setPassword={setPassword}
         showPassword={showPassword}
@@ -509,7 +515,7 @@ function App() {
   );
 
   /* ===============================
-     LAYOUT PRINCIPAL (SIDEBAR + CONTENIDO)
+     LAYOUT PRINCIPAL
      =============================== */
   return (
     <div className="dashboard-layout">
@@ -525,7 +531,6 @@ function App() {
       />
 
       <div className="content-body">
-        {/* Header y filtros solo aplican a la bandeja/lista */}
         {view === "list" && (
           <ListHeader
             sort={sort}
@@ -548,9 +553,6 @@ function App() {
           />
         )}
 
-        {/* ===============================
-            VISTA LISTA DE DOCUMENTOS
-           =============================== */}
         {view === "list" && (
           <>
             {/* Hero superior */}
@@ -590,7 +592,7 @@ function App() {
               </div>
             </div>
 
-            {/* Resumen rápido (por ahora oculto) */}
+            {/* Resumen rápido (oculto) */}
             <div
               style={{
                 display: "none",
@@ -621,7 +623,6 @@ function App() {
             </div>
 
             {loadingDocs ? (
-              // Loader
               <div
                 style={{
                   padding: 40,
@@ -644,7 +645,6 @@ function App() {
                 <div className="spinner" />
               </div>
             ) : errorDocs ? (
-              // Error
               <div
                 style={{
                   padding: 40,
@@ -673,7 +673,6 @@ function App() {
                 </button>
               </div>
             ) : docsPaginados.length === 0 ? (
-              // Estado vacío
               <div
                 style={{
                   padding: 40,
@@ -715,7 +714,6 @@ function App() {
               </div>
             ) : (
               <>
-                {/* Tabla de documentos */}
                 <div className="table-wrapper">
                   <table className="doc-table">
                     <thead>
@@ -747,7 +745,6 @@ function App() {
                   </table>
                 </div>
 
-                {/* Paginación */}
                 <div
                   style={{
                     display: "flex",
@@ -792,9 +789,6 @@ function App() {
           </>
         )}
 
-        {/* ===============================
-            VISTA SUBIDA NUEVO DOCUMENTO
-           =============================== */}
         {view === "upload" && (
           <NewDocumentForm
             API_URL={API_URL}
@@ -817,25 +811,23 @@ function App() {
           />
         )}
 
-        {/* ===============================
-            VISTA ADMIN USUARIOS
-           =============================== */}
         {view === "users" && (
           <UsersAdminView API_URL={API_URL} token={token} />
         )}
 
-        {/* ===============================
-            VISTA DASHBOARD CON GRÁFICOS
-           =============================== */}
         {view === "dashboard" && (
           <DashboardView docs={docs} user={user} />
         )}
-	{/* ===============================
-	    VISTA VERIFICACIÓN PÚBLICA
-           =============================== */}
-	{view === "verification" && (
+
+        {view === "verification" && (
           <VerificationView API_URL={API_URL} />
         )}
+
+        {import.meta.env.MODE !== "production" ? (
+          <button onClick={handleTestError}>
+            Probar error Sentry
+          </button>
+        ) : null}
       </div>
     </div>
   );

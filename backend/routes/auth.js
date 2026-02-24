@@ -6,42 +6,10 @@ const Sentry = require('@sentry/node');
 
 const router = express.Router();
 
-// Usar secreto fuerte desde variables de entorno
 const JWT_SECRET = process.env.JWT_SECRET || 'secreto-demo';
 
 // Normalizar RUN: quitar puntos y guiones
 const normalizeRun = run => (run || '').replace(/[.\-]/g, '');
-
-/**
- * Asegurar usuario administrador al iniciar el servidor
- */
-(async () => {
-  try {
-    const adminRunRaw = process.env.ADMIN_RUN || '1053806586';
-    const adminRun = normalizeRun(adminRunRaw);
-    const adminName = process.env.ADMIN_NAME || 'Alucard';
-    const adminPassword = process.env.ADMIN_PASSWORD || 'secreto-demo';
-
-    const hash = bcrypt.hashSync(adminPassword, 10);
-
-    const query = `
-      INSERT INTO users (run, name, password_hash, plan, role)
-      VALUES ($1, $2, $3, $4, $5)
-      ON CONFLICT (run) DO UPDATE SET 
-        name = EXCLUDED.name,
-        password_hash = EXCLUDED.password_hash,
-        plan = EXCLUDED.plan,
-        role = EXCLUDED.role;
-    `;
-
-    const values = [adminRun, adminName, hash, 'pro', 'admin'];
-
-    await db.query(query, values);
-    console.log(`✓ Usuario administrador asegurado: ${adminName} (${adminRun})`);
-  } catch (err) {
-    console.error('Error asegurando usuario administrador:', err);
-  }
-})();
 
 /**
  * Middleware de autenticación
@@ -61,15 +29,14 @@ function requireAuth(req, res, next) {
     const payload = jwt.verify(token, JWT_SECRET);
     req.user = payload;
 
-    // Contexto de usuario para Sentry
     Sentry.setUser({
       id: String(payload.id),
       username: payload.name || undefined,
-      email: payload.run ? `${payload.run}@run.local` : undefined, // opcional si no tienes email real
+      email: payload.email || undefined,
     });
 
     Sentry.setTag('user_role', payload.role || 'unknown');
-    Sentry.setTag('user_plan', payload.plan || 'unknown');
+    Sentry.setTag('user_company', String(payload.company_id || 'none'));
 
     return next();
   } catch (err) {
@@ -94,30 +61,35 @@ function requireRole(requiredRole) {
 
 /**
  * POST /api/auth/login
- * Procesa el acceso al sistema
+ * Acepta RUN o correo en un solo campo: identifier
  */
 router.post('/login', async (req, res, next) => {
   try {
-    const { run, password } = req.body;
+    const { identifier, password } = req.body;
 
-    if (!run || !password) {
-      return res.status(400).json({ message: 'RUN y contraseña son obligatorios' });
+    if (!identifier || !password) {
+      return res
+        .status(400)
+        .json({ message: 'RUN o correo y contraseña son obligatorios' });
     }
 
-    const normalizedRun = normalizeRun(run);
+    const isEmail = identifier.includes('@');
+    const normalizedRun = isEmail ? null : normalizeRun(identifier);
 
-    const result = await db.query(
-      'SELECT * FROM users WHERE run = $1',
-      [normalizedRun]
-    );
+    const query = isEmail
+      ? 'SELECT * FROM users WHERE email = $1'
+      : 'SELECT * FROM users WHERE run = $1';
 
+    const value = isEmail ? identifier : normalizedRun;
+
+    const result = await db.query(query, [value]);
     const user = result.rows[0];
 
     if (!user) {
       return res.status(401).json({ message: 'Credenciales inválidas' });
     }
 
-    const ok = bcrypt.compareSync(password, user.password_hash);
+    const ok = bcrypt.compareSync(password, user.password);
     if (!ok) {
       return res.status(401).json({ message: 'Credenciales inválidas' });
     }
@@ -126,9 +98,10 @@ router.post('/login', async (req, res, next) => {
       {
         id: user.id,
         run: user.run,
-        plan: user.plan,
+        email: user.email,
         name: user.name,
-        role: user.role
+        role: user.role,
+        company_id: user.company_id,
       },
       JWT_SECRET,
       { expiresIn: '8h' }
@@ -139,10 +112,11 @@ router.post('/login', async (req, res, next) => {
       user: {
         id: user.id,
         run: user.run,
+        email: user.email,
         name: user.name,
-        plan: user.plan,
-        role: user.role
-      }
+        role: user.role,
+        company_id: user.company_id,
+      },
     });
   } catch (err) {
     return next(err);
@@ -151,15 +125,15 @@ router.post('/login', async (req, res, next) => {
 
 /**
  * GET /api/auth/me
- * Devuelve datos del usuario autenticado
  */
 router.get('/me', requireAuth, (req, res) => {
   return res.json({
     id: req.user.id,
     run: req.user.run,
+    email: req.user.email,
     name: req.user.name,
-    plan: req.user.plan,
-    role: req.user.role
+    role: req.user.role,
+    company_id: req.user.company_id,
   });
 });
 
