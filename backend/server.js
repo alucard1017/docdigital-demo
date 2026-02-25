@@ -89,10 +89,10 @@ const publicLimiter = rateLimit({
 });
 
 /* ================================
-   MIDDLEWARES (CORS + BODY PARSERS)
+   MIDDLEWARES
    ================================ */
 
-// Dominios permitidos para producción / desarrollo
+// Dominios permitidos
 const allowedOrigins = [
   process.env.FRONTEND_URL,
   "https://verifirma-frontend.onrender.com",
@@ -104,39 +104,41 @@ const allowedOrigins = [
   "http://localhost:3000",
 ].filter(Boolean);
 
-// CORS robusto: nunca lanza error, solo acepta o rechaza
-const corsOptions = {
-  origin(origin, callback) {
-    // Permitir llamadas sin Origin (curl, Postman, health checks, etc.)
-    if (!origin) return callback(null, true);
+// CORS estricto, pero sin lanzar errores (no rompe el preflight)
+app.use((req, res, next) => {
+  const origin = req.headers.origin;
 
-    if (allowedOrigins.includes(origin)) {
-      return callback(null, true);
-    }
+  if (!origin) {
+    // Peticiones sin Origin (curl, Postman, health checks)
+    return next();
+  }
 
+  if (allowedOrigins.includes(origin)) {
+    res.header("Access-Control-Allow-Origin", origin);
+    res.header("Vary", "Origin");
+    res.header(
+      "Access-Control-Allow-Methods",
+      "GET,HEAD,PUT,PATCH,POST,DELETE,OPTIONS"
+    );
+    res.header(
+      "Access-Control-Allow-Headers",
+      "Content-Type, Authorization"
+    );
+    res.header("Access-Control-Allow-Credentials", "true");
+  } else {
     console.warn("❌ Origen no permitido por CORS:", origin);
-    // No lanzamos error para no romper el preflight;
-    // simplemente indicamos que no está permitido.
-    return callback(null, false);
-  },
-  methods: ["GET", "HEAD", "PUT", "PATCH", "POST", "DELETE", "OPTIONS"],
-  allowedHeaders: ["Content-Type", "Authorization"],
-  credentials: true,
-};
+  }
 
-// Aplicar CORS globalmente
-app.use(cors(corsOptions));
+  // Manejar preflight aquí mismo
+  if (req.method === "OPTIONS") {
+    return res.sendStatus(204);
+  }
 
-// Responder preflight OPTIONS con 204 y cabeceras CORS correctas
-app.options("*", cors(corsOptions), (req, res) => {
-  return res.sendStatus(204);
+  return next();
 });
 
 app.use(express.json({ limit: "25mb" }));
 app.use(express.urlencoded({ limit: "25mb", extended: true }));
-
-console.log("✓ Middlewares CORS configurados");
-console.log("✓ Middlewares JSON configurados");
 
 /* ================================
    ARCHIVOS PÚBLICOS (VERIFICACIÓN)
