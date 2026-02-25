@@ -92,7 +92,7 @@ const publicLimiter = rateLimit({
    MIDDLEWARES
    ================================ */
 
-// Dominios permitidos
+// Dominios permitidos para CORS
 const allowedOrigins = [
   process.env.FRONTEND_URL,
   "https://verifirma-frontend.onrender.com",
@@ -107,9 +107,14 @@ const allowedOrigins = [
 app.use((req, res, next) => {
   const origin = req.headers.origin;
 
+  // Siempre ponemos Vary para que los proxies cacheen bien
+  if (origin) {
+    res.header("Vary", "Origin");
+  }
+
+  // Solo añadimos cabeceras CORS si el origen está permitido
   if (origin && allowedOrigins.includes(origin)) {
     res.header("Access-Control-Allow-Origin", origin);
-    res.header("Vary", "Origin");
     res.header(
       "Access-Control-Allow-Methods",
       "GET,HEAD,PUT,PATCH,POST,DELETE,OPTIONS"
@@ -121,7 +126,11 @@ app.use((req, res, next) => {
     res.header("Access-Control-Allow-Credentials", "true");
   }
 
+  // Importante: NUNCA lanzamos errores aquí; si el origen no está permitido
+  // simplemente no devolvemos cabeceras CORS.
+
   if (req.method === "OPTIONS") {
+    // El preflight termina aquí, sin pasar por más middlewares ni rutas.
     return res.sendStatus(204);
   }
 
