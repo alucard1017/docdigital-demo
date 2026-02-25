@@ -18,7 +18,7 @@ const API_URL = API_BASE_URL;
  * Formatea RUN con puntos y guion: 10.538.065-6
  */
 function formatRun(value) {
-  let clean = value.replace(/[^0-9kK]/g, "");
+  let clean = (value || "").replace(/[^0-9kK]/g, "");
   if (!clean) return "";
   const MAX_LEN = 10;
   if (clean.length > MAX_LEN) clean = clean.slice(0, MAX_LEN);
@@ -32,7 +32,7 @@ function formatRun(value) {
 }
 
 function formatRunDoc(value) {
-  let clean = value.replace(/[^0-9kK]/g, "");
+  let clean = (value || "").replace(/[^0-9kK]/g, "");
   if (clean.length === 0) return "";
   if (clean.length > 10) clean = clean.slice(0, 10);
 
@@ -51,9 +51,10 @@ function App() {
      ESTADOS DE LA APLICACIÓN
      =============================== */
 
-  // Login: ahora usamos identifier (RUN o correo)
-  const [identifier, setIdentifier] = useState("105380658-6");
-  const [password, setPassword] = useState("kmzwa8awaa");
+  // Login: usamos identifier (RUN o correo)
+  // Guardamos internamente el valor "crudo" (sin puntos/guion) y lo formateamos solo para mostrar.
+  const [identifier, setIdentifier] = useState("1053806586");
+  const [password, setPassword] = useState("Kmzwa8awaa");
 
   // UI
   const [showPassword, setShowPassword] = useState(false);
@@ -236,9 +237,10 @@ function App() {
     setMessage("🚀 Conectando con el servidor seguro...");
 
     // Si el usuario escribió un RUN, lo normalizamos; si escribió email, lo dejamos igual
-    const value = identifier.includes("@")
+    const isEmail = identifier.includes("@");
+    const value = isEmail
       ? identifier.trim()
-      : formatRun(identifier).replace(/[^0-9kK]/g, "");
+      : identifier.replace(/[^0-9kK]/g, ""); // solo dígitos y K, sin puntos ni guion
 
     try {
       const res = await fetch(`${API_URL}/api/auth/login`, {
@@ -412,12 +414,17 @@ function App() {
      VISTA LOGIN
      =============================== */
   if (!token) {
+    // Valor que se muestra en el input: si es correo, tal cual; si no, lo formateamos como RUN
+    const displayIdentifier = identifier.includes("@")
+      ? identifier
+      : formatRun(identifier);
+
     return (
       <LoginView
-        identifier={identifier}
-        // aquí filtramos para permitir solo números y k/K cuando escriben RUN
+        identifier={displayIdentifier}
+        // Filtramos para permitir solo números y K/k cuando escriben RUN.
+        // Si incluye @ lo dejamos libre para correo.
         setIdentifier={(value) => {
-          // si incluye @ lo dejamos libre para correo
           if (value.includes("@")) {
             setIdentifier(value);
           } else {
