@@ -122,6 +122,15 @@ app.options("*", cors(corsOptions));
 app.use(express.json({ limit: "25mb" }));
 app.use(express.urlencoded({ limit: "25mb", extended: true }));
 
+// Manejo explícito de preflight OPTIONS para todas las rutas de la API
+app.use((req, res, next) => {
+  if (req.method === "OPTIONS") {
+    // Devolvemos 204 sin pasar por más middlewares ni rutas
+    return res.sendStatus(204);
+  }
+  next();
+});
+
 /* ================================
    ARCHIVOS PÚBLICOS (VERIFICACIÓN)
    ================================ */
