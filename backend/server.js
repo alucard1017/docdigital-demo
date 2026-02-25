@@ -93,6 +93,7 @@ const publicLimiter = rateLimit({
    ================================ */
 const allowedOrigins = [
   process.env.FRONTEND_URL,
+  "https://verifirma-frontend.onrender.com"
   "https://www.verifirma.cl",
   "https://verifirma.cl",
   "https://app.verifirma.cl",
