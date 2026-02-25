@@ -235,7 +235,7 @@ function App() {
     setIsLoggingIn(true);
     setMessage("🚀 Conectando con el servidor seguro...");
 
-    // Si el usuario escribió un RUN, lo formatea y limpia; si escribió email, lo dejamos igual
+    // Si el usuario escribió un RUN, lo normalizamos; si escribió email, lo dejamos igual
     const value = identifier.includes("@")
       ? identifier.trim()
       : formatRun(identifier).replace(/[^0-9kK]/g, "");
@@ -415,7 +415,16 @@ function App() {
     return (
       <LoginView
         identifier={identifier}
-        setIdentifier={setIdentifier}
+        // aquí filtramos para permitir solo números y k/K cuando escriben RUN
+        setIdentifier={(value) => {
+          // si incluye @ lo dejamos libre para correo
+          if (value.includes("@")) {
+            setIdentifier(value);
+          } else {
+            const clean = value.replace(/[^0-9kK]/g, "");
+            setIdentifier(clean);
+          }
+        }}
         password={password}
         setPassword={setPassword}
         showPassword={showPassword}
