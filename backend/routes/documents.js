@@ -4,7 +4,7 @@ const crypto = require("crypto");
 const Sentry = require("@sentry/node");
 const { requireAuth } = require("./auth");
 const { upload, handleMulterError } = require("../middlewares/uploadPdf");
-const documentsController = require("../controllers/documentsController");
+const documentsController = require("../controllers/documents");
 const db = require("../db");
 const { sellarPdfConQr } = require("../services/pdfSeal");
 
