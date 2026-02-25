@@ -409,39 +409,40 @@ function App() {
     return <VerificationView API_URL={API_URL} />;
   }
 
-  /* ===============================
-     VISTA LOGIN
-     =============================== */
-  if (!token) {
-    const displayIdentifier = identifier.includes("@")
-      ? identifier
-      : formatRun(identifier);
+/* ===============================
+   VISTA LOGIN
+   =============================== */
+if (!token) {
+  // Si es correo lo mostramos tal cual; si no, lo formateamos como RUN
+  const displayIdentifier = identifier.includes("@")
+    ? identifier
+    : formatRun(identifier);
 
-    return (
-      <LoginView
-        identifier={displayIdentifier}
-        setIdentifier={(value) => {
-          // Si contiene @ o empieza con letra, asumimos correo
-          if (value.includes("@") || /^[a-zA-Z]/.test(value)) {
-            setIdentifier(value);
-          } else {
-            // RUN: solo números y K/k
-            const clean = value.replace(/[^0-9kK]/g, "");
-            setIdentifier(clean);
-          }
-        }}
-        password={password}
-        setPassword={setPassword}
-        showPassword={showPassword}
-        setShowPassword={setShowPassword}
-        showHelp={showHelp}
-        setShowHelp={setShowHelp}
-        message={message}
-        isLoggingIn={isLoggingIn}
-        handleLogin={handleLogin}
-      />
-    );
-  }
+  return (
+    <LoginView
+      identifier={displayIdentifier}
+      setIdentifier={(value) => {
+        // Si contiene @ lo tratamos como correo: permitir letras, números, etc.
+        if (value.includes("@")) {
+          setIdentifier(value);
+        } else {
+          // Si NO tiene @ lo tratamos como RUN: solo números y K/k
+          const clean = value.replace(/[^0-9kK]/g, "");
+          setIdentifier(clean);
+        }
+      }}
+      password={password}
+      setPassword={setPassword}
+      showPassword={showPassword}
+      setShowPassword={setShowPassword}
+      showHelp={showHelp}
+      setShowHelp={setShowHelp}
+      message={message}
+      isLoggingIn={isLoggingIn}
+      handleLogin={handleLogin}
+    />
+  );
+}
 
   /* ===============================
      VISTA DETALLE DE DOCUMENTO
