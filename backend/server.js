@@ -107,10 +107,12 @@ const allowedOrigins = [
 app.use((req, res, next) => {
   const origin = req.headers.origin || "";
 
+  // Siempre decir que la respuesta varía según Origin
   if (origin) {
     res.header("Vary", "Origin");
   }
 
+  // Si el origen está permitido, añadimos cabeceras CORS
   if (allowedOrigins.includes(origin)) {
     res.header("Access-Control-Allow-Origin", origin);
     res.header(
@@ -124,9 +126,10 @@ app.use((req, res, next) => {
     res.header("Access-Control-Allow-Credentials", "true");
   }
 
-  // Atención: aquí JAMÁS lanzamos errores ni llamamos next con error.
+  // IMPORTANTE: aquí nunca lanzamos errores ni llamamos next(err)
 
   if (req.method === "OPTIONS") {
+    // El preflight termina aquí y no llega al errorHandler
     return res.sendStatus(204);
   }
 
