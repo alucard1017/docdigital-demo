@@ -104,16 +104,10 @@ const allowedOrigins = [
   "http://localhost:3000",
 ].filter(Boolean);
 
-// CORS estricto, pero sin lanzar errores (no rompe el preflight)
 app.use((req, res, next) => {
   const origin = req.headers.origin;
 
-  if (!origin) {
-    // Peticiones sin Origin (curl, Postman, health checks)
-    return next();
-  }
-
-  if (allowedOrigins.includes(origin)) {
+  if (origin && allowedOrigins.includes(origin)) {
     res.header("Access-Control-Allow-Origin", origin);
     res.header("Vary", "Origin");
     res.header(
@@ -125,11 +119,8 @@ app.use((req, res, next) => {
       "Content-Type, Authorization"
     );
     res.header("Access-Control-Allow-Credentials", "true");
-  } else {
-    console.warn("❌ Origen no permitido por CORS:", origin);
   }
 
-  // Manejar preflight aquí mismo
   if (req.method === "OPTIONS") {
     return res.sendStatus(204);
   }
