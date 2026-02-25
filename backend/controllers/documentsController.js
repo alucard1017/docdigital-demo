@@ -1067,32 +1067,6 @@ async function rejectDocument(req, res) {
   }
 }
 
-// backend/controllers/documentsController.js
-const path = require('path');
-const crypto = require('crypto');
-const fs = require('fs');
-const axios = require('axios');
-const db = require('../db');
-const {
-  sendSigningInvitation,
-  sendVisadoInvitation,
-} = require('../services/emailService');
-const { uploadPdfToS3, getSignedUrl } = require('../services/s3');
-const { isValidEmail, isValidRun, validateLength } = require('../utils/validators');
-const { PDFDocument, rgb, degrees } = require('pdf-lib');
-const { sellarPdfConQr } = require('../services/pdfSeal');
-const { generarNumeroContratoInterno } = require('../utils/numeroContratoInterno');
-const { registrarAuditoria } = require('../utils/auditLog');
-
-function generarCodigoVerificacion() {
-  return crypto
-    .randomBytes(6)
-    .toString('base64')
-    .replace(/[^A-Z0-9]/gi, '')
-    .slice(0, 10)
-    .toUpperCase();
-}
-
 /* ================================
    FUNCION: APLICAR MARCA DE AGUA
    ================================ */
