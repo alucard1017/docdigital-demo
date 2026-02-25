@@ -105,15 +105,15 @@ const allowedOrigins = [
 ].filter(Boolean);
 
 app.use((req, res, next) => {
-  const origin = req.headers.origin;
+  const origin = req.headers.origin || "";
 
-  // Siempre ponemos Vary para que los proxies cacheen bien
+  // Indicar que la respuesta depende del Origin (para caches/proxies)
   if (origin) {
     res.header("Vary", "Origin");
   }
 
-  // Solo añadimos cabeceras CORS si el origen está permitido
-  if (origin && allowedOrigins.includes(origin)) {
+  // Solo añadimos CORS si el origen está permitido
+  if (allowedOrigins.includes(origin)) {
     res.header("Access-Control-Allow-Origin", origin);
     res.header(
       "Access-Control-Allow-Methods",
@@ -124,17 +124,17 @@ app.use((req, res, next) => {
       "Content-Type, Authorization"
     );
     res.header("Access-Control-Allow-Credentials", "true");
+  } else if (origin) {
+    console.warn("❌ Origen no permitido por CORS:", origin);
+    // OJO: no lanzamos error; simplemente no ponemos cabeceras CORS
   }
 
-  // Importante: NUNCA lanzamos errores aquí; si el origen no está permitido
-  // simplemente no devolvemos cabeceras CORS.
-
+  // Preflight: siempre respondemos aquí y nunca dejamos que llegue al errorHandler
   if (req.method === "OPTIONS") {
-    // El preflight termina aquí, sin pasar por más middlewares ni rutas.
     return res.sendStatus(204);
   }
 
-  return next();
+  next();
 });
 
 app.use(express.json({ limit: "25mb" }));
