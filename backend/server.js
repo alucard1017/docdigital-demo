@@ -89,8 +89,10 @@ const publicLimiter = rateLimit({
 });
 
 /* ================================
-   MIDDLEWARES
+   MIDDLEWARES (CORS + BODY PARSERS)
    ================================ */
+
+// Dominios permitidos para producción / desarrollo
 const allowedOrigins = [
   process.env.FRONTEND_URL,
   "https://verifirma-frontend.onrender.com",
@@ -102,34 +104,39 @@ const allowedOrigins = [
   "http://localhost:3000",
 ].filter(Boolean);
 
+// CORS robusto: nunca lanza error, solo acepta o rechaza
 const corsOptions = {
   origin(origin, callback) {
+    // Permitir llamadas sin Origin (curl, Postman, health checks, etc.)
     if (!origin) return callback(null, true);
+
     if (allowedOrigins.includes(origin)) {
       return callback(null, true);
     }
+
     console.warn("❌ Origen no permitido por CORS:", origin);
-    return callback(new Error("Origen no permitido por CORS"));
+    // No lanzamos error para no romper el preflight;
+    // simplemente indicamos que no está permitido.
+    return callback(null, false);
   },
   methods: ["GET", "HEAD", "PUT", "PATCH", "POST", "DELETE", "OPTIONS"],
   allowedHeaders: ["Content-Type", "Authorization"],
   credentials: true,
 };
 
+// Aplicar CORS globalmente
 app.use(cors(corsOptions));
-app.options("*", cors(corsOptions));
+
+// Responder preflight OPTIONS con 204 y cabeceras CORS correctas
+app.options("*", cors(corsOptions), (req, res) => {
+  return res.sendStatus(204);
+});
 
 app.use(express.json({ limit: "25mb" }));
 app.use(express.urlencoded({ limit: "25mb", extended: true }));
 
-// Manejo explícito de preflight OPTIONS para todas las rutas de la API
-app.use((req, res, next) => {
-  if (req.method === "OPTIONS") {
-    // Devolvemos 204 sin pasar por más middlewares ni rutas
-    return res.sendStatus(204);
-  }
-  next();
-});
+console.log("✓ Middlewares CORS configurados");
+console.log("✓ Middlewares JSON configurados");
 
 /* ================================
    ARCHIVOS PÚBLICOS (VERIFICACIÓN)
