@@ -18,21 +18,21 @@ const rateLimit = {};
 
 function checkRateLimit(key, maxAttempts = 5, windowMs = 60000) {
   const now = Date.now();
-  
+
   if (!rateLimit[key]) {
     rateLimit[key] = { count: 1, resetAt: now + windowMs };
     return true;
   }
-  
+
   if (now > rateLimit[key].resetAt) {
     rateLimit[key] = { count: 1, resetAt: now + windowMs };
     return true;
   }
-  
+
   if (rateLimit[key].count >= maxAttempts) {
     return false;
   }
-  
+
   rateLimit[key].count++;
   return true;
 }
@@ -44,9 +44,9 @@ function checkRateLimit(key, maxAttempts = 5, windowMs = 60000) {
 async function checkDocumentOwnership(req, res, next) {
   try {
     const { id } = req.params;
-    
+
     const docRes = await db.query(
-      `SELECT id, owner_id, titulo, estado 
+      `SELECT id, owner_id, title, status 
        FROM documents 
        WHERE id = $1`,
       [id]
@@ -59,17 +59,20 @@ async function checkDocumentOwnership(req, res, next) {
     const doc = docRes.rows[0];
 
     if (doc.owner_id !== req.user.id) {
-      return res.status(403).json({ message: "No tienes permisos sobre este documento" });
+      return res
+        .status(403)
+        .json({ message: "No tienes permisos sobre este documento" });
     }
 
     // Contexto de documento cuando verificas ownership
     Sentry.setContext("document", {
       id: doc.id,
       owner_id: doc.owner_id,
-      title: doc.titulo || undefined,
-      status: doc.estado || undefined,
+      title: doc.title || undefined,
+      status: doc.status || undefined,
     });
 
+    req.document = doc;
     next();
   } catch (err) {
     console.error("❌ Error verificando permisos:", err);
@@ -83,12 +86,11 @@ async function checkDocumentOwnership(req, res, next) {
 
 function logAuditAction(req, res, next) {
   const originalJson = res.json.bind(res);
-  
-  res.json = function(data) {
-    // Log solo si la operación fue exitosa
+
+  res.json = function (data) {
     if (res.statusCode < 400) {
       const { registrarAuditoria } = require("../utils/auditLog");
-      
+
       registrarAuditoria({
         documento_id: req.params.id || null,
         usuario_id: req.user?.id || null,
@@ -96,12 +98,14 @@ function logAuditAction(req, res, next) {
         descripcion: `${req.method} ${req.route?.path}`,
         ip_address: req.ip,
         user_agent: req.headers["user-agent"] || null,
-      }).catch(err => console.error("⚠️ Error logging audit:", err));
+      }).catch((err) =>
+        console.error("⚠️ Error logging audit:", err)
+      );
     }
-    
+
     return originalJson(data);
   };
-  
+
   next();
 }
 
@@ -115,7 +119,9 @@ router.get("/export/excel", requireAuth, async (req, res) => {
   try {
     const { generarExcelDocumentos } = require("../services/excelExport");
     const excelBuffer = await generarExcelDocumentos(req.user.id);
-    const filename = `documentos-${new Date().toISOString().slice(0, 10)}.xlsx`;
+    const filename = `documentos-${new Date()
+      .toISOString()
+      .slice(0, 10)}.xlsx`;
 
     res.setHeader(
       "Content-Type",
@@ -152,9 +158,10 @@ router.post(
   requireAuth,
   (req, res, next) => {
     const key = `reminders_${req.user.id}`;
-    if (!checkRateLimit(key, 3, 3600000)) { // 3 intentos por hora
-      return res.status(429).json({ 
-        message: "Demasiados intentos. Espera 1 hora antes de volver a enviar recordatorios." 
+    if (!checkRateLimit(key, 3, 3600000)) {
+      return res.status(429).json({
+        message:
+          "Demasiados intentos. Espera 1 hora antes de volver a enviar recordatorios.",
       });
     }
     next();
@@ -188,7 +195,6 @@ router.post("/crear-flujo", requireAuth, async (req, res) => {
 
     const documento = docResult.rows[0];
 
-    // Contexto de documento recién creado
     Sentry.setContext("document", {
       id: documento.id,
       title: documento.titulo,
@@ -220,7 +226,10 @@ router.post("/crear-flujo", requireAuth, async (req, res) => {
          documento_id, tipo_evento, metadata, created_at
        )
        VALUES ($1, 'CREADO', $2, NOW())`,
-      [documento.id, JSON.stringify({ fuente: "API", creado_por: req.user.id })]
+      [
+        documento.id,
+        JSON.stringify({ fuente: "API", creado_por: req.user.id }),
+      ]
     );
 
     await db.query("COMMIT");
@@ -255,7 +264,6 @@ router.post("/firmar-flujo/:firmanteId", async (req, res) => {
 
     const firmante = firmanteRes.rows[0];
 
-    // Contexto de documento/firmante para errores aquí
     Sentry.setContext("document", {
       id: firmante.documento_id,
       title: firmante.titulo,
@@ -274,7 +282,9 @@ router.post("/firmar-flujo/:firmanteId", async (req, res) => {
     }
 
     if (firmante.estado === "RECHAZADO") {
-      return res.status(400).json({ error: "Este firmante rechazó el documento" });
+      return res
+        .status(400)
+        .json({ error: "Este firmante rechazó el documento" });
     }
 
     await db.query("BEGIN");
@@ -348,12 +358,15 @@ router.post("/firmar-flujo/:firmanteId", async (req, res) => {
         : "Firma registrada. Faltan firmantes",
       documentoId: firmante.documento_id,
       allSigned,
-      progress: ((Number(firmados) / Number(total)) * 100).toFixed(1) + "%",
+      progress:
+        ((Number(firmados) / Number(total)) * 100).toFixed(1) + "%",
     });
   } catch (error) {
     await db.query("ROLLBACK");
     console.error("❌ Error firmando flujo de documento:", error);
-    return res.status(500).json({ error: "Error firmando flujo de documento" });
+    return res
+      .status(500)
+      .json({ error: "Error firmando flujo de documento" });
   }
 });
 
@@ -361,8 +374,6 @@ router.post("/firmar-flujo/:firmanteId", async (req, res) => {
    RUTAS GET - CON PARÁMETROS (:id/...)
    ================================ */
 
-// En estos endpoints ya tienes ownership en algunos;
-// el contexto de documento se setea en checkDocumentOwnership
 router.get("/:id/pdf", documentsController.getDocumentPdf);
 router.get("/:id/timeline", documentsController.getTimeline);
 router.get("/:id/signers", requireAuth, documentsController.getSigners);
@@ -406,21 +417,27 @@ router.post(
   documentsController.resendReminder
 );
 
-router.post("/:id/recordatorio", requireAuth, checkDocumentOwnership, async (req, res) => {
-  try {
-    const { id } = req.params;
+router.post(
+  "/:id/recordatorio",
+  requireAuth,
+  checkDocumentOwnership,
+  async (req, res) => {
+    try {
+      const { id } = req.params;
 
-    const { enviarRecordatorioManual } = require("../services/reminderService");
-    const result = await enviarRecordatorioManual(id);
+      const { enviarRecordatorioManual } =
+        require("../services/reminderService");
+      const result = await enviarRecordatorioManual(id);
 
-    return res.json(result);
-  } catch (err) {
-    console.error("❌ Error enviando recordatorio:", err);
-    return res
-      .status(500)
-      .json({ message: err.message || "Error enviando recordatorio" });
+      return res.json(result);
+    } catch (err) {
+      console.error("❌ Error enviando recordatorio:", err);
+      return res.status(500).json({
+        message: err.message || "Error enviando recordatorio",
+      });
+    }
   }
-});
+);
 
 /* ================================
    EXPORTAR ROUTER
