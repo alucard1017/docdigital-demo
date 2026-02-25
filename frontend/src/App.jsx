@@ -55,6 +55,9 @@ function App() {
   const [identifier, setIdentifier] = useState("");
   const [password, setPassword] = useState("");
 
+  // Modo del campo RUN / CORREO
+  const [isEmailMode, setIsEmailMode] = useState(false);
+
   // UI
   const [showPassword, setShowPassword] = useState(false);
   const [showHelp, setShowHelp] = useState(false);
@@ -230,43 +233,43 @@ function App() {
   /* ===============================
      LOGIN
      =============================== */
-async function handleLogin(e) {
-  e.preventDefault();
-  setIsLoggingIn(true);
-  setMessage("🚀 Conectando con el servidor seguro...");
+  async function handleLogin(e) {
+    e.preventDefault();
+    setIsLoggingIn(true);
+    setMessage("🚀 Conectando con el servidor seguro...");
 
-  const isEmail = identifier.includes("@");
-  const value = isEmail
-    ? identifier.trim()
-    : identifier.replace(/[^0-9kK]/g, ""); // RUN normalizado sin puntos/guion
+    const isEmail = isEmailMode || identifier.includes("@");
+    const value = isEmail
+      ? identifier.trim()
+      : identifier.replace(/[^0-9kK]/g, ""); // RUN normalizado sin puntos/guion
 
-  try {
-    const res = await fetch(`${API_URL}/api/auth/login`, {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ identifier: value, password }),
-    });
+    try {
+      const res = await fetch(`${API_URL}/api/auth/login`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ identifier: value, password }),
+      });
 
-    const data = await res.json();
+      const data = await res.json();
 
-    if (!res.ok) {
-      throw new Error(data.message || "Credenciales no válidas");
+      if (!res.ok) {
+        throw new Error(data.message || "Credenciales no válidas");
+      }
+
+      setToken(data.token);
+      setUser(data.user);
+      localStorage.setItem("token", data.token);
+      localStorage.setItem("user", JSON.stringify(data.user));
+      setMessage("✅ Acceso concedido");
+    } catch (err) {
+      console.error("Error en login:", err);
+      setMessage(
+        "❌ Error de conexión, intenta nuevamente en unos segundos."
+      );
+    } finally {
+      setIsLoggingIn(false);
     }
-
-    setToken(data.token);
-    setUser(data.user);
-    localStorage.setItem("token", data.token);
-    localStorage.setItem("user", JSON.stringify(data.user));
-    setMessage("✅ Acceso concedido");
-  } catch (err) {
-    console.error("Error en login:", err);
-    setMessage(
-      "❌ Error de conexión, intenta nuevamente en unos segundos."
-    );
-  } finally {
-    setIsLoggingIn(false);
   }
-}
 
   /* ===============================
      CARGA DE DOCUMENTOS
@@ -409,40 +412,43 @@ async function handleLogin(e) {
     return <VerificationView API_URL={API_URL} />;
   }
 
-/* ===============================
-   VISTA LOGIN
-   =============================== */
-if (!token) {
-  // Mostrar formateado solo si es RUN; si tiene @ es correo tal cual
-  const displayIdentifier = identifier.includes("@")
-    ? identifier
-    : formatRun(identifier);
+  /* ===============================
+     VISTA LOGIN
+     =============================== */
+  if (!token) {
+    // Mostrar formateado solo si estamos en modo RUN; si es correo, tal cual
+    const displayIdentifier =
+      isEmailMode || identifier.includes("@")
+        ? identifier
+        : formatRun(identifier);
 
-  return (
-    <LoginView
-      identifier={displayIdentifier}
-      setIdentifier={(value) => {
-        // Si contiene @ lo tratamos como correo: no filtramos nada
-        if (value.includes("@")) {
-          setIdentifier(value);
-        } else {
-          // Si NO tiene @ lo tratamos como RUN: solo números y K/k
-          const clean = value.replace(/[^0-9kK]/g, "");
-          setIdentifier(clean);
-        }
-      }}
-      password={password}
-      setPassword={setPassword}
-      showPassword={showPassword}
-      setShowPassword={setShowPassword}
-      showHelp={showHelp}
-      setShowHelp={setShowHelp}
-      message={message}
-      isLoggingIn={isLoggingIn}
-      handleLogin={handleLogin}
-    />
-  );
-}
+    return (
+      <LoginView
+        identifier={displayIdentifier}
+        setIdentifier={(value) => {
+          // Si el usuario escribe alguna letra o @, pasamos a modo correo
+          if (/[a-zA-Z]/.test(value) || value.includes("@")) {
+            setIsEmailMode(true);
+            setIdentifier(value);
+          } else {
+            // Modo RUN: solo números y K/k
+            setIsEmailMode(false);
+            const clean = value.replace(/[^0-9kK]/g, "");
+            setIdentifier(clean);
+          }
+        }}
+        password={password}
+        setPassword={setPassword}
+        showPassword={showPassword}
+        setShowPassword={setShowPassword}
+        showHelp={showHelp}
+        setShowHelp={setShowHelp}
+        message={message}
+        isLoggingIn={isLoggingIn}
+        handleLogin={handleLogin}
+      />
+    );
+  }
 
   /* ===============================
      VISTA DETALLE DE DOCUMENTO
@@ -468,7 +474,7 @@ if (!token) {
         pdfUrl={pdfUrl}
         puedeFirmar={puedeFirmar}
         puedeVisar={puedeVisar}
-        puedeRechazar={peudeRechazar}
+        puedeRechazar={puedeRechazar}
         events={events}
         manejarAccionDocumento={manejarAccionDocumento}
         setView={setView}
@@ -489,9 +495,12 @@ if (!token) {
       d.status === DOC_STATUS.PENDIENTE_FIRMA;
 
     if (statusFilter === "PENDIENTES" && !esPendiente) return false;
-    if (statusFilter === "VISADOS" && d.status !== DOC_STATUS.VISADO) return false;
-    if (statusFilter === "FIRMADOS" && d.status !== DOC_STATUS.FIRMADO) return false;
-    if (statusFilter === "RECHAZADOS" && d.status !== DOC_STATUS.RECHAZADO) return false;
+    if (statusFilter === "VISADOS" && d.status !== DOC_STATUS.VISADO)
+      return false;
+    if (statusFilter === "FIRMADOS" && d.status !== DOC_STATUS.FIRMADO)
+      return false;
+    if (statusFilter === "RECHAZADOS" && d.status !== DOC_STATUS.RECHAZADO)
+      return false;
 
     if (search.trim() !== "") {
       const q = search.toLowerCase();
