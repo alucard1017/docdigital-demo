@@ -65,7 +65,9 @@ function requireRole(requiredRole) {
  */
 router.post('/login', async (req, res, next) => {
   try {
-    const { identifier, password } = req.body;
+    console.log('DEBUG /api/auth/login body:', req.body);
+
+    const { identifier, password } = req.body || {};
 
     if (!identifier || !password) {
       return res
