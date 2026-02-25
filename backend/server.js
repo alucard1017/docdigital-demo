@@ -107,12 +107,10 @@ const allowedOrigins = [
 app.use((req, res, next) => {
   const origin = req.headers.origin || "";
 
-  // Indicar que la respuesta depende del Origin (para caches/proxies)
   if (origin) {
     res.header("Vary", "Origin");
   }
 
-  // Solo añadimos CORS si el origen está permitido
   if (allowedOrigins.includes(origin)) {
     res.header("Access-Control-Allow-Origin", origin);
     res.header(
@@ -124,12 +122,10 @@ app.use((req, res, next) => {
       "Content-Type, Authorization"
     );
     res.header("Access-Control-Allow-Credentials", "true");
-  } else if (origin) {
-    console.warn("❌ Origen no permitido por CORS:", origin);
-    // OJO: no lanzamos error; simplemente no ponemos cabeceras CORS
   }
 
-  // Preflight: siempre respondemos aquí y nunca dejamos que llegue al errorHandler
+  // Atención: aquí JAMÁS lanzamos errores ni llamamos next con error.
+
   if (req.method === "OPTIONS") {
     return res.sendStatus(204);
   }
