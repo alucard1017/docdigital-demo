@@ -230,43 +230,43 @@ function App() {
   /* ===============================
      LOGIN
      =============================== */
-  async function handleLogin(e) {
-    e.preventDefault();
-    setIsLoggingIn(true);
-    setMessage("🚀 Conectando con el servidor seguro...");
+async function handleLogin(e) {
+  e.preventDefault();
+  setIsLoggingIn(true);
+  setMessage("🚀 Conectando con el servidor seguro...");
 
-    const isEmail = identifier.includes("@");
-    const value = isEmail
-      ? identifier.trim()
-      : identifier.replace(/[^0-9kK]/g, ""); // RUN normalizado
+  const isEmail = identifier.includes("@");
+  const value = isEmail
+    ? identifier.trim()
+    : identifier.replace(/[^0-9kK]/g, ""); // RUN normalizado sin puntos/guion
 
-    try {
-      const res = await fetch(`${API_URL}/api/auth/login`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ identifier: value, password }),
-      });
+  try {
+    const res = await fetch(`${API_URL}/api/auth/login`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ identifier: value, password }),
+    });
 
-      const data = await res.json();
+    const data = await res.json();
 
-      if (!res.ok) {
-        throw new Error(data.message || "Credenciales no válidas");
-      }
-
-      setToken(data.token);
-      setUser(data.user);
-      localStorage.setItem("token", data.token);
-      localStorage.setItem("user", JSON.stringify(data.user));
-      setMessage("✅ Acceso concedido");
-    } catch (err) {
-      console.error("Error en login:", err);
-      setMessage(
-        "❌ Error de conexión, intenta nuevamente en unos segundos."
-      );
-    } finally {
-      setIsLoggingIn(false);
+    if (!res.ok) {
+      throw new Error(data.message || "Credenciales no válidas");
     }
+
+    setToken(data.token);
+    setUser(data.user);
+    localStorage.setItem("token", data.token);
+    localStorage.setItem("user", JSON.stringify(data.user));
+    setMessage("✅ Acceso concedido");
+  } catch (err) {
+    console.error("Error en login:", err);
+    setMessage(
+      "❌ Error de conexión, intenta nuevamente en unos segundos."
+    );
+  } finally {
+    setIsLoggingIn(false);
   }
+}
 
   /* ===============================
      CARGA DE DOCUMENTOS
@@ -413,7 +413,7 @@ function App() {
    VISTA LOGIN
    =============================== */
 if (!token) {
-  // Si es correo lo mostramos tal cual; si no, lo formateamos como RUN
+  // Mostrar formateado solo si es RUN; si tiene @ es correo tal cual
   const displayIdentifier = identifier.includes("@")
     ? identifier
     : formatRun(identifier);
@@ -422,7 +422,7 @@ if (!token) {
     <LoginView
       identifier={displayIdentifier}
       setIdentifier={(value) => {
-        // Si contiene @ lo tratamos como correo: permitir letras, números, etc.
+        // Si contiene @ lo tratamos como correo: no filtramos nada
         if (value.includes("@")) {
           setIdentifier(value);
         } else {
