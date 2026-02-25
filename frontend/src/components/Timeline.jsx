@@ -121,19 +121,16 @@ export function Timeline({ timeline }) {
 
           return (
             <div key={event.id} className="timeline-event-wrapper">
-              {/* Línea vertical (excepto el último) */}
               {!isLast && (
                 <div className={`timeline-line timeline-line-${status}`}></div>
               )}
 
-              {/* Punto del evento */}
               <div className={`timeline-dot timeline-dot-${status}`}>
                 <span className="timeline-icon">
                   {getEventIcon(event.action)}
                 </span>
               </div>
 
-              {/* Contenido del evento */}
               <div className={`timeline-content timeline-content-${status}`}>
                 <h4
                   style={{

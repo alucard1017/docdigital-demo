@@ -1,4 +1,3 @@
-// src/components/DetailView.jsx
 import React, { useState, useEffect } from "react";
 import { Timeline } from "./Timeline";
 import { EventList } from "./EventList";
@@ -42,14 +41,14 @@ export function DetailView({
   const [recordatorioLoading, setRecordatorioLoading] = useState(false);
 
   useEffect(() => {
-    if (!selectedDoc) return;
+    if (!selectedDoc?.id) return;
+
+    const docId = selectedDoc.id;
 
     const fetchTimeline = async () => {
       try {
         setLoadingTimeline(true);
-        const res = await fetch(
-          `${API_URL}/api/docs/${selectedDoc.id}/timeline`
-        );
+        const res = await fetch(`${API_URL}/api/docs/${docId}/timeline`);
         const data = await res.json();
 
         if (res.ok && data && data.timeline) {
@@ -69,7 +68,7 @@ export function DetailView({
       try {
         setLoadingSigners(true);
         const res = await fetch(
-          `${API_URL}/api/docs/${selectedDoc.id}/signers`,
+          `${API_URL}/api/docs/${docId}/signers`,
           {
             headers: { Authorization: `Bearer ${token}` },
             credentials: "include",
@@ -92,9 +91,10 @@ export function DetailView({
     fetchTimeline();
     fetchSigners();
 
+    // Polling cada 5s para refrescar estados (firma/visado) en tiempo casi real
     const interval = setInterval(fetchTimeline, 5000);
     return () => clearInterval(interval);
-  }, [selectedDoc, token]);
+  }, [selectedDoc?.id, token]);
 
   if (!selectedDoc) return null;
 
@@ -591,7 +591,7 @@ export function DetailView({
               setView={setView}
               setSelectedDoc={setSelectedDoc}
               manejarAccionDocumento={manejarAccionDocumento}
- isAdmin={true}
+              isAdmin={true}
             />
           </div>
         </div>
