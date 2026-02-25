@@ -51,10 +51,9 @@ function App() {
      ESTADOS DE LA APLICACIÓN
      =============================== */
 
-  // Login: usamos identifier (RUN o correo)
-  // Guardamos internamente el valor "crudo" (sin puntos/guion) y lo formateamos solo para mostrar.
-  const [identifier, setIdentifier] = useState("1053806586");
-  const [password, setPassword] = useState("Kmzwa8awaa");
+  // Login: identifier (RUN o correo), guardamos valor crudo
+  const [identifier, setIdentifier] = useState("");
+  const [password, setPassword] = useState("");
 
   // UI
   const [showPassword, setShowPassword] = useState(false);
@@ -236,11 +235,10 @@ function App() {
     setIsLoggingIn(true);
     setMessage("🚀 Conectando con el servidor seguro...");
 
-    // Si el usuario escribió un RUN, lo normalizamos; si escribió email, lo dejamos igual
     const isEmail = identifier.includes("@");
     const value = isEmail
       ? identifier.trim()
-      : identifier.replace(/[^0-9kK]/g, ""); // solo dígitos y K, sin puntos ni guion
+      : identifier.replace(/[^0-9kK]/g, ""); // RUN normalizado
 
     try {
       const res = await fetch(`${API_URL}/api/auth/login`, {
@@ -261,6 +259,7 @@ function App() {
       localStorage.setItem("user", JSON.stringify(data.user));
       setMessage("✅ Acceso concedido");
     } catch (err) {
+      console.error("Error en login:", err);
       setMessage(
         "❌ Error de conexión, intenta nuevamente en unos segundos."
       );
@@ -414,7 +413,6 @@ function App() {
      VISTA LOGIN
      =============================== */
   if (!token) {
-    // Valor que se muestra en el input: si es correo, tal cual; si no, lo formateamos como RUN
     const displayIdentifier = identifier.includes("@")
       ? identifier
       : formatRun(identifier);
@@ -422,12 +420,12 @@ function App() {
     return (
       <LoginView
         identifier={displayIdentifier}
-        // Filtramos para permitir solo números y K/k cuando escriben RUN.
-        // Si incluye @ lo dejamos libre para correo.
         setIdentifier={(value) => {
-          if (value.includes("@")) {
+          // Si contiene @ o empieza con letra, asumimos correo
+          if (value.includes("@") || /^[a-zA-Z]/.test(value)) {
             setIdentifier(value);
           } else {
+            // RUN: solo números y K/k
             const clean = value.replace(/[^0-9kK]/g, "");
             setIdentifier(clean);
           }
@@ -469,7 +467,7 @@ function App() {
         pdfUrl={pdfUrl}
         puedeFirmar={puedeFirmar}
         puedeVisar={puedeVisar}
-        puedeRechazar={puedeRechazar}
+        puedeRechazar={peudeRechazar}
         events={events}
         manejarAccionDocumento={manejarAccionDocumento}
         setView={setView}
