@@ -93,7 +93,7 @@ const publicLimiter = rateLimit({
    ================================ */
 const allowedOrigins = [
   process.env.FRONTEND_URL,
-  "https://verifirma-frontend.onrender.com"
+  "https://verifirma-frontend.onrender.com",
   "https://www.verifirma.cl",
   "https://verifirma.cl",
   "https://app.verifirma.cl",
@@ -102,32 +102,25 @@ const allowedOrigins = [
   "http://localhost:3000",
 ].filter(Boolean);
 
-app.use(
-  cors({
-    origin(origin, callback) {
-      if (!origin) return callback(null, true);
-      if (allowedOrigins.includes(origin)) {
-        return callback(null, true);
-      }
-      console.warn("❌ Origen no permitido por CORS:", origin);
-      return callback(new Error("Origen no permitido por CORS"));
-    },
-    credentials: true,
-  })
-);
+const corsOptions = {
+  origin(origin, callback) {
+    if (!origin) return callback(null, true);
+    if (allowedOrigins.includes(origin)) {
+      return callback(null, true);
+    }
+    console.warn("❌ Origen no permitido por CORS:", origin);
+    return callback(new Error("Origen no permitido por CORS"));
+  },
+  methods: ["GET", "HEAD", "PUT", "PATCH", "POST", "DELETE", "OPTIONS"],
+  allowedHeaders: ["Content-Type", "Authorization"],
+  credentials: true,
+};
+
+app.use(cors(corsOptions));
+app.options("*", cors(corsOptions));
 
 app.use(express.json({ limit: "25mb" }));
 app.use(express.urlencoded({ limit: "25mb", extended: true }));
-
-const uploadsDir = path.join(__dirname, "uploads");
-if (!fs.existsSync(uploadsDir)) {
-  fs.mkdirSync(uploadsDir, { recursive: true });
-}
-app.use("/uploads", express.static(uploadsDir));
-
-console.log("✓ Middlewares CORS configurados");
-console.log("✓ Middlewares JSON configurados");
-console.log("✓ Directorio de uploads verificado");
 
 /* ================================
    ARCHIVOS PÚBLICOS (VERIFICACIÓN)
