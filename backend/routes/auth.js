@@ -46,15 +46,26 @@ function requireAuth(req, res, next) {
 
 /**
  * Middleware de autorización por rol
+ * - SUPER_ADMIN siempre pasa.
+ * - El resto debe tener exactamente el rol requerido.
  */
 function requireRole(requiredRole) {
   return function (req, res, next) {
     if (!req.user || !req.user.role) {
       return res.status(403).json({ message: 'Acceso denegado' });
     }
-    if (req.user.role !== requiredRole) {
+
+    const role = req.user.role;
+
+    // SUPER_ADMIN tiene pase libre
+    if (role === 'SUPER_ADMIN') {
+      return next();
+    }
+
+    if (role !== requiredRole) {
       return res.status(403).json({ message: 'Permisos insuficientes' });
     }
+
     return next();
   };
 }
@@ -91,7 +102,8 @@ router.post('/login', async (req, res, next) => {
       return res.status(401).json({ message: 'Credenciales inválidas' });
     }
 
-    const ok = bcrypt.compareSync(password, user.password);
+    // Comparar contra el hash correcto
+    const ok = bcrypt.compareSync(password, user.password_hash);
     if (!ok) {
       return res.status(401).json({ message: 'Credenciales inválidas' });
     }
