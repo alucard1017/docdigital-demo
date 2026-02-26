@@ -43,6 +43,14 @@ router.post('/register', async (req, res, next) => {
  */
 router.get('/', requireAuth, requireRole('ADMIN'), async (req, res) => {
   try {
+    console.log(
+      'GET /api/users by',
+      req.user.id,
+      req.user.role,
+      'company',
+      req.user.company_id
+    );
+
     const { role, company_id, run } = req.user;
     const { role: filterRole } = req.query;
 

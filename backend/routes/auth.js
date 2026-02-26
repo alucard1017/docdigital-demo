@@ -6,7 +6,12 @@ const Sentry = require('@sentry/node');
 
 const router = express.Router();
 
-const JWT_SECRET = process.env.JWT_SECRET || 'secreto-demo';
+// JWT_SECRET: obligatorio en prod
+const JWT_SECRET = process.env.JWT_SECRET;
+if (!JWT_SECRET) {
+  console.error('❌ JWT_SECRET no está definido en variables de entorno');
+  // En prod puedes incluso hacer: process.exit(1);
+}
 
 // Normalizar RUN: quitar puntos y guiones
 const normalizeRun = run => (run || '').replace(/[.\-]/g, '');
@@ -76,8 +81,6 @@ function requireRole(requiredRole) {
  */
 router.post('/login', async (req, res, next) => {
   try {
-    console.log('DEBUG /api/auth/login body:', req.body);
-
     const { identifier, password } = req.body || {};
 
     if (!identifier || !password) {
@@ -86,14 +89,22 @@ router.post('/login', async (req, res, next) => {
         .json({ message: 'RUN o correo y contraseña son obligatorios' });
     }
 
-    const isEmail = identifier.includes('@');
-    const normalizedRun = isEmail ? null : normalizeRun(identifier);
+    // Forzar minúsculas para emails
+    const rawIdentifier = String(identifier).trim();
+    const isEmail = rawIdentifier.includes('@');
+    const normalizedIdentifier = isEmail
+      ? rawIdentifier.toLowerCase()
+      : normalizeRun(rawIdentifier);
+
+    if (process.env.NODE_ENV !== 'production') {
+      console.log('DEBUG /api/auth/login identifier:', normalizedIdentifier);
+    }
 
     const query = isEmail
       ? 'SELECT * FROM users WHERE email = $1'
       : 'SELECT * FROM users WHERE run = $1';
 
-    const value = isEmail ? identifier : normalizedRun;
+    const value = normalizedIdentifier;
 
     const result = await db.query(query, [value]);
     const user = result.rows[0];
@@ -102,8 +113,13 @@ router.post('/login', async (req, res, next) => {
       return res.status(401).json({ message: 'Credenciales inválidas' });
     }
 
-    // Comparar contra el hash correcto
-    const ok = bcrypt.compareSync(password, user.password_hash);
+    // Fallback temporal: usa password_hash, y si no hay, usa password legacy
+    const hash = user.password_hash || user.password;
+    if (!hash) {
+      return res.status(401).json({ message: 'Credenciales inválidas' });
+    }
+
+    const ok = bcrypt.compareSync(password, hash);
     if (!ok) {
       return res.status(401).json({ message: 'Credenciales inválidas' });
     }
