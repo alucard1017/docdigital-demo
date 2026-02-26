@@ -11,9 +11,13 @@ export function Sidebar({
   setStatusFilter,
   logout,
 }) {
-  const OWNER_ID = 7; // ajusta si cambia
+  const OWNER_ID = 7; // ajusta si cambia en tu base de datos
+
+  // Consideramos admin_global y SUPER_ADMIN como administradores globales
   const isOwner = user?.id === OWNER_ID;
-  const isGlobalAdmin = user?.role === "admin_global";
+  const isGlobalAdmin =
+    user?.role === "admin_global" || user?.role === "SUPER_ADMIN";
+
   const showUsersMenu = isOwner || isGlobalAdmin;
 
   const handleChangeView = (nextView) => {
@@ -172,10 +176,7 @@ export function Sidebar({
 
           <div
             className={`nav-item ${view === "users" ? "active" : ""}`}
-            onClick={() => {
-              console.log("CLICK USUARIOS");
-              handleChangeView("users");
-            }}
+            onClick={() => handleChangeView("users")}
           >
             <span>👥</span> Usuarios
           </div>
