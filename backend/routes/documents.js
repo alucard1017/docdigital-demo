@@ -64,7 +64,6 @@ async function checkDocumentOwnership(req, res, next) {
         .json({ message: "No tienes permisos sobre este documento" });
     }
 
-    // Contexto de documento cuando verificas ownership
     Sentry.setContext("document", {
       id: doc.id,
       owner_id: doc.owner_id,
@@ -81,7 +80,7 @@ async function checkDocumentOwnership(req, res, next) {
 }
 
 /* ================================
-   MIDDLEWARE DE AUDITORÍA (SIMPLIFICADO - SIN ENUM)
+   MIDDLEWARE DE AUDITORÍA (SIMPLIFICADO)
    ================================ */
 
 function logAuditAction(req, res, next) {
@@ -98,9 +97,7 @@ function logAuditAction(req, res, next) {
         descripcion: `${req.method} ${req.route?.path}`,
         ip_address: req.ip,
         user_agent: req.headers["user-agent"] || null,
-      }).catch((err) =>
-        console.error("⚠️ Error logging audit:", err)
-      );
+      }).catch((err) => console.error("⚠️ Error logging audit:", err));
     }
 
     return originalJson(data);
@@ -113,8 +110,10 @@ function logAuditAction(req, res, next) {
    RUTAS GET - ESPECÍFICAS (SIN PARÁMETROS)
    ================================ */
 
+// Analytics generales
 router.get("/analytics", requireAuth, documentsController.getDocumentAnalytics);
 
+// Exportar a Excel
 router.get("/export/excel", requireAuth, async (req, res) => {
   try {
     const { generarExcelDocumentos } = require("../services/excelExport");
@@ -132,6 +131,56 @@ router.get("/export/excel", requireAuth, async (req, res) => {
   } catch (error) {
     console.error("❌ Error exportando Excel:", error);
     return res.status(500).json({ error: "Error exportando Excel" });
+  }
+});
+
+// Auditoría de documentos
+router.get("/audit", requireAuth, async (req, res) => {
+  try {
+    const { documento_id, usuario_id, evento_tipo, limit = 100 } = req.query;
+
+    const values = [];
+    const where = [];
+
+    if (documento_id) {
+      values.push(Number(documento_id));
+      where.push(`documento_id = $${values.length}`);
+    }
+    if (usuario_id) {
+      values.push(Number(usuario_id));
+      where.push(`usuario_id = $${values.length}`);
+    }
+    if (evento_tipo) {
+      values.push(evento_tipo);
+      where.push(`evento_tipo = $${values.length}`);
+    }
+
+    const whereSql = where.length ? `WHERE ${where.join(" AND ")}` : "";
+
+    values.push(Number(limit));
+    const limitIndex = values.length;
+
+    const result = await db.query(
+      `SELECT 
+         id,
+         documento_id,
+         usuario_id,
+         evento_tipo,
+         descripcion,
+         ip_address,
+         user_agent,
+         created_at
+       FROM auditoria_documentos
+       ${whereSql}
+       ORDER BY created_at DESC
+       LIMIT $${limitIndex}`,
+      values
+    );
+
+    return res.json(result.rows);
+  } catch (err) {
+    console.error("❌ Error obteniendo auditoría:", err);
+    return res.status(500).json({ message: "Error obteniendo auditoría" });
   }
 });
 
@@ -168,6 +217,10 @@ router.post(
   },
   documentsController.sendAutomaticReminders
 );
+
+/* ================================
+   RUTAS DE FLUJO (NUEVA TABLA documentos / firmantes)
+   ================================ */
 
 router.post("/crear-flujo", requireAuth, async (req, res) => {
   console.log("DEBUG crear-flujo body >>>", req.body);
