@@ -10,7 +10,7 @@ const router = express.Router();
 const JWT_SECRET = process.env.JWT_SECRET;
 if (!JWT_SECRET) {
   console.error('❌ JWT_SECRET no está definido en variables de entorno');
-  // En prod puedes incluso hacer: process.exit(1);
+  // En prod podrías hacer: process.exit(1);
 }
 
 // Normalizar RUN: quitar puntos y guiones
@@ -111,6 +111,13 @@ router.post('/login', async (req, res, next) => {
 
     if (!user) {
       return res.status(401).json({ message: 'Credenciales inválidas' });
+    }
+
+    // Bloquear usuarios inactivos (active = false)
+    if (user.active === false) {
+      return res
+        .status(401)
+        .json({ message: 'Cuenta desactivada, contacta al administrador' });
     }
 
     // Fallback temporal: usa password_hash, y si no hay, usa password legacy

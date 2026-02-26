@@ -264,8 +264,8 @@ export function UsersAdminView({ API_URL, token }) {
                 <th>RUN / NIT</th>
                 <th>Nombre completo</th>
                 <th>Correo</th>
-                <th>Rol</th>
-                <th>Plan</th>
+                <th className="col-role">Rol</th>
+                <th className="col-plan">Plan</th>
                 <th style={{ textAlign: "center" }}>Estado</th>
                 <th style={{ textAlign: "right" }}>Acciones</th>
               </tr>
@@ -276,8 +276,8 @@ export function UsersAdminView({ API_URL, token }) {
                   <td>{u.run || "-"}</td>
                   <td>{u.name || "-"}</td>
                   <td>{u.email}</td>
-                  <td>{u.role || "usuario"}</td>
-                  <td>{u.plan || "-"}</td>
+                  <td className="col-role">{u.role || "usuario"}</td>
+                  <td className="col-plan">{u.plan || "-"}</td>
                   <td style={{ textAlign: "center" }}>
                     <button
                       type="button"

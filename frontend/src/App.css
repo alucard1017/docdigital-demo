@@ -216,40 +216,47 @@ html, body {
   vertical-align: middle;
 }
 
+/* RUN */
 .doc-table td:nth-child(1) {
-  width: 60px;
-  min-width: 60px;
+  width: 80px;
+  min-width: 80px;
 }
 
+/* Nombre */
 .doc-table td:nth-child(2) {
-  width: 130px;
-  min-width: 130px;
+  width: 160px;
+  min-width: 160px;
   font-weight: 700;
   color: #1e293b;
 }
 
+/* Correo */
 .doc-table td:nth-child(3) {
-  width: 110px;
-  min-width: 110px;
+  width: 150px;
+  min-width: 150px;
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
 }
 
-.doc-table td:nth-child(4) {
-  width: 90px;
+/* Columna ROL */
+.col-role {
+  min-width: 130px;
+  text-align: center;
+  white-space: nowrap;
+}
+
+/* Columna PLAN */
+.col-plan {
   min-width: 90px;
   text-align: center;
+  white-space: nowrap;
 }
 
-.doc-table td:nth-child(5) {
-  width: 100px;
-  min-width: 100px;
-}
-
+/* Estado */
 .doc-table td:nth-child(6) {
-  width: 200px;
-  min-width: 200px;
+  width: 160px;
+  min-width: 160px;
 }
 
 .doc-table th:last-child,
