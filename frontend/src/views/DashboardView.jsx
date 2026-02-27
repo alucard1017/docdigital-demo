@@ -19,7 +19,7 @@ const COLORS = ["#4f46e5", "#22c55e", "#f97316", "#ef4444", "#0ea5e9", "#a855f7"
 
 /**
  * Dashboard de VeriFirma.
- * Ahora consume /api/docs/stats (backend multi-tenant).
+ * Consume /api/docs/stats (backend multi-tenant).
  */
 export function DashboardView({ user, token, apiUrl }) {
   const [loading, setLoading] = useState(true);
@@ -33,6 +33,13 @@ export function DashboardView({ user, token, apiUrl }) {
   const [statusData, setStatusData] = useState([]);
   const [perDayData, setPerDayData] = useState([]);
   const [tipoTramiteData, setTipoTramiteData] = useState([]);
+
+  // nombre a mostrar (con override para ti)
+  const rawName = user?.name || user?.fullName || "usuario";
+  const isJean =
+    user &&
+    (user.email === "tu-correo@loqueuses.com" || user.name === "Jean");
+  const displayName = isJean ? "Alucard" : rawName;
 
   useEffect(() => {
     if (!token) return;
@@ -48,10 +55,11 @@ export function DashboardView({ user, token, apiUrl }) {
         const data = await res.json();
 
         if (!res.ok) {
-          throw new Error(data.message || "No se pudieron cargar las estadísticas");
+          throw new Error(
+            data.message || "No se pudieron cargar las estadísticas"
+          );
         }
 
-        // KPIs directos del backend
         setKpis({
           total: data.kpis?.total ?? 0,
           pendientes: data.kpis?.pendientes ?? 0,
@@ -59,7 +67,6 @@ export function DashboardView({ user, token, apiUrl }) {
           rechazados: data.kpis?.rechazados ?? 0,
         });
 
-        // Barras por estado: reconstruimos del objeto kpis
         const status = [];
         if (data.kpis?.pendientes) {
           status.push({ status: "PENDIENTES", count: data.kpis.pendientes });
@@ -76,7 +83,6 @@ export function DashboardView({ user, token, apiUrl }) {
         });
         setStatusData(status);
 
-        // Línea por día
         setPerDayData(
           (data.perDay || []).map((d) => ({
             date: d.date,
@@ -84,7 +90,6 @@ export function DashboardView({ user, token, apiUrl }) {
           }))
         );
 
-        // Pie por tipo de trámite
         setTipoTramiteData(
           (data.porTipoTramite || []).map((t) => ({
             name: t.tipo_tramite,
@@ -103,21 +108,55 @@ export function DashboardView({ user, token, apiUrl }) {
   }, [token, apiUrl]);
 
   return (
-    <div style={{ padding: 24, display: "flex", flexDirection: "column", gap: 24 }}>
+    <div
+      style={{
+        padding: 24,
+        display: "flex",
+        flexDirection: "column",
+        gap: 24,
+      }}
+    >
       {/* Header */}
       <div>
-        <h1 style={{ margin: 0, fontSize: "1.6rem", color: "#0f172a" }}>📊 Dashboard</h1>
-        <p style={{ marginTop: 4, fontSize: "0.9rem", color: "#64748b" }}>
-          Hola {user?.name || "usuario"}, aquí ves un resumen visual de tus trámites recientes.
+        <h1
+          style={{
+            margin: 0,
+            fontSize: "1.6rem",
+            color: "#0f172a",
+          }}
+        >
+          📊 Dashboard
+        </h1>
+        <p
+          style={{
+            marginTop: 4,
+            fontSize: "0.9rem",
+            color: "#64748b",
+          }}
+        >
+          Hola {displayName}, aquí ves un resumen visual de tus trámites
+          recientes.
         </p>
       </div>
 
       {loading ? (
-        <div style={{ padding: 40, textAlign: "center", color: "#64748b" }}>
+        <div
+          style={{
+            padding: 40,
+            textAlign: "center",
+            color: "#64748b",
+          }}
+        >
           Cargando estadísticas…
         </div>
       ) : error ? (
-        <div style={{ padding: 40, textAlign: "center", color: "#b91c1c" }}>
+        <div
+          style={{
+            padding: 40,
+            textAlign: "center",
+            color: "#b91c1c",
+          }}
+        >
           {error}
         </div>
       ) : (
@@ -169,7 +208,10 @@ export function DashboardView({ user, token, apiUrl }) {
               description="Distribución según el estado actual del trámite."
             >
               <ResponsiveContainer width="100%" height={260}>
-                <BarChart data={statusData} margin={{ top: 10, right: 20, left: 0, bottom: 0 }}>
+                <BarChart
+                  data={statusData}
+                  margin={{ top: 10, right: 20, left: 0, bottom: 0 }}
+                >
                   <CartesianGrid strokeDasharray="3 3" stroke="#e5e7eb" />
                   <XAxis dataKey="status" tick={{ fontSize: 12 }} />
                   <YAxis allowDecimals={false} />
@@ -190,7 +232,10 @@ export function DashboardView({ user, token, apiUrl }) {
               description="Actividad según fecha de creación (últimos movimientos)."
             >
               <ResponsiveContainer width="100%" height={260}>
-                <LineChart data={perDayData} margin={{ top: 10, right: 20, left: 0, bottom: 0 }}>
+                <LineChart
+                  data={perDayData}
+                  margin={{ top: 10, right: 20, left: 0, bottom: 0 }}
+                >
                   <CartesianGrid strokeDasharray="3 3" stroke="#e5e7eb" />
                   <XAxis dataKey="date" tick={{ fontSize: 11 }} />
                   <YAxis allowDecimals={false} />
@@ -267,14 +312,27 @@ export function DashboardView({ user, token, apiUrl }) {
               >
                 Siguiente paso sugerido
               </h3>
-              <p style={{ fontSize: "0.85rem", color: "#475569", marginBottom: 8 }}>
+              <p
+                style={{
+                  fontSize: "0.85rem",
+                  color: "#475569",
+                  marginBottom: 8,
+                }}
+              >
                 Usa este panel para detectar cuellos de botella: muchos{" "}
-                <strong>PENDIENTE_VISADO</strong> o <strong>PENDIENTE_FIRMA</strong> indican
-                trámites detenidos antes de la firma final.
+                <strong>PENDIENTE_VISADO</strong> o{" "}
+                <strong>PENDIENTE_FIRMA</strong> indican trámites detenidos
+                antes de la firma final.
               </p>
-              <p style={{ fontSize: "0.85rem", color: "#475569" }}>
-                Si ves poca creación en los últimos días, prueba un flujo completo
-                con un cliente real para validar la experiencia de punta a punta.
+              <p
+                style={{
+                  fontSize: "0.85rem",
+                  color: "#475569",
+                }}
+              >
+                Si ves poca creación en los últimos días, prueba un flujo
+                completo con un cliente real para validar la experiencia de
+                punta a punta.
               </p>
             </div>
           </div>
@@ -299,8 +357,21 @@ function KpiCard({ label, value, color, bg }) {
         gap: 4,
       }}
     >
-      <span style={{ fontSize: "0.8rem", color: "#6b7280" }}>{label}</span>
-      <span style={{ fontSize: "1.4rem", fontWeight: 700, color: color || "#0f172a" }}>
+      <span
+        style={{
+          fontSize: "0.8rem",
+          color: "#6b7280",
+        }}
+      >
+        {label}
+      </span>
+      <span
+        style={{
+          fontSize: "1.4rem",
+          fontWeight: 700,
+          color: color || "#0f172a",
+        }}
+      >
         {value}
       </span>
     </div>

@@ -30,6 +30,7 @@ export function DetailView({
   setSelectedDoc,
   logout,
   token,
+  currentUser, // <- NUEVO
 }) {
   const [timeline, setTimeline] = useState(null);
   const [loadingTimeline, setLoadingTimeline] = useState(false);
@@ -39,6 +40,15 @@ export function DetailView({
   const [reenviarLoadingVisado, setReenviarLoadingVisado] = useState(false);
   const [reenviarSignerId, setReenviarSignerId] = useState(null);
   const [recordatorioLoading, setRecordatorioLoading] = useState(false);
+
+  // nombre dinámico + override para ti
+  const rawName =
+    currentUser?.name || currentUser?.fullName || "Usuario";
+  const isJean =
+    currentUser &&
+    (currentUser.email === "tu-correo@loqueuses.com" ||
+      currentUser.name === "Jean");
+  const displayName = isJean ? "Alucard" : rawName;
 
   useEffect(() => {
     if (!selectedDoc?.id) return;
@@ -67,13 +77,10 @@ export function DetailView({
     const fetchSigners = async () => {
       try {
         setLoadingSigners(true);
-        const res = await fetch(
-          `${API_URL}/api/docs/${docId}/signers`,
-          {
-            headers: { Authorization: `Bearer ${token}` },
-            credentials: "include",
-          }
-        );
+        const res = await fetch(`${API_URL}/api/docs/${docId}/signers`, {
+          headers: { Authorization: `Bearer ${token}` },
+          credentials: "include",
+        });
         if (!res.ok) {
           setSigners([]);
           return;
@@ -91,7 +98,6 @@ export function DetailView({
     fetchTimeline();
     fetchSigners();
 
-    // Polling cada 5s para refrescar estados (firma/visado) en tiempo casi real
     const interval = setInterval(fetchTimeline, 5000);
     return () => clearInterval(interval);
   }, [selectedDoc?.id, token]);
@@ -204,9 +210,9 @@ export function DetailView({
   );
 
   return (
-    <div className="dashboard-layout">
-      <aside className="sidebar">
-        <h2>VeriFirma</h2>
+    <div className="detail-layout">
+      <aside className="detail-sidebar">
+        <h2 className="detail-sidebar-header">VeriFirma</h2>
 
         <div
           className="nav-item"
@@ -219,8 +225,7 @@ export function DetailView({
         </div>
 
         <div
-          style={{ marginTop: "auto" }}
-          className="nav-item"
+          className="nav-item detail-sidebar-footer"
           onClick={logout}
         >
           <span>🚪</span> Cerrar Sesión
@@ -228,49 +233,30 @@ export function DetailView({
       </aside>
 
       <main className="main-area">
-        <header className="topbar">
-          <span
-            style={{
-              color: "#64748b",
-              fontWeight: 500,
-              fontSize: "0.9rem",
-            }}
-          >
+        <header className="detail-topbar">
+          <span className="detail-topbar-title">
             Revisión de Documento{" "}
             {numeroInterno ? `(${numeroInterno})` : `#${selectedDoc.id}`} - Estado{" "}
             {selectedDoc.status}
           </span>
-          <span style={{ fontWeight: 700, fontSize: "1.1rem" }}>
-            Hola, <span style={{ color: "var(--primary)" }}>Alucard</span>
+          <span className="detail-topbar-user">
+            Hola, <span>{displayName}</span>
           </span>
         </header>
 
-        <div className="content-body">
-          <div className="card-premium">
-            <h1
-              style={{
-                margin: 0,
-                fontSize: "1.8rem",
-                fontWeight: 800,
-              }}
-            >
-              {selectedDoc.title}
+        <div className="detail-container">
+          <div className="detail-card">
+            <h1 className="detail-title">
+              {selectedDoc.title || "Documento sin título"}
             </h1>
 
-            {/* Metadatos principales */}
-            <div
-              style={{
-                marginBottom: 16,
-                fontSize: "0.9rem",
-                color: "#4b5563",
-              }}
-            >
-              <p style={{ margin: 0 }}>
+            <div className="detail-meta">
+              <p>
                 N° interno:{" "}
                 <strong>{numeroInterno || `#${selectedDoc.id}`}</strong> · Estado:{" "}
                 <strong>{selectedDoc.status}</strong>
               </p>
-              <p style={{ margin: "4px 0 0 0" }}>
+              <p>
                 Tipo de trámite:{" "}
                 <strong>
                   {tramiteLabel} – {documentoLabel}
@@ -279,74 +265,32 @@ export function DetailView({
             </div>
 
             {selectedDoc.description && (
-              <div
-                style={{
-                  marginBottom: 20,
-                  padding: 12,
-                  borderRadius: 12,
-                  background: "#f9fafb",
-                  fontSize: "0.9rem",
-                  color: "#4b5563",
-                }}
-              >
+              <div className="detail-description">
                 <strong>Descripción:</strong> {selectedDoc.description}
               </div>
             )}
 
             {selectedDoc.status === DOC_STATUS.RECHAZADO &&
               selectedDoc.reject_reason && (
-                <div
-                  style={{
-                    marginBottom: 20,
-                    padding: 12,
-                    borderRadius: 12,
-                    background: "#fef2f2",
-                    fontSize: "0.9rem",
-                    color: "#b91c1c",
-                    border: "1px solid #fecaca",
-                  }}
-                >
+                <div className="detail-reject-box">
                   <strong>Motivo de rechazo:</strong>{" "}
                   {selectedDoc.reject_reason}
                 </div>
               )}
 
-            {/* Botones Ver / Descargar + Reenvío */}
-            <div
-              style={{
-                display: "flex",
-                justifyContent: "space-between",
-                alignItems: "center",
-                marginBottom: 8,
-                gap: 12,
-                flexWrap: "wrap",
-              }}
-            >
-              <span style={{ fontSize: "0.85rem", color: "#64748b" }}>
+            <div className="detail-toolbar">
+              <span className="detail-toolbar-label">
                 Visualización del documento original
               </span>
 
-              <div
-                style={{
-                  display: "flex",
-                  gap: 8,
-                  alignItems: "center",
-                  flexWrap: "wrap",
-                }}
-              >
+              <div className="detail-toolbar-actions">
                 {mostrarBotonRecordatorio && (
                   <button
                     type="button"
-                    className="btn-main"
+                    className="btn-main detail-btn-reminder-all"
                     onClick={handleEnviarRecordatorioATodos}
                     disabled={recordatorioLoading}
                     style={{
-                      background: "#8b5cf6",
-                      color: "#ffffff",
-                      fontSize: "0.8rem",
-                      padding: "8px 12px",
-                      borderRadius: 6,
-                      fontWeight: 600,
                       cursor: recordatorioLoading ? "not-allowed" : "pointer",
                       opacity: recordatorioLoading ? 0.6 : 1,
                     }}
@@ -360,17 +304,9 @@ export function DetailView({
                 {mostrarBotonReenvioVisado && (
                   <button
                     type="button"
-                    className="btn-main"
+                    className="btn-main detail-btn-reminder-visado"
                     onClick={handleReenviarVisado}
                     disabled={reenviarLoadingVisado}
-                    style={{
-                      background: "#fbbf24",
-                      color: "#92400e",
-                      fontSize: "0.8rem",
-                      padding: "8px 12px",
-                      borderRadius: 6,
-                      fontWeight: 600,
-                    }}
                   >
                     {reenviarLoadingVisado
                       ? "Reenviando..."
@@ -381,16 +317,7 @@ export function DetailView({
                 {selectedDoc && (
                   <a
                     href={`${API_URL}/api/docs/${selectedDoc.id}/download`}
-                    className="btn-main"
-                    style={{
-                      background: "#10b981",
-                      color: "#ffffff",
-                      textDecoration: "none",
-                      fontSize: "0.85rem",
-                      padding: "8px 16px",
-                      borderRadius: "6px",
-                      fontWeight: 600,
-                    }}
+                    className="btn-main detail-btn-download"
                   >
                     📥 Descargar PDF
                   </a>
@@ -401,16 +328,7 @@ export function DetailView({
                     href={pdfUrl}
                     target="_blank"
                     rel="noopener noreferrer"
-                    className="btn-main"
-                    style={{
-                      background: "#e5e7eb",
-                      color: "#111827",
-                      textDecoration: "none",
-                      fontSize: "0.85rem",
-                      padding: "8px 16px",
-                      borderRadius: "6px",
-                      fontWeight: 600,
-                    }}
+                    className="btn-main detail-btn-view"
                   >
                     👁️ Ver PDF
                   </a>
@@ -418,87 +336,40 @@ export function DetailView({
               </div>
             </div>
 
-            {/* Visor PDF */}
-            <div
-              style={{
-                borderRadius: 12,
-                overflow: "hidden",
-                border: "1px solid #e5e7eb",
-                marginBottom: 20,
-                minHeight: "60vh",
-                background: "#111827",
-              }}
-            >
+            <div className="detail-pdf-wrapper">
               {pdfUrl ? (
                 <iframe
                   title="PDF del documento"
                   src={pdfUrl}
-                  style={{
-                    width: "100%",
-                    height: "70vh",
-                    border: "none",
-                  }}
+                  className="detail-pdf-iframe"
                 />
               ) : (
-                <div style={{ padding: 24, color: "#e5e7eb" }}>
+                <div className="detail-pdf-empty">
                   No se encontró el archivo PDF para este documento.
                 </div>
               )}
             </div>
 
-            {/* Sección firmantes */}
-            <div
-              style={{
-                marginBottom: 24,
-                padding: 16,
-                borderRadius: 12,
-                border: "1px solid #e5e7eb",
-                background: "#f9fafb",
-              }}
-            >
-              <h3
-                style={{
-                  fontSize: "1rem",
-                  fontWeight: 700,
-                  marginBottom: 8,
-                }}
-              >
-                Firmantes
-              </h3>
+            <div className="detail-signers">
+              <h3 className="detail-signers-title">Firmantes</h3>
 
               {loadingSigners ? (
-                <p style={{ fontSize: "0.9rem", color: "#94a3b8" }}>
+                <p className="detail-signers-loading">
                   Cargando firmantes...
                 </p>
               ) : signers.length === 0 ? (
-                <p style={{ fontSize: "0.9rem", color: "#94a3b8" }}>
+                <p className="detail-signers-empty">
                   No hay firmantes registrados para este documento.
                 </p>
               ) : (
-                <ul style={{ listStyle: "none", padding: 0, margin: 0 }}>
+                <ul className="detail-signers-list">
                   {signers.map((s) => (
-                    <li
-                      key={s.id}
-                      style={{
-                        display: "flex",
-                        justifyContent: "space-between",
-                        alignItems: "center",
-                        padding: "6px 0",
-                        borderBottom: "1px solid #e5e7eb",
-                      }}
-                    >
+                    <li key={s.id} className="detail-signers-item">
                       <div>
-                        <div
-                          style={{ fontSize: "0.9rem", fontWeight: 600 }}
-                        >
+                        <div className="detail-signer-main">
                           {s.name || "Firmante"}
                         </div>
-                        <div
-                          style={{
-                            fontSize: "0.8rem",
-                            color: "#64748b",
-                          }}
-                        >
+                        <div className="detail-signer-sub">
                           {s.email} · Estado: {s.status}
                         </div>
                       </div>
@@ -506,17 +377,9 @@ export function DetailView({
                       {s.status !== "FIRMADO" && (
                         <button
                           type="button"
-                          className="btn-main"
+                          className="btn-main detail-btn-reminder-signer"
                           onClick={() => handleReenviarFirma(s.id)}
                           disabled={reenviarSignerId === s.id}
-                          style={{
-                            background: "#e0f2fe",
-                            color: "#0369a1",
-                            fontSize: "0.8rem",
-                            padding: "6px 10px",
-                            borderRadius: 6,
-                            fontWeight: 600,
-                          }}
                         >
                           {reenviarSignerId === s.id
                             ? "Reenviando..."
@@ -529,49 +392,22 @@ export function DetailView({
               )}
             </div>
 
-            {/* Timeline */}
-            <div style={{ marginTop: 32, marginBottom: 32 }}>
+            <div className="detail-timeline-wrapper">
               {loadingTimeline ? (
-                <div
-                  style={{
-                    textAlign: "center",
-                    padding: "20px",
-                    color: "#94a3b8",
-                  }}
-                >
+                <div className="detail-timeline-loading">
                   Cargando progreso...
                 </div>
               ) : timeline ? (
                 <Timeline timeline={timeline} />
               ) : (
-                <div
-                  style={{
-                    textAlign: "center",
-                    padding: "20px",
-                    color: "#94a3b8",
-                  }}
-                >
+                <div className="detail-timeline-empty">
                   No hay datos de progreso disponibles
                 </div>
               )}
             </div>
 
-            {/* Historial de acciones */}
-            <div
-              style={{
-                marginTop: 16,
-                paddingTop: 12,
-                borderTop: "1px solid #e5e7eb",
-                marginBottom: 16,
-              }}
-            >
-              <h3
-                style={{
-                  fontSize: "1rem",
-                  fontWeight: 700,
-                  marginBottom: 8,
-                }}
-              >
+            <div className="detail-history">
+              <h3 className="detail-history-title">
                 Historial de acciones
               </h3>
 
@@ -582,7 +418,6 @@ export function DetailView({
               )}
             </div>
 
-            {/* Acciones principales */}
             <DetailActions
               puedeFirmar={puedeFirmar}
               puedeVisar={puedeVisar}

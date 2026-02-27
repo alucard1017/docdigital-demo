@@ -1,7 +1,6 @@
 // src/components/DocumentRow.jsx
 import React from "react";
-import { DOC_STATUS } from "../constants";
-import { API_BASE_URL } from "../constants";
+import { DOC_STATUS, API_BASE_URL } from "../constants";
 
 const API_URL = API_BASE_URL;
 
@@ -39,29 +38,8 @@ export function DocumentRow({ doc, onOpenDetail, token }) {
   const tipoTramite = doc.tipo_tramite || null;
   const tipoDocumento = doc.tipo_documento || null;
 
-  const handleVerPdf = async () => {
-    try {
-      const res = await fetch(`${API_URL}/api/docs/${doc.id}/pdf`, {
-        headers: { Authorization: `Bearer ${token}` },
-      });
-      const data = await res.json();
-      if (!res.ok) {
-        throw new Error(data.message || "No se pudo obtener el PDF");
-      }
-      window.open(data.url, "_blank");
-    } catch (err) {
-      console.error("Error abriendo PDF:", err);
-      alert("❌ " + err.message);
-    }
-  };
-
-  const handleVerRechazo = () => {
-    if (!doc.reject_reason) {
-      alert("Este documento no tiene motivo de rechazo.");
-      return;
-    }
-    alert("Motivo de rechazo:\n\n" + doc.reject_reason);
-  };
+  const labelTramite = getTramiteLabel(tipoTramite);
+  const labelDoc = getDocumentoLabel(tipoDocumento);
 
   const chipBgColor =
     tipoTramite === "notaria"
@@ -81,31 +59,63 @@ export function DocumentRow({ doc, onOpenDetail, token }) {
       ? "#dc2626"
       : "#0f766e";
 
-  const labelTramite = getTramiteLabel(tipoTramite);
-  const labelDoc = getDocumentoLabel(tipoDocumento);
+  const formattedFecha = doc.created_at
+    ? new Date(doc.created_at).toLocaleString("es-CO", {
+        day: "2-digit",
+        month: "2-digit",
+        year: "numeric",
+        hour: "2-digit",
+        minute: "2-digit",
+      })
+    : "-";
+
+  const estadoLabel =
+    STATUS_LABELS[doc.status] || doc.status || "Sin estado";
+  const estadoColor = STATUS_COLORS[doc.status] || "#6b7280";
+
+  const handleVerPdf = async () => {
+    try {
+      const res = await fetch(`${API_URL}/api/docs/${doc.id}/pdf`, {
+        headers: { Authorization: `Bearer ${token}` },
+      });
+      const data = await res.json();
+
+      if (!res.ok) {
+        throw new Error(data.message || "No se pudo obtener el PDF");
+      }
+
+      window.open(data.url, "_blank");
+    } catch (err) {
+      console.error("Error abriendo PDF:", err);
+      alert("❌ " + err.message);
+    }
+  };
+
+  const handleVerRechazo = () => {
+    if (!doc.reject_reason) {
+      alert("Este documento no tiene motivo de rechazo.");
+      return;
+    }
+    alert("Motivo de rechazo:\n\n" + doc.reject_reason);
+  };
 
   return (
-    <tr>
+    <tr onClick={() => onOpenDetail(doc)}>
       {/* N° interno de contrato */}
-      <td style={{ color: "#94a3b8", fontWeight: 600 }}>
+      <td className="doc-cell-id">
         {doc.numero_contrato_interno || `#${doc.id}`}
       </td>
 
       {/* Título */}
-      <td style={{ fontWeight: 700, color: "#1e293b" }}>
-        {doc.title || "Sin título"}
-      </td>
+      <td className="doc-cell-title">{doc.title || "Sin título"}</td>
 
       {/* Tipo de trámite + tipo de documento */}
       <td>
         <span
+          className="doc-chip-tipo"
           style={{
-            padding: "2px 10px",
-            borderRadius: 999,
-            fontSize: 12,
             backgroundColor: chipBgColor,
             color: chipTextColor,
-            whiteSpace: "nowrap",
           }}
         >
           {labelTramite} – {labelDoc}
@@ -113,33 +123,16 @@ export function DocumentRow({ doc, onOpenDetail, token }) {
       </td>
 
       {/* Fecha creación */}
-      <td>
-        {doc.created_at
-          ? new Date(doc.created_at).toLocaleString("es-CO", {
-              day: "2-digit",
-              month: "2-digit",
-              year: "numeric",
-              hour: "2-digit",
-              minute: "2-digit",
-            })
-          : "-"}
-      </td>
+      <td>{formattedFecha}</td>
 
       {/* Estado */}
       <td style={{ textAlign: "center" }}>
         <span
-          style={{
-            display: "inline-block",
-            padding: "4px 10px",
-            borderRadius: 999,
-            fontSize: "0.75rem",
-            fontWeight: 600,
-            color: "#ffffff",
-            backgroundColor: STATUS_COLORS[doc.status] || "#6b7280",
-            whiteSpace: "nowrap",
-          }}
+          className="doc-status-pill"
+          style={{ backgroundColor: estadoColor }}
+          onClick={(e) => e.stopPropagation()}
         >
-          {STATUS_LABELS[doc.status] || doc.status || "Sin estado"}
+          {estadoLabel}
         </span>
       </td>
 
@@ -152,16 +145,9 @@ export function DocumentRow({ doc, onOpenDetail, token }) {
           verticalAlign: "middle",
           textAlign: "center",
         }}
+        onClick={(e) => e.stopPropagation()}
       >
-        <div
-          style={{
-            display: "inline-flex",
-            flexDirection: "column",
-            alignItems: "center",
-            justifyContent: "center",
-            gap: 6,
-          }}
-        >
+        <div className="doc-actions">
           {doc.status === DOC_STATUS.RECHAZADO && doc.reject_reason && (
             <button
               type="button"
@@ -172,7 +158,11 @@ export function DocumentRow({ doc, onOpenDetail, token }) {
             </button>
           )}
 
-          <button type="button" className="btn-main" onClick={handleVerPdf}>
+          <button
+            type="button"
+            className="btn-main"
+            onClick={handleVerPdf}
+          >
             Ver PDF
           </button>
 
