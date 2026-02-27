@@ -216,13 +216,13 @@ html, body {
   vertical-align: middle;
 }
 
-/* RUN */
+/* N° de contrato */
 .doc-table td:nth-child(1) {
   width: 80px;
   min-width: 80px;
 }
 
-/* Nombre */
+/* Título */
 .doc-table td:nth-child(2) {
   width: 160px;
   min-width: 160px;
@@ -230,7 +230,7 @@ html, body {
   color: #1e293b;
 }
 
-/* Correo */
+/* Tipo de trámite */
 .doc-table td:nth-child(3) {
   width: 150px;
   min-width: 150px;
@@ -239,26 +239,34 @@ html, body {
   text-overflow: ellipsis;
 }
 
-/* Columna ROL */
+/* Fecha (4) y otras columnas intermedias las manejas en el JSX/HTML */
+
+/* Estado actual */
+.doc-table td:nth-child(6) {
+  width: 190px;
+  min-width: 190px;
+}
+
+/* Firmante final (asumiendo que es la 7ª columna) */
+.doc-table td:nth-child(7) {
+  padding-left: 16px; /* separa visualmente del estado */
+}
+
+/* Columna ROL (para tablas de usuarios) */
 .col-role {
   min-width: 130px;
   text-align: center;
   white-space: nowrap;
 }
 
-/* Columna PLAN */
+/* Columna PLAN (para tablas de usuarios) */
 .col-plan {
   min-width: 90px;
   text-align: center;
   white-space: nowrap;
 }
 
-/* Estado */
-.doc-table td:nth-child(6) {
-  width: 160px;
-  min-width: 160px;
-}
-
+/* Acciones */
 .doc-table th:last-child,
 .doc-table td:last-child {
   text-align: center;
@@ -309,11 +317,12 @@ html, body {
 .status-badge {
   display: inline-block;
   min-width: 70px;
-  padding: 4px 6px;
+  padding: 4px 8px;
   border-radius: 9999px;
   font-size: 0.65rem;
   font-weight: 800;
   text-align: center;
+  white-space: nowrap;
 }
 
 .status-PENDIENTE {
@@ -448,13 +457,12 @@ html, body {
 .btn-secondary-danger {
   background-color: #fee2e2;
   color: #b91c1c;
-  box-shadow: 0 2px 8px rgba(248, 113, 113, 0.3);
+  box-shadow: 0 4px 14px rgba(248, 113, 113, 0.45);
 }
 
 .btn-secondary-danger:hover {
   background-color: #fecaca;
   color: #7f1d1d;
-  box-shadow: 0 4px 14px rgba(248, 113, 113, 0.45);
 }
 
 .btn-secondary-danger:active {
