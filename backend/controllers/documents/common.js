@@ -3,16 +3,23 @@ const path = require('path');
 const crypto = require('crypto');
 const fs = require('fs');
 const axios = require('axios');
+
 const db = require('../../db');
 const {
   sendSigningInvitation,
   sendVisadoInvitation,
 } = require('../../services/emailService');
 const { uploadPdfToS3, getSignedUrl } = require('../../services/s3');
-const { isValidEmail, isValidRun, validateLength } = require('../../utils/validators');
+const {
+  isValidEmail,
+  isValidRun,
+  validateLength,
+} = require('../../utils/validators');
 const { PDFDocument, rgb, degrees } = require('pdf-lib');
 const { sellarPdfConQr } = require('../../services/pdfSeal');
-const { generarNumeroContratoInterno } = require('../../utils/numeroContratoInterno');
+const {
+  generarNumeroContratoInterno,
+} = require('../../utils/numeroContratoInterno');
 const { registrarAuditoria } = require('../../utils/auditLog');
 
 function generarCodigoVerificacion() {
@@ -24,6 +31,9 @@ function generarCodigoVerificacion() {
     .toUpperCase();
 }
 
+/**
+ * Aplica marca de agua VERIFIRMA a un PDF local.
+ */
 async function aplicarMarcaAguaLocal(filePath) {
   try {
     const bytes = await fs.promises.readFile(filePath);
@@ -75,24 +85,32 @@ async function aplicarMarcaAguaLocal(filePath) {
 }
 
 module.exports = {
+  // dependencias base
   path,
   crypto,
   fs,
   axios,
   db,
+  // servicios de email
   sendSigningInvitation,
   sendVisadoInvitation,
+  // almacenamiento
   uploadPdfToS3,
   getSignedUrl,
+  // validaciones
   isValidEmail,
   isValidRun,
   validateLength,
+  // pdf-lib
   PDFDocument,
   rgb,
   degrees,
+  // sello y numeración interna
   sellarPdfConQr,
   generarNumeroContratoInterno,
+  // auditoría
   registrarAuditoria,
+  // utilidades locales
   generarCodigoVerificacion,
   aplicarMarcaAguaLocal,
 };

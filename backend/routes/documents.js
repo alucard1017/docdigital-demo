@@ -6,7 +6,6 @@ const { requireAuth } = require("./auth");
 const { upload, handleMulterError } = require("../middlewares/uploadPdf");
 const documentsController = require("../controllers/documents");
 const db = require("../db");
-const { sellarPdfConQr } = require("../services/pdfSeal");
 
 const router = express.Router();
 
@@ -33,21 +32,31 @@ function checkRateLimit(key, maxAttempts = 5, windowMs = 60000) {
     return false;
   }
 
-  rateLimit[key].count++;
+  rateLimit[key].count += 1;
   return true;
 }
 
 /* ================================
-   MIDDLEWARE DE PERMISOS
+   HELPERS DE PERMISOS / MULTI-TENANT
    ================================ */
 
-async function checkDocumentOwnership(req, res, next) {
+function isGlobalAdmin(user) {
+  return user?.role === "SUPER_ADMIN" || user?.role === "ADMIN_GLOBAL";
+}
+
+/**
+ * Middleware que asegura que el documento:
+ * - Existe
+ * - Pertenece a la misma company_id del usuario (salvo admins globales)
+ */
+async function checkDocumentCompanyScope(req, res, next) {
   try {
     const { id } = req.params;
+    const user = req.user;
 
     const docRes = await db.query(
-      `SELECT id, owner_id, title, status 
-       FROM documents 
+      `SELECT id, owner_id, title, status, company_id
+       FROM documents
        WHERE id = $1`,
       [id]
     );
@@ -58,10 +67,12 @@ async function checkDocumentOwnership(req, res, next) {
 
     const doc = docRes.rows[0];
 
-    if (doc.owner_id !== req.user.id) {
-      return res
-        .status(403)
-        .json({ message: "No tienes permisos sobre este documento" });
+    if (!isGlobalAdmin(user)) {
+      if (!user.company_id || doc.company_id !== user.company_id) {
+        return res
+          .status(403)
+          .json({ message: "No tienes permisos sobre este documento" });
+      }
     }
 
     Sentry.setContext("document", {
@@ -69,12 +80,64 @@ async function checkDocumentOwnership(req, res, next) {
       owner_id: doc.owner_id,
       title: doc.title || undefined,
       status: doc.status || undefined,
+      company_id: doc.company_id,
     });
 
     req.document = doc;
-    next();
+    return next();
   } catch (err) {
-    console.error("❌ Error verificando permisos:", err);
+    console.error("❌ Error verificando permisos de documento:", err);
+    return res.status(500).json({ message: "Error interno del servidor" });
+  }
+}
+
+/**
+ * Middleware de propiedad (exigir que sea dueño, además de misma empresa)
+ */
+async function checkDocumentOwnership(req, res, next) {
+  try {
+    const { id } = req.params;
+    const user = req.user;
+
+    const docRes = await db.query(
+      `SELECT id, owner_id, title, status, company_id
+       FROM documents
+       WHERE id = $1`,
+      [id]
+    );
+
+    if (docRes.rowCount === 0) {
+      return res.status(404).json({ message: "Documento no encontrado" });
+    }
+
+    const doc = docRes.rows[0];
+
+    if (!isGlobalAdmin(user)) {
+      if (!user.company_id || doc.company_id !== user.company_id) {
+        return res
+          .status(403)
+          .json({ message: "No tienes permisos sobre este documento" });
+      }
+
+      if (doc.owner_id !== user.id) {
+        return res
+          .status(403)
+          .json({ message: "No tienes permisos sobre este documento" });
+      }
+    }
+
+    Sentry.setContext("document", {
+      id: doc.id,
+      owner_id: doc.owner_id,
+      title: doc.title || undefined,
+      status: doc.status || undefined,
+      company_id: doc.company_id,
+    });
+
+    req.document = doc;
+    return next();
+  } catch (err) {
+    console.error("❌ Error verificando propiedad de documento:", err);
     return res.status(500).json({ message: "Error interno del servidor" });
   }
 }
@@ -86,7 +149,7 @@ async function checkDocumentOwnership(req, res, next) {
 function logAuditAction(req, res, next) {
   const originalJson = res.json.bind(res);
 
-  res.json = function (data) {
+  res.json = function patchedJson(data) {
     if (res.statusCode < 400) {
       const { registrarAuditoria } = require("../utils/auditLog");
 
@@ -103,21 +166,38 @@ function logAuditAction(req, res, next) {
     return originalJson(data);
   };
 
-  next();
+  return next();
 }
 
 /* ================================
    RUTAS GET - ESPECÍFICAS (SIN PARÁMETROS)
    ================================ */
 
-// Analytics generales
-router.get("/analytics", requireAuth, documentsController.getDocumentAnalytics);
+// Stats de documentos (multi-tenant)
+router.get(
+  "/stats",
+  requireAuth,
+  documentsController.getDocumentStats
+);
 
-// Exportar a Excel
+// Analytics generales (el controller debe respetar company_id)
+router.get(
+  "/analytics",
+  requireAuth,
+  documentsController.getDocumentAnalytics
+);
+
+// Exportar a Excel: limitar por empresa salvo admins globales
 router.get("/export/excel", requireAuth, async (req, res) => {
   try {
     const { generarExcelDocumentos } = require("../services/excelExport");
-    const excelBuffer = await generarExcelDocumentos(req.user.id);
+
+    const excelBuffer = await generarExcelDocumentos({
+      userId: req.user.id,
+      companyId: req.user.company_id,
+      isGlobalAdmin: isGlobalAdmin(req.user),
+    });
+
     const filename = `documentos-${new Date()
       .toISOString()
       .slice(0, 10)}.xlsx`;
@@ -134,7 +214,7 @@ router.get("/export/excel", requireAuth, async (req, res) => {
   }
 });
 
-// Auditoría de documentos
+// Auditoría de documentos (podrías filtrar por company_id en el SQL)
 router.get("/audit", requireAuth, async (req, res) => {
   try {
     const { documento_id, usuario_id, evento_tipo, limit = 100 } = req.query;
@@ -161,7 +241,7 @@ router.get("/audit", requireAuth, async (req, res) => {
     const limitIndex = values.length;
 
     const result = await db.query(
-      `SELECT 
+      `SELECT
          id,
          documento_id,
          usuario_id,
@@ -188,6 +268,7 @@ router.get("/audit", requireAuth, async (req, res) => {
    RUTAS GET - LISTADOS (SIN PARÁMETROS)
    ================================ */
 
+// Lista de documentos (controller filtra por company_id salvo globales)
 router.get("/", requireAuth, documentsController.getUserDocuments);
 
 /* ================================
@@ -213,7 +294,7 @@ router.post(
           "Demasiados intentos. Espera 1 hora antes de volver a enviar recordatorios.",
       });
     }
-    next();
+    return next();
   },
   documentsController.sendAutomaticReminders
 );
@@ -238,12 +319,27 @@ router.post("/crear-flujo", requireAuth, async (req, res) => {
 
     const docResult = await db.query(
       `INSERT INTO documentos (
-         tipo, titulo, estado, hash_pdf, codigo_verificacion, 
-         categoria_firma, creado_por, created_at, updated_at
+         tipo,
+         titulo,
+         estado,
+         hash_pdf,
+         codigo_verificacion,
+         categoria_firma,
+         creado_por,
+         company_id,
+         created_at,
+         updated_at
        )
-       VALUES ($1, $2, 'BORRADOR', NULL, $3, $4, $5, NOW(), NOW())
+       VALUES ($1, $2, 'BORRADOR', NULL, $3, $4, $5, $6, NOW(), NOW())
        RETURNING *`,
-      [tipo, titulo, codigoVerificacion, categoriaFirma, req.user.id]
+      [
+        tipo,
+        titulo,
+        codigoVerificacion,
+        categoriaFirma,
+        req.user.id,
+        req.user.company_id,
+      ]
     );
 
     const documento = docResult.rows[0];
@@ -254,13 +350,20 @@ router.post("/crear-flujo", requireAuth, async (req, res) => {
       status: documento.estado,
       owner_id: documento.creado_por,
       verification_code: documento.codigo_verificacion,
+      company_id: documento.company_id,
     });
 
     for (const [index, f] of firmantes.entries()) {
       await db.query(
         `INSERT INTO firmantes (
-           documento_id, nombre, email, rut, rol, orden_firma, 
-           created_at, updated_at
+           documento_id,
+           nombre,
+           email,
+           rut,
+           rol,
+           orden_firma,
+           created_at,
+           updated_at
          )
          VALUES ($1, $2, $3, $4, $5, $6, NOW(), NOW())`,
         [
@@ -276,7 +379,10 @@ router.post("/crear-flujo", requireAuth, async (req, res) => {
 
     await db.query(
       `INSERT INTO eventos_firma (
-         documento_id, tipo_evento, metadata, created_at
+         documento_id,
+         tipo_evento,
+         metadata,
+         created_at
        )
        VALUES ($1, 'CREADO', $2, NOW())`,
       [
@@ -304,7 +410,11 @@ router.post("/firmar-flujo/:firmanteId", async (req, res) => {
 
   try {
     const firmanteRes = await db.query(
-      `SELECT f.*, d.id AS documento_id, d.estado AS documento_estado, d.titulo
+      `SELECT
+         f.*,
+         d.id     AS documento_id,
+         d.estado AS documento_estado,
+         d.titulo
        FROM firmantes f
        JOIN documentos d ON d.id = f.documento_id
        WHERE f.id = $1`,
@@ -354,7 +464,13 @@ router.post("/firmar-flujo/:firmanteId", async (req, res) => {
 
     await db.query(
       `INSERT INTO eventos_firma (
-         documento_id, firmante_id, tipo_evento, ip, user_agent, metadata, created_at
+         documento_id,
+         firmante_id,
+         tipo_evento,
+         ip,
+         user_agent,
+         metadata,
+         created_at
        )
        VALUES ($1, $2, 'FIRMADO', $3, $4, $5, NOW())`,
       [
@@ -367,7 +483,7 @@ router.post("/firmar-flujo/:firmanteId", async (req, res) => {
     );
 
     const countRes = await db.query(
-      `SELECT 
+      `SELECT
          COUNT(*) FILTER (WHERE estado = 'FIRMADO') AS firmados,
          COUNT(*) AS total
        FROM firmantes
@@ -376,7 +492,9 @@ router.post("/firmar-flujo/:firmanteId", async (req, res) => {
     );
 
     const { firmados, total } = countRes.rows[0];
-    const allSigned = Number(firmados) >= Number(total);
+    const firmadosNum = Number(firmados);
+    const totalNum = Number(total);
+    const allSigned = firmadosNum >= totalNum;
 
     if (allSigned) {
       await db.query(
@@ -389,15 +507,18 @@ router.post("/firmar-flujo/:firmanteId", async (req, res) => {
 
       await db.query(
         `INSERT INTO eventos_firma (
-           documento_id, tipo_evento, metadata, created_at
+           documento_id,
+           tipo_evento,
+           metadata,
+           created_at
          )
          VALUES ($1, 'DOCUMENTO_FIRMADO_COMPLETO', $2, NOW())`,
         [
           firmante.documento_id,
           JSON.stringify({
             descripcion: "Todos los firmantes han firmado",
-            firmados: Number(firmados),
-            total: Number(total),
+            firmados: firmadosNum,
+            total: totalNum,
           }),
         ]
       );
@@ -411,8 +532,7 @@ router.post("/firmar-flujo/:firmanteId", async (req, res) => {
         : "Firma registrada. Faltan firmantes",
       documentoId: firmante.documento_id,
       allSigned,
-      progress:
-        ((Number(firmados) / Number(total)) * 100).toFixed(1) + "%",
+      progress: ((firmadosNum / totalNum) * 100).toFixed(1) + "%",
     });
   } catch (error) {
     await db.query("ROLLBACK");
@@ -429,12 +549,17 @@ router.post("/firmar-flujo/:firmanteId", async (req, res) => {
 
 router.get("/:id/pdf", documentsController.getDocumentPdf);
 router.get("/:id/timeline", documentsController.getTimeline);
-router.get("/:id/signers", requireAuth, documentsController.getSigners);
+router.get(
+  "/:id/signers",
+  requireAuth,
+  checkDocumentCompanyScope,
+  documentsController.getSigners
+);
 router.get("/:id/download", documentsController.downloadDocument);
 router.get(
   "/:id/reporte",
   requireAuth,
-  checkDocumentOwnership,
+  checkDocumentCompanyScope,
   documentsController.downloadReportPdf
 );
 
@@ -445,43 +570,45 @@ router.get(
 router.post(
   "/:id/firmar",
   requireAuth,
-  checkDocumentOwnership,
+  checkDocumentCompanyScope,
   logAuditAction,
   documentsController.signDocument
 );
+
 router.post(
   "/:id/visar",
   requireAuth,
-  checkDocumentOwnership,
+  checkDocumentCompanyScope,
   logAuditAction,
   documentsController.visarDocument
 );
+
 router.post(
   "/:id/rechazar",
   requireAuth,
-  checkDocumentOwnership,
+  checkDocumentCompanyScope,
   logAuditAction,
   documentsController.rejectDocument
 );
+
 router.post(
   "/:id/reenviar",
   requireAuth,
-  checkDocumentOwnership,
+  checkDocumentCompanyScope,
   documentsController.resendReminder
 );
 
 router.post(
   "/:id/recordatorio",
   requireAuth,
-  checkDocumentOwnership,
+  checkDocumentCompanyScope,
   async (req, res) => {
     try {
       const { id } = req.params;
-
       const { enviarRecordatorioManual } =
         require("../services/reminderService");
-      const result = await enviarRecordatorioManual(id);
 
+      const result = await enviarRecordatorioManual(id);
       return res.json(result);
     } catch (err) {
       console.error("❌ Error enviando recordatorio:", err);

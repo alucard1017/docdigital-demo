@@ -7,7 +7,7 @@ export function UserForm({ API_URL, token, user, onClose, onSaved }) {
     name: "",
     email: "",
     plan: "basic",
-    role: "admin",
+    role: "ADMIN",
     active: true,
     password: "",
   });
@@ -22,7 +22,7 @@ export function UserForm({ API_URL, token, user, onClose, onSaved }) {
         name: user.name || "",
         email: user.email || "",
         plan: user.plan || "basic",
-        role: user.role || "admin",
+        role: user.role || "ADMIN",
         active: typeof user.active === "boolean" ? user.active : true,
         password: "",
       }));
@@ -58,10 +58,7 @@ export function UserForm({ API_URL, token, user, onClose, onSaved }) {
         active: form.active,
       };
 
-      if (!isEdit && form.password) {
-        payload.password = form.password;
-      }
-      if (isEdit && form.password) {
+      if (form.password) {
         payload.password = form.password;
       }
 
@@ -167,9 +164,10 @@ export function UserForm({ API_URL, token, user, onClose, onSaved }) {
               onChange={handleChange}
               className="form-input"
             >
-              <option value="admin">Admin</option>
-              <option value="admin_global">Admin global</option>
-              <option value="user">Usuario</option>
+              <option value="USER">Usuario</option>
+              <option value="ADMIN">Admin</option>
+              <option value="ADMIN_GLOBAL">Admin global</option>
+              <option value="SUPER_ADMIN">Super admin</option>
             </select>
           </label>
 

@@ -5,4 +5,5 @@ module.exports = {
   ...require('./signing'),
   ...require('./reminders'),
   ...require('./report'),
+  ...require('./stats'),
 };

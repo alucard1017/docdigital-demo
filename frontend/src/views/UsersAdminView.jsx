@@ -62,6 +62,7 @@ export function UsersAdminView({ API_URL, token }) {
   useEffect(() => {
     cargarUsuarios();
     cargarStats();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [token, roleFilter]);
 
   function handleNewUser() {
@@ -230,9 +231,10 @@ export function UsersAdminView({ API_URL, token }) {
             }}
           >
             <option value="todos">Todos</option>
-            <option value="admin">Admin</option>
-            <option value="admin_global">Admin global</option>
-            <option value="user">Usuario</option>
+            <option value="SUPER_ADMIN">Super admin</option>
+            <option value="ADMIN_GLOBAL">Admin global</option>
+            <option value="ADMIN">Admin</option>
+            <option value="USER">Usuario</option>
           </select>
         </label>
       </div>
@@ -271,46 +273,65 @@ export function UsersAdminView({ API_URL, token }) {
               </tr>
             </thead>
             <tbody>
-              {users.map((u) => (
-                <tr key={u.id}>
-                  <td>{u.run || "-"}</td>
-                  <td>{u.name || "-"}</td>
-                  <td>{u.email}</td>
-                  <td className="col-role">{u.role || "usuario"}</td>
-                  <td className="col-plan">{u.plan || "-"}</td>
-                  <td style={{ textAlign: "center" }}>
-                    <button
-                      type="button"
-                      onClick={() => toggleActive(u)}
-                      className="btn-pill"
-                      style={
-                        u.active
-                          ? {
-                              background: "#f0fdf4",
-                              color: "#15803d",
-                              border: "1px solid #bbf7d0",
-                            }
-                          : {
-                              background: "#f9fafb",
-                              color: "#64748b",
-                              border: "1px solid #e5e7eb",
-                            }
-                      }
-                    >
-                      {u.active ? "ACTIVO" : "INACTIVO"}
-                    </button>
-                  </td>
-                  <td style={{ textAlign: "right" }}>
-                    <button
-                      type="button"
-                      className="btn-link"
-                      onClick={() => handleEditUser(u)}
-                    >
-                      Editar
-                    </button>
-                  </td>
-                </tr>
-              ))}
+              {users.map((u) => {
+                const isInactive = u.active === false;
+
+                return (
+                  <tr
+                    key={u.id}
+                    className={isInactive ? "row-inactive" : ""}
+                    style={
+                      isInactive
+                        ? { opacity: 0.6, backgroundColor: "#f9fafb" }
+                        : {}
+                    }
+                  >
+                    <td>{u.run || "-"}</td>
+                    <td>{u.name || "-"}</td>
+                    <td>{u.email || "-"}</td>
+                    <td className="col-role">
+                      <span
+                        className="badge-role"
+                        data-role={u.role || "USER"}
+                      >
+                        {u.role || "USER"}
+                      </span>
+                    </td>
+                    <td className="col-plan">{u.plan || "-"}</td>
+                    <td style={{ textAlign: "center" }}>
+                      <button
+                        type="button"
+                        onClick={() => toggleActive(u)}
+                        className="btn-pill"
+                        style={
+                          u.active
+                            ? {
+                                background: "#f0fdf4",
+                                color: "#15803d",
+                                border: "1px solid #bbf7d0",
+                              }
+                            : {
+                                background: "#f9fafb",
+                                color: "#6b7280",
+                                border: "1px solid #e5e7eb",
+                              }
+                        }
+                      >
+                        {u.active ? "ACTIVO" : "INACTIVO"}
+                      </button>
+                    </td>
+                    <td style={{ textAlign: "right" }}>
+                      <button
+                        type="button"
+                        className="btn-link"
+                        onClick={() => handleEditUser(u)}
+                      >
+                        Editar
+                      </button>
+                    </td>
+                  </tr>
+                );
+              })}
             </tbody>
           </table>
         </div>

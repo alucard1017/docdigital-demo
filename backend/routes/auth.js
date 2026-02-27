@@ -6,11 +6,11 @@ const Sentry = require('@sentry/node');
 
 const router = express.Router();
 
-// JWT_SECRET: obligatorio en prod
+// JWT_SECRET obligatorio en producción
 const JWT_SECRET = process.env.JWT_SECRET;
 if (!JWT_SECRET) {
   console.error('❌ JWT_SECRET no está definido en variables de entorno');
-  // En prod podrías hacer: process.exit(1);
+  // En producción podrías hacer: process.exit(1);
 }
 
 // Normalizar RUN: quitar puntos y guiones
@@ -34,6 +34,7 @@ function requireAuth(req, res, next) {
     const payload = jwt.verify(token, JWT_SECRET);
     req.user = payload;
 
+    // Contexto en Sentry
     Sentry.setUser({
       id: String(payload.id),
       username: payload.name || undefined,
@@ -51,8 +52,11 @@ function requireAuth(req, res, next) {
 
 /**
  * Middleware de autorización por rol
+ *
  * - SUPER_ADMIN siempre pasa.
- * - El resto debe tener exactamente el rol requerido.
+ * - ADMIN_GLOBAL pasa para rutas marcadas como ADMIN_GLOBAL o ADMIN.
+ * - ADMIN solo pasa cuando se exige exactamente ADMIN.
+ * - USER no pasa por este middleware.
  */
 function requireRole(requiredRole) {
   return function (req, res, next) {
@@ -67,6 +71,22 @@ function requireRole(requiredRole) {
       return next();
     }
 
+    // Escalera de permisos
+    if (requiredRole === 'ADMIN_GLOBAL') {
+      if (role !== 'ADMIN_GLOBAL') {
+        return res.status(403).json({ message: 'Permisos insuficientes' });
+      }
+      return next();
+    }
+
+    if (requiredRole === 'ADMIN') {
+      if (role !== 'ADMIN' && role !== 'ADMIN_GLOBAL') {
+        return res.status(403).json({ message: 'Permisos insuficientes' });
+      }
+      return next();
+    }
+
+    // Para otros casos futuros
     if (role !== requiredRole) {
       return res.status(403).json({ message: 'Permisos insuficientes' });
     }
@@ -113,47 +133,37 @@ router.post('/login', async (req, res, next) => {
       return res.status(401).json({ message: 'Credenciales inválidas' });
     }
 
-    // Bloquear usuarios inactivos (active = false)
+    // Bloquear usuarios inactivos
     if (user.active === false) {
       return res
         .status(401)
         .json({ message: 'Cuenta desactivada, contacta al administrador' });
     }
 
-    // Fallback temporal: usa password_hash, y si no hay, usa password legacy
-    const hash = user.password_hash || user.password;
-    if (!hash) {
+    // Solo password_hash (legacy password eliminado en BD)
+    if (!user.password_hash) {
       return res.status(401).json({ message: 'Credenciales inválidas' });
     }
 
-    const ok = bcrypt.compareSync(password, hash);
+    const ok = bcrypt.compareSync(password, user.password_hash);
     if (!ok) {
       return res.status(401).json({ message: 'Credenciales inválidas' });
     }
 
-    const token = jwt.sign(
-      {
-        id: user.id,
-        run: user.run,
-        email: user.email,
-        name: user.name,
-        role: user.role,
-        company_id: user.company_id,
-      },
-      JWT_SECRET,
-      { expiresIn: '8h' }
-    );
+    const tokenPayload = {
+      id: user.id,
+      run: user.run,
+      email: user.email,
+      name: user.name,
+      role: user.role,
+      company_id: user.company_id,
+    };
+
+    const token = jwt.sign(tokenPayload, JWT_SECRET, { expiresIn: '8h' });
 
     return res.json({
       token,
-      user: {
-        id: user.id,
-        run: user.run,
-        email: user.email,
-        name: user.name,
-        role: user.role,
-        company_id: user.company_id,
-      },
+      user: tokenPayload,
     });
   } catch (err) {
     return next(err);

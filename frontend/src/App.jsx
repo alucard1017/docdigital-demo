@@ -15,6 +15,29 @@ import { VerificationView } from "./views/VerificationView";
 const API_URL = API_BASE_URL;
 
 /**
+ * Helpers de rol
+ */
+function isSuperAdmin(user) {
+  return user?.role === "SUPER_ADMIN";
+}
+
+function isGlobalAdmin(user) {
+  return user?.role === "ADMIN_GLOBAL";
+}
+
+function isCompanyAdmin(user) {
+  return user?.role === "ADMIN";
+}
+
+function isAnyAdmin(user) {
+  return (
+    isSuperAdmin(user) ||
+    isGlobalAdmin(user) ||
+    isCompanyAdmin(user)
+  );
+}
+
+/**
  * Formatea RUN con puntos y guion: 10.538.065-6
  */
 function formatRun(value) {
@@ -51,66 +74,54 @@ function App() {
      ESTADOS DE LA APLICACIÓN
      =============================== */
 
-  // Login: identifier (RUN o correo), guardamos valor crudo
   const [identifier, setIdentifier] = useState("");
   const [password, setPassword] = useState("");
-
-  // Modo del campo RUN / CORREO
   const [isEmailMode, setIsEmailMode] = useState(false);
 
-  // UI
   const [showPassword, setShowPassword] = useState(false);
   const [showHelp, setShowHelp] = useState(false);
   const [message, setMessage] = useState("");
   const [isLoggingIn, setIsLoggingIn] = useState(false);
-  // 'list' | 'upload' | 'detail' | 'public-sign' | 'dashboard' | 'users'
+  // 'list' | 'upload' | 'detail' | 'public-sign' | 'dashboard' | 'users' | 'verification'
   const [view, setView] = useState("list");
 
-  // Errores del formulario de subida
   const [formErrors, setFormErrors] = useState({});
   const [tipoTramite, setTipoTramite] = useState("propio");
 
-  // Sesión
   const [token, setToken] = useState(localStorage.getItem("token") || "");
   const [user, setUser] = useState(
-    JSON.parse(localStorage.getItem("user"))
+    JSON.parse(localStorage.getItem("user") || "null")
   );
+
   const [loadingDocs, setLoadingDocs] = useState(false);
   const [errorDocs, setErrorDocs] = useState("");
   const [docs, setDocs] = useState([]);
 
-  // Configuración de firma
   const [showVisador, setShowVisador] = useState(false);
   const [extraSigners, setExtraSigners] = useState([]);
 
-  // Orden y filtros de la bandeja
   const [sort, setSort] = useState("title_asc");
   const [statusFilter, setStatusFilter] = useState("TODOS");
   const [search, setSearch] = useState("");
 
-  // Paginación
   const [page, setPage] = useState(1);
   const pageSize = 20;
 
-  // Documento seleccionado para la vista detalle
   const [selectedDoc, setSelectedDoc] = useState(null);
   const [events, setEvents] = useState([]);
-
-  // URL firmada del PDF del documento en detalle
   const [pdfUrl, setPdfUrl] = useState(null);
 
-  // Firma pública por token
   const [publicSignDoc, setPublicSignDoc] = useState(null);
   const [publicSignError, setPublicSignError] = useState("");
   const [publicSignLoading, setPublicSignLoading] = useState(false);
   const [publicSignToken, setPublicSignToken] = useState("");
   const [publicSignPdfUrl, setPublicSignPdfUrl] = useState("");
-  const [publicSignMode, setPublicSignMode] = useState(null); // "visado" o null
+  const [publicSignMode, setPublicSignMode] = useState(null);
 
   const [firmanteRunValue, setFirmanteRunValue] = useState("");
   const [empresaRutValue, setEmpresaRutValue] = useState("");
 
-  async function cargarFirmaPublica(token) {
+  async function cargarFirmaPublica(tokenParam) {
     try {
       setPublicSignLoading(true);
       setPublicSignError("");
@@ -124,8 +135,8 @@ function App() {
 
       const path =
         isVisado || isConsultaPublica
-          ? `/api/public/docs/document/${token}`
-          : `/api/public/docs/${token}`;
+          ? `/api/public/docs/document/${tokenParam}`
+          : `/api/public/docs/${tokenParam}`;
 
       const res = await fetch(`${API_URL}${path}`);
       const data = await res.json();
@@ -241,7 +252,7 @@ function App() {
     const isEmail = isEmailMode || identifier.includes("@");
     const value = isEmail
       ? identifier.trim()
-      : identifier.replace(/[^0-9kK]/g, ""); // RUN normalizado sin puntos/guion
+      : identifier.replace(/[^0-9kK]/g, "");
 
     try {
       const res = await fetch(`${API_URL}/api/auth/login`, {
@@ -416,7 +427,6 @@ function App() {
      VISTA LOGIN
      =============================== */
   if (!token) {
-    // Mostrar formateado solo si estamos en modo RUN; si es correo, tal cual
     const displayIdentifier =
       isEmailMode || identifier.includes("@")
         ? identifier
@@ -426,12 +436,10 @@ function App() {
       <LoginView
         identifier={displayIdentifier}
         setIdentifier={(value) => {
-          // Si el usuario escribe alguna letra o @, pasamos a modo correo
           if (/[a-zA-Z]/.test(value) || value.includes("@")) {
             setIsEmailMode(true);
             setIdentifier(value);
           } else {
-            // Modo RUN: solo números y K/k
             setIsEmailMode(false);
             const clean = value.replace(/[^0-9kK]/g, "");
             setIdentifier(clean);
@@ -552,6 +560,7 @@ function App() {
         statusFilter={statusFilter}
         setStatusFilter={setStatusFilter}
         logout={logout}
+        isAnyAdmin={isAnyAdmin(user)}
       />
 
       <div className="content-body">
@@ -579,7 +588,6 @@ function App() {
 
         {view === "list" && (
           <>
-            {/* Hero superior */}
             <div className="hero-dashboard">
               <div className="hero-dashboard-inner">
                 <h1 className="hero-dashboard-title">
@@ -614,36 +622,6 @@ function App() {
                   </button>
                 </div>
               </div>
-            </div>
-
-            {/* Resumen rápido (oculto) */}
-            <div
-              style={{
-                display: "none",
-                minWidth: 200,
-                height: 130,
-                borderRadius: 18,
-                border: "1px solid rgba(148, 163, 184, 0.25)",
-                background:
-                  "radial-gradient(circle at 0 0, rgba(56, 189, 248, 0.25), transparent 55%), radial-gradient(circle at 100% 100%, rgba(129, 140, 248, 0.18), transparent 55%)",
-                padding: 14,
-              }}
-            >
-              <p
-                style={{
-                  fontSize: "0.8rem",
-                  color: "#e5e7eb",
-                  marginBottom: 8,
-                  fontWeight: 600,
-                }}
-              >
-                Resumen rápido
-              </p>
-              <p style={{ fontSize: "0.8rem", color: "#cbd5f5" }}>
-                Próximo paso: conecta tu dominio{" "}
-                <span style={{ color: "#a5b4fc" }}>app.verifirma.cl</span> y
-                completa tu primer flujo de firma real.
-              </p>
             </div>
 
             {loadingDocs ? (
@@ -835,11 +813,11 @@ function App() {
           />
         )}
 
-        {view === "users" && (
+        {view === "users" && isAnyAdmin(user) && (
           <UsersAdminView API_URL={API_URL} token={token} />
         )}
 
-        {view === "dashboard" && (
+        {view === "dashboard" && isAnyAdmin(user) && (
           <DashboardView docs={docs} user={user} />
         )}
 

@@ -10,15 +10,12 @@ export function Sidebar({
   statusFilter,
   setStatusFilter,
   logout,
+  isAnyAdmin, // viene desde App.jsx
 }) {
+  // Si quieres mantener al OWNER fijo por RUN/ID, puedes seguir usándolo,
+  // pero ya no dependemos de role en minúsculas.
   const OWNER_ID = 7; // ajusta si cambia en tu base de datos
-
-  // Consideramos admin_global y SUPER_ADMIN como administradores globales
   const isOwner = user?.id === OWNER_ID;
-  const isGlobalAdmin =
-    user?.role === "admin_global" || user?.role === "SUPER_ADMIN";
-
-  const showUsersMenu = isOwner || isGlobalAdmin;
 
   const handleChangeView = (nextView) => {
     setView(nextView);
@@ -27,6 +24,8 @@ export function Sidebar({
   const handleStatusFilter = (filter) => {
     setStatusFilter(filter);
   };
+
+  const showAdminSection = isOwner || isAnyAdmin;
 
   return (
     <aside className="sidebar">
@@ -50,7 +49,7 @@ export function Sidebar({
           {user?.email || "usuario@correo.com"}
         </div>
         <div style={{ opacity: 0.7 }}>
-          Rol: {user?.role || "FIRMANTE"}
+          Rol: {user?.role || "USER"}
         </div>
       </div>
 
@@ -151,15 +150,17 @@ export function Sidebar({
         <span>📊</span> Analytics
       </div>
 
-      <div
-        className={`nav-item ${view === "dashboard" ? "active" : ""}`}
-        onClick={() => handleChangeView("dashboard")}
-      >
-        <span>📈</span> Dashboard
-      </div>
+      {isAnyAdmin && (
+        <div
+          className={`nav-item ${view === "dashboard" ? "active" : ""}`}
+          onClick={() => handleChangeView("dashboard")}
+        >
+          <span>📈</span> Dashboard
+        </div>
+      )}
 
       {/* Sección Administración */}
-      {showUsersMenu && (
+      {showAdminSection && (
         <>
           <h3
             style={{
