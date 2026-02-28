@@ -1,3 +1,4 @@
+// src/views/DashboardView.jsx
 import React, { useEffect, useState } from "react";
 import {
   BarChart,
@@ -14,14 +15,11 @@ import {
   Legend,
   ResponsiveContainer,
 } from "recharts";
+import { API_BASE_URL } from "../constants";
 
 const COLORS = ["#4f46e5", "#22c55e", "#f97316", "#ef4444", "#0ea5e9", "#a855f7"];
 
-/**
- * Dashboard de VeriFirma.
- * Consume /api/docs/stats (backend multi-tenant).
- */
-export function DashboardView({ user, token, apiUrl }) {
+export function DashboardView({ user, token }) {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
   const [kpis, setKpis] = useState({
@@ -34,8 +32,10 @@ export function DashboardView({ user, token, apiUrl }) {
   const [perDayData, setPerDayData] = useState([]);
   const [tipoTramiteData, setTipoTramiteData] = useState([]);
 
+  const apiUrl = API_BASE_URL;
+
   // nombre a mostrar (con override para ti)
-  const rawName = user?.name || user?.fullName || "usuario";
+  const rawName = user?.name || user?.fullName || "Usuario";
   const isJean =
     user &&
     (user.email === "tu-correo@loqueuses.com" || user.name === "Jean");
@@ -44,7 +44,7 @@ export function DashboardView({ user, token, apiUrl }) {
   useEffect(() => {
     if (!token) return;
 
-    const fetchStats = async () => {
+    async function fetchStats() {
       try {
         setLoading(true);
         setError("");
@@ -92,17 +92,17 @@ export function DashboardView({ user, token, apiUrl }) {
 
         setTipoTramiteData(
           (data.porTipoTramite || []).map((t) => ({
-            name: t.tipo_tramite,
+            name: t.tipo_tramite || "Sin tipo",
             value: Number(t.count || 0),
           }))
         );
       } catch (err) {
         console.error("Error cargando stats:", err);
-        setError(err.message);
+        setError(err.message || "Error al cargar estadísticas");
       } finally {
         setLoading(false);
       }
-    };
+    }
 
     fetchStats();
   }, [token, apiUrl]);
@@ -123,9 +123,10 @@ export function DashboardView({ user, token, apiUrl }) {
             margin: 0,
             fontSize: "1.6rem",
             color: "#0f172a",
+            letterSpacing: "-0.02em",
           }}
         >
-          📊 Dashboard
+          📊 Dashboard de actividad
         </h1>
         <p
           style={{
@@ -134,8 +135,8 @@ export function DashboardView({ user, token, apiUrl }) {
             color: "#64748b",
           }}
         >
-          Hola {displayName}, aquí ves un resumen visual de tus trámites
-          recientes.
+          Hola <strong>{displayName}</strong>, aquí ves un resumen visual de tus
+          trámites recientes y su estado.
         </p>
       </div>
 
@@ -155,13 +156,14 @@ export function DashboardView({ user, token, apiUrl }) {
             padding: 40,
             textAlign: "center",
             color: "#b91c1c",
+            fontWeight: 600,
           }}
         >
           {error}
         </div>
       ) : (
         <>
-          {/* KPIs */}
+          {/* KPIs principales */}
           <div
             style={{
               display: "flex",

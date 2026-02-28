@@ -14,9 +14,7 @@ import { VerificationView } from "./views/VerificationView";
 
 const API_URL = API_BASE_URL;
 
-/**
- * Helpers de rol
- */
+/* ==== Helpers de rol ==== */
 function isSuperAdmin(user) {
   return user?.role === "SUPER_ADMIN";
 }
@@ -30,16 +28,10 @@ function isCompanyAdmin(user) {
 }
 
 function isAnyAdmin(user) {
-  return (
-    isSuperAdmin(user) ||
-    isGlobalAdmin(user) ||
-    isCompanyAdmin(user)
-  );
+  return isSuperAdmin(user) || isGlobalAdmin(user) || isCompanyAdmin(user);
 }
 
-/**
- * Formatea RUN con puntos y guion: 10.538.065-6
- */
+/* ==== Helpers RUN ==== */
 function formatRun(value) {
   let clean = (value || "").replace(/[^0-9kK]/g, "");
   if (!clean) return "";
@@ -58,12 +50,10 @@ function formatRunDoc(value) {
   let clean = (value || "").replace(/[^0-9kK]/g, "");
   if (clean.length === 0) return "";
   if (clean.length > 10) clean = clean.slice(0, 10);
-
   if (clean.length <= 1) return clean;
 
   const body = clean.slice(0, -1);
   const dv = clean.slice(-1);
-
   if (!body) return dv;
 
   return body.replace(/\B(?=(\d{3})+(?!\d))/g, ".") + "-" + dv;
@@ -82,6 +72,7 @@ function App() {
   const [showHelp, setShowHelp] = useState(false);
   const [message, setMessage] = useState("");
   const [isLoggingIn, setIsLoggingIn] = useState(false);
+
   // 'list' | 'upload' | 'detail' | 'public-sign' | 'dashboard' | 'users' | 'verification'
   const [view, setView] = useState("list");
 
@@ -120,6 +111,10 @@ function App() {
 
   const [firmanteRunValue, setFirmanteRunValue] = useState("");
   const [empresaRutValue, setEmpresaRutValue] = useState("");
+
+  /* ===============================
+     FIRMA / VISADO PÚBLICO
+     =============================== */
 
   async function cargarFirmaPublica(tokenParam) {
     try {
@@ -161,7 +156,6 @@ function App() {
     }
   }
 
-  // Detectar ?token= y mode= en la URL para firma/consulta pública
   useEffect(() => {
     const params = new URLSearchParams(window.location.search);
     const tokenUrl = params.get("token");
@@ -179,7 +173,10 @@ function App() {
     }
   }, []);
 
-  // Cargar eventos del documento seleccionado
+  /* ===============================
+     TIMELINE + PDF DEL DETALLE
+     =============================== */
+
   useEffect(() => {
     async function cargarEventos() {
       if (!token || !selectedDoc) return;
@@ -204,7 +201,6 @@ function App() {
     }
   }, [token, selectedDoc, view]);
 
-  // Cargar URL firmada del PDF
   useEffect(() => {
     if (!token || !selectedDoc) {
       setPdfUrl(null);
@@ -230,61 +226,16 @@ function App() {
     fetchPdfUrl();
   }, [token, selectedDoc]);
 
-  // Cargar documentos
+  /* ===============================
+     CARGA DE DOCUMENTOS
+     =============================== */
+
   useEffect(() => {
     if (!token) return;
     if (view !== "list") return;
     cargarDocs();
   }, [token, view, sort]);
 
-  const handleTestError = () => {
-    throw new Error("Frontend test error");
-  };
-
-  /* ===============================
-     LOGIN
-     =============================== */
-  async function handleLogin(e) {
-    e.preventDefault();
-    setIsLoggingIn(true);
-    setMessage("🚀 Conectando con el servidor seguro...");
-
-    const isEmail = isEmailMode || identifier.includes("@");
-    const value = isEmail
-      ? identifier.trim()
-      : identifier.replace(/[^0-9kK]/g, "");
-
-    try {
-      const res = await fetch(`${API_URL}/api/auth/login`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ identifier: value, password }),
-      });
-
-      const data = await res.json();
-
-      if (!res.ok) {
-        throw new Error(data.message || "Credenciales no válidas");
-      }
-
-      setToken(data.token);
-      setUser(data.user);
-      localStorage.setItem("token", data.token);
-      localStorage.setItem("user", JSON.stringify(data.user));
-      setMessage("✅ Acceso concedido");
-    } catch (err) {
-      console.error("Error en login:", err);
-      setMessage(
-        "❌ Error de conexión, intenta nuevamente en unos segundos."
-      );
-    } finally {
-      setIsLoggingIn(false);
-    }
-  }
-
-  /* ===============================
-     CARGA DE DOCUMENTOS
-     =============================== */
   async function cargarDocs(sortParam = sort) {
     if (!token) return;
     setLoadingDocs(true);
@@ -325,8 +276,51 @@ function App() {
   }
 
   /* ===============================
-     ACCIONES: FIRMAR / VISAR / VER
+     LOGIN
      =============================== */
+
+  async function handleLogin(e) {
+    e.preventDefault();
+    setIsLoggingIn(true);
+    setMessage("🚀 Conectando con el servidor seguro...");
+
+    const isEmail = isEmailMode || identifier.includes("@");
+    const value = isEmail
+      ? identifier.trim()
+      : identifier.replace(/[^0-9kK]/g, "");
+
+    try {
+      const res = await fetch(`${API_URL}/api/auth/login`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ identifier: value, password }),
+      });
+
+      const data = await res.json();
+
+      if (!res.ok) {
+        throw new Error(data.message || "Credenciales no válidas");
+      }
+
+      setToken(data.token);
+      setUser(data.user);
+      localStorage.setItem("token", data.token);
+      localStorage.setItem("user", JSON.stringify(data.user));
+      setMessage("✅ Acceso concedido");
+    } catch (err) {
+      console.error("Error en login:", err);
+      setMessage(
+        "❌ Error de conexión, intenta nuevamente en unos segundos."
+      );
+    } finally {
+      setIsLoggingIn(false);
+    }
+  }
+
+  /* ===============================
+     ACCIONES: FIRMAR / VISAR / RECHAZAR
+     =============================== */
+
   async function manejarAccionDocumento(id, accion, extraData = {}) {
     if (accion === "ver") {
       const doc = docs.find((d) => d.id === id);
@@ -397,9 +391,14 @@ function App() {
     window.location.reload();
   };
 
-  // ===============================
-  // VISTA FIRMA / VISADO PÚBLICO POR TOKEN
-  // ===============================
+  const handleTestError = () => {
+    throw new Error("Frontend test error");
+  };
+
+  /* ===============================
+     RUTAS PÚBLICAS SIN LOGIN
+     =============================== */
+
   if (view === "public-sign") {
     return (
       <PublicSignView
@@ -415,17 +414,15 @@ function App() {
     );
   }
 
-  // ===============================
-  // VISTA VERIFICACIÓN PÚBLICA (SIN LOGIN)
-  // ===============================
   const isVerificationPublic = window.location.pathname === "/verificar";
   if (isVerificationPublic) {
     return <VerificationView API_URL={API_URL} />;
   }
 
   /* ===============================
-     VISTA LOGIN
+     LOGIN VIEW
      =============================== */
+
   if (!token) {
     const displayIdentifier =
       isEmailMode || identifier.includes("@")
@@ -459,8 +456,9 @@ function App() {
   }
 
   /* ===============================
-     VISTA DETALLE DE DOCUMENTO
+     DETAIL VIEW
      =============================== */
+
   if (view === "detail" && selectedDoc) {
     const requiereVisado = selectedDoc.requires_visado === true;
 
@@ -489,13 +487,15 @@ function App() {
         setSelectedDoc={setSelectedDoc}
         logout={logout}
         token={token}
+        currentUser={user}
       />
     );
   }
 
   /* ===============================
-     FILTRO EN MEMORIA PARA LA BANDEJA
+     FILTRO Y PAGINACIÓN
      =============================== */
+
   const docsFiltrados = docs.filter((d) => {
     const esPendiente =
       d.status === DOC_STATUS.PENDIENTE ||
@@ -549,6 +549,7 @@ function App() {
   /* ===============================
      LAYOUT PRINCIPAL
      =============================== */
+
   return (
     <div className="dashboard-layout">
       <Sidebar
@@ -614,7 +615,7 @@ function App() {
                     style={{
                       backgroundColor: "#020617",
                       color: "#e5e7eb",
-                      border: "1px solid #1e293b",
+                      border: "1px solid "#1e293b",
                       paddingInline: 22,
                     }}
                   >
@@ -721,13 +722,12 @@ function App() {
                     <thead>
                       <tr>
                         <th>N° de contrato</th>
-                        <th>Título del Documento</th>
+                        <th>Título del documento</th>
                         <th>Tipo de trámite</th>
-                        <th>Fecha de creación</th>
                         <th style={{ textAlign: "center" }}>
-                          Estado Actual
+                          Estado actual
                         </th>
-                        <th>Firmante Final</th>
+                        <th>Firmante final</th>
                         <th style={{ textAlign: "center" }}>Acciones</th>
                       </tr>
                     </thead>
@@ -818,7 +818,7 @@ function App() {
         )}
 
         {view === "dashboard" && isAnyAdmin(user) && (
-          <DashboardView docs={docs} user={user} />
+          <DashboardView user={user} token={token} />
         )}
 
         {view === "verification" && (
@@ -826,9 +826,7 @@ function App() {
         )}
 
         {import.meta.env.MODE !== "production" ? (
-          <button onClick={handleTestError}>
-            Probar error Sentry
-          </button>
+          <button onClick={handleTestError}>Probar error Sentry</button>
         ) : null}
       </div>
     </div>

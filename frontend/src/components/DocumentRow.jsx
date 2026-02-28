@@ -7,13 +7,13 @@ const API_URL = API_BASE_URL;
 function getTramiteLabel(value) {
   if (value === "notaria") return "Notaría";
   if (value === "propio") return "Propio";
-  return "N/D";
+  return "Otro";
 }
 
 function getDocumentoLabel(value) {
-  if (value === "poderes") return "Poderes y autorizaciones";
-  if (value === "contratos") return "Solo contratos";
-  return "N/D";
+  if (value === "poderes") return "Poderes";
+  if (value === "contratos") return "Contratos";
+  return "Otro";
 }
 
 const STATUS_LABELS = {
@@ -69,8 +69,7 @@ export function DocumentRow({ doc, onOpenDetail, token }) {
       })
     : "-";
 
-  const estadoLabel =
-    STATUS_LABELS[doc.status] || doc.status || "Sin estado";
+  const estadoLabel = STATUS_LABELS[doc.status] || doc.status || "Sin estado";
   const estadoColor = STATUS_COLORS[doc.status] || "#6b7280";
 
   const handleVerPdf = async () => {
@@ -100,14 +99,19 @@ export function DocumentRow({ doc, onOpenDetail, token }) {
   };
 
   return (
-    <tr onClick={() => onOpenDetail(doc)}>
+    <tr className="doc-row" onClick={() => onOpenDetail(doc)}>
       {/* N° interno de contrato */}
       <td className="doc-cell-id">
         {doc.numero_contrato_interno || `#${doc.id}`}
       </td>
 
-      {/* Título */}
-      <td className="doc-cell-title">{doc.title || "Sin título"}</td>
+      {/* Título + fecha */}
+      <td className="doc-cell-title">
+        <div className="doc-title-main">
+          {doc.title || "Sin título"}
+        </div>
+        <div className="doc-title-sub">{formattedFecha}</div>
+      </td>
 
       {/* Tipo de trámite + tipo de documento */}
       <td>
@@ -118,15 +122,12 @@ export function DocumentRow({ doc, onOpenDetail, token }) {
             color: chipTextColor,
           }}
         >
-          {labelTramite} – {labelDoc}
+          {labelTramite} · {labelDoc}
         </span>
       </td>
 
-      {/* Fecha creación */}
-      <td>{formattedFecha}</td>
-
       {/* Estado */}
-      <td style={{ textAlign: "center" }}>
+      <td className="doc-cell-status">
         <span
           className="doc-status-pill"
           style={{ backgroundColor: estadoColor }}
@@ -137,14 +138,15 @@ export function DocumentRow({ doc, onOpenDetail, token }) {
       </td>
 
       {/* Firmante principal */}
-      <td>{doc.firmante_nombre || "No asignado"}</td>
+      <td className="doc-cell-signer">
+        <div className="doc-signer-main">
+          {doc.firmante_nombre || "No asignado"}
+        </div>
+      </td>
 
       {/* Acciones */}
       <td
-        style={{
-          verticalAlign: "middle",
-          textAlign: "center",
-        }}
+        className="doc-cell-actions"
         onClick={(e) => e.stopPropagation()}
       >
         <div className="doc-actions">

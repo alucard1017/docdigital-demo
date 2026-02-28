@@ -53,7 +53,10 @@ export function PublicSignView({
 
       await cargarFirmaPublica(publicSignToken);
     } catch (err) {
-      alert("❌ " + (err.message || "Ocurrió un error al procesar la acción."));
+      alert(
+        "❌ " +
+          (err.message || "Ocurrió un error al procesar la acción.")
+      );
     }
   }
 
@@ -117,7 +120,8 @@ export function PublicSignView({
 
   return (
     <div className="login-bg">
-      <div className="login-card" style={{ maxWidth: 800 }}>
+      <div className="login-card" style={{ maxWidth: 820 }}>
+        {/* Título principal */}
         <h1
           style={{
             textAlign: "center",
@@ -127,14 +131,15 @@ export function PublicSignView({
             fontWeight: 800,
           }}
         >
-          {isVisado ? "Visado de Documento" : "Firma de Documento"}
+          {isVisado ? "Visado de documento" : "Firma de documento"}
         </h1>
 
+        {/* Aviso principal */}
         <div
           style={{
             marginBottom: 20,
             padding: 12,
-            borderRadius: 8,
+            borderRadius: 12,
             backgroundColor: isVisado ? "#fffbeb" : "#eff6ff",
             border: `1px solid ${isVisado ? "#f59e0b" : "#3b82f6"}`,
             color: isVisado ? "#92400e" : "#1e3a8a",
@@ -157,8 +162,9 @@ export function PublicSignView({
           )}
         </div>
 
+        {/* Estados de carga / error */}
         {publicSignLoading && (
-          <p style={{ textAlign: "center", marginTop: 20 }}>
+          <p style={{ textAlign: "center", marginTop: 20, color: "#64748b" }}>
             Cargando información del documento…
           </p>
         )}
@@ -176,13 +182,15 @@ export function PublicSignView({
           </p>
         )}
 
+        {/* Contenido principal cuando hay documento */}
         {document && !publicSignLoading && !publicSignError && (
           <>
             <p
               style={{
                 textAlign: "center",
                 color: "#64748b",
-                marginBottom: 20,
+                marginBottom: 16,
+                fontSize: "0.9rem",
               }}
             >
               Documento: <strong>{document.title}</strong>
@@ -232,6 +240,7 @@ export function PublicSignView({
               </p>
             )}
 
+            {/* Mensajes de estado finales */}
             {docRejected && (
               <p
                 style={{
@@ -284,6 +293,7 @@ export function PublicSignView({
               </p>
             ) : null}
 
+            {/* Botones de acción */}
             {canActOnDocument && (
               <div
                 style={{
@@ -322,12 +332,13 @@ export function PublicSignView({
               </div>
             )}
 
+            {/* Panel de rechazo */}
             {showReject && (
               <div
                 style={{
                   marginTop: 16,
                   padding: 16,
-                  borderRadius: 8,
+                  borderRadius: 12,
                   backgroundColor: "#fef2f2",
                   border: "1px solid #fecaca",
                   color: "#7f1d1d",
@@ -357,7 +368,7 @@ export function PublicSignView({
                   style={{
                     width: "100%",
                     padding: 8,
-                    borderRadius: 6,
+                    borderRadius: 8,
                     border: "1px solid #fecaca",
                     resize: "vertical",
                     fontFamily: "inherit",
@@ -392,7 +403,7 @@ export function PublicSignView({
                     className="btn-main"
                     style={{
                       padding: "8px 14px",
-                      borderRadius: 8,
+                      borderRadius: 999,
                       border: "1px solid #e5e7eb",
                       backgroundColor: "#ffffff",
                       color: "#374151",
@@ -411,7 +422,7 @@ export function PublicSignView({
                     className="btn-main"
                     style={{
                       padding: "8px 14px",
-                      borderRadius: 8,
+                      borderRadius: 999,
                       backgroundColor: "#b91c1c",
                       color: "#ffffff",
                       border: "none",
