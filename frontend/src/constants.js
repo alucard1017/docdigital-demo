@@ -5,11 +5,12 @@ const runtimeConfig = window.__APP_CONFIG__ || {};
 
 // Prioridad:
 // 1. API_BASE_URL desde config.js (APP_API_BASE_URL en Render)
-// 2. VITE_API_URL (para desarrollo local con Vite)
+// 2. VITE_API_BASE_URL (Vite: .env.development / .env.production)
 // 3. Cadena vacía si no hay nada (para detectar errores rápido)
 export const API_BASE_URL =
-  runtimeConfig.API_BASE_URL || import.meta.env.VITE_API_URL || "";
+  runtimeConfig.API_BASE_URL || import.meta.env.VITE_API_BASE_URL || "";
 
+// Estados de documento normalizados
 export const DOC_STATUS = {
   PENDIENTE: "PENDIENTE",
   PENDIENTE_VISADO: "PENDIENTE_VISADO",

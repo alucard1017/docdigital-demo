@@ -1,12 +1,14 @@
 // src/views/PublicSignView.jsx
 import React, { useState } from "react";
+import { PublicHeader } from "../components/PublicHeader";
+import { PublicFooter } from "../components/PublicFooter";
 
 export function PublicSignView({
   publicSignLoading,
   publicSignError,
-  publicSignDoc,      // { document, signer }
+  publicSignDoc,      // { document, signer } o { document, signer: null } en visado/consulta
   publicSignPdfUrl,
-  publicSignToken,    // token = sign_token del firmante, o signature_token para visado
+  publicSignToken,    // token de firma/visado
   publicSignMode,     // "visado" o null
   API_URL,
   cargarFirmaPublica, // GET /api/public/docs/:token
@@ -40,22 +42,23 @@ export function PublicSignView({
         throw new Error(
           data.message ||
             (isVisado
-              ? "No se pudo registrar el visado"
-              : "No se pudo registrar la firma")
+              ? "No se pudo registrar el visado."
+              : "No se pudo registrar la firma.")
         );
       }
 
       alert(
         isVisado
-          ? "✅ Visado registrado correctamente"
-          : "✅ Firma registrada correctamente"
+          ? "✅ Visado registrado correctamente."
+          : "✅ Firma registrada correctamente."
       );
 
       await cargarFirmaPublica(publicSignToken);
     } catch (err) {
       alert(
         "❌ " +
-          (err.message || "Ocurrió un error al procesar la acción.")
+          (err.message ||
+            "Ocurrió un error al procesar la acción. Intenta nuevamente.")
       );
     }
   }
@@ -96,7 +99,9 @@ export function PublicSignView({
       setRejectReason("");
       setRejectError("");
     } catch (err) {
-      setRejectError(err.message || "Error al registrar el rechazo.");
+      setRejectError(
+        err.message || "Error al registrar el rechazo. Intenta nuevamente."
+      );
     } finally {
       setRejecting(false);
     }
@@ -118,9 +123,13 @@ export function PublicSignView({
     !alreadySignedByThisSigner &&
     !docRejected;
 
+  const showSkeleton = publicSignLoading && !document && !publicSignError;
+
   return (
     <div className="login-bg">
-      <div className="login-card" style={{ maxWidth: 820 }}>
+      <div className="login-card" style={{ maxWidth: 840 }}>
+        <PublicHeader />
+
         {/* Título principal */}
         <h1
           style={{
@@ -162,24 +171,60 @@ export function PublicSignView({
           )}
         </div>
 
-        {/* Estados de carga / error */}
-        {publicSignLoading && (
-          <p style={{ textAlign: "center", marginTop: 20, color: "#64748b" }}>
-            Cargando información del documento…
-          </p>
-        )}
-
-        {publicSignError && (
-          <p
+        {/* Loader a pantalla media */}
+        {showSkeleton && (
+          <div
             style={{
+              padding: 32,
               textAlign: "center",
-              marginTop: 20,
-              color: "#b91c1c",
-              fontWeight: 600,
+              color: "#64748b",
+              fontSize: "0.95rem",
             }}
           >
-            {publicSignError}
-          </p>
+            <div style={{ marginBottom: 8, fontWeight: 600 }}>
+              Cargando información del documento…
+            </div>
+            <div style={{ fontSize: "0.85rem", color: "#9ca3af" }}>
+              Esto puede tardar unos segundos, no cierres esta ventana.
+            </div>
+          </div>
+        )}
+
+        {/* Mensaje de error público */}
+        {publicSignError && (
+          <div
+            style={{
+              marginTop: 12,
+              marginBottom: 16,
+              padding: 12,
+              borderRadius: 12,
+              backgroundColor: "#fef2f2",
+              border: "1px solid #fecaca",
+              color: "#b91c1c",
+              fontSize: "0.9rem",
+            }}
+          >
+            <div style={{ fontWeight: 700, marginBottom: 4 }}>
+              No se pudo cargar el documento.
+            </div>
+            <div>{publicSignError}</div>
+            <button
+              type="button"
+              className="btn-main"
+              style={{
+                marginTop: 10,
+                padding: "8px 14px",
+                borderRadius: 999,
+                backgroundColor: "#0f172a",
+                color: "#e5e7eb",
+                border: "none",
+              }}
+              onClick={() => cargarFirmaPublica(publicSignToken)}
+              disabled={publicSignLoading}
+            >
+              Reintentar carga
+            </button>
+          </div>
         )}
 
         {/* Contenido principal cuando hay documento */}
@@ -317,6 +362,7 @@ export function PublicSignView({
                     className="btn-main"
                     style={{
                       width: "100%",
+
                       backgroundColor: "#fee2e2",
                       color: "#b91c1c",
                       border: "1px solid #fecaca",
@@ -437,6 +483,8 @@ export function PublicSignView({
             )}
           </>
         )}
+
+        <PublicFooter />
       </div>
     </div>
   );

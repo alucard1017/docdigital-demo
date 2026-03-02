@@ -11,6 +11,7 @@ import { NewDocumentForm } from "./views/NewDocumentForm";
 import { UsersAdminView } from "./views/UsersAdminView";
 import { DashboardView } from "./views/DashboardView";
 import { VerificationView } from "./views/VerificationView";
+import { getSubdomain } from "./utils/subdomain";
 
 const API_URL = API_BASE_URL;
 
@@ -18,15 +19,12 @@ const API_URL = API_BASE_URL;
 function isSuperAdmin(user) {
   return user?.role === "SUPER_ADMIN";
 }
-
 function isGlobalAdmin(user) {
   return user?.role === "ADMIN_GLOBAL";
 }
-
 function isCompanyAdmin(user) {
   return user?.role === "ADMIN";
 }
-
 function isAnyAdmin(user) {
   return isSuperAdmin(user) || isGlobalAdmin(user) || isCompanyAdmin(user);
 }
@@ -43,7 +41,7 @@ function formatRun(value) {
   const dv = clean.slice(-1);
   const formattedBody = body.replace(/\B(?=(\d{3})+(?!\d))/g, ".");
   if (!body) return dv;
-  return formattedBody + "-" + dv;
+  return `${formattedBody}-${dv}`;
 }
 
 function formatRunDoc(value) {
@@ -60,6 +58,14 @@ function formatRunDoc(value) {
 }
 
 function App() {
+  /* ===============================
+     CONFIG SEGÚN SUBDOMINIO
+     =============================== */
+
+  const subdomain = getSubdomain();
+  const isVerificationPortal = subdomain === "verificar";
+  const isSigningPortal = subdomain === "firmar";
+
   /* ===============================
      ESTADOS DE LA APLICACIÓN
      =============================== */
@@ -148,7 +154,7 @@ function App() {
         setPublicSignPdfUrl(data.pdfUrl);
       }
     } catch (err) {
-      setPublicSignError(err.message);
+      setPublicSignError(err.message || "No se pudo cargar el documento");
       setPublicSignDoc(null);
       setPublicSignPdfUrl("");
     } finally {
@@ -156,22 +162,43 @@ function App() {
     }
   }
 
+  /* ===============================
+     RUTAS PÚBLICAS (sin login)
+     =============================== */
+
   useEffect(() => {
-    const params = new URLSearchParams(window.location.search);
-    const tokenUrl = params.get("token");
-    const modeUrl = params.get("mode");
-    const pathname = window.location.pathname;
+    const syncViewWithLocation = () => {
+      const params = new URLSearchParams(window.location.search);
+      const tokenUrl = params.get("token");
+      const modeUrl = params.get("mode");
+      const pathname = window.location.pathname;
 
-    const isFirmaPublica = pathname === "/firma-publica";
-    const isConsultaPublica = pathname === "/consulta-publica";
+      const isFirmaPublicaPath =
+        pathname === "/firma-publica" || (isSigningPortal && pathname === "/");
+      const isConsultaPublica = pathname === "/consulta-publica";
+      const isVerificationPublic =
+        pathname === "/verificar" || (isVerificationPortal && pathname === "/");
 
-    if (tokenUrl && (isFirmaPublica || isConsultaPublica)) {
-      setView("public-sign");
-      setPublicSignToken(tokenUrl);
-      setPublicSignMode(isFirmaPublica ? modeUrl || null : null);
-      cargarFirmaPublica(tokenUrl);
-    }
-  }, []);
+      // Firma / visado / consulta pública
+      if (tokenUrl && (isFirmaPublicaPath || isConsultaPublica)) {
+        setView("public-sign");
+        setPublicSignToken(tokenUrl);
+        setPublicSignMode(isFirmaPublicaPath ? modeUrl || null : null);
+        cargarFirmaPublica(tokenUrl);
+        return;
+      }
+
+      // Portal de verificación
+      if (isVerificationPublic) {
+        setView("verification");
+        return;
+      }
+    };
+
+    syncViewWithLocation();
+    window.addEventListener("popstate", syncViewWithLocation);
+    return () => window.removeEventListener("popstate", syncViewWithLocation);
+  }, [isVerificationPortal, isSigningPortal]);
 
   /* ===============================
      TIMELINE + PDF DEL DETALLE
@@ -188,7 +215,7 @@ function App() {
           }
         );
         const data = await res.json();
-        setEvents(data);
+        setEvents(Array.isArray(data) ? data : []);
       } catch (err) {
         console.error("Error cargando eventos:", err);
       }
@@ -199,7 +226,7 @@ function App() {
     } else {
       setEvents([]);
     }
-  }, [token, selectedDoc, view]);
+  }, [API_URL, token, selectedDoc, view]);
 
   useEffect(() => {
     if (!token || !selectedDoc) {
@@ -224,7 +251,7 @@ function App() {
     };
 
     fetchPdfUrl();
-  }, [token, selectedDoc]);
+  }, [API_URL, token, selectedDoc]);
 
   /* ===============================
      CARGA DE DOCUMENTOS
@@ -234,6 +261,7 @@ function App() {
     if (!token) return;
     if (view !== "list") return;
     cargarDocs();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [token, view, sort]);
 
   async function cargarDocs(sortParam = sort) {
@@ -258,7 +286,6 @@ function App() {
       }
 
       if (!res.ok) {
-        console.error("Error al cargar documentos:", res.status);
         setErrorDocs(
           "No se pudieron cargar los documentos. Intenta nuevamente."
         );
@@ -266,7 +293,7 @@ function App() {
       }
 
       const data = await res.json();
-      setDocs(data);
+      setDocs(Array.isArray(data) ? data : []);
     } catch (err) {
       console.error("Fallo al cargar documentos:", err);
       setErrorDocs("Error de conexión con el servidor.");
@@ -310,7 +337,8 @@ function App() {
     } catch (err) {
       console.error("Error en login:", err);
       setMessage(
-        "❌ Error de conexión, intenta nuevamente en unos segundos."
+        err.message ||
+          "❌ Error de conexión, intenta nuevamente en unos segundos."
       );
     } finally {
       setIsLoggingIn(false);
@@ -337,10 +365,10 @@ function App() {
         if (!res.ok) {
           throw new Error(data.message || "No se pudo obtener el PDF");
         }
-        window.open(data.url, "_blank");
+        window.open(data.url, "_blank", "noopener,noreferrer");
       } catch (err) {
         console.error("Error abriendo PDF:", err);
-        alert("❌ " + err.message);
+        alert("❌ " + (err.message || "No se pudo abrir el PDF"));
       }
       return;
     }
@@ -380,7 +408,7 @@ function App() {
       setView("list");
       setSelectedDoc(null);
     } catch (err) {
-      alert("❌ " + err.message);
+      alert("❌ " + (err.message || "No se pudo procesar la acción"));
     }
   }
 
@@ -396,7 +424,36 @@ function App() {
   };
 
   /* ===============================
-     RUTAS PÚBLICAS SIN LOGIN
+     PORTAL DE VERIFICACIÓN PURO
+     (verificar.verifirma.cl)
+     =============================== */
+
+  if (isVerificationPortal) {
+    return <VerificationView API_URL={API_URL} />;
+  }
+
+  /* ===============================
+     PORTAL DE FIRMA PÚBLICA PURO
+     (firmar.verifirma.cl)
+     =============================== */
+
+  if (isSigningPortal) {
+    return (
+      <PublicSignView
+        publicSignLoading={publicSignLoading}
+        publicSignError={publicSignError}
+        publicSignDoc={publicSignDoc}
+        publicSignPdfUrl={publicSignPdfUrl}
+        publicSignToken={publicSignToken}
+        publicSignMode={publicSignMode}
+        API_URL={API_URL}
+        cargarFirmaPublica={cargarFirmaPublica}
+      />
+    );
+  }
+
+  /* ===============================
+     RUTAS PÚBLICAS SIN LOGIN (dentro del app)
      =============================== */
 
   if (view === "public-sign") {
@@ -414,8 +471,7 @@ function App() {
     );
   }
 
-  const isVerificationPublic = window.location.pathname === "/verificar";
-  if (isVerificationPublic) {
+  if (view === "verification") {
     return <VerificationView API_URL={API_URL} />;
   }
 
@@ -819,10 +875,6 @@ function App() {
 
         {view === "dashboard" && isAnyAdmin(user) && (
           <DashboardView user={user} token={token} />
-        )}
-
-        {view === "verification" && (
-          <VerificationView API_URL={API_URL} />
         )}
 
         {import.meta.env.MODE !== "production" ? (
