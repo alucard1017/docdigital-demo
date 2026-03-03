@@ -13,8 +13,8 @@ export function PublicSignView({
   API_URL,
   cargarFirmaPublica, // GET /api/public/docs/:token
 }) {
-  const pdfUrl = publicSignPdfUrl || "";
   const isVisado = publicSignMode === "visado";
+  const pdfUrl = publicSignPdfUrl || "";
 
   const document = publicSignDoc?.document || null;
   const signer = publicSignDoc?.signer || null;
@@ -23,6 +23,29 @@ export function PublicSignView({
   const [rejectReason, setRejectReason] = useState("");
   const [rejecting, setRejecting] = useState(false);
   const [rejectError, setRejectError] = useState("");
+
+  const alreadySignedByThisSigner =
+    !isVisado && signer && signer.status === "FIRMADO";
+
+  const docFullySigned =
+    !isVisado && document && document.status === "FIRMADO";
+
+  const docRejected = document && document.status === "RECHAZADO";
+
+  const canActOnDocument =
+    document &&
+    !publicSignLoading &&
+    !publicSignError &&
+    !docFullySigned &&
+    !alreadySignedByThisSigner &&
+    !docRejected;
+
+  const showSkeleton = publicSignLoading && !document && !publicSignError;
+
+  function getDefaultErrorMessage() {
+    if (isVisado) return "No se pudo registrar el visado.";
+    return "No se pudo registrar la firma.";
+  }
 
   async function handleConfirm() {
     try {
@@ -39,12 +62,7 @@ export function PublicSignView({
       const data = await res.json();
 
       if (!res.ok) {
-        throw new Error(
-          data.message ||
-            (isVisado
-              ? "No se pudo registrar el visado."
-              : "No se pudo registrar la firma.")
-        );
+        throw new Error(data.message || getDefaultErrorMessage());
       }
 
       alert(
@@ -57,7 +75,7 @@ export function PublicSignView({
     } catch (err) {
       alert(
         "❌ " +
-          (err.message ||
+          (err?.message ||
             "Ocurrió un error al procesar la acción. Intenta nuevamente.")
       );
     }
@@ -100,30 +118,13 @@ export function PublicSignView({
       setRejectError("");
     } catch (err) {
       setRejectError(
-        err.message || "Error al registrar el rechazo. Intenta nuevamente."
+        err?.message ||
+          "Error al registrar el rechazo. Intenta nuevamente."
       );
     } finally {
       setRejecting(false);
     }
   }
-
-  const alreadySignedByThisSigner =
-    !isVisado && signer && signer.status === "FIRMADO";
-
-  const docFullySigned =
-    !isVisado && document && document.status === "FIRMADO";
-
-  const docRejected = document && document.status === "RECHAZADO";
-
-  const canActOnDocument =
-    document &&
-    !publicSignLoading &&
-    !publicSignError &&
-    !docFullySigned &&
-    !alreadySignedByThisSigner &&
-    !docRejected;
-
-  const showSkeleton = publicSignLoading && !document && !publicSignError;
 
   return (
     <div className="login-bg">
@@ -171,7 +172,7 @@ export function PublicSignView({
           )}
         </div>
 
-        {/* Loader a pantalla media */}
+        {/* Loader */}
         {showSkeleton && (
           <div
             style={{
@@ -190,7 +191,7 @@ export function PublicSignView({
           </div>
         )}
 
-        {/* Mensaje de error público */}
+        {/* Error al cargar documento */}
         {publicSignError && (
           <div
             style={{
@@ -227,7 +228,7 @@ export function PublicSignView({
           </div>
         )}
 
-        {/* Contenido principal cuando hay documento */}
+        {/* Contenido principal */}
         {document && !publicSignLoading && !publicSignError && (
           <>
             <p
@@ -362,7 +363,6 @@ export function PublicSignView({
                     className="btn-main"
                     style={{
                       width: "100%",
-
                       backgroundColor: "#fee2e2",
                       color: "#b91c1c",
                       border: "1px solid #fecaca",

@@ -12,23 +12,24 @@ const {
   SMTP_PASS,
   SMTP_FROM_EMAIL,
   SMTP_FROM_NAME,
-  SIGN_BASE_URL,        // ej: https://firmar.verifirma.cl
-  VERIFICATION_BASE_URL // ej: https://verificar.verifirma.cl
+  FRONTEND_URL,          // ej: https://verifirma-frontend.onrender.com
+  PUBLIC_VERIFY_BASE_URL // ej: https://verifirma-frontend.onrender.com/verificar
 } = process.env;
 
-if (
-  !SMTP_HOST ||
-  !SMTP_PORT ||
-  !SMTP_USER ||
-  !SMTP_PASS ||
-  !SMTP_FROM_EMAIL
-) {
+if (!SMTP_HOST || !SMTP_PORT || !SMTP_USER || !SMTP_PASS || !SMTP_FROM_EMAIL) {
   console.warn("DEBUG EMAIL >> Faltan variables SMTP:", {
     SMTP_HOST: !!SMTP_HOST,
     SMTP_PORT: !!SMTP_PORT,
     SMTP_USER: !!SMTP_USER,
     SMTP_PASS: !!SMTP_PASS,
     SMTP_FROM_EMAIL: !!SMTP_FROM_EMAIL,
+  });
+}
+
+if (!FRONTEND_URL || !PUBLIC_VERIFY_BASE_URL) {
+  console.warn("DEBUG EMAIL >> Faltan URLs de frontend:", {
+    FRONTEND_URL: !!FRONTEND_URL,
+    PUBLIC_VERIFY_BASE_URL: !!PUBLIC_VERIFY_BASE_URL,
   });
 }
 
@@ -41,6 +42,14 @@ const transporter = nodemailer.createTransport({
     pass: SMTP_PASS,
   },
 });
+
+/**
+ * Normaliza una base URL quitando slash final.
+ */
+function normalizeBaseUrl(url) {
+  if (!url) return "";
+  return url.endsWith("/") ? url.slice(0, -1) : url;
+}
 
 /**
  * Genera data URL con QR apuntando a "url"
@@ -68,31 +77,44 @@ async function sendSignatureInviteEmail({
   signer_email,
   signer_name,
   document_title,
-  signature_token,     // token para firma pública
-  verification_code,   // ej: VF-2026-000008
+  signature_token,   // token para firma pública
+  verification_code, // ej: VF-2026-000008
 }) {
   const fromEmail = SMTP_FROM_EMAIL;
   const fromName = SMTP_FROM_NAME || "VeriFirma";
 
-  // Construir URLs limpias usando los dominios de firma/verificación
-  const signBase = SIGN_BASE_URL || "";              // https://firmar.verifirma.cl
-  const verifyBase = VERIFICATION_BASE_URL || "";    // https://verificar.verifirma.cl
+  if (!signer_email) {
+    console.error("DEBUG EMAIL >> signer_email requerido");
+    return false;
+  }
 
+  const frontendBase = normalizeBaseUrl(FRONTEND_URL);
+  const verifyBase = normalizeBaseUrl(PUBLIC_VERIFY_BASE_URL);
+
+  // URL pública de firma en el frontend
+  // Ej: https://verifirma-frontend.onrender.com/public/sign?token=...
   const signUrl =
-    signBase && signature_token
-      ? `${signBase}/?token=${encodeURIComponent(signature_token)}`
+    frontendBase && signature_token
+      ? `${frontendBase}/public/sign?token=${encodeURIComponent(
+          signature_token
+        )}`
       : "";
 
+  // URL pública de verificación por código
+  // Ej: https://verifirma-frontend.onrender.com/verificar?code=...
   const publicVerifyUrl =
     verifyBase && verification_code
-      ? `${verifyBase}/?code=${encodeURIComponent(verification_code)}`
+      ? `${verifyBase}?code=${encodeURIComponent(verification_code)}`
       : "";
 
-  const subject = `Invitación a firmar: ${document_title}`;
+  const subject = `Invitación a firmar: ${document_title || "Documento"}`;
 
   // QR apuntando preferentemente a la URL de firma
   const qrTargetUrl = signUrl || publicVerifyUrl;
   const qrDataUrl = await generateQrDataUrl(qrTargetUrl);
+
+  const safeSignerName = signer_name || "";
+  const safeDocumentTitle = document_title || "Documento";
 
   const html = `
 <!DOCTYPE html>
@@ -130,7 +152,7 @@ async function sendSignatureInviteEmail({
               </h1>
 
               <p style="margin:0 0 12px;font-size:14px;line-height:1.5;color:#4b5563;">
-                Hola <strong>${signer_name || ""}</strong>,
+                Hola <strong>${safeSignerName}</strong>,
               </p>
 
               <p style="margin:0 0 16px;font-size:14px;line-height:1.5;color:#4b5563;">
@@ -140,7 +162,7 @@ async function sendSignatureInviteEmail({
               <table role="presentation" cellpadding="0" cellspacing="0" style="width:100%;margin-bottom:16px;font-size:13px;border-radius:12px;background-color:#f9fafb;border:1px solid #e5e7eb;">
                 <tr>
                   <td style="padding:10px 14px;width:40%;color:#6b7280;">Título del documento</td>
-                  <td style="padding:10px 14px;font-weight:600;">${document_title}</td>
+                  <td style="padding:10px 14px;font-weight:600;">${safeDocumentTitle}</td>
                 </tr>
                 ${
                   verification_code
@@ -227,6 +249,7 @@ async function sendSignatureInviteEmail({
       to: signer_email,
       subject,
       signUrl,
+      publicVerifyUrl,
     });
 
     const info = await transporter.sendMail({
