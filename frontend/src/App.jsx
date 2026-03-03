@@ -1,4 +1,4 @@
-import { useState, useEffect } from "react";
+import { useState, useEffect, useCallback, useMemo } from "react";
 import "./App.css";
 import { Sidebar } from "./components/Sidebar";
 import { DetailView } from "./components/DetailView";
@@ -13,7 +13,8 @@ import { DashboardView } from "./views/DashboardView";
 import { VerificationView } from "./views/VerificationView";
 import { getSubdomain } from "./utils/subdomain";
 
-/* ==== Helpers de rol ==== */
+/* ========= Helpers de rol ========= */
+
 function isSuperAdmin(user) {
   return user?.role === "SUPER_ADMIN";
 }
@@ -27,7 +28,8 @@ function isAnyAdmin(user) {
   return isSuperAdmin(user) || isGlobalAdmin(user) || isCompanyAdmin(user);
 }
 
-/* ==== Helpers RUN ==== */
+/* ========= Helpers RUN ========= */
+
 function formatRun(value) {
   let clean = (value || "").replace(/[^0-9kK]/g, "");
   if (!clean) return "";
@@ -54,6 +56,8 @@ function formatRunDoc(value) {
 
   return body.replace(/\B(?=(\d{3})+(?!\d))/g, ".") + "-" + dv;
 }
+
+/* ========= Component ========= */
 
 function App() {
   /* ===============================
@@ -116,49 +120,55 @@ function App() {
   const [firmanteRunValue, setFirmanteRunValue] = useState("");
   const [empresaRutValue, setEmpresaRutValue] = useState("");
 
+  const apiRoot = useMemo(() => apiUrl("/api"), []);
+
   /* ===============================
      FIRMA / VISADO PÚBLICO
      =============================== */
 
-  async function cargarFirmaPublica(tokenParam) {
-    try {
-      setPublicSignLoading(true);
-      setPublicSignError("");
+  const cargarFirmaPublica = useCallback(
+    async (tokenParam) => {
+      try {
+        setPublicSignLoading(true);
+        setPublicSignError("");
 
-      const params = new URLSearchParams(window.location.search);
-      const modeUrl = params.get("mode");
-      const pathname = window.location.pathname;
+        const params = new URLSearchParams(window.location.search);
+        const modeUrl = params.get("mode");
+        const pathname = window.location.pathname;
 
-      const isVisado = modeUrl === "visado";
-      const isConsultaPublica = pathname === "/consulta-publica";
+        const isVisado = modeUrl === "visado";
+        const isConsultaPublica = pathname === "/consulta-publica";
 
-      const path =
-        isVisado || isConsultaPublica
-          ? `/api/public/docs/document/${tokenParam}`
-          : `/api/public/docs/${tokenParam}`;
+        const path =
+          isVisado || isConsultaPublica
+            ? `/api/public/docs/document/${tokenParam}`
+            : `/api/public/docs/${tokenParam}`;
 
-      const res = await fetch(apiUrl(path));
-      const data = await res.json();
+        const res = await fetch(apiUrl(path));
+        const data = await res.json();
 
-      if (!res.ok) {
-        throw new Error(data.message || "No se pudo cargar el documento");
+        if (!res.ok) {
+          throw new Error(data.message || "No se pudo cargar el documento");
+        }
+
+        if (isVisado || isConsultaPublica) {
+          setPublicSignDoc({ document: data.document, signer: null });
+          setPublicSignPdfUrl(data.pdfUrl);
+        } else {
+          setPublicSignDoc(data);
+          setPublicSignPdfUrl(data.pdfUrl);
+        }
+      } catch (err) {
+        console.error("Error cargando firma pública:", err);
+        setPublicSignError(err.message || "No se pudo cargar el documento");
+        setPublicSignDoc(null);
+        setPublicSignPdfUrl("");
+      } finally {
+        setPublicSignLoading(false);
       }
-
-      if (isVisado || isConsultaPublica) {
-        setPublicSignDoc({ document: data.document, signer: null });
-        setPublicSignPdfUrl(data.pdfUrl);
-      } else {
-        setPublicSignDoc(data);
-        setPublicSignPdfUrl(data.pdfUrl);
-      }
-    } catch (err) {
-      setPublicSignError(err.message || "No se pudo cargar el documento");
-      setPublicSignDoc(null);
-      setPublicSignPdfUrl("");
-    } finally {
-      setPublicSignLoading(false);
-    }
-  }
+    },
+    []
+  );
 
   /* ===============================
      RUTAS PÚBLICAS (sin login)
@@ -171,11 +181,20 @@ function App() {
       const modeUrl = params.get("mode");
       const pathname = window.location.pathname;
 
+      // Aceptamos varias rutas para compatibilidad:
+      // - /public/sign?token=...
+      // - /firma-publica?token=...
+      // - firmar.subdominio.cl/ (root del portal de firma)
       const isFirmaPublicaPath =
-        pathname === "/firma-publica" || (isSigningPortal && pathname === "/");
+        pathname === "/public/sign" ||
+        pathname === "/firma-publica" ||
+        (isSigningPortal && pathname === "/");
+
       const isConsultaPublica = pathname === "/consulta-publica";
+
       const isVerificationPublic =
-        pathname === "/verificar" || (isVerificationPortal && pathname === "/");
+        pathname === "/verificar" ||
+        (isVerificationPortal && pathname === "/");
 
       // Firma / visado / consulta pública
       if (tokenUrl && (isFirmaPublicaPath || isConsultaPublica)) {
@@ -196,15 +215,19 @@ function App() {
     syncViewWithLocation();
     window.addEventListener("popstate", syncViewWithLocation);
     return () => window.removeEventListener("popstate", syncViewWithLocation);
-  }, [isVerificationPortal, isSigningPortal]);
+  }, [isVerificationPortal, isSigningPortal, cargarFirmaPublica]);
 
   /* ===============================
      TIMELINE + PDF DEL DETALLE
      =============================== */
 
   useEffect(() => {
-    async function cargarEventos() {
-      if (!token || !selectedDoc) return;
+    if (!token || !selectedDoc || view !== "detail") {
+      if (view !== "detail") setEvents([]);
+      return;
+    }
+
+    const cargarEventos = async () => {
       try {
         const res = await fetch(
           apiUrl(`/api/docs/${selectedDoc.id}/timeline`),
@@ -217,13 +240,9 @@ function App() {
       } catch (err) {
         console.error("Error cargando eventos:", err);
       }
-    }
+    };
 
-    if (view === "detail") {
-      cargarEventos();
-    } else {
-      setEvents([]);
-    }
+    cargarEventos();
   }, [token, selectedDoc, view]);
 
   useEffect(() => {
@@ -255,50 +274,52 @@ function App() {
      CARGA DE DOCUMENTOS
      =============================== */
 
+  const cargarDocs = useCallback(
+    async (sortParam = sort) => {
+      if (!token) return;
+      setLoadingDocs(true);
+      setErrorDocs("");
+
+      try {
+        const res = await fetch(
+          apiUrl(`/api/docs?sort=${encodeURIComponent(sortParam)}`),
+          {
+            headers: { Authorization: `Bearer ${token}` },
+          }
+        );
+
+        if (res.status === 401) {
+          localStorage.removeItem("token");
+          localStorage.removeItem("user");
+          setToken("");
+          setUser(null);
+          return;
+        }
+
+        if (!res.ok) {
+          setErrorDocs(
+            "No se pudieron cargar los documentos. Intenta nuevamente."
+          );
+          return;
+        }
+
+        const data = await res.json();
+        setDocs(Array.isArray(data) ? data : []);
+      } catch (err) {
+        console.error("Fallo al cargar documentos:", err);
+        setErrorDocs("Error de conexión con el servidor.");
+      } finally {
+        setLoadingDocs(false);
+      }
+    },
+    [sort, token]
+  );
+
   useEffect(() => {
     if (!token) return;
     if (view !== "list") return;
     cargarDocs();
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [token, view, sort]);
-
-  async function cargarDocs(sortParam = sort) {
-    if (!token) return;
-    setLoadingDocs(true);
-    setErrorDocs("");
-
-    try {
-      const res = await fetch(
-        apiUrl(`/api/docs?sort=${encodeURIComponent(sortParam)}`),
-        {
-          headers: { Authorization: `Bearer ${token}` },
-        }
-      );
-
-      if (res.status === 401) {
-        localStorage.removeItem("token");
-        localStorage.removeItem("user");
-        setToken("");
-        setUser(null);
-        return;
-      }
-
-      if (!res.ok) {
-        setErrorDocs(
-          "No se pudieron cargar los documentos. Intenta nuevamente."
-        );
-        return;
-      }
-
-      const data = await res.json();
-      setDocs(Array.isArray(data) ? data : []);
-    } catch (err) {
-      console.error("Fallo al cargar documentos:", err);
-      setErrorDocs("Error de conexión con el servidor.");
-    } finally {
-      setLoadingDocs(false);
-    }
-  }
+  }, [token, view, sort, cargarDocs]);
 
   /* ===============================
      LOGIN
@@ -410,9 +431,13 @@ function App() {
     }
   }
 
+  /* ===============================
+     SESIÓN
+     =============================== */
+
   const logout = () => {
     localStorage.clear();
-    setToken(null);
+    setToken("");
     setUser(null);
     window.location.reload();
   };
@@ -422,18 +447,12 @@ function App() {
   };
 
   /* ===============================
-     PORTAL DE VERIFICACIÓN PURO
-     (verificar.verifirma.cl)
+     PORTALES PUROS (subdominios)
      =============================== */
 
   if (isVerificationPortal) {
-    return <VerificationView API_URL={apiUrl("/api")} />;
+    return <VerificationView API_URL={apiRoot} />;
   }
-
-  /* ===============================
-     PORTAL DE FIRMA PÚBLICA PURO
-     (firmar.verifirma.cl)
-     =============================== */
 
   if (isSigningPortal) {
     return (
@@ -444,14 +463,14 @@ function App() {
         publicSignPdfUrl={publicSignPdfUrl}
         publicSignToken={publicSignToken}
         publicSignMode={publicSignMode}
-        API_URL={apiUrl("/api")}
+        API_URL={apiRoot}
         cargarFirmaPublica={cargarFirmaPublica}
       />
     );
   }
 
   /* ===============================
-     RUTAS PÚBLICAS SIN LOGIN (dentro del app)
+     RUTAS PÚBLICAS SIN LOGIN
      =============================== */
 
   if (view === "public-sign") {
@@ -463,14 +482,14 @@ function App() {
         publicSignPdfUrl={publicSignPdfUrl}
         publicSignToken={publicSignToken}
         publicSignMode={publicSignMode}
-        API_URL={apiUrl("/api")}
+        API_URL={apiRoot}
         cargarFirmaPublica={cargarFirmaPublica}
       />
     );
   }
 
   if (view === "verification") {
-    return <VerificationView API_URL={apiUrl("/api")} />;
+    return <VerificationView API_URL={apiRoot} />;
   }
 
   /* ===============================
@@ -550,29 +569,31 @@ function App() {
      FILTRO Y PAGINACIÓN
      =============================== */
 
-  const docsFiltrados = docs.filter((d) => {
-    const esPendiente =
-      d.status === DOC_STATUS.PENDIENTE ||
-      d.status === DOC_STATUS.PENDIENTE_VISADO ||
-      d.status === DOC_STATUS.PENDIENTE_FIRMA;
+  const docsFiltrados = useMemo(() => {
+    return docs.filter((d) => {
+      const esPendiente =
+        d.status === DOC_STATUS.PENDIENTE ||
+        d.status === DOC_STATUS.PENDIENTE_VISADO ||
+        d.status === DOC_STATUS.PENDIENTE_FIRMA;
 
-    if (statusFilter === "PENDIENTES" && !esPendiente) return false;
-    if (statusFilter === "VISADOS" && d.status !== DOC_STATUS.VISADO)
-      return false;
-    if (statusFilter === "FIRMADOS" && d.status !== DOC_STATUS.FIRMADO)
-      return false;
-    if (statusFilter === "RECHAZADOS" && d.status !== DOC_STATUS.RECHAZADO)
-      return false;
+      if (statusFilter === "PENDIENTES" && !esPendiente) return false;
+      if (statusFilter === "VISADOS" && d.status !== DOC_STATUS.VISADO)
+        return false;
+      if (statusFilter === "FIRMADOS" && d.status !== DOC_STATUS.FIRMADO)
+        return false;
+      if (statusFilter === "RECHAZADOS" && d.status !== DOC_STATUS.RECHAZADO)
+        return false;
 
-    if (search.trim() !== "") {
-      const q = search.toLowerCase();
-      const titulo = (d.title || "").toLowerCase();
-      const empresa = (d.destinatario_nombre || "").toLowerCase();
-      if (!titulo.includes(q) && !empresa.includes(q)) return false;
-    }
+      if (search.trim() !== "") {
+        const q = search.toLowerCase();
+        const titulo = (d.title || "").toLowerCase();
+        const empresa = (d.destinatario_nombre || "").toLowerCase();
+        if (!titulo.includes(q) && !empresa.includes(q)) return false;
+      }
 
-    return true;
-  });
+      return true;
+    });
+  }, [docs, statusFilter, search]);
 
   const pendientes = docs.filter(
     (d) =>
@@ -838,7 +859,7 @@ function App() {
 
         {view === "upload" && (
           <NewDocumentForm
-            API_URL={apiUrl("/api")}
+            API_URL={apiRoot}
             token={token}
             tipoTramite={tipoTramite}
             setTipoTramite={setTipoTramite}
@@ -859,7 +880,7 @@ function App() {
         )}
 
         {view === "users" && isAnyAdmin(user) && (
-          <UsersAdminView API_URL={apiUrl("/api")} token={token} />
+          <UsersAdminView API_URL={apiRoot} token={token} />
         )}
 
         {view === "dashboard" && isAnyAdmin(user) && (
