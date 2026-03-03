@@ -1,5 +1,6 @@
 // src/views/NewDocumentForm.jsx
 import React, { useState } from "react";
+import { apiUrl } from "../constants";
 
 const TIPOS_TRAMITE = [
   { value: "propio", label: "Trámite propio (sin notaría)" },
@@ -12,7 +13,7 @@ const TIPOS_DOCUMENTO = [
 ];
 
 export function NewDocumentForm({
-  API_URL,
+  API_URL, // ya no lo usamos, pero lo dejamos para no romper props
   token,
   tipoTramite,
   setTipoTramite,
@@ -240,14 +241,21 @@ export function NewDocumentForm({
           }
 
           try {
-            const res = await fetch(`${API_URL}/api/docs`, {
+            const res = await fetch(apiUrl("/docs"), {
               method: "POST",
               headers: {
                 Authorization: `Bearer ${token}`,
               },
               body: formData,
             });
-            if (!res.ok) throw new Error("Fallo en la subida");
+
+            if (!res.ok) {
+              const data = await res.json().catch(() => null);
+              const msg =
+                data?.message || "No se pudo crear el documento en el servidor.";
+              throw new Error(msg);
+            }
+
             alert("✅ ¡Documento procesado correctamente!");
             form.reset();
             setShowVisador(false);
@@ -259,12 +267,14 @@ export function NewDocumentForm({
             setView("list");
             cargarDocs();
           } catch (err) {
-            alert(err.message);
+            console.error("Error creando documento:", err);
+            alert(err.message || "Fallo en la subida");
           } finally {
             setSubmitting(false);
           }
         }}
       >
+
         {/* === TÍTULO DEL CONTRATO + BOTÓN PDF === */}
         <div
           style={{
