@@ -1,4 +1,5 @@
 // backend/services/sendSignatureInviteEmail.js
+
 const nodemailer = require("nodemailer");
 const QRCode = require("qrcode");
 require("dotenv").config();
@@ -12,9 +13,13 @@ const {
   SMTP_PASS,
   SMTP_FROM_EMAIL,
   SMTP_FROM_NAME,
-  FRONTEND_URL,          // ej: https://verifirma-frontend.onrender.com
-  PUBLIC_VERIFY_BASE_URL // ej: https://verifirma-frontend.onrender.com/verificar
+  FRONTEND_URL, // ej: https://docdigital-demo.vercel.app
+  PUBLIC_VERIFY_BASE_URL, // ej: https://docdigital-demo.vercel.app/verificar
 } = process.env;
+
+/* =========================
+   Validación de configuración
+   ========================= */
 
 if (!SMTP_HOST || !SMTP_PORT || !SMTP_USER || !SMTP_PASS || !SMTP_FROM_EMAIL) {
   console.warn("DEBUG EMAIL >> Faltan variables SMTP:", {
@@ -33,6 +38,10 @@ if (!FRONTEND_URL || !PUBLIC_VERIFY_BASE_URL) {
   });
 }
 
+/* =========================
+   Transporter SMTP
+   ========================= */
+
 const transporter = nodemailer.createTransport({
   host: SMTP_HOST,
   port: Number(SMTP_PORT) || 587,
@@ -43,8 +52,13 @@ const transporter = nodemailer.createTransport({
   },
 });
 
+/* =========================
+   Helpers
+   ========================= */
+
 /**
  * Normaliza una base URL quitando slash final.
+ * Ej: "https://foo.com/" => "https://foo.com"
  */
 function normalizeBaseUrl(url) {
   if (!url) return "";
@@ -69,15 +83,22 @@ async function generateQrDataUrl(url) {
   }
 }
 
+/* =========================
+   Servicio principal
+   ========================= */
+
 /**
  * Enviar invitación de firma por SMTP (Nodemailer)
- * Incluye código de verificación + QR opcional
+ * Incluye:
+ * - Enlace directo de firma pública (/public/sign?token=...)
+ * - Enlace de verificación por código (/verificar?code=...)
+ * - QR apuntando al mejor enlace disponible
  */
 async function sendSignatureInviteEmail({
   signer_email,
   signer_name,
   document_title,
-  signature_token,   // token para firma pública
+  signature_token, // token para firma pública
   verification_code, // ej: VF-2026-000008
 }) {
   const fromEmail = SMTP_FROM_EMAIL;
@@ -91,8 +112,8 @@ async function sendSignatureInviteEmail({
   const frontendBase = normalizeBaseUrl(FRONTEND_URL);
   const verifyBase = normalizeBaseUrl(PUBLIC_VERIFY_BASE_URL);
 
-  // URL pública de firma en el frontend
-  // Ej: https://verifirma-frontend.onrender.com/public/sign?token=...
+  // URL pública de firma en el frontend (Vercel)
+  // Ej: https://docdigital-demo.vercel.app/public/sign?token=...
   const signUrl =
     frontendBase && signature_token
       ? `${frontendBase}/public/sign?token=${encodeURIComponent(
@@ -101,7 +122,7 @@ async function sendSignatureInviteEmail({
       : "";
 
   // URL pública de verificación por código
-  // Ej: https://verifirma-frontend.onrender.com/verificar?code=...
+  // Ej: https://docdigital-demo.vercel.app/verificar?code=...
   const publicVerifyUrl =
     verifyBase && verification_code
       ? `${verifyBase}?code=${encodeURIComponent(verification_code)}`
@@ -191,7 +212,11 @@ async function sendSignatureInviteEmail({
                   </td>
                 </tr>
               </table>`
-                  : ""
+                  : `
+              <p style="margin:8px 0 16px;font-size:13px;line-height:1.5;color:#b91c1c;">
+                ⚠ No se pudo generar el enlace directo de firma porque falta el token de firma.
+                Contacta al emisor del documento o al soporte de VeriFirma.
+              </p>`
               }
 
               <p style="margin:0 0 10px;font-size:13px;line-height:1.5;color:#6b7280;">
