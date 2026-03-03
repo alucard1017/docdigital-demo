@@ -4,7 +4,7 @@ import { Sidebar } from "./components/Sidebar";
 import { DetailView } from "./components/DetailView";
 import { ListHeader } from "./components/ListHeader";
 import { DocumentRow } from "./components/DocumentRow";
-import { DOC_STATUS, API_BASE_URL } from "./constants";
+import { DOC_STATUS, apiUrl } from "./constants";
 import { LoginView } from "./views/LoginView";
 import { PublicSignView } from "./views/PublicSignView";
 import { NewDocumentForm } from "./views/NewDocumentForm";
@@ -12,8 +12,6 @@ import { UsersAdminView } from "./views/UsersAdminView";
 import { DashboardView } from "./views/DashboardView";
 import { VerificationView } from "./views/VerificationView";
 import { getSubdomain } from "./utils/subdomain";
-
-const API_URL = API_BASE_URL;
 
 /* ==== Helpers de rol ==== */
 function isSuperAdmin(user) {
@@ -139,7 +137,7 @@ function App() {
           ? `/api/public/docs/document/${tokenParam}`
           : `/api/public/docs/${tokenParam}`;
 
-      const res = await fetch(`${API_URL}${path}`);
+      const res = await fetch(apiUrl(path));
       const data = await res.json();
 
       if (!res.ok) {
@@ -209,7 +207,7 @@ function App() {
       if (!token || !selectedDoc) return;
       try {
         const res = await fetch(
-          `${API_URL}/api/docs/${selectedDoc.id}/timeline`,
+          apiUrl(`/api/docs/${selectedDoc.id}/timeline`),
           {
             headers: { Authorization: `Bearer ${token}` },
           }
@@ -226,7 +224,7 @@ function App() {
     } else {
       setEvents([]);
     }
-  }, [API_URL, token, selectedDoc, view]);
+  }, [token, selectedDoc, view]);
 
   useEffect(() => {
     if (!token || !selectedDoc) {
@@ -236,7 +234,7 @@ function App() {
 
     const fetchPdfUrl = async () => {
       try {
-        const res = await fetch(`${API_URL}/api/docs/${selectedDoc.id}/pdf`, {
+        const res = await fetch(apiUrl(`/api/docs/${selectedDoc.id}/pdf`), {
           headers: { Authorization: `Bearer ${token}` },
         });
         const data = await res.json();
@@ -251,7 +249,7 @@ function App() {
     };
 
     fetchPdfUrl();
-  }, [API_URL, token, selectedDoc]);
+  }, [token, selectedDoc]);
 
   /* ===============================
      CARGA DE DOCUMENTOS
@@ -271,7 +269,7 @@ function App() {
 
     try {
       const res = await fetch(
-        `${API_URL}/api/docs?sort=${encodeURIComponent(sortParam)}`,
+        apiUrl(`/api/docs?sort=${encodeURIComponent(sortParam)}`),
         {
           headers: { Authorization: `Bearer ${token}` },
         }
@@ -317,7 +315,7 @@ function App() {
       : identifier.replace(/[^0-9kK]/g, "");
 
     try {
-      const res = await fetch(`${API_URL}/api/auth/login`, {
+      const res = await fetch(apiUrl("/api/auth/login"), {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ identifier: value, password }),
@@ -358,7 +356,7 @@ function App() {
       }
 
       try {
-        const res = await fetch(`${API_URL}/api/docs/${doc.id}/pdf`, {
+        const res = await fetch(apiUrl(`/api/docs/${doc.id}/pdf`), {
           headers: { Authorization: `Bearer ${token}` },
         });
         const data = await res.json();
@@ -384,7 +382,7 @@ function App() {
         body = JSON.stringify({ motivo: extraData.motivo });
       }
 
-      const res = await fetch(`${API_URL}/api/docs/${id}/${accion}`, {
+      const res = await fetch(apiUrl(`/api/docs/${id}/${accion}`), {
         method: "POST",
         headers,
         body,
@@ -429,7 +427,7 @@ function App() {
      =============================== */
 
   if (isVerificationPortal) {
-    return <VerificationView API_URL={API_URL} />;
+    return <VerificationView API_URL={apiUrl("/api")} />;
   }
 
   /* ===============================
@@ -446,7 +444,7 @@ function App() {
         publicSignPdfUrl={publicSignPdfUrl}
         publicSignToken={publicSignToken}
         publicSignMode={publicSignMode}
-        API_URL={API_URL}
+        API_URL={apiUrl("/api")}
         cargarFirmaPublica={cargarFirmaPublica}
       />
     );
@@ -465,14 +463,14 @@ function App() {
         publicSignPdfUrl={publicSignPdfUrl}
         publicSignToken={publicSignToken}
         publicSignMode={publicSignMode}
-        API_URL={API_URL}
+        API_URL={apiUrl("/api")}
         cargarFirmaPublica={cargarFirmaPublica}
       />
     );
   }
 
   if (view === "verification") {
-    return <VerificationView API_URL={API_URL} />;
+    return <VerificationView API_URL={apiUrl("/api")} />;
   }
 
   /* ===============================
@@ -724,10 +722,7 @@ function App() {
                   {errorDocs ||
                     "Por favor, revisa tu conexión e inténtalo nuevamente."}
                 </p>
-                <button
-                  className="btn-main btn-primary"
-                  onClick={cargarDocs}
-                >
+                <button className="btn-main btn-primary" onClick={cargarDocs}>
                   Reintentar carga
                 </button>
               </div>
@@ -820,22 +815,16 @@ function App() {
                       type="button"
                       className="btn-main"
                       disabled={page === 1}
-                      onClick={() =>
-                        setPage((p) => Math.max(1, p - 1))
-                      }
+                      onClick={() => setPage((p) => Math.max(1, p - 1))}
                     >
                       Anterior
                     </button>
                     <button
                       type="button"
                       className="btn-main"
-                      disabled={
-                        page === totalPaginas || totalPaginas === 0
-                      }
+                      disabled={page === totalPaginas || totalPaginas === 0}
                       onClick={() =>
-                        setPage((p) =>
-                          Math.min(totalPaginas, p + 1)
-                        )
+                        setPage((p) => Math.min(totalPaginas, p + 1))
                       }
                     >
                       Siguiente
@@ -849,7 +838,7 @@ function App() {
 
         {view === "upload" && (
           <NewDocumentForm
-            API_URL={API_URL}
+            API_URL={apiUrl("/api")}
             token={token}
             tipoTramite={tipoTramite}
             setTipoTramite={setTipoTramite}
@@ -870,7 +859,7 @@ function App() {
         )}
 
         {view === "users" && isAnyAdmin(user) && (
-          <UsersAdminView API_URL={API_URL} token={token} />
+          <UsersAdminView API_URL={apiUrl("/api")} token={token} />
         )}
 
         {view === "dashboard" && isAnyAdmin(user) && (
