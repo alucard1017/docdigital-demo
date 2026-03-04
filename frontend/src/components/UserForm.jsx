@@ -44,7 +44,7 @@ export function UserForm({ API_URL, token, user, onClose, onSaved }) {
 
     try {
       const url = isEdit
-        ? `${API_URL}/api/users/${user.id}`
+        ? apiUrl(`/users/${user.id}`)
         : `${API_URL}/api/users`;
 
       const method = isEdit ? "PUT" : "POST";

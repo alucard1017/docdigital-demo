@@ -21,7 +21,7 @@ export function ListHeader({
 }) {
   const handleDownloadReport = async () => {
     try {
-      const res = await fetch(`${API_URL}/api/docs/export/excel`, {
+      const res = await fetch(apiUrl("/docs/export/excel"), {
         headers: {
           Authorization: `Bearer ${token}`,
         },

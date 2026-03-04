@@ -24,7 +24,7 @@ export function AuditView({ token }) {
       if (eventType) params.append("evento_tipo", eventType);
       params.append("limit", "200");
 
-      const res = await fetch(`${API_URL}/api/docs/audit?${params.toString()}`, {
+      const res = await fetch(apiUrl(`/docs/audit?${params.toString()}`), {
         headers: {
           Authorization: `Bearer ${token}`,
         },

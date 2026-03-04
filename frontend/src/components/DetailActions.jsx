@@ -18,7 +18,7 @@ export function DetailActions({
 
   const handleDownload = () => {
     if (!selectedDoc) return;
-    window.location.href = `${API_URL}/api/docs/${selectedDoc.id}/download`;
+    window.location.href = apiUrl(`/docs/${selectedDoc.id}/download`);
   };
 
   return (

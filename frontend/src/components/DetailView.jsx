@@ -2,7 +2,7 @@ import React, { useState, useEffect } from "react";
 import { Timeline } from "./Timeline";
 import { EventList } from "./EventList";
 import { DetailActions } from "./DetailActions";
-import { DOC_STATUS, API_BASE_URL } from "../constants";
+import { DOC_STATUS, apiUrl } from "../constants";
 
 const API_URL = API_BASE_URL;
 

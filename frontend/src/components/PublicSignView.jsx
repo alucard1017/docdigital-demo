@@ -27,7 +27,7 @@ export function PublicSignView({ token }) {
   useEffect(() => {
     const fetchDoc = async () => {
       try {
-        const res = await fetch(`${API_URL}/api/public/docs/${token}`);
+        const res = await fetch(apiUrl(`/public/docs/${token}`));
         const data = await res.json();
 
         if (!res.ok) {
@@ -69,7 +69,7 @@ export function PublicSignView({ token }) {
       const actionPath = isVisado ? "visar" : "firmar";
 
       const res = await fetch(
-        `${API_URL}/api/public/docs/${token}/${actionPath}`,
+        apiUrl(`/public/docs/${token}/${actionPath}`),
         {
           method: "POST",
           headers: { "Content-Type": "application/json" },
