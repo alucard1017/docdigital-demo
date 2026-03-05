@@ -36,13 +36,22 @@ function resolveApiBaseUrl() {
 export const API_BASE_URL = resolveApiBaseUrl();
 
 /**
- * Helper para construir URLs de la API de forma segura.
- * Ejemplo: apiUrl("/api/auth/login") => "https://verifirma-api.onrender.com/api/auth/login"
+ * Helper para construir URLs de la API de forma inteligente:
+ * ✅ DEV: /api/... (Vercel proxy automático → backend)
+ * ✅ PROD: path limpio (Vercel Functions o backend proxy)
+ * ✅ Compatible con API_BASE_URL si existe
  */
 export function apiUrl(path = "") {
   const base = API_BASE_URL;
   const cleanPath = path.startsWith("/") ? path : `/${path}`;
-  return `${base}${cleanPath}`;
+
+  // En desarrollo: usa proxy de Vercel para evitar CORS
+  if (import.meta.env.DEV) {
+    return `/api${cleanPath}`;
+  }
+
+  // En producción: usa base URL o path limpio
+  return base ? `${base}${cleanPath}` : cleanPath;
 }
 
 // Estados de documento normalizados
