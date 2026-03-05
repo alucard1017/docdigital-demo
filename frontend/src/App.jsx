@@ -1,3 +1,4 @@
+// src/App.jsx
 import { useState, useEffect, useCallback, useMemo } from "react";
 import "./App.css";
 import { Sidebar } from "./components/Sidebar";
@@ -120,55 +121,53 @@ function App() {
   const [firmanteRunValue, setFirmanteRunValue] = useState("");
   const [empresaRutValue, setEmpresaRutValue] = useState("");
 
-  const apiRoot = useMemo(() => apiUrl("/api"), []);
+  // URL raíz normalizada (para pasar a vistas hijas)
+  const apiRoot = useMemo(() => apiUrl("/"), []);
 
   /* ===============================
      FIRMA / VISADO PÚBLICO
      =============================== */
 
-  const cargarFirmaPublica = useCallback(
-    async (tokenParam) => {
-      try {
-        setPublicSignLoading(true);
-        setPublicSignError("");
+  const cargarFirmaPublica = useCallback(async (tokenParam) => {
+    try {
+      setPublicSignLoading(true);
+      setPublicSignError("");
 
-        const params = new URLSearchParams(window.location.search);
-        const modeUrl = params.get("mode");
-        const pathname = window.location.pathname;
+      const params = new URLSearchParams(window.location.search);
+      const modeUrl = params.get("mode");
+      const pathname = window.location.pathname;
 
-        const isVisado = modeUrl === "visado";
-        const isConsultaPublica = pathname === "/consulta-publica";
+      const isVisado = modeUrl === "visado";
+      const isConsultaPublica = pathname === "/consulta-publica";
 
-        const path =
-          isVisado || isConsultaPublica
-            ? `/api/public/docs/document/${tokenParam}`
-            : `/api/public/docs/${tokenParam}`;
+      const path =
+        isVisado || isConsultaPublica
+          ? `/api/public/docs/document/${tokenParam}`
+          : `/api/public/docs/${tokenParam}`;
 
-        const res = await fetch(apiUrl(path));
-        const data = await res.json();
+      const res = await fetch(apiUrl(path));
+      const data = await res.json();
 
-        if (!res.ok) {
-          throw new Error(data.message || "No se pudo cargar el documento");
-        }
-
-        if (isVisado || isConsultaPublica) {
-          setPublicSignDoc({ document: data.document, signer: null });
-          setPublicSignPdfUrl(data.pdfUrl);
-        } else {
-          setPublicSignDoc(data);
-          setPublicSignPdfUrl(data.pdfUrl);
-        }
-      } catch (err) {
-        console.error("Error cargando firma pública:", err);
-        setPublicSignError(err.message || "No se pudo cargar el documento");
-        setPublicSignDoc(null);
-        setPublicSignPdfUrl("");
-      } finally {
-        setPublicSignLoading(false);
+      if (!res.ok) {
+        throw new Error(data.message || "No se pudo cargar el documento");
       }
-    },
-    []
-  );
+
+      if (isVisado || isConsultaPublica) {
+        setPublicSignDoc({ document: data.document, signer: null });
+        setPublicSignPdfUrl(data.pdfUrl);
+      } else {
+        setPublicSignDoc(data);
+        setPublicSignPdfUrl(data.pdfUrl);
+      }
+    } catch (err) {
+      console.error("Error cargando firma pública:", err);
+      setPublicSignError(err.message || "No se pudo cargar el documento");
+      setPublicSignDoc(null);
+      setPublicSignPdfUrl("");
+    } finally {
+      setPublicSignLoading(false);
+    }
+  }, []);
 
   /* ===============================
      RUTAS PÚBLICAS (sin login)
@@ -181,10 +180,6 @@ function App() {
       const modeUrl = params.get("mode");
       const pathname = window.location.pathname;
 
-      // Aceptamos varias rutas para compatibilidad:
-      // - /public/sign?token=...
-      // - /firma-publica?token=...
-      // - firmar.subdominio.cl/ (root del portal de firma)
       const isFirmaPublicaPath =
         pathname === "/public/sign" ||
         pathname === "/firma-publica" ||
@@ -196,7 +191,6 @@ function App() {
         pathname === "/verificar" ||
         (isVerificationPortal && pathname === "/");
 
-      // Firma / visado / consulta pública
       if (tokenUrl && (isFirmaPublicaPath || isConsultaPublica)) {
         setView("public-sign");
         setPublicSignToken(tokenUrl);
@@ -205,7 +199,6 @@ function App() {
         return;
       }
 
-      // Portal de verificación
       if (isVerificationPublic) {
         setView("verification");
         return;
@@ -602,14 +595,8 @@ function App() {
       d.status === DOC_STATUS.PENDIENTE_FIRMA
   ).length;
 
-  const visados = docs.filter(
-    (d) => d.status === DOC_STATUS.VISADO
-  ).length;
-
-  const firmados = docs.filter(
-    (d) => d.status === DOC_STATUS.FIRMADO
-  ).length;
-
+  const visados = docs.filter((d) => d.status === DOC_STATUS.VISADO).length;
+  const firmados = docs.filter((d) => d.status === DOC_STATUS.FIRMADO).length;
   const rechazados = docs.filter(
     (d) => d.status === DOC_STATUS.RECHAZADO
   ).length;
@@ -796,9 +783,7 @@ function App() {
                         <th>N° de contrato</th>
                         <th>Título del documento</th>
                         <th>Tipo de trámite</th>
-                        <th style={{ textAlign: "center" }}>
-                          Estado actual
-                        </th>
+                        <th style={{ textAlign: "center" }}>Estado actual</th>
                         <th>Firmante final</th>
                         <th style={{ textAlign: "center" }}>Acciones</th>
                       </tr>
