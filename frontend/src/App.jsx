@@ -433,6 +433,13 @@ function App() {
   /* PORTALES / LOGIN / DETAIL ...   */
   /* =============================== */
 
+  // Atajo duro: si estamos en /verificar en el dominio principal,
+  // no montes login ni dashboard, solo la vista de verificación
+  const pathname = window.location.pathname;
+  if (!isVerificationPortal && pathname === "/verificar") {
+    return <VerificationView API_URL={apiRoot} />;
+  }
+
   // 1) Portales puros por subdominio (no montan el dashboard)
   if (isVerificationPortal) {
     return <VerificationView API_URL={apiRoot} />;
