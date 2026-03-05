@@ -2,7 +2,7 @@ import React, { useState, useEffect } from "react";
 import { Timeline } from "./Timeline";
 import { EventList } from "./EventList";
 import { DetailActions } from "./DetailActions";
-import { DOC_STATUS, apiUrl } from "../constants";
+import { DOC_STATUS, API_BASE_URL } from "../constants";
 
 const API_URL = API_BASE_URL;
 
@@ -30,7 +30,7 @@ export function DetailView({
   setSelectedDoc,
   logout,
   token,
-  currentUser, // <- NUEVO
+  currentUser,
 }) {
   const [timeline, setTimeline] = useState(null);
   const [loadingTimeline, setLoadingTimeline] = useState(false);
@@ -41,9 +41,7 @@ export function DetailView({
   const [reenviarSignerId, setReenviarSignerId] = useState(null);
   const [recordatorioLoading, setRecordatorioLoading] = useState(false);
 
-  // nombre dinámico + override para ti
-  const rawName =
-    currentUser?.name || currentUser?.fullName || "Usuario";
+  const rawName = currentUser?.name || currentUser?.fullName || "Usuario";
   const isJean =
     currentUser &&
     (currentUser.email === "tu-correo@loqueuses.com" ||
@@ -224,10 +222,7 @@ export function DetailView({
           <span>⬅️</span> Volver a la Bandeja
         </div>
 
-        <div
-          className="nav-item detail-sidebar-footer"
-          onClick={logout}
-        >
+        <div className="nav-item detail-sidebar-footer" onClick={logout}>
           <span>🚪</span> Cerrar Sesión
         </div>
       </aside>

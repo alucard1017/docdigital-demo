@@ -1,4 +1,2 @@
 // public/config.js
-window.__APP_CONFIG__ = {
-  API_BASE_URL: "https://verifirma-api.onrender.com"
-};
+// Ya no se usa. La URL de la API viene de import.meta.env en src/constants.js.
