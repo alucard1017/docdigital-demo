@@ -1,60 +1,32 @@
 // src/constants.js
 
-// Config de runtime inyectada por public/config.js (opcional)
-const runtimeConfig = window.__APP_CONFIG__ || {};
-
-// Normaliza una URL base (sin slash final)
-function normalizeBaseUrl(url) {
-  if (!url) return "";
-  return url.endsWith("/") ? url.slice(0, -1) : url;
-}
-
 /**
- * Obtiene la base URL de la API con prioridad:
- * 1. runtimeConfig.API_BASE_URL (inyectado por public/config.js)
- * 2. import.meta.env.VITE_API_BASE_URL (Vite: .env.development / .env.production)
- * 3. "" si no hay nada (para detectar errores rápido)
+ * API_BASE_URL SIMPLE que SIEMPRE funciona:
+ * ✅ DEV: localhost:4000 (env o fallback)
+ * ✅ PROD: verifirma-api.onrender.com (env o fallback) 
+ * ❌ NO más runtimeConfig que falla en Render
  */
-function resolveApiBaseUrl() {
-  const fromRuntime = runtimeConfig.API_BASE_URL;
-  const fromEnv = import.meta.env.VITE_API_BASE_URL;
-
-  const raw = fromRuntime || fromEnv || "";
-
-  // Log de ayuda en consola si no está configurado
-  if (!raw) {
-    // eslint-disable-next-line no-console
-    console.error(
-      "[config] API_BASE_URL no está definida. Revisa runtimeConfig.API_BASE_URL o VITE_API_BASE_URL en Vercel."
-    );
-  }
-
-  return normalizeBaseUrl(raw);
-}
-
-// URL base de la API
-export const API_BASE_URL = resolveApiBaseUrl();
+export const API_BASE_URL = import.meta.env.VITE_API_BASE_URL || 
+  (import.meta.env.DEV 
+    ? 'http://localhost:4000' 
+    : 'https://verifirma-api.onrender.com'
+  );
 
 /**
- * Helper para construir URLs de la API de forma inteligente:
- * ✅ DEV: /api/... (Vercel proxy automático → backend)
- * ✅ PROD: path limpio (Vercel Functions o backend proxy)
- * ✅ Compatible con API_BASE_URL si existe
+ * Helper URLs API (usa siempre este en fetch/axios)
  */
 export function apiUrl(path = "") {
-  const base = API_BASE_URL;
   const cleanPath = path.startsWith("/") ? path : `/${path}`;
-
-  // En desarrollo: usa proxy de Vercel para evitar CORS
+  
+  // DEV: proxy automático (sin CORS)
   if (import.meta.env.DEV) {
     return `/api${cleanPath}`;
   }
-
-  // En producción: usa base URL o path limpio
-  return base ? `${base}${cleanPath}` : cleanPath;
+  
+  return `${API_BASE_URL}${cleanPath}`;
 }
 
-// Estados de documento normalizados
+// Estados documentos
 export const DOC_STATUS = {
   PENDIENTE: "PENDIENTE",
   PENDIENTE_VISADO: "PENDIENTE_VISADO",
@@ -62,4 +34,11 @@ export const DOC_STATUS = {
   VISADO: "VISADO",
   FIRMADO: "FIRMADO",
   RECHAZADO: "RECHAZADO",
+};
+
+// URLs públicas (para enlaces email/share)
+export const PUBLIC_URLS = {
+  APP: import.meta.env.VITE_APP_URL || 'https://app.verifirma.cl',
+  SIGN: import.meta.env.VITE_SIGN_BASE_URL || 'https://firmar.verifirma.cl',
+  VERIFY: import.meta.env.VITE_VERIFY_BASE_URL || 'https://verificar.verifirma.cl'
 };
