@@ -65,17 +65,6 @@ function App() {
   const isVerificationPortal = subdomain === "verificar";
   const isSigningPortal = subdomain === "firmar";
 
-  // Demora para hidratar en cliente y evitar mismatch
-  const [isClientReady, setIsClientReady] = useState(false);
-
-  useEffect(() => {
-    // pequeño timeout para asegurarnos de que el DOM del cliente ya está listo
-    const t = setTimeout(() => {
-      setIsClientReady(true);
-    }, 50);
-    return () => clearTimeout(t);
-  }, []);
-
   const [identifier, setIdentifier] = useState("");
   const [password, setPassword] = useState("");
   const [isEmailMode, setIsEmailMode] = useState(false);
@@ -444,11 +433,7 @@ function App() {
   /* PORTALES / LOGIN / DETAIL ...   */
   /* =============================== */
 
-  // Mientras el cliente no esté listo, evita montar nada complejo
-  if (!isClientReady) {
-    return null;
-  }
-
+  // 1) Portales puros por subdominio (no montan el dashboard)
   if (isVerificationPortal) {
     return <VerificationView API_URL={apiRoot} />;
   }
@@ -468,6 +453,7 @@ function App() {
     );
   }
 
+  // 2) Rutas públicas sin login (mismo dominio principal)
   if (view === "public-sign") {
     return (
       <PublicSignView
@@ -487,6 +473,7 @@ function App() {
     return <VerificationView API_URL={apiRoot} />;
   }
 
+  // 3) Portal de login
   if (!token) {
     const displayIdentifier =
       isEmailMode || identifier.includes("@")
@@ -519,6 +506,7 @@ function App() {
     );
   }
 
+  // 4) Vista de detalle de documento
   if (view === "detail" && selectedDoc) {
     const requiereVisado = selectedDoc.requires_visado === true;
 
@@ -552,6 +540,7 @@ function App() {
     );
   }
 
+  // 5) Dashboard principal
   const docsFiltrados = useMemo(() => {
     return docs.filter((d) => {
       const esPendiente =
