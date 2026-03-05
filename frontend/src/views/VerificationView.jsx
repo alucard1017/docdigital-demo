@@ -18,15 +18,21 @@ export function VerificationView({ API_URL }) {
         setCode(urlCode);
       }
     } catch {
-      // ignore
+      // ignorar
     }
   }, []);
 
   const handleSubmit = async (e) => {
     e.preventDefault();
 
-    if (!code.trim()) {
+    const cleanCode = code.trim();
+    if (!cleanCode) {
       setError("Ingresa un código de verificación.");
+      return;
+    }
+
+    if (!API_URL) {
+      setError("La URL del servicio de verificación no está configurada.");
       return;
     }
 
@@ -35,10 +41,11 @@ export function VerificationView({ API_URL }) {
     setResult(null);
 
     try {
-      const cleanCode = code.trim();
-      const res = await fetch(
-        `${API_URL}/api/public/verificar/${encodeURIComponent(cleanCode)}`
-      );
+      const url = `${API_URL.replace(/\/+$/, "")}/api/public/verificar/${encodeURIComponent(
+        cleanCode
+      )}`;
+
+      const res = await fetch(url);
 
       if (!res.ok) {
         let message = "No se pudo verificar el documento.";
@@ -48,19 +55,20 @@ export function VerificationView({ API_URL }) {
           message =
             "El código de verificación ha expirado, solicita uno nuevo al emisor.";
         }
-        let data;
+
         try {
-          data = await res.json();
-          if (data?.message) message = data.message;
+          const data = await res.json();
+          if (data && data.message) message = data.message;
         } catch {
-          // ignore parse error
+          // respuesta sin JSON, ignorar
         }
+
         throw new Error(message);
       }
 
       const data = await res.json();
 
-      if (!data.document) {
+      if (!data || !data.document) {
         throw new Error(
           "No se encontraron datos del documento asociados a este código."
         );
@@ -68,6 +76,7 @@ export function VerificationView({ API_URL }) {
 
       setResult(data);
     } catch (err) {
+      console.error("Error al verificar documento:", err);
       setError(err.message || "Error al verificar el documento.");
       setResult(null);
     } finally {
@@ -116,7 +125,7 @@ export function VerificationView({ API_URL }) {
         rejectReason = meta.motivo;
       }
     } catch {
-      // metadata no JSON o corrupta, ignorar
+      // metadata no JSON, ignorar
     }
   }
 
@@ -235,7 +244,6 @@ export function VerificationView({ API_URL }) {
               background: "#f9fafb",
             }}
           >
-            {/* Banner de rechazo si aplica */}
             {doc.status === "RECHAZADO" && (
               <div
                 style={{
