@@ -61,17 +61,9 @@ function formatRunDoc(value) {
 /* ========= Component ========= */
 
 function App() {
-  /* ===============================
-     CONFIG SEGÚN SUBDOMINIO
-     =============================== */
-
   const subdomain = getSubdomain();
   const isVerificationPortal = subdomain === "verificar";
   const isSigningPortal = subdomain === "firmar";
-
-  /* ===============================
-     ESTADOS DE LA APLICACIÓN
-     =============================== */
 
   const [identifier, setIdentifier] = useState("");
   const [password, setPassword] = useState("");
@@ -82,7 +74,6 @@ function App() {
   const [message, setMessage] = useState("");
   const [isLoggingIn, setIsLoggingIn] = useState(false);
 
-  // 'list' | 'upload' | 'detail' | 'public-sign' | 'dashboard' | 'users' | 'verification'
   const [view, setView] = useState("list");
 
   const [formErrors, setFormErrors] = useState({});
@@ -121,12 +112,11 @@ function App() {
   const [firmanteRunValue, setFirmanteRunValue] = useState("");
   const [empresaRutValue, setEmpresaRutValue] = useState("");
 
-  // URL raíz normalizada (para pasar a vistas hijas)
   const apiRoot = useMemo(() => apiUrl("/"), []);
 
-  /* ===============================
-     FIRMA / VISADO PÚBLICO
-     =============================== */
+  /* =============================== */
+  /* FIRMA / VISADO PÚBLICO          */
+  /* =============================== */
 
   const cargarFirmaPublica = useCallback(async (tokenParam) => {
     try {
@@ -169,9 +159,9 @@ function App() {
     }
   }, []);
 
-  /* ===============================
-     RUTAS PÚBLICAS (sin login)
-     =============================== */
+  /* =============================== */
+  /* RUTAS PÚBLICAS (sin login)      */
+  /* =============================== */
 
   useEffect(() => {
     const syncViewWithLocation = () => {
@@ -210,9 +200,9 @@ function App() {
     return () => window.removeEventListener("popstate", syncViewWithLocation);
   }, [isVerificationPortal, isSigningPortal, cargarFirmaPublica]);
 
-  /* ===============================
-     TIMELINE + PDF DEL DETALLE
-     =============================== */
+  /* =============================== */
+  /* TIMELINE + PDF DEL DETALLE      */
+  /* =============================== */
 
   useEffect(() => {
     if (!token || !selectedDoc || view !== "detail") {
@@ -263,9 +253,9 @@ function App() {
     fetchPdfUrl();
   }, [token, selectedDoc]);
 
-  /* ===============================
-     CARGA DE DOCUMENTOS
-     =============================== */
+  /* =============================== */
+  /* CARGA DE DOCUMENTOS             */
+  /* =============================== */
 
   const cargarDocs = useCallback(
     async (sortParam = sort) => {
@@ -314,9 +304,9 @@ function App() {
     cargarDocs();
   }, [token, view, sort, cargarDocs]);
 
-  /* ===============================
-     LOGIN
-     =============================== */
+  /* =============================== */
+  /* LOGIN                           */
+  /* =============================== */
 
   async function handleLogin(e) {
     e.preventDefault();
@@ -357,9 +347,9 @@ function App() {
     }
   }
 
-  /* ===============================
-     ACCIONES: FIRMAR / VISAR / RECHAZAR
-     =============================== */
+  /* =============================== */
+  /* ACCIONES: FIRMAR / VISAR ...    */
+  /* =============================== */
 
   async function manejarAccionDocumento(id, accion, extraData = {}) {
     if (accion === "ver") {
@@ -424,9 +414,9 @@ function App() {
     }
   }
 
-  /* ===============================
-     SESIÓN
-     =============================== */
+  /* =============================== */
+  /* SESIÓN                          */
+  /* =============================== */
 
   const logout = () => {
     localStorage.clear();
@@ -439,9 +429,9 @@ function App() {
     throw new Error("Frontend test error");
   };
 
-  /* ===============================
-     PORTALES PUROS (subdominios)
-     =============================== */
+  /* =============================== */
+  /* PORTALES / LOGIN / DETAIL ...   */
+  /* =============================== */
 
   if (isVerificationPortal) {
     return <VerificationView API_URL={apiRoot} />;
@@ -462,10 +452,6 @@ function App() {
     );
   }
 
-  /* ===============================
-     RUTAS PÚBLICAS SIN LOGIN
-     =============================== */
-
   if (view === "public-sign") {
     return (
       <PublicSignView
@@ -484,10 +470,6 @@ function App() {
   if (view === "verification") {
     return <VerificationView API_URL={apiRoot} />;
   }
-
-  /* ===============================
-     LOGIN VIEW
-     =============================== */
 
   if (!token) {
     const displayIdentifier =
@@ -521,10 +503,6 @@ function App() {
     );
   }
 
-  /* ===============================
-     DETAIL VIEW
-     =============================== */
-
   if (view === "detail" && selectedDoc) {
     const requiereVisado = selectedDoc.requires_visado === true;
 
@@ -557,10 +535,6 @@ function App() {
       />
     );
   }
-
-  /* ===============================
-     FILTRO Y PAGINACIÓN
-     =============================== */
 
   const docsFiltrados = useMemo(() => {
     return docs.filter((d) => {
@@ -607,10 +581,6 @@ function App() {
     (page - 1) * pageSize,
     page * pageSize
   );
-
-  /* ===============================
-     LAYOUT PRINCIPAL
-     =============================== */
 
   return (
     <div className="dashboard-layout">
