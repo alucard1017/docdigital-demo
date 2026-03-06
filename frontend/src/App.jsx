@@ -430,22 +430,38 @@ function App() {
   };
 
   /* =============================== */
-  /* PORTALES / LOGIN / DETAIL ...   */
+  /* MODO DE VISTA (UN SOLO PUNTO)   */
   /* =============================== */
 
-  // Atajo duro: si estamos en /verificar en el dominio principal,
-  // no montes login ni dashboard, solo la vista de verificación
   const pathname = window.location.pathname;
-  if (!isVerificationPortal && pathname === "/verificar") {
-    return <VerificationView API_URL={apiRoot} />;
-  }
 
-  // 1) Portales puros por subdominio (no montan el dashboard)
+  let mode = "app"; // por defecto: app normal (login + dashboard)
+
   if (isVerificationPortal) {
+    mode = "verification-portal";
+  } else if (isSigningPortal) {
+    mode = "signing-portal";
+  } else if (!isVerificationPortal && pathname === "/verificar") {
+    mode = "verification-route";
+  } else if (view === "public-sign") {
+    mode = "public-sign";
+  } else if (view === "verification") {
+    mode = "verification-view";
+  }
+
+  /* =============================== */
+  /* RENDER SEGÚN MODO               */
+  /* =============================== */
+
+  if (
+    mode === "verification-portal" ||
+    mode === "verification-route" ||
+    mode === "verification-view"
+  ) {
     return <VerificationView API_URL={apiRoot} />;
   }
 
-  if (isSigningPortal) {
+  if (mode === "signing-portal") {
     return (
       <PublicSignView
         publicSignLoading={publicSignLoading}
@@ -460,8 +476,7 @@ function App() {
     );
   }
 
-  // 2) Rutas públicas sin login (mismo dominio principal)
-  if (view === "public-sign") {
+  if (mode === "public-sign") {
     return (
       <PublicSignView
         publicSignLoading={publicSignLoading}
@@ -476,11 +491,6 @@ function App() {
     );
   }
 
-  if (view === "verification") {
-    return <VerificationView API_URL={apiRoot} />;
-  }
-
-  // 3) Portal de login
   if (!token) {
     const displayIdentifier =
       isEmailMode || identifier.includes("@")
@@ -513,7 +523,6 @@ function App() {
     );
   }
 
-  // 4) Vista de detalle de documento
   if (view === "detail" && selectedDoc) {
     const requiereVisado = selectedDoc.requires_visado === true;
 
@@ -547,7 +556,6 @@ function App() {
     );
   }
 
-  // 5) Dashboard principal
   const docsFiltrados = useMemo(() => {
     return docs.filter((d) => {
       const esPendiente =
