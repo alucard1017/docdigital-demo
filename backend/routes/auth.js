@@ -1,24 +1,45 @@
+// backend/routes/auth.js
 const express = require("express");
 const bcrypt = require("bcryptjs");
 const jwt = require("jsonwebtoken");
 const db = require("../db");
 const Sentry = require("@sentry/node");
+const { logAuth } = require("../utils/auditLog");
 
 const router = express.Router();
 
-// JWT_SECRET obligatorio
+/* ========= Configuración JWT ========= */
+
 const JWT_SECRET = process.env.JWT_SECRET;
 if (!JWT_SECRET) {
   console.error("❌ JWT_SECRET no está definido en variables de entorno");
-  // En producción podrías hacer: process.exit(1);
 }
 
-// Normalizar RUN: quitar puntos y guiones
-const normalizeRun = (run) => (run || "").replace(/[.\-]/g, "");
+/* ========= Helpers ========= */
 
-/**
- * Middleware de autenticación
- */
+// Normalizar RUN: quitar puntos y guiones
+const normalizeRun = (run) => (run || "").replace(/[.\\-]/g, "");
+
+/* ========= Helpers de permisos sobre usuarios ========= */
+
+function canManageAllUsers(user) {
+  return user?.role === "SUPER_ADMIN" || user?.role === "ADMIN_GLOBAL";
+}
+
+function canManageCompanyUsers(user) {
+  return (
+    user?.role === "ADMIN" ||
+    user?.role === "SUPER_ADMIN" ||
+    user?.role === "ADMIN_GLOBAL"
+  );
+}
+
+function isProtectedUser(targetUser) {
+  return targetUser?.role === "SUPER_ADMIN";
+}
+
+/* ========= Middleware de autenticación ========= */
+
 function requireAuth(req, res, next) {
   try {
     const header = req.headers.authorization || "";
@@ -31,29 +52,49 @@ function requireAuth(req, res, next) {
       return res.status(401).json({ message: "No autorizado" });
     }
 
-    const payload = jwt.verify(token, JWT_SECRET);
-    req.user = payload;
+    if (!JWT_SECRET) {
+      console.error("❌ requireAuth sin JWT_SECRET configurado");
+      return res
+        .status(500)
+        .json({ message: "Configuración de servidor incompleta" });
+    }
 
-    // Contexto en Sentry
+    const payload = jwt.verify(token, JWT_SECRET);
+
+    req.user = {
+      id: payload.id,
+      run: payload.run,
+      email: payload.email,
+      name: payload.name,
+      role: payload.role,
+      company_id: payload.company_id ?? null,
+    };
+
+    if (process.env.NODE_ENV !== "production") {
+      console.log("DEBUG REQ.USER en requireAuth:", req.user);
+    }
+
     Sentry.setUser({
       id: String(payload.id),
       username: payload.name || undefined,
       email: payload.email || undefined,
     });
-
     Sentry.setTag("user_role", payload.role || "unknown");
     Sentry.setTag("user_company", String(payload.company_id || "none"));
+    if (req.requestId) {
+      Sentry.setTag("request_id", req.requestId);
+    }
 
     return next();
   } catch (err) {
     console.error("Error en requireAuth:", err);
+    Sentry.captureException(err);
     return res.status(401).json({ message: "Token inválido o expirado" });
   }
 }
 
-/**
- * Middleware de autorización por rol
- */
+/* ========= Middleware de autorización por rol ========= */
+
 function requireRole(requiredRole) {
   return function (req, res, next) {
     if (!req.user || !req.user.role) {
@@ -62,7 +103,6 @@ function requireRole(requiredRole) {
 
     const role = req.user.role;
 
-    // SUPER_ADMIN tiene pase libre
     if (role === "SUPER_ADMIN") {
       return next();
     }
@@ -89,12 +129,17 @@ function requireRole(requiredRole) {
   };
 }
 
-/**
- * POST /api/auth/login
- * Acepta RUN o correo en un solo campo: identifier
- */
+/* ========= POST /api/auth/login ========= */
+
 router.post("/login", async (req, res) => {
   try {
+    if (!JWT_SECRET) {
+      console.error("❌ Intento de login sin JWT_SECRET configurado");
+      return res
+        .status(500)
+        .json({ message: "Configuración de servidor incompleta" });
+    }
+
     const { identifier, password } = req.body || {};
 
     if (!identifier || !password) {
@@ -105,29 +150,73 @@ router.post("/login", async (req, res) => {
 
     const rawIdentifier = String(identifier).trim();
     const isEmail = rawIdentifier.includes("@");
+
     const normalizedIdentifier = isEmail
       ? rawIdentifier.toLowerCase()
       : normalizeRun(rawIdentifier);
 
     if (process.env.NODE_ENV !== "production") {
       console.log("DEBUG /api/auth/login body:", {
-        identifier: normalizedIdentifier,
+        rawIdentifier,
+        normalizedIdentifier,
         isEmail,
       });
     }
 
-    const query = isEmail
-      ? "SELECT * FROM users WHERE email = $1"
-      : "SELECT * FROM users WHERE run = $1";
+    if (!db || typeof db.query !== "function") {
+      console.error("❌ db.query no está disponible");
+      return res
+        .status(500)
+        .json({ message: "Error de conexión con la base de datos" });
+    }
 
-    const result = await db.query(query, [normalizedIdentifier]);
+    const query = isEmail
+      ? `SELECT * FROM public.users WHERE email = $1`
+      : `SELECT * FROM public.users WHERE run = $1`;
+
+    let result;
+    try {
+      result = await db.query(query, [normalizedIdentifier]);
+    } catch (dbErr) {
+      console.error("❌ Error ejecutando query en /api/auth/login:", dbErr);
+      Sentry.captureException(dbErr);
+      return res
+        .status(500)
+        .json({ message: "Error de base de datos en login" });
+    }
+
     const user = result.rows[0];
 
     if (!user) {
+      if (process.env.NODE_ENV !== "production") {
+        console.warn(
+          "Login fallido: usuario no encontrado",
+          isEmail
+            ? { by: "email", email: normalizedIdentifier }
+            : { by: "run", run: normalizedIdentifier }
+        );
+      }
+
+      await logAuth({
+        userId: null,
+        run: isEmail ? null : normalizedIdentifier,
+        action: "login_failed",
+        metadata: { reason: "user_not_found", isEmail },
+        req,
+      });
+
       return res.status(401).json({ message: "Credenciales inválidas" });
     }
 
     if (user.active === false) {
+      await logAuth({
+        userId: user.id,
+        run: user.run,
+        action: "login_failed",
+        metadata: { reason: "user_inactive" },
+        req,
+      });
+
       return res
         .status(401)
         .json({ message: "Cuenta desactivada, contacta al administrador" });
@@ -135,11 +224,45 @@ router.post("/login", async (req, res) => {
 
     if (!user.password_hash) {
       console.warn("Usuario sin password_hash, id:", user.id);
+
+      await logAuth({
+        userId: user.id,
+        run: user.run,
+        action: "login_failed",
+        metadata: { reason: "missing_password_hash" },
+        req,
+      });
+
       return res.status(401).json({ message: "Credenciales inválidas" });
     }
 
-    const ok = await bcrypt.compare(password, user.password_hash);
+    let ok;
+    try {
+      ok = await bcrypt.compare(password, user.password_hash);
+    } catch (cmpErr) {
+      console.error("Error comparando password en /api/auth/login:", cmpErr);
+      Sentry.captureException(cmpErr);
+      return res
+        .status(500)
+        .json({ message: "Error interno al validar la contraseña" });
+    }
+
     if (!ok) {
+      if (process.env.NODE_ENV !== "production") {
+        console.warn(
+          "Login fallido: contraseña incorrecta para usuario id:",
+          user.id
+        );
+      }
+
+      await logAuth({
+        userId: user.id,
+        run: user.run,
+        action: "login_failed",
+        metadata: { reason: "bad_password" },
+        req,
+      });
+
       return res.status(401).json({ message: "Credenciales inválidas" });
     }
 
@@ -149,7 +272,7 @@ router.post("/login", async (req, res) => {
       email: user.email,
       name: user.name,
       role: user.role,
-      company_id: user.company_id,
+      company_id: user.company_id ?? null,
     };
 
     let token;
@@ -157,10 +280,19 @@ router.post("/login", async (req, res) => {
       token = jwt.sign(tokenPayload, JWT_SECRET, { expiresIn: "8h" });
     } catch (err) {
       console.error("Error firmando JWT en /login:", err);
+      Sentry.captureException(err);
       return res
         .status(500)
         .json({ message: "Error interno al generar el token" });
     }
+
+    await logAuth({
+      userId: user.id,
+      run: user.run,
+      action: "login_success",
+      metadata: { role: user.role, company_id: user.company_id ?? null },
+      req,
+    });
 
     return res.json({
       token,
@@ -175,9 +307,8 @@ router.post("/login", async (req, res) => {
   }
 });
 
-/**
- * GET /api/auth/me
- */
+/* ========= GET /api/auth/me ========= */
+
 router.get("/me", requireAuth, (req, res) => {
   return res.json({
     id: req.user.id,
@@ -185,10 +316,13 @@ router.get("/me", requireAuth, (req, res) => {
     email: req.user.email,
     name: req.user.name,
     role: req.user.role,
-    company_id: req.user.company_id,
+    company_id: req.user.company_id ?? null,
   });
 });
 
 module.exports = router;
 module.exports.requireAuth = requireAuth;
 module.exports.requireRole = requireRole;
+module.exports.canManageAllUsers = canManageAllUsers;
+module.exports.canManageCompanyUsers = canManageCompanyUsers;
+module.exports.isProtectedUser = isProtectedUser;

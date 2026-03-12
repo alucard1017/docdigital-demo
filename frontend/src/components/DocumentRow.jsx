@@ -1,4 +1,3 @@
-// src/components/DocumentRow.jsx
 import React from "react";
 import { DOC_STATUS, API_BASE_URL } from "../constants";
 
@@ -72,7 +71,8 @@ export function DocumentRow({ doc, onOpenDetail, token }) {
   const estadoLabel = STATUS_LABELS[doc.status] || doc.status || "Sin estado";
   const estadoColor = STATUS_COLORS[doc.status] || "#6b7280";
 
-  const handleVerPdf = async () => {
+  const handleVerPdf = async (e) => {
+    e.stopPropagation();
     try {
       const res = await fetch(`${API_URL}/api/docs/${doc.id}/pdf`, {
         headers: { Authorization: `Bearer ${token}` },
@@ -83,14 +83,15 @@ export function DocumentRow({ doc, onOpenDetail, token }) {
         throw new Error(data.message || "No se pudo obtener el PDF");
       }
 
-      window.open(data.url, "_blank");
+      window.open(data.url, "_blank", "noopener,noreferrer");
     } catch (err) {
       console.error("Error abriendo PDF:", err);
-      alert("❌ " + err.message);
+      alert("❌ " + (err.message || "No se pudo abrir el PDF"));
     }
   };
 
-  const handleVerRechazo = () => {
+  const handleVerRechazo = (e) => {
+    e.stopPropagation();
     if (!doc.reject_reason) {
       alert("Este documento no tiene motivo de rechazo.");
       return;
@@ -98,18 +99,22 @@ export function DocumentRow({ doc, onOpenDetail, token }) {
     alert("Motivo de rechazo:\n\n" + doc.reject_reason);
   };
 
+  const handleOpenDetail = () => {
+    onOpenDetail(doc);
+  };
+
   return (
-    <tr className="doc-row" onClick={() => onOpenDetail(doc)}>
+    <tr className="doc-row" onClick={handleOpenDetail}>
       {/* N° interno de contrato */}
       <td className="doc-cell-id">
-        {doc.numero_contrato_interno || `#${doc.id}`}
+        <span className="doc-id-pill">
+          {doc.numero_contrato_interno || `#${doc.id}`}
+        </span>
       </td>
 
       {/* Título + fecha */}
       <td className="doc-cell-title">
-        <div className="doc-title-main">
-          {doc.title || "Sin título"}
-        </div>
+        <div className="doc-title-main">{doc.title || "Sin título"}</div>
         <div className="doc-title-sub">{formattedFecha}</div>
       </td>
 
@@ -142,13 +147,13 @@ export function DocumentRow({ doc, onOpenDetail, token }) {
         <div className="doc-signer-main">
           {doc.firmante_nombre || "No asignado"}
         </div>
+        {doc.destinatario_nombre && (
+          <div className="doc-signer-sub">{doc.destinatario_nombre}</div>
+        )}
       </td>
 
       {/* Acciones */}
-      <td
-        className="doc-cell-actions"
-        onClick={(e) => e.stopPropagation()}
-      >
+      <td className="doc-cell-actions">
         <div className="doc-actions">
           {doc.status === DOC_STATUS.RECHAZADO && doc.reject_reason && (
             <button
@@ -160,18 +165,17 @@ export function DocumentRow({ doc, onOpenDetail, token }) {
             </button>
           )}
 
-          <button
-            type="button"
-            className="btn-main"
-            onClick={handleVerPdf}
-          >
+          <button type="button" className="btn-main" onClick={handleVerPdf}>
             Ver PDF
           </button>
 
           <button
             type="button"
             className="btn-main btn-primary"
-            onClick={() => onOpenDetail(doc)}
+            onClick={(e) => {
+              e.stopPropagation();
+              handleOpenDetail();
+            }}
           >
             Abrir documento
           </button>

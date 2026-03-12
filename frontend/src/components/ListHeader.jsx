@@ -1,8 +1,11 @@
-// src/components/ListHeader.jsx
 import React from "react";
 import { API_BASE_URL } from "../constants";
 
 const API_URL = API_BASE_URL;
+
+function apiUrl(path) {
+  return `${API_URL.replace(/\/+$/, "")}/api${path}`;
+}
 
 export function ListHeader({
   sort,
@@ -17,7 +20,7 @@ export function ListHeader({
   firmados,
   rechazados,
   onSync,
-  token, // <-- nuevo prop
+  token,
 }) {
   const handleDownloadReport = async () => {
     try {
@@ -52,18 +55,21 @@ export function ListHeader({
     }
   };
 
+  const total = pendientes + visados + firmados + rechazados;
+
   return (
     <>
       {/* Resumen de estados */}
       <div
         style={{
           display: "flex",
+          flexWrap: "wrap",
           gap: 12,
           marginBottom: 16,
           fontSize: "0.85rem",
         }}
       >
-        {/* TODOS */}
+        {/* Todos */}
         <button
           type="button"
           onClick={() => setStatusFilter("TODOS")}
@@ -76,7 +82,7 @@ export function ListHeader({
             cursor: "pointer",
           }}
         >
-          Todos: <strong>{pendientes + visados + firmados + rechazados}</strong>
+          Todos: <strong>{total}</strong>
         </button>
 
         {/* Pendientes */}
@@ -89,8 +95,7 @@ export function ListHeader({
             border: "1px solid #e5e7eb",
             background:
               statusFilter === "PENDIENTES" ? "#3730a3" : "#eef2ff",
-            color:
-              statusFilter === "PENDIENTES" ? "#eef2ff" : "#3730a3",
+            color: statusFilter === "PENDIENTES" ? "#eef2ff" : "#3730a3",
             cursor: "pointer",
           }}
         >
@@ -107,8 +112,7 @@ export function ListHeader({
             border: "1px solid #e5e7eb",
             background:
               statusFilter === "VISADOS" ? "#0f766e" : "#ecfeff",
-            color:
-              statusFilter === "VISADOS" ? "#ecfeff" : "#0f766e",
+            color: statusFilter === "VISADOS" ? "#ecfeff" : "#0f766e",
             cursor: "pointer",
           }}
         >
@@ -125,8 +129,7 @@ export function ListHeader({
             border: "1px solid #e5e7eb",
             background:
               statusFilter === "FIRMADOS" ? "#166534" : "#ecfdf3",
-            color:
-              statusFilter === "FIRMADOS" ? "#ecfdf3" : "#166534",
+            color: statusFilter === "FIRMADOS" ? "#ecfdf3" : "#166534",
             cursor: "pointer",
           }}
         >
@@ -143,8 +146,7 @@ export function ListHeader({
             border: "1px solid #e5e7eb",
             background:
               statusFilter === "RECHAZADOS" ? "#b91c1c" : "#fef2f2",
-            color:
-              statusFilter === "RECHAZADOS" ? "#fef2f2" : "#b91c1c",
+            color: statusFilter === "RECHAZADOS" ? "#fef2f2" : "#b91c1c",
             cursor: "pointer",
           }}
         >
@@ -157,7 +159,8 @@ export function ListHeader({
         style={{
           display: "flex",
           justifyContent: "space-between",
-          alignItems: "center",
+          alignItems: "flex-start",
+          gap: 16,
           marginBottom: 30,
         }}
       >
@@ -171,6 +174,15 @@ export function ListHeader({
           >
             Bandeja de Entrada
           </h1>
+          <p
+            style={{
+              margin: "4px 0 0 0",
+              fontSize: "0.85rem",
+              color: "#6b7280",
+            }}
+          >
+            {totalFiltrado} documentos encontrados con los filtros actuales
+          </p>
 
           {/* Orden + filtros */}
           <div
@@ -246,6 +258,7 @@ export function ListHeader({
                 alignItems: "center",
                 gap: 8,
                 flexGrow: 1,
+                minWidth: 200,
               }}
             >
               <span>Buscar:</span>
@@ -268,7 +281,14 @@ export function ListHeader({
         </div>
 
         {/* Botones de acciones */}
-        <div style={{ display: "flex", gap: 8 }}>
+        <div
+          style={{
+            display: "flex",
+            flexDirection: "column",
+            gap: 8,
+            alignItems: "flex-end",
+          }}
+        >
           <button
             type="button"
             className="btn-main"

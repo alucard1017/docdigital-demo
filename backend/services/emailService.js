@@ -1,14 +1,18 @@
 // backend/services/emailService.js
-const { MailtrapClient } = require("mailtrap");
+const nodemailer = require("nodemailer");
 const QRCode = require("qrcode");
 const crypto = require("crypto");
 const { uploadBufferToS3, getSignedUrl } = require("./storageR2");
 
-console.log("📬 [EMAIL] Cargando emailService.js (Mailtrap API)");
+console.log("📬 [EMAIL] Cargando emailService.js (SMTP Brevo)");
 
-const TOKEN = process.env.MAILTRAP_TOKEN || process.env.MAILTRAP_API_TOKEN;
-const SENDER_EMAIL = process.env.MAILTRAP_SENDER_EMAIL;
-const SENDER_NAME = process.env.MAILTRAP_SENDER_NAME || "VeriFirma";
+// Config SMTP desde .env
+const SMTP_HOST = process.env.SMTP_HOST;
+const SMTP_PORT = Number(process.env.SMTP_PORT) || 587;
+const SMTP_USER = process.env.SMTP_USER;
+const SMTP_PASS = process.env.SMTP_PASS;
+const SENDER_EMAIL = process.env.SMTP_FROM_EMAIL;
+const SENDER_NAME = process.env.SMTP_FROM_NAME || "VeriFirma";
 
 // URL pública fija de verificación de documentos
 const PUBLIC_VERIFY_BASE_URL =
@@ -18,59 +22,92 @@ const PUBLIC_VERIFY_BASE_URL =
 const DASHBOARD_BASE_URL =
   process.env.DASHBOARD_URL || "https://app.verifirma.cl";
 
-// DEBUG: ver qué llega desde Render
-console.log("🔎 [EMAIL] DEBUG ENV:", {
-  MAILTRAP_TOKEN: TOKEN ? "[OK] token presente" : "[FALTA]",
-  MAILTRAP_SENDER_EMAIL: SENDER_EMAIL || "[FALTA]",
-  MAILTRAP_SENDER_NAME: SENDER_NAME || "[FALTA]",
-  PUBLIC_VERIFY_BASE_URL,
-  DASHBOARD_BASE_URL,
+// DEBUG: ver qué llega desde .env
+console.log("🔎 [EMAIL] DEBUG SMTP:", {
+  SMTP_HOST,
+  SMTP_PORT,
+  SMTP_USER: SMTP_USER ? "[OK]" : "[FALTA]",
+  SMTP_PASS: SMTP_PASS ? "[OK]" : "[FALTA]",
+  SENDER_EMAIL: SENDER_EMAIL || "[FALTA]",
+  SENDER_NAME,
 });
 
-if (!TOKEN || !SENDER_EMAIL) {
+if (!SMTP_HOST || !SMTP_USER || !SMTP_PASS || !SENDER_EMAIL) {
   console.warn(
-    "⚠️ [EMAIL] Faltan variables MAILTRAP_TOKEN o MAILTRAP_SENDER_EMAIL",
+    "⚠️ [EMAIL] Faltan variables SMTP_* o SMTP_FROM_EMAIL",
     {
-      MAILTRAP_TOKEN: !!TOKEN,
-      MAILTRAP_SENDER_EMAIL: !!SENDER_EMAIL,
+      SMTP_HOST: !!SMTP_HOST,
+      SMTP_USER: !!SMTP_USER,
+      SMTP_PASS: !!SMTP_PASS,
+      SENDER_EMAIL: !!SENDER_EMAIL,
     }
   );
 }
 
-const client = new MailtrapClient({ token: TOKEN });
-const sender = { name: SENDER_NAME, email: SENDER_EMAIL };
+// Transporter Nodemailer con Mailtrap SMTP sandbox
+const transporter = nodemailer.createTransport({
+  host: SMTP_HOST,
+  port: SMTP_PORT,
+  auth: {
+    user: SMTP_USER,
+    pass: SMTP_PASS,
+  },
+});
 
 /* ================================
    Utilidades
    ================================ */
 
 /**
- * Enviar email genérico HTML con Mailtrap
+ * Enviar email genérico HTML vía SMTP
+ */
+function sleep(ms) {
+  return new Promise((resolve) => setTimeout(resolve, ms));
+}
+
+/**
+ * Enviar email genérico HTML vía SMTP (con throttle)
  */
 async function sendEmail({ to, subject, html }) {
-  if (!TOKEN || !SENDER_EMAIL) {
-    console.error("❌ [EMAIL] Mailtrap API no configurada correctamente");
+  if (!SMTP_HOST || !SMTP_USER || !SMTP_PASS || !SENDER_EMAIL) {
+    console.error("❌ [EMAIL] SMTP no configurado correctamente");
     return false;
   }
 
   try {
-    console.log("📬 [EMAIL] Enviando email (Mailtrap API):", { to, subject });
+    console.log("📬 [EMAIL] Enviando email (SMTP):", { to, subject });
 
-    await client.send({
-      from: sender,
-      to: [{ email: to }],
+    const info = await transporter.sendMail({
+      from: `"${SENDER_NAME}" <${SENDER_EMAIL}>`,
+      to,
       subject,
       html,
-      category: "Transactional",
     });
 
-    console.log("✅ [EMAIL] Enviado OK (Mailtrap API)");
+    console.log("✅ [EMAIL] Enviado OK (SMTP):", info.messageId);
     return true;
   } catch (error) {
-    console.error(
-      "❌ [EMAIL] Error enviando email (Mailtrap API):",
-      error.message
-    );
+    const msg = String(error?.message || "");
+    console.error("❌ [EMAIL] Error enviando email (SMTP):", msg);
+
+    // Si Mailtrap devuelve "Too many emails per second", reintenta una vez
+    if (msg.includes("Too many emails per second")) {
+      console.warn("⏳ [EMAIL] Throttling: reintentando en 1500ms...");
+      await sleep(1500);
+      try {
+        const info = await transporter.sendMail({
+          from: `"${SENDER_NAME}" <${SENDER_EMAIL}>`,
+          to,
+          subject,
+          html,
+        });
+        console.log("✅ [EMAIL] Reintento OK (SMTP):", info.messageId);
+        return true;
+      } catch (err2) {
+        console.error("❌ [EMAIL] Reintento falló:", err2.message);
+      }
+    }
+
     return false;
   }
 }
@@ -781,8 +818,8 @@ module.exports = {
   sendEmail,
   sendSigningInvitation,
   sendVisadoInvitation,
-  sendRejectionNotification,  
-  sendReminder,                
+  sendRejectionNotification,
+  sendReminder,
   sendNotification,
   sendDestinationNotification,
 };            

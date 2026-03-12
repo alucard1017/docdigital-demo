@@ -1,13 +1,13 @@
 // backend/server.js
 
-// ================================
-// CARGA DE VARIABLES DE ENTORNO
-// ================================
+/* ================================
+   CARGA DE VARIABLES DE ENTORNO
+   ================================ */
 const envFile =
   process.env.NODE_ENV === "development" ? ".env.development" : ".env";
 
 require("dotenv").config({ path: envFile });
-require("./instrument"); // inicializa Sentry v8 antes de todo
+require("./instrument"); // Inicializa Sentry antes de todo
 
 const express = require("express");
 const path = require("path");
@@ -15,6 +15,8 @@ const fs = require("fs");
 const rateLimit = require("express-rate-limit");
 const helmet = require("helmet");
 const Sentry = require("@sentry/node");
+const requestMeta = require("./middlewares/requestMeta");
+const db = require("./db");
 
 console.log("=====================================");
 console.log("🚀 INICIANDO SERVER.JS");
@@ -23,9 +25,16 @@ console.log("Usando archivo de entorno:", envFile);
 console.log("=====================================");
 
 const app = express();
+
+// Confía en proxy (Render/Nginx) para X-Forwarded-For
 app.set("trust proxy", 1);
 
-// BODY PARSERS
+// Middleware global de metadatos de request (requestId, ip, userAgent)
+app.use(requestMeta);
+
+/* ================================
+   BODY PARSERS
+   ================================ */
 app.use(express.json());
 app.use(express.urlencoded({ extended: true }));
 
@@ -66,7 +75,6 @@ const requiredEnvVars = [
   "SMTP_USER",
   "SMTP_PASS",
   "SMTP_FROM_EMAIL",
-  // R2 / storage
   "R2_ACCOUNT_ID",
   "R2_BUCKET",
   "R2_ACCESS_KEY_ID",
@@ -76,10 +84,7 @@ const requiredEnvVars = [
 
 const missingVars = requiredEnvVars.filter((variable) => !process.env[variable]);
 if (missingVars.length > 0) {
-  console.warn(
-    "⚠️  Variables de entorno faltantes:",
-    missingVars.join(", ")
-  );
+  console.warn("⚠️  Variables de entorno faltantes:", missingVars.join(", "));
 }
 console.log("✓ Variables de entorno validadas");
 
@@ -98,16 +103,16 @@ const loginLimiter = rateLimit({
   message: "Demasiados intentos de login, intenta después",
 });
 
-app.use(generalLimiter);
-
 const publicLimiter = rateLimit({
   windowMs: 10 * 60 * 1000,
   max: 60,
   message: "Demasiadas solicitudes desde este origen. Intenta más tarde.",
 });
 
+app.use(generalLimiter);
+
 /* ================================
-   CORS MANUAL (ACTUALIZADO)
+   CORS MANUAL
    ================================ */
 const allowedOrigins = [
   process.env.FRONTEND_URL,
@@ -117,7 +122,7 @@ const allowedOrigins = [
   "https://app.verifirma.cl",
   "https://firmar.verifirma.cl",
   "https://verificar.verifirma.cl",
-  "https://docdigital.vercel.app", // frontend en Vercel
+  "https://docdigital.vercel.app",
   "http://localhost:5173",
   "http://localhost:5174",
   "http://localhost:3000",
@@ -136,10 +141,7 @@ app.use((req, res, next) => {
       "Access-Control-Allow-Methods",
       "GET,HEAD,PUT,PATCH,POST,DELETE,OPTIONS"
     );
-    res.header(
-      "Access-Control-Allow-Headers",
-      "Content-Type, Authorization"
-    );
+    res.header("Access-Control-Allow-Headers", "Content-Type, Authorization");
     res.header("Access-Control-Allow-Credentials", "true");
   }
 
@@ -172,28 +174,44 @@ app.use("/api-docs", swaggerUi.serve, swaggerUi.setup(specs));
 console.log("✓ Swagger UI disponible en /api-docs");
 
 /* ================================
-   RUTAS DE SALUD / PING
+   RUTAS DE SALUD / INFO
    ================================ */
-app.get("/api/health", (req, res) => {
+app.get("/api/health", async (req, res) => {
   try {
-    console.log("DEBUG HEALTH >> /api/health llamado");
+    const started = process.uptime();
+    let dbStatus = "unknown";
 
-    res.json({
-      ok: true,
+    try {
+      const r = await db.query("SELECT 1 AS ok");
+      dbStatus = r.rows[0].ok === 1 ? "ok" : "error";
+    } catch (dbErr) {
+      console.error("❌ /api/health DB error:", dbErr);
+      dbStatus = "error";
+    }
+
+    const status = dbStatus === "ok" ? "ok" : "degraded";
+
+    res.status(status === "ok" ? 200 : 503).json({
+      status,
+      uptime_seconds: Math.round(started),
       timestamp: new Date().toISOString(),
-      storage_enabled: !!process.env.R2_BUCKET,
-      database: process.env.DATABASE_URL ? "conectada" : "no configurada",
+      checks: {
+        database: dbStatus,
+        storage: process.env.R2_BUCKET ? "configured" : "not_configured",
+      },
     });
   } catch (e) {
     console.error("❌ Error en /api/health:", e);
-    res.status(500).json({ ok: false, message: "Error en health" });
+    res.status(500).json({
+      status: "error",
+      message: "Error en health",
+      timestamp: new Date().toISOString(),
+    });
   }
 });
 console.log("✓ Ruta GET /api/health registrada");
 
-/* ================================
-   INFO API
-   ================================ */
+// Info simple
 app.get("/api/info", (req, res) => {
   res.json({
     message: "API de VeriFirma funcionando",
@@ -226,6 +244,9 @@ const docRoutes = require("./routes/documents");
 const publicRoutes = require("./routes/public");
 const usersRouter = require("./routes/users");
 const publicRegisterRoutes = require("./routes/publicRegister");
+const companiesRoutes = require("./routes/companies");
+const statusRoutes = require("./routes/status");
+const logsRoutes = require("./routes/logs");
 const { requireAuth, requireRole } = require("./routes/auth");
 
 app.use("/api/auth", loginLimiter, authRoutes);
@@ -234,15 +255,31 @@ console.log("✓ Rutas /api/auth registradas");
 app.use("/api/users", usersRouter);
 console.log("✓ Rutas /api/users registradas");
 
+app.use("/api/status", statusRoutes);
+console.log("✓ Rutas /api/status registradas");
+
+app.use("/api/logs", logsRoutes);
+console.log("✓ Rutas /api/logs registradas");
+
 app.use(
   "/api/docs",
   (req, res, next) => {
-    console.log(`DEBUG DOCS >> ${req.method} ${req.originalUrl} llamado`);
+    console.log(`DEBUG DOCS (alias) >> ${req.method} ${req.originalUrl} llamado`);
     next();
   },
   docRoutes
 );
-console.log("✓ Rutas /api/docs registradas");
+
+// Prefijo nuevo que usa el frontend
+app.use(
+  "/api/documents",
+  (req, res, next) => {
+    console.log(`DEBUG DOCUMENTS >> ${req.method} ${req.originalUrl} llamado`);
+    next();
+  },
+  docRoutes
+);
+console.log("✓ Rutas /api/documents registradas");
 
 app.use(
   "/api/public",
@@ -257,6 +294,9 @@ console.log("✓ Rutas /api/public registradas");
 
 app.use("/api/public", publicRegisterRoutes);
 console.log("✓ Rutas /api/public/register registradas");
+
+app.use("/api/companies", companiesRoutes);
+console.log("✓ Rutas /api/companies registradas");
 
 /* ================================
    RUTA STORAGE / URLs FIRMADAS
@@ -302,12 +342,15 @@ app.get("/api/admin/ping", requireAuth, requireRole("admin"), (req, res) => {
 });
 console.log("✓ Ruta GET /api/admin/ping registrada");
 
+/* ================================
+   DEBUG AUTH
+   ================================ */
 app.get("/api/test-auth", (req, res) => {
   console.log("📍 GET /api/test-auth llamado");
   const header = req.headers.authorization || "";
   const token = header.replace("Bearer ", "");
   res.json({
-    token_recibido: token ? "sí" : "no",
+    token_recibido: !!token ? "sí" : "no",
     token,
     header_completo: header || "ninguno",
   });
@@ -477,10 +520,13 @@ const server = app.listen(PORT, () => {
   console.log("   GET  /api/info");
   console.log("   GET  /api/sentry-test");
   console.log("   GET  /api/stats");
+  console.log("   /api/status ...");
+  console.log("   /api/logs ...");
   console.log("   /api/auth ...");
   console.log("   /api/users ...");
   console.log("   /api/docs ...");
   console.log("   /api/public ...");
+  console.log("   /api/companies ...");
   console.log("=====================================");
   console.log(`🌍 FRONTEND_URL: ${process.env.FRONTEND_URL || "no configurada"}`);
   console.log(

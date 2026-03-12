@@ -1,55 +1,132 @@
 // backend/utils/auditLog.js
-const db = require('../db');
+const db = require("../db");
 
 /**
- * Registra un evento de auditoría en la tabla auditoria_documentos
- * @param {Object} params
- * @param {number} params.documento_id - ID del documento
- * @param {number} params.usuario_id - ID del usuario que hizo la acción
- * @param {string} params.evento_tipo - Tipo de evento (CREADO, FIRMADO, RECHAZADO, etc.)
- * @param {string} params.descripcion - Descripción del evento
- * @param {string} params.ip_address - IP del usuario (opcional)
- * @param {string} params.user_agent - User Agent del navegador (opcional)
+ * Extrae IP, user-agent y requestId de un objeto req Express-like.
  */
-async function registrarAuditoria({
-  documento_id,
-  usuario_id,
-  evento_tipo,
-  descripcion,
-  ip_address = null,
-  user_agent = null,
+function extractRequestContext(req) {
+  if (!req) {
+    return { ip: null, userAgent: null, requestId: null };
+  }
+
+  const ipHeader = req.headers?.["x-forwarded-for"];
+  const forwardedIp =
+    typeof ipHeader === "string" ? ipHeader.split(",")[0].trim() : null;
+
+  const ip = req.ipAddress || req.ip || forwardedIp || null;
+  const userAgent = req.userAgent || req.headers?.["user-agent"] || null;
+  const requestId = req.requestId || null;
+
+  return { ip, userAgent, requestId };
+}
+
+/**
+ * Normaliza metadata a JSON string o null.
+ */
+function normalizeMetadata(metadata) {
+  if (!metadata) return null;
+  if (typeof metadata === "string") return metadata;
+
+  if (typeof metadata === "object") {
+    try {
+      return JSON.stringify(metadata);
+    } catch {
+      return null;
+    }
+  }
+  return null;
+}
+
+/**
+ * Construye metadata estándar para eventos de documentos.
+ */
+function buildDocumentAuditMetadata({
+  documentId,
+  title,
+  status,
+  companyId = null,
+  extra = {},
 }) {
+  const base = {
+    document_id: documentId,
+    title: title || null,
+    status: status || null,
+    company_id: companyId,
+  };
+
+  return { ...base, ...extra };
+}
+
+/* ================================
+   logAudit: acciones de negocio / dominio
+   ================================ */
+async function logAudit({
+  user,
+  action,
+  entityType,
+  entityId = null,
+  metadata = null,
+  req = null,
+}) {
+  if (!action || !entityType) return;
+
   try {
+    const userId = user?.id ?? null;
+    const companyId = user?.company_id ?? null;
+    const { ip, userAgent, requestId } = extractRequestContext(req);
+    const metadataJson = normalizeMetadata(metadata);
+
     await db.query(
-      `INSERT INTO auditoria_documentos (
-         documento_id, usuario_id, evento_tipo, descripcion, ip_address, user_agent
-       )
-       VALUES ($1, $2, $3, $4, $5, $6)`,
-      [documento_id, usuario_id, evento_tipo, descripcion, ip_address, user_agent]
+      `INSERT INTO audit_log
+         (user_id, company_id, action, entity_type, entity_id, metadata, ip, user_agent, request_id)
+       VALUES ($1,      $2,        $3,     $4,          $5,        $6,       $7, $8,         $9)`,
+      [
+        userId,
+        companyId,
+        action,
+        entityType,
+        entityId,
+        metadataJson,
+        ip,
+        userAgent,
+        requestId,
+      ]
     );
-    console.log(`✅ Auditoría registrada: ${evento_tipo} para documento ${documento_id}`);
   } catch (err) {
-    console.error('⚠️ Error registrando auditoría:', err.message);
-    // No lanzar error para no interrumpir el flujo principal
+    console.error("⚠️ Error registrando audit_log:", err.message || err);
   }
 }
 
-/**
- * Obtiene el historial de auditoría de un documento
- */
-async function obtenerAuditoria(documento_id) {
+/* ================================
+   logAuth: eventos de autenticación
+   ================================ */
+async function logAuth({
+  userId = null,
+  run = null,
+  action,
+  metadata = null,
+  req = null,
+}) {
+  if (!action) return;
+
   try {
-    const result = await db.query(
-      `SELECT * FROM auditoria_documentos
-       WHERE documento_id = $1
-       ORDER BY created_at DESC`,
-      [documento_id]
+    const { ip, userAgent } = extractRequestContext(req);
+    const metadataJson = normalizeMetadata(metadata);
+
+    await db.query(
+      `INSERT INTO auth_log
+         (user_id, run, action, metadata, ip, user_agent, created_at)
+       VALUES ($1,      $2,  $3,     $4,       $5, $6,         NOW())`,
+      [userId, run, action, metadataJson, ip, userAgent]
     );
-    return result.rows;
   } catch (err) {
-    console.error('⚠️ Error obteniendo auditoría:', err.message);
-    return [];
+    console.error("⚠️ Error registrando auth_log:", err.message || err);
   }
 }
 
-module.exports = { registrarAuditoria, obtenerAuditoria };
+module.exports = {
+  logAudit,
+  logAuth,
+  extractRequestContext,
+  buildDocumentAuditMetadata,
+};

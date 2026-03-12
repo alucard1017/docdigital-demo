@@ -5,34 +5,39 @@ const Sentry = require("@sentry/node");
 const { requireAuth } = require("./auth");
 const { upload, handleMulterError } = require("../middlewares/uploadPdf");
 const documentsController = require("../controllers/documents");
+const {
+  logAudit,
+  buildDocumentAuditMetadata,
+} = require("../utils/auditLog");
 const db = require("../db");
 
 const router = express.Router();
 
 /* ================================
-   RATE LIMITING SIMPLE
+   RATE LIMITING SIMPLE EN MEMORIA
    ================================ */
 
-const rateLimit = {};
+const rateLimitStore = {};
 
 function checkRateLimit(key, maxAttempts = 5, windowMs = 60000) {
   const now = Date.now();
+  const current = rateLimitStore[key];
 
-  if (!rateLimit[key]) {
-    rateLimit[key] = { count: 1, resetAt: now + windowMs };
+  if (!current) {
+    rateLimitStore[key] = { count: 1, resetAt: now + windowMs };
     return true;
   }
 
-  if (now > rateLimit[key].resetAt) {
-    rateLimit[key] = { count: 1, resetAt: now + windowMs };
+  if (now > current.resetAt) {
+    rateLimitStore[key] = { count: 1, resetAt: now + windowMs };
     return true;
   }
 
-  if (rateLimit[key].count >= maxAttempts) {
+  if (current.count >= maxAttempts) {
     return false;
   }
 
-  rateLimit[key].count += 1;
+  current.count += 1;
   return true;
 }
 
@@ -44,15 +49,14 @@ function isGlobalAdmin(user) {
   return user?.role === "SUPER_ADMIN" || user?.role === "ADMIN_GLOBAL";
 }
 
-/**
- * Middleware que asegura que el documento:
- * - Existe
- * - Pertenece a la misma company_id del usuario (salvo admins globales)
- */
 async function checkDocumentCompanyScope(req, res, next) {
   try {
-    const { id } = req.params;
+    const id = Number(req.params.id);
     const user = req.user;
+
+    if (Number.isNaN(id)) {
+      return res.status(400).json({ message: "ID de documento inválido" });
+    }
 
     const docRes = await db.query(
       `SELECT id, owner_id, title, status, company_id
@@ -91,13 +95,14 @@ async function checkDocumentCompanyScope(req, res, next) {
   }
 }
 
-/**
- * Middleware de propiedad (exigir que sea dueño, además de misma empresa)
- */
 async function checkDocumentOwnership(req, res, next) {
   try {
-    const { id } = req.params;
+    const id = Number(req.params.id);
     const user = req.user;
+
+    if (Number.isNaN(id)) {
+      return res.status(400).json({ message: "ID de documento inválido" });
+    }
 
     const docRes = await db.query(
       `SELECT id, owner_id, title, status, company_id
@@ -143,51 +148,60 @@ async function checkDocumentOwnership(req, res, next) {
 }
 
 /* ================================
-   MIDDLEWARE DE AUDITORÍA (SIMPLIFICADO)
+   HOOK DE AUDITORÍA (logAudit)
    ================================ */
 
-function logAuditAction(req, res, next) {
-  const originalJson = res.json.bind(res);
+function withDocumentAudit(action) {
+  return (req, res, next) => {
+    const originalJson = res.json.bind(res);
 
-  res.json = function patchedJson(data) {
-    if (res.statusCode < 400) {
-      const { registrarAuditoria } = require("../utils/auditLog");
+    res.json = (body) => {
+      if (res.statusCode < 400) {
+        const rawId =
+          req.params.id ||
+          req.params.documento_id ||
+          (body && (body.documentoId || body.id)) ||
+          null;
 
-      registrarAuditoria({
-        documento_id: req.params.id || null,
-        usuario_id: req.user?.id || null,
-        evento_tipo: "API_ACTION",
-        descripcion: `${req.method} ${req.route?.path}`,
-        ip_address: req.ip,
-        user_agent: req.headers["user-agent"] || null,
-      }).catch((err) => console.error("⚠️ Error logging audit:", err));
-    }
+        const entityId = rawId ? Number(rawId) : null;
 
-    return originalJson(data);
+        const metadata = buildDocumentAuditMetadata({
+          documentId: entityId,
+          title: req.document?.title,
+          status: req.document?.status,
+          companyId: req.document?.company_id || req.user?.company_id || null,
+          extra: {
+            path: req.originalUrl,
+            method: req.method,
+            response_status: res.statusCode,
+          },
+        });
+
+        logAudit({
+          user: req.user || null,
+          action,
+          entityType: "document",
+          entityId,
+          metadata,
+          req,
+        });
+      }
+
+      return originalJson(body);
+    };
+
+    return next();
   };
-
-  return next();
 }
 
 /* ================================
    RUTAS GET - ESPECÍFICAS (SIN PARÁMETROS)
    ================================ */
 
-// Stats de documentos (multi-tenant)
-router.get(
-  "/stats",
-  requireAuth,
-  documentsController.getDocumentStats
-);
+router.get("/stats", requireAuth, documentsController.getDocumentStats);
 
-// Analytics generales (el controller debe respetar company_id)
-router.get(
-  "/analytics",
-  requireAuth,
-  documentsController.getDocumentAnalytics
-);
+router.get("/analytics", requireAuth, documentsController.getDocumentAnalytics);
 
-// Exportar a Excel: limitar por empresa salvo admins globales
 router.get("/export/excel", requireAuth, async (req, res) => {
   try {
     const { generarExcelDocumentos } = require("../services/excelExport");
@@ -214,7 +228,6 @@ router.get("/export/excel", requireAuth, async (req, res) => {
   }
 });
 
-// Auditoría de documentos (podrías filtrar por company_id en el SQL)
 router.get("/audit", requireAuth, async (req, res) => {
   try {
     const { documento_id, usuario_id, evento_tipo, limit = 100 } = req.query;
@@ -265,14 +278,13 @@ router.get("/audit", requireAuth, async (req, res) => {
 });
 
 /* ================================
-   RUTAS GET - LISTADOS (SIN PARÁMETROS)
+   RUTAS GET - LISTADOS
    ================================ */
 
-// Lista de documentos (controller filtra por company_id salvo globales)
 router.get("/", requireAuth, documentsController.getUserDocuments);
 
 /* ================================
-   RUTAS POST - ESPECIALES (SIN PARÁMETROS)
+   RUTAS POST - SIN PARÁMETROS
    ================================ */
 
 router.post(
@@ -300,7 +312,7 @@ router.post(
 );
 
 /* ================================
-   RUTAS DE FLUJO (NUEVA TABLA documentos / firmantes)
+   RUTAS DE FLUJO (TABLA documentos / firmantes)
    ================================ */
 
 router.post("/crear-flujo", requireAuth, async (req, res) => {
@@ -393,6 +405,26 @@ router.post("/crear-flujo", requireAuth, async (req, res) => {
 
     await db.query("COMMIT");
 
+    const metadata = buildDocumentAuditMetadata({
+      documentId: documento.id,
+      title: documento.titulo,
+      status: documento.estado,
+      companyId: documento.company_id,
+      extra: {
+        categoria_firma: documento.categoria_firma,
+        firmantes: firmantes.length,
+      },
+    });
+
+    logAudit({
+      user: req.user,
+      action: "document_flow_created",
+      entityType: "document",
+      entityId: documento.id,
+      metadata,
+      req,
+    });
+
     return res.status(201).json({
       documentoId: documento.id,
       codigoVerificacion,
@@ -409,12 +441,15 @@ router.post("/firmar-flujo/:firmanteId", async (req, res) => {
   const { firmanteId } = req.params;
 
   try {
+    await db.query("BEGIN");
+
     const firmanteRes = await db.query(
       `SELECT
          f.*,
          d.id     AS documento_id,
          d.estado AS documento_estado,
-         d.titulo
+         d.titulo,
+         d.company_id
        FROM firmantes f
        JOIN documentos d ON d.id = f.documento_id
        WHERE f.id = $1`,
@@ -422,6 +457,7 @@ router.post("/firmar-flujo/:firmanteId", async (req, res) => {
     );
 
     if (firmanteRes.rowCount === 0) {
+      await db.query("ROLLBACK");
       return res.status(404).json({ error: "Firmante no encontrado" });
     }
 
@@ -441,16 +477,16 @@ router.post("/firmar-flujo/:firmanteId", async (req, res) => {
     });
 
     if (firmante.estado === "FIRMADO") {
+      await db.query("ROLLBACK");
       return res.status(400).json({ error: "Este firmante ya firmó" });
     }
 
     if (firmante.estado === "RECHAZADO") {
+      await db.query("ROLLBACK");
       return res
         .status(400)
         .json({ error: "Este firmante rechazó el documento" });
     }
-
-    await db.query("BEGIN");
 
     await db.query(
       `UPDATE firmantes
@@ -526,6 +562,28 @@ router.post("/firmar-flujo/:firmanteId", async (req, res) => {
 
     await db.query("COMMIT");
 
+    const metadata = buildDocumentAuditMetadata({
+      documentId: firmante.documento_id,
+      title: firmante.titulo,
+      status: allSigned ? "FIRMADO" : firmante.documento_estado,
+      companyId: firmante.company_id || null,
+      extra: {
+        firmante_id: firmante.id,
+        firmante_email: firmante.email,
+        all_signed: allSigned,
+        progress: `${((firmadosNum / totalNum) * 100).toFixed(1)}%`,
+      },
+    });
+
+    logAudit({
+      user: null,
+      action: "document_flow_signed",
+      entityType: "document",
+      entityId: firmante.documento_id,
+      metadata,
+      req,
+    });
+
     return res.json({
       mensaje: allSigned
         ? "Firma registrada y documento completado"
@@ -549,13 +607,16 @@ router.post("/firmar-flujo/:firmanteId", async (req, res) => {
 
 router.get("/:id/pdf", documentsController.getDocumentPdf);
 router.get("/:id/timeline", documentsController.getTimeline);
+
 router.get(
   "/:id/signers",
   requireAuth,
   checkDocumentCompanyScope,
   documentsController.getSigners
 );
+
 router.get("/:id/download", documentsController.downloadDocument);
+
 router.get(
   "/:id/reporte",
   requireAuth,
@@ -571,7 +632,7 @@ router.post(
   "/:id/firmar",
   requireAuth,
   checkDocumentCompanyScope,
-  logAuditAction,
+  withDocumentAudit("document_signed"),
   documentsController.signDocument
 );
 
@@ -579,7 +640,7 @@ router.post(
   "/:id/visar",
   requireAuth,
   checkDocumentCompanyScope,
-  logAuditAction,
+  withDocumentAudit("document_visado"),
   documentsController.visarDocument
 );
 
@@ -587,7 +648,7 @@ router.post(
   "/:id/rechazar",
   requireAuth,
   checkDocumentCompanyScope,
-  logAuditAction,
+  withDocumentAudit("document_rejected"),
   documentsController.rejectDocument
 );
 
@@ -604,11 +665,31 @@ router.post(
   checkDocumentCompanyScope,
   async (req, res) => {
     try {
-      const { id } = req.params;
-      const { enviarRecordatorioManual } =
-        require("../services/reminderService");
+      const id = Number(req.params.id);
 
+      const { enviarRecordatorioManual } = require("../services/reminderService");
       const result = await enviarRecordatorioManual(id);
+
+      const metadata = buildDocumentAuditMetadata({
+        documentId: id,
+        title: req.document?.title,
+        status: req.document?.status,
+        companyId: req.document?.company_id || req.user?.company_id || null,
+        extra: {
+          path: req.originalUrl,
+          method: req.method,
+        },
+      });
+
+      logAudit({
+        user: req.user,
+        action: "document_reminder_manual",
+        entityType: "document",
+        entityId: id,
+        metadata,
+        req,
+      });
+
       return res.json(result);
     } catch (err) {
       console.error("❌ Error enviando recordatorio:", err);
@@ -618,9 +699,5 @@ router.post(
     }
   }
 );
-
-/* ================================
-   EXPORTAR ROUTER
-   ================================ */
 
 module.exports = router;

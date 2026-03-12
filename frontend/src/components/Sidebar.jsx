@@ -10,11 +10,9 @@ export function Sidebar({
   statusFilter,
   setStatusFilter,
   logout,
-  isAnyAdmin, // viene desde App.jsx
+  isAnyAdmin,
 }) {
-  // Si quieres mantener al OWNER fijo por RUN/ID, puedes seguir usándolo,
-  // pero ya no dependemos de role en minúsculas.
-  const OWNER_ID = 7; // ajusta si cambia en tu base de datos
+  const OWNER_ID = 7; // ajusta si cambia en tu BD
   const isOwner = user?.id === OWNER_ID;
 
   const handleChangeView = (nextView) => {
@@ -26,6 +24,11 @@ export function Sidebar({
   };
 
   const showAdminSection = isOwner || isAnyAdmin;
+  const isAdminGlobalOrOwner =
+    !!user &&
+    (user.role === "SUPER_ADMIN" ||
+      user.role === "ADMIN_GLOBAL" ||
+      user.id === OWNER_ID);
 
   return (
     <aside className="sidebar">
@@ -48,9 +51,7 @@ export function Sidebar({
         <div style={{ opacity: 0.7 }}>
           {user?.email || "usuario@correo.com"}
         </div>
-        <div style={{ opacity: 0.7 }}>
-          Rol: {user?.role || "USER"}
-        </div>
+        <div style={{ opacity: 0.7 }}>Rol: {user?.role || "USER"}</div>
       </div>
 
       {/* Sección Bandeja */}
@@ -159,6 +160,15 @@ export function Sidebar({
         </div>
       )}
 
+      {isAnyAdmin && (
+        <div
+          className={`nav-item ${view === "status" ? "active" : ""}`}
+          onClick={() => handleChangeView("status")}
+        >
+          <span>🩺</span> Estado
+        </div>
+      )}
+
       {/* Sección Administración */}
       {showAdminSection && (
         <>
@@ -181,6 +191,37 @@ export function Sidebar({
           >
             <span>👥</span> Usuarios
           </div>
+
+          {isAdminGlobalOrOwner && (
+            <>
+              <div
+                className={`nav-item ${
+                  view === "companies" ? "active" : ""
+                }`}
+                onClick={() => handleChangeView("companies")}
+              >
+                <span>🏢</span> Empresas
+              </div>
+
+              <div
+                className={`nav-item ${
+                  view === "audit-logs" ? "active" : ""
+                }`}
+                onClick={() => handleChangeView("audit-logs")}
+              >
+                <span>📜</span> Auditoría (negocio)
+              </div>
+
+              <div
+                className={`nav-item ${
+                  view === "auth-logs" ? "active" : ""
+                }`}
+                onClick={() => handleChangeView("auth-logs")}
+              >
+                <span>🔐</span> Auth logs
+              </div>
+            </>
+          )}
         </>
       )}
 

@@ -1,3 +1,4 @@
+// src/components/DetailView.js
 import React, { useState, useEffect } from "react";
 import { Timeline } from "./Timeline";
 import { EventList } from "./EventList";
@@ -24,7 +25,7 @@ export function DetailView({
   puedeFirmar,
   puedeVisar,
   puedeRechazar,
-  events,
+  events, // compatibilidad legacy (se cae a esto si no hay timeline nuevo)
   manejarAccionDocumento,
   setView,
   setSelectedDoc,
@@ -49,22 +50,39 @@ export function DetailView({
   const displayName = isJean ? "Alucard" : rawName;
 
   useEffect(() => {
-    if (!selectedDoc?.id) return;
+    if (!selectedDoc?.id || !token) return;
 
     const docId = selectedDoc.id;
+    const controller = new AbortController();
 
     const fetchTimeline = async () => {
       try {
         setLoadingTimeline(true);
-        const res = await fetch(`${API_URL}/api/docs/${docId}/timeline`);
+        const res = await fetch(
+          `${API_URL}/api/documents/${docId}/timeline`,
+          {
+            headers: { Authorization: `Bearer ${token}` },
+            credentials: "include",
+            signal: controller.signal,
+          }
+        );
+
         const data = await res.json();
 
-        if (res.ok && data && data.timeline) {
+        if (!res.ok) {
+          console.error("Error HTTP timeline:", res.status, data?.message);
+          setTimeline(null);
+          return;
+        }
+
+        // backend devuelve { document, timeline }
+        if (data && data.timeline) {
           setTimeline(data.timeline);
         } else {
           setTimeline(null);
         }
       } catch (err) {
+        if (err.name === "AbortError") return;
         console.error("Error fetching timeline:", err);
         setTimeline(null);
       } finally {
@@ -75,10 +93,13 @@ export function DetailView({
     const fetchSigners = async () => {
       try {
         setLoadingSigners(true);
-        const res = await fetch(`${API_URL}/api/docs/${docId}/signers`, {
-          headers: { Authorization: `Bearer ${token}` },
-          credentials: "include",
-        });
+        const res = await fetch(
+          `${API_URL}/api/documents/${docId}/signers`,
+          {
+            headers: { Authorization: `Bearer ${token}` },
+            credentials: "include",
+          }
+        );
         if (!res.ok) {
           setSigners([]);
           return;
@@ -97,7 +118,11 @@ export function DetailView({
     fetchSigners();
 
     const interval = setInterval(fetchTimeline, 5000);
-    return () => clearInterval(interval);
+
+    return () => {
+      controller.abort();
+      clearInterval(interval);
+    };
   }, [selectedDoc?.id, token]);
 
   if (!selectedDoc) return null;
@@ -402,9 +427,7 @@ export function DetailView({
             </div>
 
             <div className="detail-history">
-              <h3 className="detail-history-title">
-                Historial de acciones
-              </h3>
+              <h3 className="detail-history-title">Historial de acciones</h3>
 
               {timeline && timeline.events && timeline.events.length > 0 ? (
                 <EventList events={timeline.events} />

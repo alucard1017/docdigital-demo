@@ -1,51 +1,68 @@
-const express = require('express');
-const bcrypt = require('bcryptjs');
-const db = require('../db');
-const { requireAuth, requireRole } = require('./auth');
+// backend/routes/users.js
+const express = require("express");
+const bcrypt = require("bcryptjs");
+const db = require("../db");
+const { requireAuth, requireRole } = require("./auth");
+const { logAuth, logAudit } = require("../utils/auditLog");
 
 const router = express.Router();
 
-const normalizeRun = run => (run || '').replace(/[.\\\-]/g, '');
+// Normalizar RUN: quitar puntos y guiones
+const normalizeRun = (run) => (run || "").replace(/[.\\-]/g, "");
 
-// RUN del dueño que NUNCA se puede borrar (normalizado)
-const OWNER_RUN = normalizeRun(process.env.ADMIN_RUN || '1053806586');
+// RUN del dueño que NUNCA se puede borrar ni tocar salvo él mismo
+const OWNER_RUN = normalizeRun(process.env.ADMIN_RUN || "1053806586");
 
-const ALLOWED_ROLES = ['SUPER_ADMIN', 'ADMIN_GLOBAL', 'ADMIN', 'USER'];
+const ALLOWED_ROLES = ["SUPER_ADMIN", "ADMIN_GLOBAL", "ADMIN", "USER"];
+
+function isAdminLike(role) {
+  return role === "ADMIN" || role === "ADMIN_GLOBAL" || role === "SUPER_ADMIN";
+}
 
 /**
  * POST /api/users/register
- * Registro público (si lo usas)
- * - Crea siempre USER por defecto y sin privilegios.
- * - Puedes luego asociarlo a una company_id desde el panel.
+ * Registro público opcional
+ * - Crea siempre USER sin privilegios.
  */
-router.post('/register', async (req, res, next) => {
+router.post("/register", async (req, res, next) => {
   try {
     const { run, name, email, password, plan } = req.body || {};
 
     if (!run || !name || !email || !password) {
       return res
         .status(400)
-        .json({ message: 'RUN, nombre, correo y contraseña son obligatorios' });
+        .json({ message: "RUN, nombre, correo y contraseña son obligatorios" });
     }
 
     const normalizedRun = normalizeRun(run);
     const normalizedEmail = String(email).toLowerCase();
     const hash = bcrypt.hashSync(password, 10);
 
-    await db.query(
-      `INSERT INTO users (run, name, email, password_hash, plan, role, active, company_id)
-       VALUES ($1, $2, $3, $4, $5, 'USER', true, $6)`,
-      [
-        normalizedRun,
-        name,
-        normalizedEmail,
-        hash,
-        plan || 'basic',
-        null, // se podrá asignar company_id luego desde el panel
-      ]
+    const result = await db.query(
+      `INSERT INTO public.users (run, "name", email, password_hash, "plan", "role", active, company_id)
+       VALUES ($1, $2, $3, $4, $5, 'USER', true, $6)
+       RETURNING id, run, "name", email, company_id`,
+      [normalizedRun, name, normalizedEmail, hash, plan || "basic", null]
     );
 
-    return res.status(201).json({ message: 'Usuario creado' });
+    const created = result.rows[0];
+
+    await logAudit({
+      user: null,
+      action: "user_registered_public",
+      entityType: "user",
+      entityId: created.id,
+      metadata: {
+        run: created.run,
+        email: created.email,
+        company_id: created.company_id,
+        plan: plan || "basic",
+        via: "public_register",
+      },
+      req,
+    });
+
+    return res.status(201).json({ message: "Usuario creado" });
   } catch (err) {
     return next(err);
   }
@@ -53,12 +70,11 @@ router.post('/register', async (req, res, next) => {
 
 /**
  * GET /api/users
- * Lista de usuarios
- * - SUPER_ADMIN y ADMIN_GLOBAL: ven todos
- * - ADMIN: solo usuarios de su misma company_id
- * Permite filtrar por rol: /api/users?role=ADMIN
+ * Lista de usuarios:
+ * - SUPER_ADMIN y ADMIN_GLOBAL: ven todos.
+ * - ADMIN: solo usuarios de su company_id.
  */
-router.get('/', requireAuth, requireRole('ADMIN'), async (req, res) => {
+router.get("/", requireAuth, requireRole("ADMIN"), async (req, res) => {
   try {
     const { role, company_id, run } = req.user;
     const { role: filterRole } = req.query;
@@ -68,16 +84,14 @@ router.get('/', requireAuth, requireRole('ADMIN'), async (req, res) => {
 
     const requesterRun = normalizeRun(run);
     const isOwner = requesterRun === OWNER_RUN;
-    const isSuper = role === 'SUPER_ADMIN';
-    const isGlobal = role === 'ADMIN_GLOBAL';
+    const isSuper = role === "SUPER_ADMIN";
+    const isGlobal = role === "ADMIN_GLOBAL";
 
-    // Filtro por tenant: solo los ADMIN normales se restringen por company_id
     if (!isSuper && !isGlobal) {
       whereParts.push(`company_id = $${params.length + 1}`);
       params.push(company_id);
     }
 
-    // Si NO es dueño, ocultar al OWNER
     if (!isOwner) {
       whereParts.push(`run <> $${params.length + 1}`);
       params.push(OWNER_RUN);
@@ -89,42 +103,35 @@ router.get('/', requireAuth, requireRole('ADMIN'), async (req, res) => {
     }
 
     let query = `
-      SELECT id, run, name, email, plan, role, active, company_id
-      FROM users
+      SELECT id, run, "name", email, "plan", "role", active, company_id
+      FROM public.users
     `;
 
     if (whereParts.length > 0) {
-      query += ' WHERE ' + whereParts.join(' AND ');
+      query += " WHERE " + whereParts.join(" AND ");
     }
 
-    query += ' ORDER BY id ASC';
+    query += " ORDER BY id ASC";
 
     const result = await db.query(query, params);
     return res.json(result.rows);
   } catch (err) {
-    console.error('❌ Error listando usuarios:', err);
-    return res.status(500).json({ message: 'Error interno del servidor' });
+    console.error("❌ Error listando usuarios:", err);
+    return res.status(500).json({ message: "Error interno del servidor" });
   }
 });
 
 /**
  * POST /api/users
  * Crear usuario (solo admin)
- *
- * Regla por empresa:
- * - Si es el PRIMER usuario de esa company_id -> role = ADMIN forzado.
- * - Si ya existen usuarios en esa company_id:
- *   - OWNER puede asignar cualquier rol (incluyendo ADMIN_GLOBAL / SUPER_ADMIN).
- *   - ADMIN_GLOBAL puede crear ADMIN o USER (nunca SUPER_ADMIN).
- *   - ADMIN de empresa puede crear USER o ADMIN, solo dentro de su misma company_id.
  */
-router.post('/', requireAuth, requireRole('ADMIN'), async (req, res) => {
+router.post("/", requireAuth, requireRole("ADMIN"), async (req, res) => {
   try {
     const {
       run,
       name,
       password,
-      plan = 'basic',
+      plan = "basic",
       role,
       email,
       active,
@@ -134,7 +141,7 @@ router.post('/', requireAuth, requireRole('ADMIN'), async (req, res) => {
     if (!run || !name || !password) {
       return res
         .status(400)
-        .json({ message: 'RUN, nombre y contraseña son obligatorios' });
+        .json({ message: "RUN, nombre y contraseña son obligatorios" });
     }
 
     const requesterRun = normalizeRun(req.user.run);
@@ -145,64 +152,56 @@ router.post('/', requireAuth, requireRole('ADMIN'), async (req, res) => {
     const normalizedEmail = email ? String(email).toLowerCase() : null;
     const hash = bcrypt.hashSync(password, 10);
 
-    // company_id final: si no se envía, hereda el del creador
     const finalCompanyId = company_id || req.user.company_id;
 
     if (!finalCompanyId) {
       return res
         .status(400)
-        .json({ message: 'company_id es obligatorio para crear usuarios' });
+        .json({ message: "company_id es obligatorio para crear usuarios" });
     }
 
-    // ¿Cuántos usuarios existen ya en esa empresa?
     const countRes = await db.query(
-      'SELECT COUNT(*)::int AS total FROM users WHERE company_id = $1',
+      "SELECT COUNT(*)::int AS total FROM public.users WHERE company_id = $1",
       [finalCompanyId]
     );
     const totalInCompany = countRes.rows[0].total;
 
-    let finalRole = role || 'USER';
+    let finalRole = role || "USER";
 
-    // Si es el primer usuario de la empresa, siempre ADMIN
     if (totalInCompany === 0) {
-      finalRole = 'ADMIN';
+      finalRole = "ADMIN";
     } else {
-      // No es el primero: aplicar reglas según quién crea
       if (isOwner) {
-        // OWNER puede dejar cualquier rol permitido
         if (!ALLOWED_ROLES.includes(finalRole)) {
-          finalRole = 'USER';
+          finalRole = "USER";
         }
-      } else if (requesterRole === 'ADMIN_GLOBAL') {
-        // ADMIN_GLOBAL: puede crear ADMIN o USER (nunca SUPER_ADMIN)
-        if (finalRole === 'SUPER_ADMIN') {
-          finalRole = 'ADMIN';
+      } else if (requesterRole === "ADMIN_GLOBAL") {
+        if (finalRole === "SUPER_ADMIN") {
+          finalRole = "ADMIN";
         }
-        if (!['ADMIN', 'USER'].includes(finalRole)) {
-          finalRole = 'USER';
+        if (!["ADMIN", "USER"].includes(finalRole)) {
+          finalRole = "USER";
         }
-      } else if (requesterRole === 'ADMIN') {
-        // ADMIN de empresa: solo ADMIN o USER y siempre en su propia company_id
+      } else if (requesterRole === "ADMIN") {
         if (finalCompanyId !== req.user.company_id) {
           return res
             .status(403)
-            .json({ message: 'No puedes crear usuarios en otra empresa' });
+            .json({ message: "No puedes crear usuarios en otra empresa" });
         }
-        if (!['ADMIN', 'USER'].includes(finalRole)) {
-          finalRole = 'USER';
+        if (!["ADMIN", "USER"].includes(finalRole)) {
+          finalRole = "USER";
         }
       } else {
-        // Roles menores no deberían llegar aquí por requireRole, pero por seguridad:
-        finalRole = 'USER';
+        finalRole = "USER";
       }
     }
 
-    const finalActive = typeof active === 'boolean' ? active : true;
+    const finalActive = typeof active === "boolean" ? active : true;
 
     const result = await db.query(
-      `INSERT INTO users (run, name, email, password_hash, plan, role, active, company_id)
+      `INSERT INTO public.users (run, "name", email, password_hash, "plan", "role", active, company_id)
        VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
-       RETURNING id, run, name, email, plan, role, active, company_id`,
+       RETURNING id, run, "name", email, "plan", "role", active, company_id`,
       [
         normalizedRun,
         name,
@@ -215,22 +214,35 @@ router.post('/', requireAuth, requireRole('ADMIN'), async (req, res) => {
       ]
     );
 
-    return res.status(201).json(result.rows[0]);
+    const created = result.rows[0];
+
+    await logAudit({
+      user: req.user,
+      action: "user_created",
+      entityType: "user",
+      entityId: created.id,
+      metadata: {
+        created_run: created.run,
+        created_email: created.email,
+        created_role: created.role,
+        company_id: created.company_id,
+        via: "admin_panel",
+      },
+      req,
+    });
+
+    return res.status(201).json(created);
   } catch (err) {
-    console.error('❌ Error creando usuario:', err);
-    return res.status(500).json({ message: 'Error interno del servidor' });
+    console.error("❌ Error creando usuario:", err);
+    return res.status(500).json({ message: "Error interno del servidor" });
   }
 });
 
 /**
  * PUT /api/users/:id
  * Editar usuario (solo admin)
- * - Nadie puede cambiar el rol del dueño
- * - Solo el dueño puede subir/bajar roles de ADMIN_GLOBAL/SUPER_ADMIN
- * - ADMIN_GLOBAL y ADMIN pueden subir/bajar entre USER y ADMIN
- *   dentro de su empresa.
  */
-router.put('/:id', requireAuth, requireRole('ADMIN'), async (req, res) => {
+router.put("/:id", requireAuth, requireRole("ADMIN"), async (req, res) => {
   try {
     const { id } = req.params;
     const { run, name, email, plan, role, password, active, company_id } =
@@ -241,22 +253,21 @@ router.put('/:id', requireAuth, requireRole('ADMIN'), async (req, res) => {
     const isOwner = requesterRun === OWNER_RUN;
 
     const userRes = await db.query(
-      'SELECT id, run, role, company_id FROM users WHERE id = $1',
+      "SELECT id, run, role, company_id FROM public.users WHERE id = $1",
       [id]
     );
 
     if (userRes.rowCount === 0) {
-      return res.status(404).json({ message: 'Usuario no encontrado' });
+      return res.status(404).json({ message: "Usuario no encontrado" });
     }
 
-    const target = userRes.rows[0];
-    const targetIsOwner = normalizeRun(target.run) === OWNER_RUN;
+    const before = userRes.rows[0];
+    const targetIsOwner = normalizeRun(before.run) === OWNER_RUN;
 
-    // Nadie puede cambiar al dueño salvo él mismo
     if (targetIsOwner && !isOwner) {
-      return res
-        .status(403)
-        .json({ message: 'No tienes permisos para modificar la cuenta principal' });
+      return res.status(403).json({
+        message: "No tienes permisos para modificar la cuenta principal",
+      });
     }
 
     const fields = [];
@@ -268,7 +279,7 @@ router.put('/:id', requireAuth, requireRole('ADMIN'), async (req, res) => {
       values.push(normalizeRun(run));
     }
     if (name) {
-      fields.push(`name = $${idx++}`);
+      fields.push(`"name" = $${idx++}`);
       values.push(name);
     }
     if (email !== undefined) {
@@ -276,45 +287,39 @@ router.put('/:id', requireAuth, requireRole('ADMIN'), async (req, res) => {
       values.push(email ? String(email).toLowerCase() : null);
     }
     if (plan) {
-      fields.push(`plan = $${idx++}`);
+      fields.push(`"plan" = $${idx++}`);
       values.push(plan);
     }
 
-    // Lógica de cambio de rol
     if (role && !(targetIsOwner && !isOwner)) {
       if (!ALLOWED_ROLES.includes(role)) {
-        return res
-          .status(400)
-          .json({ message: 'Rol inválido' });
+        return res.status(400).json({ message: "Rol inválido" });
       }
 
       if (!isOwner) {
-        // No OWNER
-        if (role === 'SUPER_ADMIN' || role === 'ADMIN_GLOBAL') {
-          // Nadie excepto el dueño puede tocar global/super
-          return res
-            .status(403)
-            .json({ message: 'Solo el dueño puede asignar roles ADMIN_GLOBAL o SUPER_ADMIN' });
+        if (role === "SUPER_ADMIN" || role === "ADMIN_GLOBAL") {
+          return res.status(403).json({
+            message:
+              "Solo el dueño puede asignar roles ADMIN_GLOBAL o SUPER_ADMIN",
+          });
         }
 
-        // ADMIN_GLOBAL o ADMIN pueden subir/bajar entre USER y ADMIN
-        if (requesterRole === 'ADMIN' || requesterRole === 'ADMIN_GLOBAL') {
-          // Deben estar en la misma empresa
-          if (target.company_id !== req.user.company_id) {
-            return res
-              .status(403)
-              .json({ message: 'No puedes cambiar el rol de usuarios de otra empresa' });
+        if (requesterRole === "ADMIN" || requesterRole === "ADMIN_GLOBAL") {
+          if (before.company_id !== req.user.company_id) {
+            return res.status(403).json({
+              message: "No puedes cambiar el rol de usuarios de otra empresa",
+            });
           }
 
-          if (!['ADMIN', 'USER'].includes(role)) {
-            return res
-              .status(403)
-              .json({ message: 'Solo puedes asignar roles USER o ADMIN en tu empresa' });
+          if (!["ADMIN", "USER"].includes(role)) {
+            return res.status(403).json({
+              message: "Solo puedes asignar roles USER o ADMIN en tu empresa",
+            });
           }
         }
       }
 
-      fields.push(`role = $${idx++}`);
+      fields.push(`"role" = $${idx++}`);
       values.push(role);
     }
 
@@ -323,91 +328,268 @@ router.put('/:id', requireAuth, requireRole('ADMIN'), async (req, res) => {
       fields.push(`password_hash = $${idx++}`);
       values.push(hash);
     }
-    if (typeof active === 'boolean') {
+    if (typeof active === "boolean") {
       fields.push(`active = $${idx++}`);
       values.push(active);
     }
     if (company_id !== undefined) {
-      // Solo el dueño puede mover usuarios entre empresas
       if (!isOwner) {
-        return res
-          .status(403)
-          .json({ message: 'Solo el dueño puede cambiar la empresa de un usuario' });
+        return res.status(403).json({
+          message: "Solo el dueño puede cambiar la empresa de un usuario",
+        });
       }
       fields.push(`company_id = $${idx++}`);
       values.push(company_id);
     }
 
     if (fields.length === 0) {
-      return res.status(400).json({ message: 'No hay campos para actualizar' });
+      return res.status(400).json({ message: "No hay campos para actualizar" });
     }
 
     values.push(id);
 
     const result = await db.query(
-      `UPDATE users
-       SET ${fields.join(', ')}
+      `UPDATE public.users
+       SET ${fields.join(", ")}
        WHERE id = $${idx}
-       RETURNING id, run, name, email, plan, role, active, company_id`,
+       RETURNING id, run, "name", email, "plan", "role", active, company_id`,
       values
     );
 
-    return res.json(result.rows[0]);
+    const updated = result.rows[0];
+
+    await logAudit({
+      user: req.user,
+      action: "user_updated",
+      entityType: "user",
+      entityId: updated.id,
+      metadata: {
+        before_role: before.role,
+        new_role: updated.role,
+        company_id: updated.company_id,
+      },
+      req,
+    });
+
+    return res.json(updated);
   } catch (err) {
-    console.error('❌ Error actualizando usuario:', err);
-    return res.status(500).json({ message: 'Error interno del servidor' });
+    console.error("❌ Error actualizando usuario:", err);
+    return res.status(500).json({ message: "Error interno del servidor" });
   }
 });
 
 /**
  * DELETE /api/users/:id
- * Borrar usuario (solo admin) pero:
- * - Nadie puede borrar al dueño
- * - Solo el dueño puede borrar otros admins (ADMIN, ADMIN_GLOBAL, SUPER_ADMIN)
+ * Borrar usuario según reglas:
+ * - SUPER_ADMIN / OWNER: pueden borrar cualquiera excepto OWNER.
+ * - ADMIN_GLOBAL: puede borrar ADMIN / USER de cualquier empresa.
+ * - ADMIN: puede borrar usuarios (USER/ADMIN) solo de su empresa.
  */
-router.delete('/:id', requireAuth, requireRole('ADMIN'), async (req, res) => {
+router.delete("/:id", requireAuth, requireRole("ADMIN"), async (req, res) => {
   try {
     const { id } = req.params;
 
     const userRes = await db.query(
-      'SELECT id, run, role FROM users WHERE id = $1',
+      "SELECT id, run, role, company_id FROM public.users WHERE id = $1",
       [id]
     );
 
     if (userRes.rowCount === 0) {
-      return res.status(404).json({ message: 'Usuario no encontrado' });
+      return res.status(404).json({ message: "Usuario no encontrado" });
     }
 
     const target = userRes.rows[0];
-    const requesterRun = normalizeRun(req.user.run);
+
+    const requester = req.user;
+    const requesterRun = normalizeRun(requester.run);
     const isOwner = requesterRun === OWNER_RUN;
+    const isSuper = requester.role === "SUPER_ADMIN";
+    const isGlobal = requester.role === "ADMIN_GLOBAL";
+    const isAdminEmpresa = requester.role === "ADMIN";
 
-    // 1) Nadie puede borrar al dueño
+    // 1) Nunca permitir borrar la cuenta principal
     if (normalizeRun(target.run) === OWNER_RUN) {
-      return res
-        .status(403)
-        .json({ message: 'No se puede eliminar la cuenta principal del sistema' });
+      return res.status(403).json({
+        message: "No se puede eliminar la cuenta principal del sistema",
+      });
     }
 
-    // 2) Solo el dueño puede borrar otros administradores/globales/super
-    const isTargetAdmin =
-      target.role === 'ADMIN' ||
-      target.role === 'ADMIN_GLOBAL' ||
-      target.role === 'SUPER_ADMIN';
+    const targetIsAdmin = isAdminLike(target.role);
 
-    if (isTargetAdmin && !isOwner) {
-      return res
-        .status(403)
-        .json({ message: 'Solo el dueño puede eliminar otros administradores' });
+    if (targetIsAdmin) {
+      // Admin fuerte
+      if (target.role === "SUPER_ADMIN" || target.role === "ADMIN_GLOBAL") {
+        // Solo dueño o SUPER_ADMIN pueden borrar estos
+        if (!isOwner && !isSuper) {
+          return res.status(403).json({
+            message:
+              "Solo el dueño o el super admin pueden eliminar super_admin o admin_global",
+          });
+        }
+      } else if (target.role === "ADMIN") {
+        // ADMIN_GLOBAL / SUPER / OWNER pueden eliminar ADMIN de cualquier empresa
+        if (!isOwner && !isSuper && !isGlobal) {
+          return res.status(403).json({
+            message:
+              "Solo el dueño, super admin o admin global pueden eliminar administradores",
+          });
+        }
+      }
+    } else {
+      // Usuario normal
+      if (isAdminEmpresa && !isOwner && !isSuper && !isGlobal) {
+        if (
+          !requester.company_id ||
+          requester.company_id !== target.company_id
+        ) {
+          return res.status(403).json({
+            message: "Solo puedes eliminar usuarios que pertenezcan a tu empresa",
+          });
+        }
+      }
     }
 
-    await db.query('DELETE FROM users WHERE id = $1', [id]);
+    await db.query("DELETE FROM public.users WHERE id = $1", [id]);
 
-    return res.json({ message: 'Usuario eliminado correctamente' });
+    await logAudit({
+      user: requester,
+      action: "user_deleted",
+      entityType: "user",
+      entityId: target.id,
+      metadata: {
+        run: target.run,
+        role: target.role,
+        company_id: target.company_id,
+        deleted_by_id: requester.id,
+        deleted_by_role: requester.role,
+      },
+      req,
+    });
+
+    return res.json({ message: "Usuario eliminado correctamente" });
   } catch (err) {
-    console.error('❌ Error eliminando usuario:', err);
-    return res.status(500).json({ message: 'Error interno del servidor' });
+    console.error("❌ Error eliminando usuario:", err);
+    return res.status(500).json({ message: "Error interno del servidor" });
   }
 });
+
+/**
+ * RESET PASSWORD (solo admins según reglas de rol)
+ */
+router.post(
+  "/:id/reset-password",
+  requireAuth,
+  requireRole("ADMIN"),
+  async (req, res) => {
+    try {
+      const { id } = req.params;
+
+      const requester = req.user;
+      const requesterRunNorm = normalizeRun(requester.run);
+      const isOwner = requesterRunNorm === OWNER_RUN;
+      const isSuper = requester.role === "SUPER_ADMIN";
+      const isGlobal = requester.role === "ADMIN_GLOBAL";
+      const isAdmin = requester.role === "ADMIN";
+
+      const userRes = await db.query(
+        "SELECT id, run, role, email, name, company_id FROM public.users WHERE id = $1",
+        [id]
+      );
+
+      if (userRes.rowCount === 0) {
+        return res.status(404).json({ message: "Usuario no encontrado" });
+      }
+
+      const target = userRes.rows[0];
+      const targetRunNorm = normalizeRun(target.run);
+      const isTargetOwner = targetRunNorm === OWNER_RUN;
+      const isTargetAdminLike = isAdminLike(target.role);
+
+      if (isTargetOwner && !isOwner) {
+        return res.status(403).json({
+          message: "No puedes resetear la contraseña de la cuenta principal",
+        });
+      }
+
+      if (isTargetAdminLike && !isOwner && !isSuper) {
+        return res.status(403).json({
+          message:
+            "Solo el dueño o el super admin pueden resetear contraseñas de administradores",
+        });
+      }
+
+      if (isAdmin && !isOwner && !isSuper && !isGlobal) {
+        if (
+          !requester.company_id ||
+          requester.company_id !== target.company_id
+        ) {
+          return res.status(403).json({
+            message: "Solo puedes resetear contraseñas de usuarios de tu empresa",
+          });
+        }
+      }
+
+      const crypto = require("crypto");
+      const tempPassword = crypto.randomBytes(4).toString("hex");
+      const hash = await bcrypt.hash(tempPassword, 10);
+
+      await db.query(
+        "UPDATE public.users SET password_hash = $1 WHERE id = $2",
+        [hash, target.id]
+      );
+
+      try {
+        const {
+          sendPasswordResetAdminEmail,
+        } = require("../services/sendPasswordResetEmail");
+        if (target.email) {
+          await sendPasswordResetAdminEmail({
+            to: target.email,
+            name: target.name,
+            tempPassword,
+          });
+        }
+      } catch (mailErr) {
+        console.error("⚠️ Error enviando email de reset:", mailErr.message);
+      }
+
+      await logAuth({
+        userId: target.id,
+        run: target.run,
+        action: "password_change",
+        metadata: {
+          by_admin_id: requester.id,
+          by_admin_run: requester.run,
+          by_admin_role: requester.role,
+          via: "admin_reset",
+        },
+        req,
+      });
+
+      await logAudit({
+        user: requester,
+        action: "password_reset_by_admin",
+        entityType: "user",
+        entityId: target.id,
+        metadata: {
+          target_run: target.run,
+          target_role: target.role,
+          company_id: target.company_id,
+        },
+        req,
+      });
+
+      return res.json({
+        message:
+          "Contraseña temporal generada y enviado correo al usuario (si tiene correo configurado).",
+      });
+    } catch (err) {
+      console.error("❌ Error en POST /api/users/:id/reset-password:", err);
+      return res
+        .status(500)
+        .json({ message: "Error interno al resetear la contraseña" });
+    }
+  }
+);
 
 module.exports = router;

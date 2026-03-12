@@ -1,6 +1,5 @@
 // src/views/NewDocumentForm.jsx
 import React, { useState } from "react";
-import { apiUrl } from "../constants";
 
 const TIPOS_TRAMITE = [
   { value: "propio", label: "Trámite propio (sin notaría)" },
@@ -13,7 +12,7 @@ const TIPOS_DOCUMENTO = [
 ];
 
 export function NewDocumentForm({
-  API_URL, // ya no lo usamos, pero lo dejamos para no romper props
+  API_URL,
   token,
   tipoTramite,
   setTipoTramite,
@@ -133,7 +132,6 @@ export function NewDocumentForm({
 
           const form = e.target;
           const formData = new FormData(form);
-
           const newErrors = {};
 
           // Validar tipoDocumento
@@ -220,7 +218,7 @@ export function NewDocumentForm({
           formData.append("empresa_rut", empresaRutValue);
           formData.append("requiresVisado", showVisador ? "true" : "false");
 
-          // Firmante adicional (por ahora solo el primero)
+          // Firmante adicional (solo el primero por ahora)
           if (extraSigners.length > 0) {
             const idx = 0;
             const nombreExtra =
@@ -241,7 +239,7 @@ export function NewDocumentForm({
           }
 
           try {
-            const res = await fetch(apiUrl("/docs"), {
+            const res = await fetch(`${API_URL}/api/docs`, {
               method: "POST",
               headers: {
                 Authorization: `Bearer ${token}`,
@@ -274,7 +272,6 @@ export function NewDocumentForm({
           }
         }}
       >
-
         {/* === TÍTULO DEL CONTRATO + BOTÓN PDF === */}
         <div
           style={{

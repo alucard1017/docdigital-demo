@@ -1,32 +1,34 @@
 // backend/controllers/documents/common.js
-const path = require('path');
-const crypto = require('crypto');
-const fs = require('fs');
-const axios = require('axios');
+const path = require("path");
+const crypto = require("crypto");
+const fs = require("fs");
+const axios = require("axios");
 
-const db = require('../../db');
+const db = require("../../db");
 const {
   sendSigningInvitation,
   sendVisadoInvitation,
-} = require('../../services/emailService');
-const { uploadPdfToS3, getSignedUrl } = require('../../services/s3');
+} = require("../../services/emailService");
+const { uploadPdfToS3, getSignedUrl } = require("../../services/s3");
 const {
   isValidEmail,
   isValidRun,
   validateLength,
-} = require('../../utils/validators');
-const { PDFDocument, rgb, degrees } = require('pdf-lib');
-const { sellarPdfConQr } = require('../../services/pdfSeal');
+} = require("../../utils/validators");
+const { PDFDocument, rgb, degrees } = require("pdf-lib");
+const { sellarPdfConQr } = require("../../services/pdfSeal");
 const {
   generarNumeroContratoInterno,
-} = require('../../utils/numeroContratoInterno');
-const { registrarAuditoria } = require('../../utils/auditLog');
+} = require("../../utils/numeroContratoInterno");
 
+/**
+ * Genera un código alfanumérico para verificación pública de documentos.
+ */
 function generarCodigoVerificacion() {
   return crypto
     .randomBytes(6)
-    .toString('base64')
-    .replace(/[^A-Z0-9]/gi, '')
+    .toString("base64")
+    .replace(/[^A-Z0-9]/gi, "")
     .slice(0, 10)
     .toUpperCase();
 }
@@ -40,8 +42,8 @@ async function aplicarMarcaAguaLocal(filePath) {
     const pdfDoc = await PDFDocument.load(bytes);
     const pages = pdfDoc.getPages();
 
-    const textoPrincipal = 'VERIFIRMA';
-    const textoSecundario = 'Documento en proceso – No válido como original';
+    const textoPrincipal = "VERIFIRMA";
+    const textoSecundario = "Documento en proceso – No válido como original";
     const fontSizeMain = 30;
     const fontSizeSub = 11;
     const opacity = 0.36;
@@ -78,10 +80,17 @@ async function aplicarMarcaAguaLocal(filePath) {
 
     const pdfBytes = await pdfDoc.save();
     await fs.promises.writeFile(filePath, pdfBytes);
-    console.log('✅ Marca de agua VERIFIRMA aplicada a', filePath);
+    console.log("✅ Marca de agua VERIFIRMA aplicada a", filePath);
   } catch (err) {
-    console.error('⚠️ Error aplicando marca de agua:', err);
+    console.error("⚠️ Error aplicando marca de agua:", err);
   }
+}
+
+/**
+ * Calcula el hash SHA-256 de un buffer.
+ */
+function computeHash(buffer) {
+  return crypto.createHash("sha256").update(buffer).digest("hex");
 }
 
 module.exports = {
@@ -108,9 +117,8 @@ module.exports = {
   // sello y numeración interna
   sellarPdfConQr,
   generarNumeroContratoInterno,
-  // auditoría
-  registrarAuditoria,
   // utilidades locales
   generarCodigoVerificacion,
   aplicarMarcaAguaLocal,
+  computeHash,
 };

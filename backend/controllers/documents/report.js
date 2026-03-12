@@ -1,26 +1,39 @@
 // backend/controllers/documents/report.js
-const { db, getSignedUrl } = require('./common');
-const { PDFDocument, rgb } = require('pdf-lib');
-const axios = require('axios');
+const {
+  db,
+  getSignedUrl,
+  computeHash,
+} = require("./common");
+const { PDFDocument, rgb } = require("pdf-lib");
+const axios = require("axios");
+const { logAudit } = require("../../utils/auditLog");
 
 /* ================================
-   GET: Descargar PDF
+   GET: Descargar PDF (con verificación de hash)
    ================================ */
 async function downloadDocument(req, res) {
   try {
     const id = req.params.id;
 
+    // Si la ruta está protegida con requireAuth, aquí tienes req.user; si no, solo filtras por id.
+    const params = [id];
+    let where = "id = $1";
+
+    // Si quieres limitar por empresa cuando hay usuario autenticado:
+    if (req.user && req.user.company_id) {
+      params.push(req.user.company_id);
+      where += " AND company_id = $2";
+    }
+
     const result = await db.query(
-      `SELECT id, title, file_path 
+      `SELECT id, title, file_path, pdf_hash 
        FROM documents
-       WHERE id = $1`,
-      [id]
+       WHERE ${where}`,
+      params
     );
 
     if (result.rowCount === 0) {
-      return res
-        .status(404)
-        .json({ message: 'Documento no encontrado' });
+      return res.status(404).json({ message: "Documento no encontrado" });
     }
 
     const doc = result.rows[0];
@@ -28,31 +41,59 @@ async function downloadDocument(req, res) {
     if (!doc.file_path) {
       return res
         .status(404)
-        .json({ message: 'Documento sin archivo asociado' });
+        .json({ message: "Documento sin archivo asociado" });
     }
 
     const signedUrl = await getSignedUrl(doc.file_path, 3600);
 
     const fileResponse = await axios.get(signedUrl, {
-      responseType: 'stream',
+      responseType: "arraybuffer",
     });
 
-    const filename =
-      (doc.title || `documento-${doc.id}`).replace(
-        /[^a-zA-Z0-9-_]/g,
-        '_'
-      ) + '.pdf';
+    const buffer = Buffer.from(fileResponse.data);
 
-    res.setHeader('Content-Type', 'application/pdf');
+    // Verificación de integridad si hay hash guardado
+    if (doc.pdf_hash) {
+      const currentHash = computeHash(buffer);
+      if (currentHash !== doc.pdf_hash) {
+        console.error(
+          "❌ Hash de PDF no coincide para documento",
+          doc.id
+        );
+
+        await logAudit({
+          user: req.user || null,
+          action: "document_hash_mismatch",
+          entityType: "document",
+          entityId: doc.id,
+          metadata: {
+            stored_hash: doc.pdf_hash,
+            current_hash: currentHash,
+          },
+          req,
+        });
+
+        return res.status(409).json({
+          message:
+            "El archivo del documento parece haber sido alterado. Contacta al administrador.",
+        });
+      }
+    }
+
+    const filename =
+      (doc.title || `documento-${doc.id}`).replace(/[^a-zA-Z0-9-_]/g, "_") +
+      ".pdf";
+
+    res.setHeader("Content-Type", "application/pdf");
     res.setHeader(
-      'Content-Disposition',
+      "Content-Disposition",
       `attachment; filename="${filename}"`
     );
 
-    fileResponse.data.pipe(res);
+    return res.send(buffer);
   } catch (err) {
-    console.error('❌ Error en descarga de documento:', err);
-    return res.status(500).json({ message: 'Error interno del servidor' });
+    console.error("❌ Error en descarga de documento:", err);
+    return res.status(500).json({ message: "Error interno del servidor" });
   }
 }
 
@@ -80,8 +121,8 @@ async function getDocumentAnalytics(req, res) {
     const eventsRes = await db.query(
       `SELECT 
          DATE(created_at) AS fecha,
-         COUNT(*) FILTER (WHERE action = 'FIRMADO_PUBLICO' OR action = 'FIRMADO') AS firmas_dia,
-         COUNT(*) FILTER (WHERE action = 'RECHAZO_PUBLICO' OR action = 'RECHAZADO') AS rechazos_dia
+         COUNT(*) FILTER (WHERE action IN ('FIRMADO_PUBLICO', 'FIRMADO')) AS firmas_dia,
+         COUNT(*) FILTER (WHERE action IN ('RECHAZO_PUBLICO', 'RECHAZADO')) AS rechazos_dia
        FROM document_events
        WHERE document_id IN (
          SELECT id FROM documents WHERE owner_id = $1
@@ -96,17 +137,20 @@ async function getDocumentAnalytics(req, res) {
 
     return res.json({
       summary: {
-        total: Number(stats.total),
-        firmados: Number(stats.firmados),
-        rechazados: Number(stats.rechazados),
-        pendientes: Number(stats.pendientes),
+        total: Number(stats.total || 0),
+        firmados: Number(stats.firmados || 0),
+        rechazados: Number(stats.rechazados || 0),
+        pendientes: Number(stats.pendientes || 0),
         tasa_firma_pct:
           stats.total > 0
             ? ((Number(stats.firmados) / Number(stats.total)) * 100).toFixed(1)
             : 0,
         tasa_rechazo_pct:
           stats.total > 0
-            ? ((Number(stats.rechazados) / Number(stats.total)) * 100).toFixed(1)
+            ? (
+                (Number(stats.rechazados) / Number(stats.total)) *
+                100
+              ).toFixed(1)
             : 0,
         horas_promedio: stats.horas_promedio_firma
           ? parseFloat(stats.horas_promedio_firma).toFixed(1)
@@ -121,7 +165,7 @@ async function getDocumentAnalytics(req, res) {
 }
 
 /* ================================
-   POST: Descargar reporte PDF con detalles
+   GET: Descargar reporte PDF con detalles
    ================================ */
 async function downloadReportPdf(req, res) {
   try {
@@ -164,7 +208,9 @@ async function downloadReportPdf(req, res) {
     yPos -= 30;
 
     page.drawText(
-      `Contrato: ${doc.numero_contrato_interno || "N/A"} | Estado: ${doc.status}`,
+      `Contrato: ${doc.numero_contrato_interno || "N/A"} | Estado: ${
+        doc.status
+      }`,
       {
         x: 50,
         y: yPos,
@@ -174,12 +220,15 @@ async function downloadReportPdf(req, res) {
     );
 
     yPos -= 20;
-    page.drawText(`Creado: ${new Date(doc.created_at).toLocaleString("es-CL")}`, {
-      x: 50,
-      y: yPos,
-      size: 10,
-      color: rgb(0.5, 0.5, 0.5),
-    });
+    page.drawText(
+      `Creado: ${new Date(doc.created_at).toLocaleString("es-CL")}`,
+      {
+        x: 50,
+        y: yPos,
+        size: 10,
+        color: rgb(0.5, 0.5, 0.5),
+      }
+    );
 
     yPos -= 25;
 
@@ -193,7 +242,12 @@ async function downloadReportPdf(req, res) {
     yPos -= 15;
 
     for (const signer of signersRes.rows) {
-      const statusSymbol = signer.status === "FIRMADO" ? "✓" : signer.status === "RECHAZADO" ? "✗" : "○";
+      const statusSymbol =
+        signer.status === "FIRMADO"
+          ? "✓"
+          : signer.status === "RECHAZADO"
+          ? "✗"
+          : "○";
       const statusColor =
         signer.status === "FIRMADO"
           ? rgb(0.2, 0.7, 0.2)
@@ -221,7 +275,9 @@ async function downloadReportPdf(req, res) {
         yPos -= 24;
       } else if (signer.rejected_at) {
         page.drawText(
-          `   Rechazado: ${new Date(signer.rejected_at).toLocaleString("es-CL")}`,
+          `   Rechazado: ${new Date(
+            signer.rejected_at
+          ).toLocaleString("es-CL")}`,
           {
             x: 70,
             y: yPos - 12,
@@ -230,12 +286,15 @@ async function downloadReportPdf(req, res) {
           }
         );
         if (signer.rejection_reason) {
-          page.drawText(`   Motivo: ${signer.rejection_reason.substring(0, 50)}`, {
-            x: 70,
-            y: yPos - 24,
-            size: 8,
-            color: rgb(0.6, 0.6, 0.6),
-          });
+          page.drawText(
+            `   Motivo: ${signer.rejection_reason.substring(0, 50)}`,
+            {
+              x: 70,
+              y: yPos - 24,
+              size: 8,
+              color: rgb(0.6, 0.6, 0.6),
+            }
+          );
           yPos -= 36;
         } else {
           yPos -= 24;
@@ -258,7 +317,9 @@ async function downloadReportPdf(req, res) {
 
     for (const event of eventsRes.rows.slice(0, 10)) {
       page.drawText(
-        `[${new Date(event.created_at).toLocaleString("es-CL")}] ${event.action}`,
+        `[${new Date(event.created_at).toLocaleString("es-CL")}] ${
+          event.action
+        }`,
         {
           x: 70,
           y: yPos,
@@ -269,12 +330,15 @@ async function downloadReportPdf(req, res) {
 
       if (event.details) {
         const detailText = event.details.substring(0, 60);
-        page.drawText(`    ${detailText}${event.details.length > 60 ? "..." : ""}`, {
-          x: 70,
-          y: yPos - 10,
-          size: 8,
-          color: rgb(0.7, 0.7, 0.7),
-        });
+        page.drawText(
+          `    ${detailText}${event.details.length > 60 ? "..." : ""}`,
+          {
+            x: 70,
+            y: yPos - 10,
+            size: 8,
+            color: rgb(0.7, 0.7, 0.7),
+          }
+        );
         yPos -= 20;
       } else {
         yPos -= 12;
@@ -283,9 +347,9 @@ async function downloadReportPdf(req, res) {
 
     const pdfBytes = await pdfDoc.save();
 
-    const filename = `reporte-${doc.numero_contrato_interno || doc.id}-${new Date()
-      .toISOString()
-      .slice(0, 10)}.pdf`;
+    const filename = `reporte-${
+      doc.numero_contrato_interno || doc.id
+    }-${new Date().toISOString().slice(0, 10)}.pdf`;
 
     res.setHeader("Content-Type", "application/pdf");
     res.setHeader("Content-Disposition", `attachment; filename="${filename}"`);

@@ -18,6 +18,11 @@ export function EventList({ events }) {
     RECHAZADO: "#ef4444", // rojo
   };
 
+  const sourceConfig = {
+    document_events: { label: "Flujo", bg: "#dbeafe", color: "#1d4ed8" },
+    audit_log: { label: "Auditoría", bg: "#fef3c7", color: "#92400e" },
+  };
+
   const formatDate = (timestamp) => {
     if (!timestamp) return "-";
     const date = new Date(timestamp);
@@ -29,6 +34,26 @@ export function EventList({ events }) {
       minute: "2-digit",
       second: "2-digit",
     });
+  };
+
+  const formatDetails = (e) => {
+    if (e.details) return String(e.details);
+
+    if (e.metadata && typeof e.metadata === "object") {
+      const { document_id, title, status, ...rest } = e.metadata;
+      const partes = [];
+      if (title || document_id) {
+        partes.push(`Documento: ${title || document_id}`);
+      }
+      if (status) {
+        partes.push(`Estado: ${status}`);
+      }
+      const extras = Object.keys(rest).length ? JSON.stringify(rest) : "";
+      if (extras) partes.push(`Extra: ${extras}`);
+      return partes.join(" | ");
+    }
+
+    return "";
   };
 
   if (safeEvents.length === 0) {
@@ -58,10 +83,12 @@ export function EventList({ events }) {
       {safeEvents.map((e) => {
         const color = actionColors[e.action] || "#e5e7eb";
         const icon = actionIcons[e.action] || "📋";
+        const sourceCfg =
+          sourceConfig[e.source] || sourceConfig.document_events;
 
         return (
           <div
-            key={e.id || `${e.action}-${e.timestamp}`}
+            key={e.id || `${e.source}-${e.action}-${e.timestamp}`}
             style={{
               display: "flex",
               gap: 12,
@@ -92,17 +119,33 @@ export function EventList({ events }) {
                   justifyContent: "space-between",
                   alignItems: "center",
                   marginBottom: 4,
+                  gap: 8,
                 }}
               >
-                <span
-                  style={{
-                    fontWeight: 700,
-                    color: color === "#e5e7eb" ? "#1e293b" : color,
-                    fontSize: "0.9rem",
-                  }}
-                >
-                  {e.action}
-                </span>
+                <div style={{ display: "flex", gap: 8, alignItems: "center" }}>
+                  <span
+                    style={{
+                      fontWeight: 700,
+                      color: color === "#e5e7eb" ? "#1e293b" : color,
+                      fontSize: "0.9rem",
+                    }}
+                  >
+                    {e.action}
+                  </span>
+                  <span
+                    style={{
+                      fontSize: "0.7rem",
+                      padding: "2px 6px",
+                      borderRadius: 999,
+                      background: sourceCfg.bg,
+                      color: sourceCfg.color,
+                      textTransform: "uppercase",
+                    }}
+                  >
+                    {sourceCfg.label}
+                  </span>
+                </div>
+
                 <span
                   style={{
                     fontSize: "0.75rem",
@@ -113,33 +156,54 @@ export function EventList({ events }) {
                 </span>
               </div>
 
-              <p
-                style={{
-                  margin: "4px 0",
-                  fontSize: "0.85rem",
-                  color: "#4b5563",
-                  lineHeight: "1.4",
-                }}
-              >
-                {e.details}
-              </p>
+              {formatDetails(e) && (
+                <p
+                  style={{
+                    margin: "4px 0",
+                    fontSize: "0.85rem",
+                    color: "#4b5563",
+                    lineHeight: "1.4",
+                  }}
+                >
+                  {formatDetails(e)}
+                </p>
+              )}
 
               <div
                 style={{
                   display: "flex",
+                  flexWrap: "wrap",
                   gap: 12,
                   fontSize: "0.8rem",
                   color: "#9ca3af",
                   marginTop: 6,
                 }}
               >
-                <span>👤 {e.actor}</span>
+                {e.actor && <span>👤 {e.actor}</span>}
                 {e.fromStatus && e.toStatus && (
                   <span>
                     {e.fromStatus} → <strong>{e.toStatus}</strong>
                   </span>
                 )}
+                {e.ip && <span>IP: {e.ip}</span>}
+                {e.requestId && <span>Req ID: {e.requestId}</span>}
               </div>
+
+              {e.userAgent && (
+                <div
+                  style={{
+                    marginTop: 4,
+                    fontSize: "0.75rem",
+                    color: "#a1a1aa",
+                    whiteSpace: "nowrap",
+                    overflow: "hidden",
+                    textOverflow: "ellipsis",
+                  }}
+                  title={e.userAgent}
+                >
+                  Agente: {e.userAgent}
+                </div>
+              )}
             </div>
           </div>
         );

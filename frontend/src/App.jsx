@@ -1,17 +1,21 @@
 // src/App.jsx
-import { useState, useEffect, useCallback, useMemo } from "react";
+import { useState, useEffect, useCallback } from "react";
 import "./App.css";
 import { Sidebar } from "./components/Sidebar";
 import { DetailView } from "./components/DetailView";
 import { ListHeader } from "./components/ListHeader";
 import { DocumentRow } from "./components/DocumentRow";
-import { DOC_STATUS, apiUrl } from "./constants";
+import { DOC_STATUS, API_BASE_URL } from "./constants";
 import { LoginView } from "./views/LoginView";
 import { PublicSignView } from "./views/PublicSignView";
 import { NewDocumentForm } from "./views/NewDocumentForm";
 import { UsersAdminView } from "./views/UsersAdminView";
 import { DashboardView } from "./views/DashboardView";
 import { VerificationView } from "./views/VerificationView";
+import { CompaniesAdminView } from "./views/CompaniesAdminView";
+import { StatusAdminView } from "./views/StatusAdminView";
+import { AuditLogsView } from "./views/AuditLogsView";
+import { AuthLogsView } from "./views/AuthLogsView";
 import { getSubdomain } from "./utils/subdomain";
 
 /* ========= Helpers de rol ========= */
@@ -99,7 +103,6 @@ function App() {
   const pageSize = 20;
 
   const [selectedDoc, setSelectedDoc] = useState(null);
-  const [events, setEvents] = useState([]);
   const [pdfUrl, setPdfUrl] = useState(null);
 
   const [publicSignDoc, setPublicSignDoc] = useState(null);
@@ -112,52 +115,55 @@ function App() {
   const [firmanteRunValue, setFirmanteRunValue] = useState("");
   const [empresaRutValue, setEmpresaRutValue] = useState("");
 
-  const apiRoot = useMemo(() => apiUrl("/"), []);
+  const apiRoot = API_BASE_URL.replace(/\/+$/, "");
 
   /* =============================== */
   /* FIRMA / VISADO PÚBLICO          */
   /* =============================== */
 
-  const cargarFirmaPublica = useCallback(async (tokenParam) => {
-    try {
-      setPublicSignLoading(true);
-      setPublicSignError("");
+  const cargarFirmaPublica = useCallback(
+    async (tokenParam) => {
+      try {
+        setPublicSignLoading(true);
+        setPublicSignError("");
 
-      const params = new URLSearchParams(window.location.search);
-      const modeUrl = params.get("mode");
-      const pathname = window.location.pathname;
+        const params = new URLSearchParams(window.location.search);
+        const modeUrl = params.get("mode");
+        const pathname = window.location.pathname;
 
-      const isVisado = modeUrl === "visado";
-      const isConsultaPublica = pathname === "/consulta-publica";
+        const isVisado = modeUrl === "visado";
+        const isConsultaPublica = pathname === "/consulta-publica";
 
-      const path =
-        isVisado || isConsultaPublica
-          ? `/api/public/docs/document/${tokenParam}`
-          : `/api/public/docs/${tokenParam}`;
+        const path =
+          isVisado || isConsultaPublica
+            ? `/api/public/docs/document/${tokenParam}`
+            : `/api/public/docs/${tokenParam}`;
 
-      const res = await fetch(apiUrl(path));
-      const data = await res.json();
+        const res = await fetch(`${apiRoot}${path}`);
+        const data = await res.json();
 
-      if (!res.ok) {
-        throw new Error(data.message || "No se pudo cargar el documento");
+        if (!res.ok) {
+          throw new Error(data.message || "No se pudo cargar el documento");
+        }
+
+        if (isVisado || isConsultaPublica) {
+          setPublicSignDoc({ document: data.document, signer: null });
+          setPublicSignPdfUrl(data.pdfUrl);
+        } else {
+          setPublicSignDoc(data);
+          setPublicSignPdfUrl(data.pdfUrl);
+        }
+      } catch (err) {
+        console.error("Error cargando firma pública:", err);
+        setPublicSignError(err.message || "No se pudo cargar el documento");
+        setPublicSignDoc(null);
+        setPublicSignPdfUrl("");
+      } finally {
+        setPublicSignLoading(false);
       }
-
-      if (isVisado || isConsultaPublica) {
-        setPublicSignDoc({ document: data.document, signer: null });
-        setPublicSignPdfUrl(data.pdfUrl);
-      } else {
-        setPublicSignDoc(data);
-        setPublicSignPdfUrl(data.pdfUrl);
-      }
-    } catch (err) {
-      console.error("Error cargando firma pública:", err);
-      setPublicSignError(err.message || "No se pudo cargar el documento");
-      setPublicSignDoc(null);
-      setPublicSignPdfUrl("");
-    } finally {
-      setPublicSignLoading(false);
-    }
-  }, []);
+    },
+    [apiRoot]
+  );
 
   /* =============================== */
   /* RUTAS PÚBLICAS (sin login)      */
@@ -200,58 +206,6 @@ function App() {
     return () => window.removeEventListener("popstate", syncViewWithLocation);
   }, [isVerificationPortal, isSigningPortal, cargarFirmaPublica]);
 
-  /* =============================== */
-  /* TIMELINE + PDF DEL DETALLE      */
-  /* =============================== */
-
-  useEffect(() => {
-    if (!token || !selectedDoc || view !== "detail") {
-      if (view !== "detail") setEvents([]);
-      return;
-    }
-
-    const cargarEventos = async () => {
-      try {
-        const res = await fetch(
-          apiUrl(`/api/docs/${selectedDoc.id}/timeline`),
-          {
-            headers: { Authorization: `Bearer ${token}` },
-          }
-        );
-        const data = await res.json();
-        setEvents(Array.isArray(data) ? data : []);
-      } catch (err) {
-        console.error("Error cargando eventos:", err);
-      }
-    };
-
-    cargarEventos();
-  }, [token, selectedDoc, view]);
-
-  useEffect(() => {
-    if (!token || !selectedDoc) {
-      setPdfUrl(null);
-      return;
-    }
-
-    const fetchPdfUrl = async () => {
-      try {
-        const res = await fetch(apiUrl(`/api/docs/${selectedDoc.id}/pdf`), {
-          headers: { Authorization: `Bearer ${token}` },
-        });
-        const data = await res.json();
-        if (!res.ok) {
-          throw new Error(data.message || "No se pudo obtener el PDF");
-        }
-        setPdfUrl(data.url);
-      } catch (err) {
-        console.error("Error obteniendo URL de PDF:", err);
-        setPdfUrl(null);
-      }
-    };
-
-    fetchPdfUrl();
-  }, [token, selectedDoc]);
 
   /* =============================== */
   /* CARGA DE DOCUMENTOS             */
@@ -265,7 +219,7 @@ function App() {
 
       try {
         const res = await fetch(
-          apiUrl(`/api/docs?sort=${encodeURIComponent(sortParam)}`),
+          `${apiRoot}/api/docs?sort=${encodeURIComponent(sortParam)}`,
           {
             headers: { Authorization: `Bearer ${token}` },
           }
@@ -295,7 +249,7 @@ function App() {
         setLoadingDocs(false);
       }
     },
-    [sort, token]
+    [sort, token, apiRoot]
   );
 
   useEffect(() => {
@@ -311,15 +265,21 @@ function App() {
   async function handleLogin(e) {
     e.preventDefault();
     setIsLoggingIn(true);
-    setMessage("🚀 Conectando con el servidor seguro...");
+    setMessage("Conectando con el servidor seguro...");
 
     const isEmail = isEmailMode || identifier.includes("@");
-    const value = isEmail
+    const valueRaw = isEmail
       ? identifier.trim()
       : identifier.replace(/[^0-9kK]/g, "");
+    const value = isEmail ? valueRaw.toLowerCase() : valueRaw;
 
     try {
-      const res = await fetch(apiUrl("/api/auth/login"), {
+      console.log("DEBUG handleLogin payload:", {
+        identifier: value,
+        isEmail,
+      });
+
+      const res = await fetch(`${apiRoot}/api/auth/login`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ identifier: value, password }),
@@ -335,12 +295,12 @@ function App() {
       setUser(data.user);
       localStorage.setItem("token", data.token);
       localStorage.setItem("user", JSON.stringify(data.user));
-      setMessage("✅ Acceso concedido");
+      setMessage("Acceso concedido");
     } catch (err) {
       console.error("Error en login:", err);
       setMessage(
         err.message ||
-          "❌ Error de conexión, intenta nuevamente en unos segundos."
+          "Error de conexión, intenta nuevamente en unos segundos."
       );
     } finally {
       setIsLoggingIn(false);
@@ -360,7 +320,7 @@ function App() {
       }
 
       try {
-        const res = await fetch(apiUrl(`/api/docs/${doc.id}/pdf`), {
+        const res = await fetch(`${apiRoot}/api/docs/${doc.id}/pdf`, {
           headers: { Authorization: `Bearer ${token}` },
         });
         const data = await res.json();
@@ -386,7 +346,7 @@ function App() {
         body = JSON.stringify({ motivo: extraData.motivo });
       }
 
-      const res = await fetch(apiUrl(`/api/docs/${id}/${accion}`), {
+      const res = await fetch(`${apiRoot}/api/docs/${id}/${accion}`, {
         method: "POST",
         headers,
         body,
@@ -430,12 +390,12 @@ function App() {
   };
 
   /* =============================== */
-  /* MODO DE VISTA (UN SOLO PUNTO)   */
+  /* MODO DE VISTA (RUTAS)           */
   /* =============================== */
 
   const pathname = window.location.pathname;
 
-  let mode = "app"; // por defecto: app normal (login + dashboard)
+  let mode = "app";
 
   if (isVerificationPortal) {
     mode = "verification-portal";
@@ -461,22 +421,7 @@ function App() {
     return <VerificationView API_URL={apiRoot} />;
   }
 
-  if (mode === "signing-portal") {
-    return (
-      <PublicSignView
-        publicSignLoading={publicSignLoading}
-        publicSignError={publicSignError}
-        publicSignDoc={publicSignDoc}
-        publicSignPdfUrl={publicSignPdfUrl}
-        publicSignToken={publicSignToken}
-        publicSignMode={publicSignMode}
-        API_URL={apiRoot}
-        cargarFirmaPublica={cargarFirmaPublica}
-      />
-    );
-  }
-
-  if (mode === "public-sign") {
+  if (mode === "signing-portal" || mode === "public-sign") {
     return (
       <PublicSignView
         publicSignLoading={publicSignLoading}
@@ -523,6 +468,10 @@ function App() {
     );
   }
 
+  /* =============================== */
+  /* VISTA DETALLE DOCUMENTO         */
+  /* =============================== */
+
   if (view === "detail" && selectedDoc) {
     const requiereVisado = selectedDoc.requires_visado === true;
 
@@ -545,7 +494,6 @@ function App() {
         puedeFirmar={puedeFirmar}
         puedeVisar={puedeVisar}
         puedeRechazar={puedeRechazar}
-        events={events}
         manejarAccionDocumento={manejarAccionDocumento}
         setView={setView}
         setSelectedDoc={setSelectedDoc}
@@ -556,31 +504,33 @@ function App() {
     );
   }
 
-  const docsFiltrados = useMemo(() => {
-    return docs.filter((d) => {
-      const esPendiente =
-        d.status === DOC_STATUS.PENDIENTE ||
-        d.status === DOC_STATUS.PENDIENTE_VISADO ||
-        d.status === DOC_STATUS.PENDIENTE_FIRMA;
+  /* =============================== */
+  /* LISTA DOCUMENTOS + OTRAS VISTAS */
+  /* =============================== */
 
-      if (statusFilter === "PENDIENTES" && !esPendiente) return false;
-      if (statusFilter === "VISADOS" && d.status !== DOC_STATUS.VISADO)
-        return false;
-      if (statusFilter === "FIRMADOS" && d.status !== DOC_STATUS.FIRMADO)
-        return false;
-      if (statusFilter === "RECHAZADOS" && d.status !== DOC_STATUS.RECHAZADO)
-        return false;
+  const docsFiltrados = docs.filter((d) => {
+    const esPendiente =
+      d.status === DOC_STATUS.PENDIENTE ||
+      d.status === DOC_STATUS.PENDIENTE_VISADO ||
+      d.status === DOC_STATUS.PENDIENTE_FIRMA;
 
-      if (search.trim() !== "") {
-        const q = search.toLowerCase();
-        const titulo = (d.title || "").toLowerCase();
-        const empresa = (d.destinatario_nombre || "").toLowerCase();
-        if (!titulo.includes(q) && !empresa.includes(q)) return false;
-      }
+    if (statusFilter === "PENDIENTES" && !esPendiente) return false;
+    if (statusFilter === "VISADOS" && d.status !== DOC_STATUS.VISADO)
+      return false;
+    if (statusFilter === "FIRMADOS" && d.status !== DOC_STATUS.FIRMADO)
+      return false;
+    if (statusFilter === "RECHAZADOS" && d.status !== DOC_STATUS.RECHAZADO)
+      return false;
 
-      return true;
-    });
-  }, [docs, statusFilter, search]);
+    if (search.trim() !== "") {
+      const q = search.toLowerCase();
+      const titulo = (d.title || "").toLowerCase();
+      const empresa = (d.destinatario_nombre || "").toLowerCase();
+      if (!titulo.includes(q) && !empresa.includes(q)) return false;
+    }
+
+    return true;
+  });
 
   const pendientes = docs.filter(
     (d) =>
@@ -602,6 +552,13 @@ function App() {
     page * pageSize
   );
 
+  const anyAdmin = isAnyAdmin(user);
+  const isGlobalAdminOrOwner =
+    !!user &&
+    (user.role === "SUPER_ADMIN" ||
+      user.role === "ADMIN_GLOBAL" ||
+      user.id === 7);
+
   return (
     <div className="dashboard-layout">
       <Sidebar
@@ -613,7 +570,7 @@ function App() {
         statusFilter={statusFilter}
         setStatusFilter={setStatusFilter}
         logout={logout}
-        isAnyAdmin={isAnyAdmin(user)}
+        isAnyAdmin={anyAdmin}
       />
 
       <div className="content-body">
@@ -854,17 +811,33 @@ function App() {
           />
         )}
 
-        {view === "users" && isAnyAdmin(user) && (
+        {view === "users" && anyAdmin && (
           <UsersAdminView API_URL={apiRoot} token={token} />
         )}
 
-        {view === "dashboard" && isAnyAdmin(user) && (
+        {view === "dashboard" && anyAdmin && (
           <DashboardView user={user} token={token} />
         )}
 
-        {import.meta.env.MODE !== "production" ? (
+        {view === "companies" && anyAdmin && (
+          <CompaniesAdminView API_URL={apiRoot} token={token} />
+        )}
+
+        {view === "status" && anyAdmin && (
+          <StatusAdminView API_URL={apiRoot} token={token} />
+        )}
+
+        {view === "audit-logs" && isGlobalAdminOrOwner && (
+          <AuditLogsView API_URL={apiRoot} token={token} />
+        )}
+
+        {view === "auth-logs" && isGlobalAdminOrOwner && (
+          <AuthLogsView API_URL={apiRoot} token={token} />
+        )}
+
+        {import.meta.env.MODE !== "production" && (
           <button onClick={handleTestError}>Probar error Sentry</button>
-        ) : null}
+        )}
       </div>
     </div>
   );

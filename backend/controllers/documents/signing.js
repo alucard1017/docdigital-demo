@@ -1,5 +1,6 @@
 // backend/controllers/documents/signing.js
-const { db, registrarAuditoria, sellarPdfConQr } = require('./common');
+const { db, sellarPdfConQr } = require("./common");
+const { logAudit } = require("../../utils/auditLog");
 
 /* ================================
    POST: Firmar documento (propietario)
@@ -16,25 +17,25 @@ async function signDocument(req, res) {
     );
 
     if (current.rowCount === 0) {
-      return res.status(404).json({ message: 'No encontrado' });
+      return res.status(404).json({ message: "No encontrado" });
     }
 
     const docActual = current.rows[0];
 
-    if (docActual.status === 'FIRMADO') {
-      return res.status(400).json({ message: 'Ya firmado' });
+    if (docActual.status === "FIRMADO") {
+      return res.status(400).json({ message: "Ya firmado" });
     }
 
-    if (docActual.status === 'RECHAZADO') {
-      return res.status(400).json({ message: 'Documento rechazado' });
+    if (docActual.status === "RECHAZADO") {
+      return res.status(400).json({ message: "Documento rechazado" });
     }
 
     if (
       docActual.requires_visado === true &&
-      docActual.status === 'PENDIENTE_VISADO'
+      docActual.status === "PENDIENTE_VISADO"
     ) {
       return res.status(400).json({
-        message: 'Este documento requiere visación antes de firmar',
+        message: "Este documento requiere visación antes de firmar",
       });
     }
 
@@ -43,7 +44,7 @@ async function signDocument(req, res) {
        SET status = $1, updated_at = NOW()
        WHERE id = $2 AND owner_id = $3
        RETURNING *`,
-      ['FIRMADO', id, req.user.id]
+      ["FIRMADO", id, req.user.id]
     );
     const doc = result.rows[0];
 
@@ -54,21 +55,24 @@ async function signDocument(req, res) {
        VALUES ($1, $2, $3, $4, $5, $6)`,
       [
         doc.id,
-        req.user.name || 'Sistema',
-        'FIRMADO',
-        'Firmado por propietario',
+        req.user.name || "Sistema",
+        "FIRMADO",
+        "Firmado por propietario",
         docActual.status,
-        'FIRMADO',
+        "FIRMADO",
       ]
     );
 
-    await registrarAuditoria({
-      documento_id: doc.id,
-      usuario_id: req.user.id,
-      evento_tipo: 'FIRMADO',
-      descripcion: 'Documento firmado por propietario',
-      ip_address: req.ip,
-      user_agent: req.headers['user-agent'] || null,
+    await logAudit({
+      user: req.user,
+      action: "document_signed",
+      entityType: "document",
+      entityId: doc.id,
+      metadata: {
+        from_status: docActual.status,
+        to_status: "FIRMADO",
+      },
+      req,
     });
 
     if (doc.nuevo_documento_id) {
@@ -87,7 +91,7 @@ async function signDocument(req, res) {
             s3Key: doc.pdf_original_url || doc.file_path,
             documentoId: docNuevo.id,
             codigoVerificacion: docNuevo.codigo_verificacion,
-            categoriaFirma: docNuevo.categoria_firma || 'SIMPLE',
+            categoriaFirma: docNuevo.categoria_firma || "SIMPLE",
             numeroContratoInterno: doc.numero_contrato_interno,
           });
 
@@ -99,18 +103,18 @@ async function signDocument(req, res) {
           );
         }
       } catch (sealError) {
-        console.error('⚠️ Error sellando PDF con QR:', sealError);
+        console.error("⚠️ Error sellando PDF con QR:", sealError);
       }
     }
 
     return res.json({
       ...doc,
       file_url: doc.file_path,
-      message: 'Documento firmado exitosamente',
+      message: "Documento firmado exitosamente",
     });
   } catch (err) {
-    console.error('❌ Error firmando documento:', err);
-    return res.status(500).json({ message: 'Error interno del servidor' });
+    console.error("❌ Error firmando documento:", err);
+    return res.status(500).json({ message: "Error interno del servidor" });
   }
 }
 
@@ -129,28 +133,28 @@ async function visarDocument(req, res) {
     );
 
     if (current.rowCount === 0) {
-      return res.status(404).json({ message: 'No encontrado' });
+      return res.status(404).json({ message: "No encontrado" });
     }
 
     const docActual = current.rows[0];
 
-    if (docActual.status === 'FIRMADO') {
-      return res.status(400).json({ message: 'Ya firmado' });
+    if (docActual.status === "FIRMADO") {
+      return res.status(400).json({ message: "Ya firmado" });
     }
 
-    if (docActual.status === 'RECHAZADO') {
-      return res.status(400).json({ message: 'Documento rechazado' });
+    if (docActual.status === "RECHAZADO") {
+      return res.status(400).json({ message: "Documento rechazado" });
     }
 
     if (docActual.requires_visado !== true) {
       return res.status(400).json({
-        message: 'Este documento no requiere visación',
+        message: "Este documento no requiere visación",
       });
     }
 
-    if (docActual.status !== 'PENDIENTE_VISADO') {
+    if (docActual.status !== "PENDIENTE_VISADO") {
       return res.status(400).json({
-        message: 'Solo se pueden visar documentos en estado PENDIENTE_VISADO',
+        message: "Solo se pueden visar documentos en estado PENDIENTE_VISADO",
       });
     }
 
@@ -159,7 +163,7 @@ async function visarDocument(req, res) {
        SET status = $1, updated_at = NOW() 
        WHERE id = $2 AND owner_id = $3 
        RETURNING *`,
-      ['PENDIENTE_FIRMA', id, req.user.id]
+      ["PENDIENTE_FIRMA", id, req.user.id]
     );
     const doc = result.rows[0];
 
@@ -170,31 +174,34 @@ async function visarDocument(req, res) {
        VALUES ($1, $2, $3, $4, $5, $6)`,
       [
         doc.id,
-        req.user.name || 'Sistema',
-        'VISADO',
-        'Documento visado por el propietario',
+        req.user.name || "Sistema",
+        "VISADO",
+        "Documento visado por el propietario",
         docActual.status,
-        'PENDIENTE_FIRMA',
+        "PENDIENTE_FIRMA",
       ]
     );
 
-    await registrarAuditoria({
-      documento_id: doc.id,
-      usuario_id: req.user.id,
-      evento_tipo: 'VISADO',
-      descripcion: 'Documento visado por propietario',
-      ip_address: req.ip,
-      user_agent: req.headers['user-agent'] || null,
+    await logAudit({
+      user: req.user,
+      action: "document_visado",
+      entityType: "document",
+      entityId: doc.id,
+      metadata: {
+        from_status: docActual.status,
+        to_status: "PENDIENTE_FIRMA",
+      },
+      req,
     });
 
     return res.json({
       ...doc,
       file_url: doc.file_path,
-      message: 'Documento visado exitosamente',
+      message: "Documento visado exitosamente",
     });
   } catch (err) {
-    console.error('❌ Error visando documento:', err);
-    return res.status(500).json({ message: 'Error interno del servidor' });
+    console.error("❌ Error visando documento:", err);
+    return res.status(500).json({ message: "Error interno del servidor" });
   }
 }
 
@@ -214,19 +221,19 @@ async function rejectDocument(req, res) {
     );
 
     if (current.rowCount === 0) {
-      return res.status(404).json({ message: 'No encontrado' });
+      return res.status(404).json({ message: "No encontrado" });
     }
 
     const docActual = current.rows[0];
 
-    if (docActual.status === 'FIRMADO') {
+    if (docActual.status === "FIRMADO") {
       return res.status(400).json({
-        message: 'Ya firmado, no se puede rechazar',
+        message: "Ya firmado, no se puede rechazar",
       });
     }
 
-    if (docActual.status === 'RECHAZADO') {
-      return res.status(400).json({ message: 'Ya rechazado' });
+    if (docActual.status === "RECHAZADO") {
+      return res.status(400).json({ message: "Ya rechazado" });
     }
 
     const result = await db.query(
@@ -234,7 +241,7 @@ async function rejectDocument(req, res) {
        SET status = $1, reject_reason = $2, updated_at = NOW()
        WHERE id = $3 AND owner_id = $4 
        RETURNING *`,
-      ['RECHAZADO', motivo || 'Sin especificar', id, req.user.id]
+      ["RECHAZADO", motivo || "Sin especificar", id, req.user.id]
     );
 
     const doc = result.rows[0];
@@ -246,31 +253,31 @@ async function rejectDocument(req, res) {
        VALUES ($1, $2, $3, $4, $5, $6)`,
       [
         doc.id,
-        req.user.name || 'Sistema',
-        'RECHAZADO',
-        `Documento rechazado: ${motivo || 'Sin especificar'}`,
+        req.user.name || "Sistema",
+        "RECHAZADO",
+        `Documento rechazado: ${motivo || "Sin especificar"}`,
         docActual.status,
-        'RECHAZADO',
+        "RECHAZADO",
       ]
     );
 
-    await registrarAuditoria({
-      documento_id: doc.id,
-      usuario_id: req.user.id,
-      evento_tipo: 'RECHAZADO',
-      descripcion: `Documento rechazado. Motivo: ${motivo || 'Sin especificar'}`,
-      ip_address: req.ip,
-      user_agent: req.headers['user-agent'] || null,
+    await logAudit({
+      user: req.user,
+      action: "document_rejected",
+      entityType: "document",
+      entityId: doc.id,
+      metadata: { motivo: motivo || "Sin especificar" },
+      req,
     });
 
     return res.json({
       ...doc,
       file_url: doc.file_path,
-      message: 'Documento rechazado exitosamente',
+      message: "Documento rechazado exitosamente",
     });
   } catch (err) {
-    console.error('❌ Error rechazando documento:', err);
-    return res.status(500).json({ message: 'Error interno del servidor' });
+    console.error("❌ Error rechazando documento:", err);
+    return res.status(500).json({ message: "Error interno del servidor" });
   }
 }
 
