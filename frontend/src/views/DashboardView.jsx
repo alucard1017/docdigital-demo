@@ -339,7 +339,7 @@ function KpiCard({ label, value, color, bg }) {
         minWidth: 160,
         padding: 14,
         borderRadius: 16,
-        border: "1px solid "#e5e7eb",
+        border: "1px solid #e5e7eb",
         background: bg || "#ffffff",
         display: "flex",
         flexDirection: "column",
