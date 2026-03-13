@@ -1,5 +1,6 @@
 // src/views/AuditLogsView.jsx
 import { useEffect, useState } from "react";
+import api from "../api/client";
 
 const ACTION_OPTIONS = [
   { value: "", label: "Todas las acciones" },
@@ -30,7 +31,7 @@ function formatDateTime(value) {
   });
 }
 
-export function AuditLogsView({ API_URL, token }) {
+export function AuditLogsView() {
   const [logs, setLogs] = useState([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
@@ -47,33 +48,26 @@ export function AuditLogsView({ API_URL, token }) {
   const [prettyMetadata, setPrettyMetadata] = useState("");
 
   async function cargarLogs() {
-    if (!token) return;
     setLoading(true);
     setError("");
 
-    const params = new URLSearchParams();
-    if (action) params.set("action", action);
-    if (entityType) params.set("entity_type", entityType);
-    if (userId.trim()) params.set("user_id", userId.trim());
-    if (companyId.trim()) params.set("company_id", companyId.trim());
-    params.set("limit", String(500)); // tope razonable
+    const params = {};
+    if (action) params.action = action;
+    if (entityType) params.entity_type = entityType;
+    if (userId.trim()) params.user_id = userId.trim();
+    if (companyId.trim()) params.company_id = companyId.trim();
+    params.limit = 500;
 
     try {
-      const res = await fetch(
-        `${API_URL}/api/logs/audit?${params.toString()}`,
-        {
-          headers: { Authorization: `Bearer ${token}` },
-        }
-      );
-      const data = await res.json().catch(() => []);
-      if (!res.ok) {
-        throw new Error(
-          data.message || "No se pudieron cargar los logs de auditoría"
-        );
-      }
+      const res = await api.get("/logs/audit", { params });
+      const data = res.data;
       setLogs(Array.isArray(data) ? data : []);
     } catch (err) {
-      setError(err.message || "Error al cargar auditoría");
+      const msg =
+        err.response?.data?.message ||
+        err.message ||
+        "No se pudieron cargar los logs de auditoría";
+      setError(msg);
     } finally {
       setLoading(false);
     }
@@ -81,8 +75,7 @@ export function AuditLogsView({ API_URL, token }) {
 
   useEffect(() => {
     cargarLogs();
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [token]);
+  }, []);
 
   function handleFilterSubmit(e) {
     e.preventDefault();
@@ -109,7 +102,7 @@ export function AuditLogsView({ API_URL, token }) {
       } else {
         setPrettyMetadata("// Sin metadata adicional");
       }
-    } catch (e) {
+    } catch {
       setPrettyMetadata("// No se pudo parsear metadata");
     }
   }
@@ -422,8 +415,8 @@ export function AuditLogsView({ API_URL, token }) {
                 color: "#64748b",
               }}
             >
-              ID log: {selectedLog.id} · Acción: {selectedLog.action} ·
-              Entidad: {selectedLog.entity_type}#{selectedLog.entity_id}
+              ID log: {selectedLog.id} · Acción: {selectedLog.action} · Entidad:{" "}
+              {selectedLog.entity_type}#{selectedLog.entity_id}
             </p>
             <div
               style={{

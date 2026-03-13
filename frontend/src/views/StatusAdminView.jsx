@@ -1,7 +1,8 @@
-// frontend/src/views/StatusAdminView.jsx
+// src/views/StatusAdminView.jsx
 import { useEffect, useState } from "react";
+import api from "../api/client";
 
-export function StatusAdminView({ API_URL, token }) {
+export function StatusAdminView() {
   const [health, setHealth] = useState(null);
   const [metrics, setMetrics] = useState(null);
   const [error, setError] = useState("");
@@ -12,34 +13,19 @@ export function StatusAdminView({ API_URL, token }) {
       setLoading(true);
       setError("");
 
-      const headers = {
-        "Content-Type": "application/json",
-        Authorization: token ? `Bearer ${token}` : "",
-      };
-
       const [healthRes, metricsRes] = await Promise.all([
-        fetch(`${API_URL}/api/health`, { headers }),
-        fetch(`${API_URL}/api/status/metrics`, { headers }),
+        api.get("/health"),
+        api.get("/status/metrics"),
       ]);
 
-      const healthJson = await healthRes.json().catch(() => ({}));
-      const metricsJson = await metricsRes.json().catch(() => ({}));
-
-      if (!healthRes.ok) {
-        throw new Error(
-          healthJson.message || healthJson.status || "Error en /api/health"
-        );
-      }
-      if (!metricsRes.ok) {
-        throw new Error(
-          metricsJson.message || "Error obteniendo métricas de estado"
-        );
-      }
-
-      setHealth(healthJson);
-      setMetrics(metricsJson);
+      setHealth(healthRes.data || null);
+      setMetrics(metricsRes.data || null);
     } catch (err) {
-      setError(err.message || "Error interno obteniendo métricas");
+      const msg =
+        err.response?.data?.message ||
+        err.message ||
+        "Error interno obteniendo métricas";
+      setError(msg);
       setHealth(null);
       setMetrics(null);
     } finally {
@@ -49,7 +35,6 @@ export function StatusAdminView({ API_URL, token }) {
 
   useEffect(() => {
     fetchAll();
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   return (
@@ -109,7 +94,6 @@ export function StatusAdminView({ API_URL, token }) {
           type="button"
           className="btn-link"
           onClick={() => {
-            // botón para probar Sentry si lo usas
             throw new Error("Test manual de Sentry desde StatusAdminView");
           }}
         >

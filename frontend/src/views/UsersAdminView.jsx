@@ -1,5 +1,6 @@
 // src/views/UsersAdminView.jsx
 import { useEffect, useState, useMemo } from "react";
+import api from "../api/client";
 import { UserForm } from "../components/UserForm";
 
 function normalizeRun(run) {
@@ -17,12 +18,10 @@ function formatRunVisual(value) {
 }
 
 function esAdminPotente(role) {
-  return (
-    role === "ADMIN" || role === "ADMIN_GLOBAL" || role === "SUPER_ADMIN"
-  );
+  return role === "ADMIN" || role === "ADMIN_GLOBAL" || role === "SUPER_ADMIN";
 }
 
-export function UsersAdminView({ API_URL, token }) {
+export function UsersAdminView() {
   const [users, setUsers] = useState([]);
   const [roleFilter, setRoleFilter] = useState("todos");
   const [loading, setLoading] = useState(true);
@@ -55,47 +54,30 @@ export function UsersAdminView({ API_URL, token }) {
   const isOwner = currentRunNorm === OWNER_RUN;
 
   async function cargarUsuarios() {
-    if (!token) return;
     setLoading(true);
     setError("");
 
     try {
-      const url =
-        roleFilter && roleFilter !== "todos"
-          ? `${API_URL}/api/users?role=${encodeURIComponent(roleFilter)}`
-          : `${API_URL}/api/users`;
-
-      const res = await fetch(url, {
-        headers: { Authorization: `Bearer ${token}` },
-      });
-
-      const data = await res.json().catch(() => ({}));
-
-      if (!res.ok) {
-        throw new Error(data.message || "No se pudieron cargar los usuarios");
-      }
-
+      const params =
+        roleFilter && roleFilter !== "todos" ? { role: roleFilter } : {};
+      const res = await api.get("/users", { params });
+      const data = res.data;
       setUsers(Array.isArray(data) ? data : []);
     } catch (err) {
-      setError(err.message || "Error de conexión al cargar usuarios.");
+      const msg =
+        err.response?.data?.message ||
+        err.message ||
+        "No se pudieron cargar los usuarios";
+      setError(msg);
     } finally {
       setLoading(false);
     }
   }
 
   async function cargarStats() {
-    if (!token) return;
-
     try {
-      const res = await fetch(`${API_URL}/api/stats`, {
-        headers: { Authorization: `Bearer ${token}` },
-      });
-
-      const data = await res.json().catch(() => ({}));
-      if (!res.ok) {
-        throw new Error(data.error || "No se pudieron cargar las estadísticas");
-      }
-
+      const res = await api.get("/stats");
+      const data = res.data;
       setStats(data);
     } catch (e) {
       console.error("Error cargando stats:", e);
@@ -105,7 +87,7 @@ export function UsersAdminView({ API_URL, token }) {
   useEffect(() => {
     cargarUsuarios();
     cargarStats();
-  }, [token, roleFilter]);
+  }, [roleFilter]);
 
   function handleNewUser() {
     if (!canManage) {
@@ -170,25 +152,22 @@ export function UsersAdminView({ API_URL, token }) {
 
     try {
       setSaving(true);
-      const res = await fetch(`${API_URL}/api/users/${user.id}`, {
-        method: "PUT",
-        headers: {
-          "Content-Type": "application/json",
-          Authorization: `Bearer ${token}`,
-        },
-        body: JSON.stringify({ active: !user.active }),
+      const res = await api.put(`/users/${user.id}`, {
+        active: !user.active,
       });
-
-      const data = await res.json().catch(() => ({}));
-      if (!res.ok) {
-        throw new Error(data.message || "No se pudo actualizar el estado");
+      if (!res || !res.data) {
+        throw new Error("No se pudo actualizar el estado");
       }
 
       setUsers((prev) =>
         prev.map((u) => (u.id === user.id ? { ...u, active: !u.active } : u))
       );
     } catch (err) {
-      alert(err.message || "Error al cambiar estado del usuario");
+      const msg =
+        err.response?.data?.message ||
+        err.message ||
+        "Error al cambiar estado del usuario";
+      alert(msg);
     } finally {
       setSaving(false);
     }
@@ -207,27 +186,18 @@ export function UsersAdminView({ API_URL, token }) {
 
     try {
       setSaving(true);
-      const res = await fetch(
-        `${API_URL}/api/users/${user.id}/reset-password`,
-        {
-          method: "POST",
-          headers: {
-            Authorization: `Bearer ${token}`,
-          },
-        }
-      );
-
-      const data = await res.json().catch(() => ({}));
-      if (!res.ok) {
-        throw new Error(data.message || "No se pudo resetear la contraseña");
-      }
-
+      const res = await api.post(`/users/${user.id}/reset-password`);
+      const data = res.data;
       alert(
-        data.message ||
+        data?.message ||
           "Contraseña temporal generada. El usuario debe revisar su correo."
       );
     } catch (err) {
-      alert(err.message || "Error al resetear la contraseña.");
+      const msg =
+        err.response?.data?.message ||
+        err.message ||
+        "Error al resetear la contraseña.";
+      alert(msg);
     } finally {
       setSaving(false);
     }
@@ -247,8 +217,6 @@ export function UsersAdminView({ API_URL, token }) {
       return;
     }
 
-    // La lógica fina de quién puede eliminar a quién la resuelve el backend;
-    // aquí solo evitamos casos obvios (igual que en editar).
     if (isTargetAdminLike && !isOwner && !isSuper && !isGlobal) {
       alert(
         "Solo el dueño, super admin o admin global pueden eliminar administradores."
@@ -257,28 +225,24 @@ export function UsersAdminView({ API_URL, token }) {
     }
 
     const ok = window.confirm(
-      `¿Seguro que deseas eliminar al usuario "${user.name || "-"}" (${user.email || user.run})? Esta acción no se puede deshacer.`
+      `¿Seguro que deseas eliminar al usuario "${user.name || "-"}" (${
+        user.email || user.run
+      })? Esta acción no se puede deshacer.`
     );
     if (!ok) return;
 
     try {
       setSaving(true);
-      const res = await fetch(`${API_URL}/api/users/${user.id}`, {
-        method: "DELETE",
-        headers: {
-          Authorization: `Bearer ${token}`,
-        },
-      });
-
-      const data = await res.json().catch(() => ({}));
-      if (!res.ok) {
-        throw new Error(data.message || "No se pudo eliminar el usuario");
-      }
-
-      alert(data.message || "Usuario eliminado correctamente");
+      const res = await api.delete(`/users/${user.id}`);
+      const data = res.data;
+      alert(data?.message || "Usuario eliminado correctamente");
       setUsers((prev) => prev.filter((u) => u.id !== user.id));
     } catch (err) {
-      alert(err.message || "Error al eliminar usuario");
+      const msg =
+        err.response?.data?.message ||
+        err.message ||
+        "Error al eliminar usuario";
+      alert(msg);
     } finally {
       setSaving(false);
     }
@@ -352,7 +316,6 @@ export function UsersAdminView({ API_URL, token }) {
 
   return (
     <div className="card-premium">
-      {/* encabezado */}
       <div
         style={{
           display: "flex",
@@ -410,7 +373,6 @@ export function UsersAdminView({ API_URL, token }) {
         )}
       </div>
 
-      {/* stats */}
       {stats && stats.documentos && (
         <div
           style={{
@@ -445,7 +407,6 @@ export function UsersAdminView({ API_URL, token }) {
         </div>
       )}
 
-      {/* filtros */}
       <div
         style={{
           marginBottom: 16,
@@ -490,7 +451,6 @@ export function UsersAdminView({ API_URL, token }) {
         </label>
       </div>
 
-      {/* tabla */}
       {users.length === 0 ? (
         <div
           style={{
@@ -710,8 +670,6 @@ export function UsersAdminView({ API_URL, token }) {
 
       {showForm && (
         <UserForm
-          API_URL={API_URL}
-          token={token}
           user={editingUser}
           currentUser={currentUser}
           onClose={() => {

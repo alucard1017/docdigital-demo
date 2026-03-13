@@ -17,6 +17,7 @@ import { StatusAdminView } from "./views/StatusAdminView";
 import { AuditLogsView } from "./views/AuditLogsView";
 import { AuthLogsView } from "./views/AuthLogsView";
 import { getSubdomain } from "./utils/subdomain";
+import api from "./api/client";
 
 /* ========= Helpers de rol ========= */
 
@@ -206,7 +207,6 @@ function App() {
     return () => window.removeEventListener("popstate", syncViewWithLocation);
   }, [isVerificationPortal, isSigningPortal, cargarFirmaPublica]);
 
-
   /* =============================== */
   /* CARGA DE DOCUMENTOS             */
   /* =============================== */
@@ -218,38 +218,24 @@ function App() {
       setErrorDocs("");
 
       try {
-        const res = await fetch(
-          `${apiRoot}/api/docs?sort=${encodeURIComponent(sortParam)}`,
-          {
-            headers: { Authorization: `Bearer ${token}` },
-          }
-        );
+        const res = await api.get("/docs", {
+          params: { sort: sortParam },
+        });
 
-        if (res.status === 401) {
-          localStorage.removeItem("token");
-          localStorage.removeItem("user");
-          setToken("");
-          setUser(null);
-          return;
-        }
-
-        if (!res.ok) {
-          setErrorDocs(
-            "No se pudieron cargar los documentos. Intenta nuevamente."
-          );
-          return;
-        }
-
-        const data = await res.json();
+        const data = res.data;
         setDocs(Array.isArray(data) ? data : []);
       } catch (err) {
         console.error("Fallo al cargar documentos:", err);
-        setErrorDocs("Error de conexión con el servidor.");
+        const msg =
+          err.response?.data?.message ||
+          err.message ||
+          "No se pudieron cargar los documentos. Intenta nuevamente.";
+        setErrorDocs(msg);
       } finally {
         setLoadingDocs(false);
       }
     },
-    [sort, token, apiRoot]
+    [sort, token]
   );
 
   useEffect(() => {
@@ -279,17 +265,12 @@ function App() {
         isEmail,
       });
 
-      const res = await fetch(`${apiRoot}/api/auth/login`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ identifier: value, password }),
+      const res = await api.post("/auth/login", {
+        identifier: value,
+        password,
       });
 
-      const data = await res.json();
-
-      if (!res.ok) {
-        throw new Error(data.message || "Credenciales no válidas");
-      }
+      const data = res.data;
 
       setToken(data.token);
       setUser(data.user);
@@ -298,10 +279,11 @@ function App() {
       setMessage("Acceso concedido");
     } catch (err) {
       console.error("Error en login:", err);
-      setMessage(
+      const msg =
+        err.response?.data?.message ||
         err.message ||
-          "Error de conexión, intenta nuevamente en unos segundos."
-      );
+        "Error de conexión, intenta nuevamente en unos segundos.";
+      setMessage(msg);
     } finally {
       setIsLoggingIn(false);
     }
@@ -320,43 +302,36 @@ function App() {
       }
 
       try {
-        const res = await fetch(`${apiRoot}/api/docs/${doc.id}/pdf`, {
-          headers: { Authorization: `Bearer ${token}` },
-        });
-        const data = await res.json();
-        if (!res.ok) {
-          throw new Error(data.message || "No se pudo obtener el PDF");
+        const res = await api.get(`/docs/${doc.id}/pdf`);
+        const data = res.data;
+        if (!data || !data.url) {
+          throw new Error("No se pudo obtener el PDF");
         }
         window.open(data.url, "_blank", "noopener,noreferrer");
       } catch (err) {
         console.error("Error abriendo PDF:", err);
-        alert("❌ " + (err.message || "No se pudo abrir el PDF"));
+        const msg =
+          err.response?.data?.message ||
+          err.message ||
+          "No se pudo abrir el PDF";
+        alert("❌ " + msg);
       }
       return;
     }
 
     try {
-      let body;
-      const headers = {
-        Authorization: `Bearer ${token}`,
-      };
+      let body = undefined;
 
       if (accion === "rechazar") {
-        headers["Content-Type"] = "application/json";
-        body = JSON.stringify({ motivo: extraData.motivo });
+        body = { motivo: extraData.motivo };
       }
 
-      const res = await fetch(`${apiRoot}/api/docs/${id}/${accion}`, {
-        method: "POST",
-        headers,
-        body,
-      });
+      const res = await api.post(
+        `/docs/${id}/${accion}`,
+        body ? body : undefined
+      );
 
-      const data = await res.json();
-
-      if (!res.ok) {
-        throw new Error(data.message || "No se pudo actualizar el documento");
-      }
+      const data = res.data;
 
       if (accion === "firmar") {
         alert("✅ Documento firmado correctamente");
@@ -364,13 +339,19 @@ function App() {
         alert("✅ Documento visado correctamente");
       } else if (accion === "rechazar") {
         alert("✅ Documento rechazado correctamente");
+      } else if (data?.message) {
+        alert("✅ " + data.message);
       }
 
       await cargarDocs();
       setView("list");
       setSelectedDoc(null);
     } catch (err) {
-      alert("❌ " + (err.message || "No se pudo procesar la acción"));
+      const msg =
+        err.response?.data?.message ||
+        err.message ||
+        "No se pudo procesar la acción";
+      alert("❌ " + msg);
     }
   }
 
@@ -498,7 +479,6 @@ function App() {
         setView={setView}
         setSelectedDoc={setSelectedDoc}
         logout={logout}
-        token={token}
         currentUser={user}
       />
     );
@@ -592,7 +572,6 @@ function App() {
             firmados={firmados}
             rechazados={rechazados}
             onSync={cargarDocs}
-            token={token}
           />
         )}
 
@@ -740,10 +719,10 @@ function App() {
                         <DocumentRow
                           key={d.id}
                           doc={d}
-                          token={token}
                           onOpenDetail={(doc) => {
                             setSelectedDoc(doc);
                             setView("detail");
+                            setPdfUrl(null); // opcional: limpiar pdfUrl
                           }}
                         />
                       ))}
@@ -791,8 +770,6 @@ function App() {
 
         {view === "upload" && (
           <NewDocumentForm
-            API_URL={apiRoot}
-            token={token}
             tipoTramite={tipoTramite}
             setTipoTramite={setTipoTramite}
             formErrors={formErrors}
@@ -811,28 +788,24 @@ function App() {
           />
         )}
 
-        {view === "users" && anyAdmin && (
-          <UsersAdminView API_URL={apiRoot} token={token} />
-        )}
+        {view === "users" && anyAdmin && <UsersAdminView />}
 
-        {view === "dashboard" && anyAdmin && (
-          <DashboardView user={user} token={token} />
-        )}
+        {view === "dashboard" && anyAdmin && <DashboardView user={user} />}
 
         {view === "companies" && anyAdmin && (
-          <CompaniesAdminView API_URL={apiRoot} token={token} />
+          <CompaniesAdminView API_URL={apiRoot} />
         )}
 
         {view === "status" && anyAdmin && (
-          <StatusAdminView API_URL={apiRoot} token={token} />
+          <StatusAdminView API_URL={apiRoot} />
         )}
 
         {view === "audit-logs" && isGlobalAdminOrOwner && (
-          <AuditLogsView API_URL={apiRoot} token={token} />
+          <AuditLogsView API_URL={apiRoot} />
         )}
 
         {view === "auth-logs" && isGlobalAdminOrOwner && (
-          <AuthLogsView API_URL={apiRoot} token={token} />
+          <AuthLogsView API_URL={apiRoot} />
         )}
 
         {import.meta.env.MODE !== "production" && (

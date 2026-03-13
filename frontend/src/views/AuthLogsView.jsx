@@ -1,5 +1,6 @@
 // src/views/AuthLogsView.jsx
 import { useEffect, useState } from "react";
+import api from "../api/client";
 
 const ACTION_OPTIONS = [
   { value: "", label: "Todas las acciones" },
@@ -28,7 +29,7 @@ function formatDateTime(value) {
   });
 }
 
-export function AuthLogsView({ API_URL, token }) {
+export function AuthLogsView() {
   const [logs, setLogs] = useState([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
@@ -45,34 +46,25 @@ export function AuthLogsView({ API_URL, token }) {
   const [prettyMetadata, setPrettyMetadata] = useState("");
 
   async function cargarLogs() {
-    if (!token) return;
     setLoading(true);
     setError("");
 
-    const params = new URLSearchParams();
-    if (action) params.set("action", action);
-    if (run.trim()) params.set("run", run.trim());
-    params.set("limit", String(pageSize)); // backend no tiene paginado todavía
+    const params = {};
+    if (action) params.action = action;
+    if (run.trim()) params.run = run.trim();
+    params.limit = pageSize;
 
     try {
-      const res = await fetch(
-        `${API_URL}/api/logs/auth?${params.toString()}`,
-        {
-          headers: {
-            Authorization: `Bearer ${token}`,
-          },
-        }
-      );
-
-      const data = await res.json().catch(() => []);
-      if (!res.ok) {
-        throw new Error(data.message || "No se pudieron cargar los auth logs");
-      }
-
+      const res = await api.get("/logs/auth", { params });
+      const data = res.data;
       const rows = Array.isArray(data) ? data : [];
       setLogs(rows);
     } catch (err) {
-      setError(err.message || "Error al cargar logs de autenticación");
+      const msg =
+        err.response?.data?.message ||
+        err.message ||
+        "No se pudieron cargar los auth logs";
+      setError(msg);
     } finally {
       setLoading(false);
     }
@@ -80,8 +72,7 @@ export function AuthLogsView({ API_URL, token }) {
 
   useEffect(() => {
     cargarLogs();
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [token]);
+  }, []);
 
   function handleFilterSubmit(e) {
     e.preventDefault();
@@ -89,7 +80,6 @@ export function AuthLogsView({ API_URL, token }) {
     cargarLogs();
   }
 
-  // Filtros adicionales por role y company_id en el frontend (metadata)
   const logsFiltrados = logs.filter((log) => {
     const meta = log.metadata || {};
     const metaRole =
@@ -126,7 +116,7 @@ export function AuthLogsView({ API_URL, token }) {
       } else {
         setPrettyMetadata("// Sin metadata adicional");
       }
-    } catch (e) {
+    } catch {
       setPrettyMetadata("// No se pudo parsear metadata");
     }
   }

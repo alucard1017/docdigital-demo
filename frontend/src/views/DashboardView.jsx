@@ -15,11 +15,11 @@ import {
   Legend,
   ResponsiveContainer,
 } from "recharts";
-import { API_BASE_URL } from "../constants";
+import api from "../api/client";
 
 const COLORS = ["#4f46e5", "#22c55e", "#f97316", "#ef4444", "#0ea5e9", "#a855f7"];
 
-export function DashboardView({ user, token }) {
+export function DashboardView({ user }) {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
   const [kpis, setKpis] = useState({
@@ -32,9 +32,6 @@ export function DashboardView({ user, token }) {
   const [perDayData, setPerDayData] = useState([]);
   const [tipoTramiteData, setTipoTramiteData] = useState([]);
 
-  const apiUrl = API_BASE_URL;
-
-  // nombre a mostrar (con override para ti)
   const rawName = user?.name || user?.fullName || "Usuario";
   const isJean =
     user &&
@@ -42,23 +39,13 @@ export function DashboardView({ user, token }) {
   const displayName = isJean ? "Alucard" : rawName;
 
   useEffect(() => {
-    if (!token) return;
-
     async function fetchStats() {
       try {
         setLoading(true);
         setError("");
 
-        const res = await fetch(`${apiUrl}/api/docs/stats`, {
-          headers: { Authorization: `Bearer ${token}` },
-        });
-        const data = await res.json();
-
-        if (!res.ok) {
-          throw new Error(
-            data.message || "No se pudieron cargar las estadísticas"
-          );
-        }
+        const res = await api.get("/docs/stats");
+        const data = res.data || {};
 
         setKpis({
           total: data.kpis?.total ?? 0,
@@ -98,14 +85,18 @@ export function DashboardView({ user, token }) {
         );
       } catch (err) {
         console.error("Error cargando stats:", err);
-        setError(err.message || "Error al cargar estadísticas");
+        const msg =
+          err.response?.data?.message ||
+          err.message ||
+          "Error al cargar estadísticas";
+        setError(msg);
       } finally {
         setLoading(false);
       }
     }
 
     fetchStats();
-  }, [token, apiUrl]);
+  }, []);
 
   return (
     <div
@@ -116,7 +107,6 @@ export function DashboardView({ user, token }) {
         gap: 24,
       }}
     >
-      {/* Header */}
       <div>
         <h1
           style={{
@@ -163,7 +153,6 @@ export function DashboardView({ user, token }) {
         </div>
       ) : (
         <>
-          {/* KPIs principales */}
           <div
             style={{
               display: "flex",
@@ -197,7 +186,6 @@ export function DashboardView({ user, token }) {
             />
           </div>
 
-          {/* Fila 1: barras por estado + línea por día */}
           <div
             style={{
               display: "grid",
@@ -257,7 +245,6 @@ export function DashboardView({ user, token }) {
             </ChartCard>
           </div>
 
-          {/* Fila 2: pie por tipo_tramite + panel lateral */}
           <div
             style={{
               display: "grid",
@@ -352,7 +339,7 @@ function KpiCard({ label, value, color, bg }) {
         minWidth: 160,
         padding: 14,
         borderRadius: 16,
-        border: "1px solid #e5e7eb",
+        border: "1px solid "#e5e7eb",
         background: bg || "#ffffff",
         display: "flex",
         flexDirection: "column",

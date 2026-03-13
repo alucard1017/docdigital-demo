@@ -1,6 +1,8 @@
+// src/components/admin/UserForm.jsx
 import { useEffect, useState } from "react";
+import api from "../../api/client";
 
-export function UserForm({ API_URL, token, user, onClose, onSaved }) {
+export function UserForm({ user, onClose, onSaved }) {
   const isEdit = !!user?.id;
   const [form, setForm] = useState({
     run: "",
@@ -43,12 +45,6 @@ export function UserForm({ API_URL, token, user, onClose, onSaved }) {
     setError("");
 
     try {
-      const url = isEdit
-        ? `${API_URL}/api/users/${user.id}`
-        : `${API_URL}/api/users`;
-
-      const method = isEdit ? "PUT" : "POST";
-
       const payload = {
         run: form.run,
         name: form.name,
@@ -58,32 +54,24 @@ export function UserForm({ API_URL, token, user, onClose, onSaved }) {
         active: form.active,
       };
 
-      if (!isEdit && form.password) {
-        payload.password = form.password;
-      }
-      if (isEdit && form.password) {
+      if (form.password) {
         payload.password = form.password;
       }
 
-      const res = await fetch(url, {
-        method,
-        headers: {
-          "Content-Type": "application/json",
-          Authorization: `Bearer ${token}`,
-        },
-        body: JSON.stringify(payload),
-      });
+      const url = isEdit ? `/users/${user.id}` : "/users";
+      const method = isEdit ? "put" : "post";
 
-      const data = await res.json().catch(() => ({}));
-
-      if (!res.ok) {
-        throw new Error(data.message || "No se pudo guardar el usuario");
-      }
+      const res = await api[method](url, payload);
+      const data = res.data || {};
 
       onSaved?.(data);
       onClose?.();
     } catch (err) {
-      setError(err.message || "Error de conexión al guardar usuario.");
+      const msg =
+        err.response?.data?.message ||
+        err.message ||
+        "Error de conexión al guardar usuario.";
+      setError(msg);
     } finally {
       setSaving(false);
     }

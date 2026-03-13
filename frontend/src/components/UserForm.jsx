@@ -1,5 +1,6 @@
 // src/components/UserForm.jsx
 import { useEffect, useMemo, useState } from "react";
+import api from "../api/client";
 
 function normalizeRun(run) {
   return (run || "").replace(/[.\-]/g, "");
@@ -16,14 +17,7 @@ function formatRunVisual(value) {
   return `${formattedBody}-${dv}`;
 }
 
-export function UserForm({
-  API_URL,
-  token,
-  user,
-  currentUser,
-  onClose,
-  onSaved,
-}) {
+export function UserForm({ user, currentUser, onClose, onSaved }) {
   const isEdit = !!user?.id;
 
   const [form, setForm] = useState({
@@ -94,27 +88,23 @@ export function UserForm({
     setFieldErrors({});
   }, [user, currentUser]);
 
-  // Cargar listado de empresas para el dropdown
   useEffect(() => {
-    if (!token) return;
-    setLoadingCompanies(true);
-    fetch(`${API_URL}/api/companies`, {
-      headers: { Authorization: `Bearer ${token}` },
-    })
-      .then((res) => res.json())
-      .then((data) => {
-        if (Array.isArray(data)) {
-          setCompanies(data);
-        } else {
-          setCompanies([]);
-        }
-      })
-      .catch((err) => {
+    const fetchCompanies = async () => {
+      try {
+        setLoadingCompanies(true);
+        const res = await api.get("/companies");
+        const data = res.data;
+        setCompanies(Array.isArray(data) ? data : []);
+      } catch (err) {
         console.error("Error cargando companies:", err);
         setCompanies([]);
-      })
-      .finally(() => setLoadingCompanies(false));
-  }, [API_URL, token]);
+      } finally {
+        setLoadingCompanies(false);
+      }
+    };
+
+    fetchCompanies();
+  }, []);
 
   useEffect(() => {
     if (!availableRoles.includes(form.role)) {
@@ -183,30 +173,20 @@ export function UserForm({
         payload.password = form.password;
       }
 
-      const url = isEdit
-        ? `${API_URL}/api/users/${user.id}`
-        : `${API_URL}/api/users`;
-      const method = isEdit ? "PUT" : "POST";
+      const url = isEdit ? `/users/${user.id}` : "/users";
+      const method = isEdit ? "put" : "post";
 
-      const res = await fetch(url, {
-        method,
-        headers: {
-          "Content-Type": "application/json",
-          Authorization: `Bearer ${token}`,
-        },
-        body: JSON.stringify(payload),
-      });
-
-      const data = await res.json().catch(() => ({}));
-
-      if (!res.ok) {
-        throw new Error(data.message || "No se pudo guardar el usuario");
-      }
+      const res = await api[method](url, payload);
+      const data = res.data || {};
 
       onSaved?.(data);
       onClose?.();
     } catch (err) {
-      setError(err.message || "Error de conexión al guardar usuario.");
+      const msg =
+        err.response?.data?.message ||
+        err.message ||
+        "Error de conexión al guardar usuario.";
+      setError(msg);
     } finally {
       setSaving(false);
     }

@@ -3,9 +3,8 @@ import React, { useState, useEffect } from "react";
 import { Timeline } from "./Timeline";
 import { EventList } from "./EventList";
 import { DetailActions } from "./DetailActions";
-import { DOC_STATUS, API_BASE_URL } from "../constants";
-
-const API_URL = API_BASE_URL;
+import { DOC_STATUS } from "../constants";
+import api from "../api/client";
 
 function getTramiteLabel(value) {
   if (value === "notaria") return "Notaría";
@@ -25,12 +24,11 @@ export function DetailView({
   puedeFirmar,
   puedeVisar,
   puedeRechazar,
-  events, // compatibilidad legacy (se cae a esto si no hay timeline nuevo)
+  events,
   manejarAccionDocumento,
   setView,
   setSelectedDoc,
   logout,
-  token,
   currentUser,
 }) {
   const [timeline, setTimeline] = useState(null);
@@ -50,7 +48,7 @@ export function DetailView({
   const displayName = isJean ? "Alucard" : rawName;
 
   useEffect(() => {
-    if (!selectedDoc?.id || !token) return;
+    if (!selectedDoc?.id) return;
 
     const docId = selectedDoc.id;
     const controller = new AbortController();
@@ -58,31 +56,20 @@ export function DetailView({
     const fetchTimeline = async () => {
       try {
         setLoadingTimeline(true);
-        const res = await fetch(
-          `${API_URL}/api/documents/${docId}/timeline`,
-          {
-            headers: { Authorization: `Bearer ${token}` },
-            credentials: "include",
-            signal: controller.signal,
-          }
-        );
 
-        const data = await res.json();
+        const res = await api.get(`/documents/${docId}/timeline`, {
+          signal: controller.signal,
+        });
 
-        if (!res.ok) {
-          console.error("Error HTTP timeline:", res.status, data?.message);
-          setTimeline(null);
-          return;
-        }
+        const data = res.data;
 
-        // backend devuelve { document, timeline }
         if (data && data.timeline) {
           setTimeline(data.timeline);
         } else {
           setTimeline(null);
         }
       } catch (err) {
-        if (err.name === "AbortError") return;
+        if (err.name === "CanceledError" || err.name === "AbortError") return;
         console.error("Error fetching timeline:", err);
         setTimeline(null);
       } finally {
@@ -93,18 +80,8 @@ export function DetailView({
     const fetchSigners = async () => {
       try {
         setLoadingSigners(true);
-        const res = await fetch(
-          `${API_URL}/api/documents/${docId}/signers`,
-          {
-            headers: { Authorization: `Bearer ${token}` },
-            credentials: "include",
-          }
-        );
-        if (!res.ok) {
-          setSigners([]);
-          return;
-        }
-        const data = await res.json();
+        const res = await api.get(`/documents/${docId}/signers`);
+        const data = res.data;
         setSigners(Array.isArray(data) ? data : []);
       } catch (err) {
         console.error("Error fetching signers:", err);
@@ -123,7 +100,7 @@ export function DetailView({
       controller.abort();
       clearInterval(interval);
     };
-  }, [selectedDoc?.id, token]);
+  }, [selectedDoc?.id]);
 
   if (!selectedDoc) return null;
 
@@ -142,24 +119,17 @@ export function DetailView({
     if (!selectedDoc) return;
     try {
       setReenviarLoadingVisado(true);
-      const res = await fetch(
-        `${API_URL}/api/docs/${selectedDoc.id}/reenviar`,
-        {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ tipo: "VISADO" }),
-          credentials: "include",
-        }
-      );
-      const data = await res.json();
-      if (!res.ok) {
-        throw new Error(
-          data.message || "No se pudo reenviar el correo de visado"
-        );
-      }
-      alert(data.message || "Recordatorio de visado reenviado");
+      const res = await api.post(`/docs/${selectedDoc.id}/reenviar`, {
+        tipo: "VISADO",
+      });
+      const data = res.data;
+      alert(data?.message || "Recordatorio de visado reenviado");
     } catch (err) {
-      alert("❌ " + err.message);
+      const msg =
+        err.response?.data?.message ||
+        err.message ||
+        "No se pudo reenviar el correo de visado";
+      alert("❌ " + msg);
     } finally {
       setReenviarLoadingVisado(false);
     }
@@ -169,24 +139,18 @@ export function DetailView({
     if (!selectedDoc || !signerId) return;
     try {
       setReenviarSignerId(signerId);
-      const res = await fetch(
-        `${API_URL}/api/docs/${selectedDoc.id}/reenviar`,
-        {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ tipo: "FIRMA", signerId }),
-          credentials: "include",
-        }
-      );
-      const data = await res.json();
-      if (!res.ok) {
-        throw new Error(
-          data.message || "No se pudo reenviar el correo de firma"
-        );
-      }
-      alert(data.message || "Recordatorio de firma reenviado");
+      const res = await api.post(`/docs/${selectedDoc.id}/reenviar`, {
+        tipo: "FIRMA",
+        signerId,
+      });
+      const data = res.data;
+      alert(data?.message || "Recordatorio de firma reenviado");
     } catch (err) {
-      alert("❌ " + err.message);
+      const msg =
+        err.response?.data?.message ||
+        err.message ||
+        "No se pudo reenviar el correo de firma";
+      alert("❌ " + msg);
     } finally {
       setReenviarSignerId(null);
     }
@@ -196,28 +160,24 @@ export function DetailView({
     if (!selectedDoc) return;
     try {
       setRecordatorioLoading(true);
-      const res = await fetch(
-        `${API_URL}/api/docs/${selectedDoc.id}/recordatorio`,
-        {
-          method: "POST",
-          headers: {
-            "Content-Type": "application/json",
-            Authorization: `Bearer ${token}`,
-          },
-          credentials: "include",
-        }
-      );
-      const data = await res.json();
-      if (!res.ok) {
-        throw new Error(data.message || "No se pudo enviar el recordatorio");
-      }
-      alert(`✅ ${data.message}`);
+      const res = await api.post(`/docs/${selectedDoc.id}/recordatorio`);
+      const data = res.data;
+      alert(`✅ ${data?.message || "Recordatorio enviado"}`);
     } catch (err) {
-      alert("❌ " + err.message);
+      const msg =
+        err.response?.data?.message ||
+        err.message ||
+        "No se pudo enviar el recordatorio";
+      alert("❌ " + msg);
     } finally {
       setRecordatorioLoading(false);
     }
   }
+
+  const baseUrl = api.defaults.baseURL || "";
+  const downloadUrl = selectedDoc
+    ? `${baseUrl}/docs/${selectedDoc.id}/download`
+    : null;
 
   const numeroInterno =
     (timeline &&
@@ -334,9 +294,9 @@ export function DetailView({
                   </button>
                 )}
 
-                {selectedDoc && (
+                {downloadUrl && (
                   <a
-                    href={`${API_URL}/api/docs/${selectedDoc.id}/download`}
+                    href={downloadUrl}
                     className="btn-main detail-btn-download"
                   >
                     📥 Descargar PDF

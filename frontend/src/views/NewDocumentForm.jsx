@@ -1,5 +1,6 @@
 // src/views/NewDocumentForm.jsx
 import React, { useState } from "react";
+import api from "../api/client";
 
 const TIPOS_TRAMITE = [
   { value: "propio", label: "Trámite propio (sin notaría)" },
@@ -12,8 +13,6 @@ const TIPOS_DOCUMENTO = [
 ];
 
 export function NewDocumentForm({
-  API_URL,
-  token,
   tipoTramite,
   setTipoTramite,
   formErrors,
@@ -33,6 +32,150 @@ export function NewDocumentForm({
   const [tipoDocumento, setTipoDocumento] = useState("");
   const [fileName, setFileName] = useState("");
   const [submitting, setSubmitting] = useState(false);
+
+  const handleSubmit = async (e) => {
+    e.preventDefault();
+    setFormErrors({});
+    setSubmitting(true);
+
+    const form = e.target;
+    const formData = new FormData(form);
+    const newErrors = {};
+
+    // Validar tipoDocumento
+    if (!tipoDocumento) {
+      newErrors.tipo_documento =
+        "Selecciona si es Poderes y autorizaciones o Solo contratos.";
+    }
+
+    // tipo de trámite / documento
+    formData.append("tipo_tramite", tipoTramite);
+    formData.append("tipo_documento", tipoDocumento);
+    if (tipoTramite === "notaria") {
+      formData.append("requiere_firma_notarial", "true");
+    }
+
+    const firmanteRunClean = firmanteRunValue.replace(/[^0-9kK]/g, "");
+    const empresaRutClean = empresaRutValue.replace(/[^0-9kK]/g, "");
+
+    const title = form.title.value.trim();
+    const firmanteEmail = form.firmante_email.value.trim();
+
+    // Campos firmante
+    const firmanteNombre1 = form.firmante_nombre1.value.trim();
+    const firmanteNombre2 = (form.firmante_nombre2?.value || "").trim();
+    const firmanteApellido1 = form.firmante_apellido1.value.trim();
+    const firmanteApellido2 = (form.firmante_apellido2?.value || "").trim();
+    const firmanteMovil = form.firmante_movil.value.trim();
+
+    // Destinatario / empresa
+    const destinatarioNombre =
+      form.destinatario_nombre?.value.trim() || "";
+    const destinatarioEmail = form.destinatario_email.value.trim();
+
+    const file = form.file?.files?.[0];
+
+    // Validaciones básicas
+    if (!title) newErrors.title = "Este campo es obligatorio.";
+    if (!file) newErrors.file = "Adjunta un archivo PDF.";
+
+    // Validaciones firmante
+    if (!firmanteNombre1)
+      newErrors.firmante_nombre1 = "Este campo es obligatorio.";
+    if (!firmanteApellido1)
+      newErrors.firmante_apellido1 = "Este campo es obligatorio.";
+    if (!firmanteEmail)
+      newErrors.firmante_email = "Ingresa un correo válido.";
+    if (!firmanteRunClean)
+      newErrors.firmante_run = "RUN / RUT es obligatorio.";
+    else if (firmanteRunClean.length < 8 || firmanteRunClean.length > 10) {
+      newErrors.firmante_run = "RUN inválido (ej: 12.345.678-9)";
+    }
+    if (!firmanteMovil)
+      newErrors.firmante_movil = "El teléfono es obligatorio.";
+
+    // Validaciones destinatario / empresa
+    if (!destinatarioNombre)
+      newErrors.destinatario_nombre = "Este campo es obligatorio.";
+    if (!destinatarioEmail)
+      newErrors.destinatario_email = "Ingresa un correo válido.";
+    if (!empresaRutClean)
+      newErrors.empresa_rut = "El RUT de la empresa es obligatorio.";
+    else if (empresaRutClean.length < 8 || empresaRutClean.length > 10) {
+      newErrors.empresa_rut = "RUT inválido (ej: 12.345.678-9)";
+    }
+
+    if (Object.keys(newErrors).length > 0) {
+      setFormErrors(newErrors);
+      setSubmitting(false);
+      return;
+    }
+
+    const firmanteNombreCompleto = [
+      firmanteNombre1,
+      firmanteNombre2,
+      firmanteApellido1,
+      firmanteApellido2,
+    ]
+      .filter(Boolean)
+      .join(" ");
+
+    formData.append("firmante_nombre_completo", firmanteNombreCompleto);
+    formData.append("firmante_run", firmanteRunValue);
+    formData.append("firmante_movil", firmanteMovil);
+    formData.append("empresa_rut", empresaRutValue);
+    formData.append("requiresVisado", showVisador ? "true" : "false");
+
+    // Firmante adicional (solo el primero por ahora)
+    if (extraSigners.length > 0) {
+      const idx = 0;
+      const nombreExtra =
+        form[`extra_nombre_${idx}`]?.value.trim() || "";
+      const emailExtra =
+        form[`extra_email_${idx}`]?.value.trim() || "";
+      const movilExtra =
+        form[`extra_movil_${idx}`]?.value.trim() || "";
+
+      if (emailExtra) {
+        formData.append(
+          "firmante_adicional_nombre_completo",
+          nombreExtra
+        );
+        formData.append("firmante_adicional_email", emailExtra);
+        formData.append("firmante_adicional_movil", movilExtra);
+      }
+    }
+
+    try {
+      const res = await api.post("/docs", formData);
+
+      if (!res || !res.data) {
+        throw new Error(
+          "No se pudo crear el documento en el servidor."
+        );
+      }
+
+      alert("✅ ¡Documento procesado correctamente!");
+      form.reset();
+      setShowVisador(false);
+      setExtraSigners([]);
+      setFirmanteRunValue("");
+      setEmpresaRutValue("");
+      setTipoDocumento("");
+      setFileName("");
+      setView("list");
+      cargarDocs();
+    } catch (err) {
+      console.error("Error creando documento:", err);
+      const msg =
+        err.response?.data?.message ||
+        err.message ||
+        "Fallo en la subida";
+      alert(msg);
+    } finally {
+      setSubmitting(false);
+    }
+  };
 
   return (
     <div className="card-premium">
@@ -124,154 +267,7 @@ export function NewDocumentForm({
         </div>
       </div>
 
-      <form
-        onSubmit={async (e) => {
-          e.preventDefault();
-          setFormErrors({});
-          setSubmitting(true);
-
-          const form = e.target;
-          const formData = new FormData(form);
-          const newErrors = {};
-
-          // Validar tipoDocumento
-          if (!tipoDocumento) {
-            newErrors.tipo_documento =
-              "Selecciona si es Poderes y autorizaciones o Solo contratos.";
-          }
-
-          // tipo de trámite -> snake_case para backend
-          formData.append("tipo_tramite", tipoTramite);
-          formData.append("tipo_documento", tipoDocumento);
-          if (tipoTramite === "notaria") {
-            formData.append("requiere_firma_notarial", "true");
-          }
-
-          const firmanteRunClean = firmanteRunValue.replace(/[^0-9kK]/g, "");
-          const empresaRutClean = empresaRutValue.replace(/[^0-9kK]/g, "");
-
-          const title = form.title.value.trim();
-          const firmanteEmail = form.firmante_email.value.trim();
-
-          // Campos firmante
-          const firmanteNombre1 = form.firmante_nombre1.value.trim();
-          const firmanteNombre2 = (form.firmante_nombre2?.value || "").trim();
-          const firmanteApellido1 = form.firmante_apellido1.value.trim();
-          const firmanteApellido2 =
-            (form.firmante_apellido2?.value || "").trim();
-          const firmanteMovil = form.firmante_movil.value.trim();
-
-          // Destinatario / empresa
-          const destinatarioNombre =
-            form.destinatario_nombre?.value.trim() || "";
-          const destinatarioEmail = form.destinatario_email.value.trim();
-
-          const file = form.file?.files?.[0];
-
-          if (!title) newErrors.title = "Este campo es obligatorio.";
-          if (!file) newErrors.file = "Adjunta un archivo PDF.";
-
-          // Validaciones firmante
-          if (!firmanteNombre1)
-            newErrors.firmante_nombre1 = "Este campo es obligatorio.";
-          if (!firmanteApellido1)
-            newErrors.firmante_apellido1 = "Este campo es obligatorio.";
-          if (!firmanteEmail)
-            newErrors.firmante_email = "Ingresa un correo válido.";
-          if (!firmanteRunClean)
-            newErrors.firmante_run = "RUN / RUT es obligatorio.";
-          else if (firmanteRunClean.length < 8 || firmanteRunClean.length > 10) {
-            newErrors.firmante_run = "RUN inválido (ej: 12.345.678-9)";
-          }
-          if (!firmanteMovil)
-            newErrors.firmante_movil = "El teléfono es obligatorio.";
-
-          // Validaciones destinatario / empresa
-          if (!destinatarioNombre)
-            newErrors.destinatario_nombre = "Este campo es obligatorio.";
-          if (!destinatarioEmail)
-            newErrors.destinatario_email = "Ingresa un correo válido.";
-          if (!empresaRutClean)
-            newErrors.empresa_rut = "El RUT de la empresa es obligatorio.";
-          else if (empresaRutClean.length < 8 || empresaRutClean.length > 10) {
-            newErrors.empresa_rut = "RUT inválido (ej: 12.345.678-9)";
-          }
-
-          if (Object.keys(newErrors).length > 0) {
-            setFormErrors(newErrors);
-            setSubmitting(false);
-            return;
-          }
-
-          const firmanteNombreCompleto = [
-            firmanteNombre1,
-            firmanteNombre2,
-            firmanteApellido1,
-            firmanteApellido2,
-          ]
-            .filter(Boolean)
-            .join(" ");
-
-          formData.append("firmante_nombre_completo", firmanteNombreCompleto);
-          formData.append("firmante_run", firmanteRunValue);
-          formData.append("firmante_movil", firmanteMovil);
-          formData.append("empresa_rut", empresaRutValue);
-          formData.append("requiresVisado", showVisador ? "true" : "false");
-
-          // Firmante adicional (solo el primero por ahora)
-          if (extraSigners.length > 0) {
-            const idx = 0;
-            const nombreExtra =
-              form[`extra_nombre_${idx}`]?.value.trim() || "";
-            const emailExtra =
-              form[`extra_email_${idx}`]?.value.trim() || "";
-            const movilExtra =
-              form[`extra_movil_${idx}`]?.value.trim() || "";
-
-            if (emailExtra) {
-              formData.append(
-                "firmante_adicional_nombre_completo",
-                nombreExtra
-              );
-              formData.append("firmante_adicional_email", emailExtra);
-              formData.append("firmante_adicional_movil", movilExtra);
-            }
-          }
-
-          try {
-            const res = await fetch(`${API_URL}/api/docs`, {
-              method: "POST",
-              headers: {
-                Authorization: `Bearer ${token}`,
-              },
-              body: formData,
-            });
-
-            if (!res.ok) {
-              const data = await res.json().catch(() => null);
-              const msg =
-                data?.message || "No se pudo crear el documento en el servidor.";
-              throw new Error(msg);
-            }
-
-            alert("✅ ¡Documento procesado correctamente!");
-            form.reset();
-            setShowVisador(false);
-            setExtraSigners([]);
-            setFirmanteRunValue("");
-            setEmpresaRutValue("");
-            setTipoDocumento("");
-            setFileName("");
-            setView("list");
-            cargarDocs();
-          } catch (err) {
-            console.error("Error creando documento:", err);
-            alert(err.message || "Fallo en la subida");
-          } finally {
-            setSubmitting(false);
-          }
-        }}
-      >
+      <form onSubmit={handleSubmit}>
         {/* === TÍTULO DEL CONTRATO + BOTÓN PDF === */}
         <div
           style={{

@@ -1,7 +1,7 @@
+// src/components/DocumentRow.js
 import React from "react";
-import { DOC_STATUS, API_BASE_URL } from "../constants";
-
-const API_URL = API_BASE_URL;
+import { DOC_STATUS } from "../constants";
+import api from "../api/client";
 
 function getTramiteLabel(value) {
   if (value === "notaria") return "Notaría";
@@ -33,7 +33,7 @@ const STATUS_COLORS = {
   RECHAZADO: "#b91c1c",
 };
 
-export function DocumentRow({ doc, onOpenDetail, token }) {
+export function DocumentRow({ doc, onOpenDetail }) {
   const tipoTramite = doc.tipo_tramite || null;
   const tipoDocumento = doc.tipo_documento || null;
 
@@ -74,19 +74,21 @@ export function DocumentRow({ doc, onOpenDetail, token }) {
   const handleVerPdf = async (e) => {
     e.stopPropagation();
     try {
-      const res = await fetch(`${API_URL}/api/docs/${doc.id}/pdf`, {
-        headers: { Authorization: `Bearer ${token}` },
-      });
-      const data = await res.json();
+      const res = await api.get(`/docs/${doc.id}/pdf`);
+      const data = res.data;
 
-      if (!res.ok) {
-        throw new Error(data.message || "No se pudo obtener el PDF");
+      if (!data || !data.url) {
+        throw new Error("No se pudo obtener la URL del PDF");
       }
 
       window.open(data.url, "_blank", "noopener,noreferrer");
     } catch (err) {
       console.error("Error abriendo PDF:", err);
-      alert("❌ " + (err.message || "No se pudo abrir el PDF"));
+      const msg =
+        err.response?.data?.message ||
+        err.message ||
+        "No se pudo abrir el PDF";
+      alert("❌ " + msg);
     }
   };
 
@@ -105,20 +107,17 @@ export function DocumentRow({ doc, onOpenDetail, token }) {
 
   return (
     <tr className="doc-row" onClick={handleOpenDetail}>
-      {/* N° interno de contrato */}
       <td className="doc-cell-id">
         <span className="doc-id-pill">
           {doc.numero_contrato_interno || `#${doc.id}`}
         </span>
       </td>
 
-      {/* Título + fecha */}
       <td className="doc-cell-title">
         <div className="doc-title-main">{doc.title || "Sin título"}</div>
         <div className="doc-title-sub">{formattedFecha}</div>
       </td>
 
-      {/* Tipo de trámite + tipo de documento */}
       <td>
         <span
           className="doc-chip-tipo"
@@ -131,7 +130,6 @@ export function DocumentRow({ doc, onOpenDetail, token }) {
         </span>
       </td>
 
-      {/* Estado */}
       <td className="doc-cell-status">
         <span
           className="doc-status-pill"
@@ -142,7 +140,6 @@ export function DocumentRow({ doc, onOpenDetail, token }) {
         </span>
       </td>
 
-      {/* Firmante principal */}
       <td className="doc-cell-signer">
         <div className="doc-signer-main">
           {doc.firmante_nombre || "No asignado"}
@@ -152,7 +149,6 @@ export function DocumentRow({ doc, onOpenDetail, token }) {
         )}
       </td>
 
-      {/* Acciones */}
       <td className="doc-cell-actions">
         <div className="doc-actions">
           {doc.status === DOC_STATUS.RECHAZADO && doc.reject_reason && (

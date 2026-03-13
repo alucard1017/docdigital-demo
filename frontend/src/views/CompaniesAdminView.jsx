@@ -1,5 +1,6 @@
 // src/views/CompaniesAdminView.jsx
 import { useEffect, useState } from "react";
+import api from "../api/client";
 
 function formatDate(value) {
   if (!value) return "";
@@ -26,7 +27,7 @@ function getPlanClassName(plan) {
   return "badge-plan badge-plan-basic";
 }
 
-export function CompaniesAdminView({ API_URL, token }) {
+export function CompaniesAdminView() {
   const [companies, setCompanies] = useState([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
@@ -34,20 +35,18 @@ export function CompaniesAdminView({ API_URL, token }) {
   const [saving, setSaving] = useState(false);
 
   async function cargarCompanies() {
-    if (!token) return;
     setLoading(true);
     setError("");
     try {
-      const res = await fetch(`${API_URL}/api/companies`, {
-        headers: { Authorization: `Bearer ${token}` },
-      });
-      const data = await res.json().catch(() => []);
-      if (!res.ok) {
-        throw new Error(data.message || "No se pudieron cargar las empresas");
-      }
+      const res = await api.get("/companies");
+      const data = res.data;
       setCompanies(Array.isArray(data) ? data : []);
     } catch (err) {
-      setError(err.message || "Error al cargar empresas");
+      const msg =
+        err.response?.data?.message ||
+        err.message ||
+        "No se pudieron cargar las empresas";
+      setError(msg);
     } finally {
       setLoading(false);
     }
@@ -55,8 +54,7 @@ export function CompaniesAdminView({ API_URL, token }) {
 
   useEffect(() => {
     cargarCompanies();
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [token]);
+  }, []);
 
   async function handleCreate(e) {
     e.preventDefault();
@@ -64,25 +62,19 @@ export function CompaniesAdminView({ API_URL, token }) {
 
     try {
       setSaving(true);
-      const res = await fetch(`${API_URL}/api/companies`, {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-          Authorization: `Bearer ${token}`,
-        },
-        body: JSON.stringify({ name }),
-      });
-      const data = await res.json().catch(() => ({}));
-      if (!res.ok) {
-        throw new Error(data.message || "No se pudo crear la empresa");
+      const res = await api.post("/companies", { name });
+      if (!res || !res.data) {
+        throw new Error("No se pudo crear la empresa");
       }
       setName("");
       await cargarCompanies();
-      // TODO: reemplazar por toast global
       window.alert("Empresa creada correctamente");
     } catch (err) {
-      // TODO: reemplazar por toast global
-      window.alert(err.message || "Error al crear empresa");
+      const msg =
+        err.response?.data?.message ||
+        err.message ||
+        "Error al crear empresa";
+      window.alert(msg);
     } finally {
       setSaving(false);
     }
@@ -96,24 +88,20 @@ export function CompaniesAdminView({ API_URL, token }) {
     if (!nuevoNombre || !nuevoNombre.trim()) return;
 
     try {
-      const res = await fetch(`${API_URL}/api/companies/${id}`, {
-        method: "PUT",
-        headers: {
-          "Content-Type": "application/json",
-          Authorization: `Bearer ${token}`,
-        },
-        body: JSON.stringify({ name: nuevoNombre.trim() }),
+      const res = await api.put(`/companies/${id}`, {
+        name: nuevoNombre.trim(),
       });
-      const data = await res.json().catch(() => ({}));
-      if (!res.ok) {
-        throw new Error(data.message || "No se pudo actualizar la empresa");
+      if (!res || !res.data) {
+        throw new Error("No se pudo actualizar la empresa");
       }
       await cargarCompanies();
-      // TODO: reemplazar por toast global
       window.alert("Empresa actualizada correctamente");
     } catch (err) {
-      // TODO: reemplazar por toast global
-      window.alert(err.message || "Error al actualizar empresa");
+      const msg =
+        err.response?.data?.message ||
+        err.message ||
+        "Error al actualizar empresa";
+      window.alert(msg);
     }
   }
 
@@ -124,22 +112,18 @@ export function CompaniesAdminView({ API_URL, token }) {
     if (!ok) return;
 
     try {
-      const res = await fetch(`${API_URL}/api/companies/${id}`, {
-        method: "DELETE",
-        headers: {
-          Authorization: `Bearer ${token}`,
-        },
-      });
-      const data = await res.json().catch(() => ({}));
-      if (!res.ok) {
-        throw new Error(data.message || "No se pudo eliminar la empresa");
+      const res = await api.delete(`/companies/${id}`);
+      if (!res || !res.data) {
+        throw new Error("No se pudo eliminar la empresa");
       }
       await cargarCompanies();
-      // TODO: reemplazar por toast global
       window.alert("Empresa eliminada correctamente");
     } catch (err) {
-      // TODO: reemplazar por toast global
-      window.alert(err.message || "Error al eliminar empresa");
+      const msg =
+        err.response?.data?.message ||
+        err.message ||
+        "Error al eliminar empresa";
+      window.alert(msg);
     }
   }
 

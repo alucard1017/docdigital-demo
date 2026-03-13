@@ -43,6 +43,7 @@ function isProtectedUser(targetUser) {
 function requireAuth(req, res, next) {
   try {
     const header = req.headers.authorization || "";
+
     if (!header.startsWith("Bearer ")) {
       return res.status(401).json({ message: "No autorizado" });
     }
@@ -59,7 +60,21 @@ function requireAuth(req, res, next) {
         .json({ message: "Configuración de servidor incompleta" });
     }
 
-    const payload = jwt.verify(token, JWT_SECRET);
+    let payload;
+    try {
+      payload = jwt.verify(token, JWT_SECRET);
+    } catch (err) {
+      // Diferenciamos explícitamente expirado vs inválido
+      if (err.name === "TokenExpiredError") {
+        console.warn("⚠️ Token expirado en requireAuth:", {
+          expiredAt: err.expiredAt,
+        });
+        return res.status(401).json({ message: "Token expirado" });
+      }
+
+      console.error("❌ Token inválido en requireAuth:", err);
+      return res.status(401).json({ message: "Token inválido" });
+    }
 
     req.user = {
       id: payload.id,
@@ -74,6 +89,7 @@ function requireAuth(req, res, next) {
       console.log("DEBUG REQ.USER en requireAuth:", req.user);
     }
 
+    // Contexto Sentry
     Sentry.setUser({
       id: String(payload.id),
       username: payload.name || undefined,
@@ -87,9 +103,11 @@ function requireAuth(req, res, next) {
 
     return next();
   } catch (err) {
-    console.error("Error en requireAuth:", err);
+    console.error("❌ Error inesperado en requireAuth:", err);
     Sentry.captureException(err);
-    return res.status(401).json({ message: "Token inválido o expirado" });
+    return res
+      .status(500)
+      .json({ message: "Error interno en autenticación" });
   }
 }
 
@@ -103,6 +121,7 @@ function requireRole(requiredRole) {
 
     const role = req.user.role;
 
+    // SUPER_ADMIN siempre entra
     if (role === "SUPER_ADMIN") {
       return next();
     }
@@ -240,7 +259,7 @@ router.post("/login", async (req, res) => {
     try {
       ok = await bcrypt.compare(password, user.password_hash);
     } catch (cmpErr) {
-      console.error("Error comparando password en /api/auth/login:", cmpErr);
+      console.error("❌ Error comparando password en /api/auth/login:", cmpErr);
       Sentry.captureException(cmpErr);
       return res
         .status(500)
@@ -279,7 +298,7 @@ router.post("/login", async (req, res) => {
     try {
       token = jwt.sign(tokenPayload, JWT_SECRET, { expiresIn: "8h" });
     } catch (err) {
-      console.error("Error firmando JWT en /login:", err);
+      console.error("❌ Error firmando JWT en /login:", err);
       Sentry.captureException(err);
       return res
         .status(500)
@@ -299,7 +318,7 @@ router.post("/login", async (req, res) => {
       user: tokenPayload,
     });
   } catch (err) {
-    console.error("Error inesperado en /api/auth/login:", err);
+    console.error("❌ Error inesperado en /api/auth/login:", err);
     Sentry.captureException(err);
     return res
       .status(500)

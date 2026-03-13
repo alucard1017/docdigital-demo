@@ -64,6 +64,7 @@ router.post("/register", async (req, res, next) => {
 
     return res.status(201).json({ message: "Usuario creado" });
   } catch (err) {
+    console.error("❌ Error en POST /api/users/register:", err);
     return next(err);
   }
 });
@@ -407,7 +408,6 @@ router.delete("/:id", requireAuth, requireRole("ADMIN"), async (req, res) => {
     const isGlobal = requester.role === "ADMIN_GLOBAL";
     const isAdminEmpresa = requester.role === "ADMIN";
 
-    // 1) Nunca permitir borrar la cuenta principal
     if (normalizeRun(target.run) === OWNER_RUN) {
       return res.status(403).json({
         message: "No se puede eliminar la cuenta principal del sistema",
@@ -417,9 +417,7 @@ router.delete("/:id", requireAuth, requireRole("ADMIN"), async (req, res) => {
     const targetIsAdmin = isAdminLike(target.role);
 
     if (targetIsAdmin) {
-      // Admin fuerte
       if (target.role === "SUPER_ADMIN" || target.role === "ADMIN_GLOBAL") {
-        // Solo dueño o SUPER_ADMIN pueden borrar estos
         if (!isOwner && !isSuper) {
           return res.status(403).json({
             message:
@@ -427,7 +425,6 @@ router.delete("/:id", requireAuth, requireRole("ADMIN"), async (req, res) => {
           });
         }
       } else if (target.role === "ADMIN") {
-        // ADMIN_GLOBAL / SUPER / OWNER pueden eliminar ADMIN de cualquier empresa
         if (!isOwner && !isSuper && !isGlobal) {
           return res.status(403).json({
             message:
@@ -436,7 +433,6 @@ router.delete("/:id", requireAuth, requireRole("ADMIN"), async (req, res) => {
         }
       }
     } else {
-      // Usuario normal
       if (isAdminEmpresa && !isOwner && !isSuper && !isGlobal) {
         if (
           !requester.company_id ||
@@ -474,6 +470,7 @@ router.delete("/:id", requireAuth, requireRole("ADMIN"), async (req, res) => {
 });
 
 /**
+ * POST /api/users/:id/reset-password
  * RESET PASSWORD (solo admins según reglas de rol)
  */
 router.post(
