@@ -1,26 +1,25 @@
 // src/api/client.js
 import axios from "axios";
 
-// Normaliza la base URL de la API
-const RAW_API_BASE_URL = import.meta.env.VITE_API_URL;
-
-// Si no hay VITE_API_URL, dejamos explícito que es solo para desarrollo
-const API_BASE_URL = (RAW_API_BASE_URL && RAW_API_BASE_URL.replace(/\/+$/, "")) ||
+// 1. Base URL de la API (prod: VITE_API_URL, dev: localhost)
+const API_BASE_URL =
+  (import.meta.env.VITE_API_URL &&
+    import.meta.env.VITE_API_URL.replace(/\/+$/, "")) ||
   "http://localhost:3000/api";
 
-// En producción logueamos una sola vez qué base URL está usando el bundle
+// Log solo en producción para confirmar qué URL usa el bundle
 if (!import.meta.env.DEV) {
-  // Esto te ayuda a ver en prod qué URL realmente está usando app.verifirma.cl
   console.log("[API BASE URL]", API_BASE_URL);
 }
 
+// 2. Instancia principal de Axios
 const api = axios.create({
   baseURL: API_BASE_URL,
-  timeout: 15000,
+  timeout: 30000, // 30s para evitar timeouts tontos en Render
   withCredentials: false,
 });
 
-// Helper para leer token (por si luego cambias de localStorage a otra cosa)
+// 3. Helpers de sesión
 function getAccessToken() {
   try {
     return localStorage.getItem("token") || null;
@@ -33,18 +32,17 @@ function clearSessionAndRedirect() {
   try {
     localStorage.removeItem("token");
     localStorage.removeItem("user");
-    // Opcional: guardar ruta actual para volver después del login
-    // localStorage.setItem("redirectAfterLogin", window.location.pathname);
   } catch {
     // ignorar errores de storage
   }
   window.location.href = "/login";
 }
 
-// REQUEST INTERCEPTOR: adjuntar token y logs en dev
+// 4. Interceptor de request (adjunta token y loguea en dev)
 api.interceptors.request.use(
   (config) => {
     const token = getAccessToken();
+
     if (token) {
       config.headers = config.headers || {};
       config.headers.Authorization = `Bearer ${token}`;
@@ -69,7 +67,7 @@ api.interceptors.request.use(
   }
 );
 
-// RESPONSE INTERCEPTOR: manejar 401 y logs de error en dev
+// 5. Interceptor de response (maneja 401 y loguea errores en dev)
 api.interceptors.response.use(
   (response) => response,
   (error) => {
