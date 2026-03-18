@@ -1,8 +1,18 @@
 // src/api/client.js
 import axios from "axios";
 
-const API_BASE_URL =
-  import.meta.env.VITE_API_URL?.replace(/\/+$/, "") || "http://localhost:3000/api";
+// Normaliza la base URL de la API
+const RAW_API_BASE_URL = import.meta.env.VITE_API_URL;
+
+// Si no hay VITE_API_URL, dejamos explícito que es solo para desarrollo
+const API_BASE_URL = (RAW_API_BASE_URL && RAW_API_BASE_URL.replace(/\/+$/, "")) ||
+  "http://localhost:3000/api";
+
+// En producción logueamos una sola vez qué base URL está usando el bundle
+if (!import.meta.env.DEV) {
+  // Esto te ayuda a ver en prod qué URL realmente está usando app.verifirma.cl
+  console.log("[API BASE URL]", API_BASE_URL);
+}
 
 const api = axios.create({
   baseURL: API_BASE_URL,
@@ -23,7 +33,7 @@ function clearSessionAndRedirect() {
   try {
     localStorage.removeItem("token");
     localStorage.removeItem("user");
-    // Opcional: guarda ruta actual para volver después del login
+    // Opcional: guardar ruta actual para volver después del login
     // localStorage.setItem("redirectAfterLogin", window.location.pathname);
   } catch {
     // ignorar errores de storage
@@ -31,7 +41,7 @@ function clearSessionAndRedirect() {
   window.location.href = "/login";
 }
 
-// REQUEST INTERCEPTOR: adjuntar token y logs útiles
+// REQUEST INTERCEPTOR: adjuntar token y logs en dev
 api.interceptors.request.use(
   (config) => {
     const token = getAccessToken();
@@ -59,7 +69,7 @@ api.interceptors.request.use(
   }
 );
 
-// RESPONSE INTERCEPTOR: manejar 401 y logs de error
+// RESPONSE INTERCEPTOR: manejar 401 y logs de error en dev
 api.interceptors.response.use(
   (response) => response,
   (error) => {
