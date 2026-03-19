@@ -84,10 +84,18 @@ function App() {
   const [formErrors, setFormErrors] = useState({});
   const [tipoTramite, setTipoTramite] = useState("propio");
 
-  const [token, setToken] = useState(localStorage.getItem("token") || "");
-  const [user, setUser] = useState(
-    JSON.parse(localStorage.getItem("user") || "null")
+  const [token, setToken] = useState(() =>
+  typeof localStorage !== "undefined" ? localStorage.getItem("token") || "" : ""
   );
+  const [user, setUser] = useState(() => {
+  try {
+    return typeof localStorage !== "undefined"
+      ? JSON.parse(localStorage.getItem("user") || "null")
+      : null;
+  } catch {
+    return null;
+  }
+});
 
   const [loadingDocs, setLoadingDocs] = useState(false);
   const [errorDocs, setErrorDocs] = useState("");
@@ -248,46 +256,50 @@ function App() {
   /* LOGIN                           */
   /* =============================== */
 
-  async function handleLogin(e) {
-    e.preventDefault();
-    setIsLoggingIn(true);
-    setMessage("Conectando con el servidor seguro...");
+async function handleLogin(e) {
+  e.preventDefault();
+  setIsLoggingIn(true);
+  setMessage("Conectando con el servidor seguro...");
 
-    const isEmail = isEmailMode || identifier.includes("@");
-    const valueRaw = isEmail
-      ? identifier.trim()
-      : identifier.replace(/[^0-9kK]/g, "");
-    const value = isEmail ? valueRaw.toLowerCase() : valueRaw;
+  const inputVal = identifier.trim();
+  const isEmail = inputVal.includes("@");
 
-    try {
-      console.log("DEBUG handleLogin payload:", {
-        identifier: value,
-        isEmail,
-      });
+  const cleanValue = isEmail
+    ? inputVal.toLowerCase()
+    : inputVal.replace(/[^0-9kK]/g, "").toUpperCase();
 
-      const res = await api.post("/auth/login", {
-        identifier: value,
-        password,
-      });
-
-      const data = res.data;
-
-      setToken(data.token);
-      setUser(data.user);
-      localStorage.setItem("token", data.token);
-      localStorage.setItem("user", JSON.stringify(data.user));
-      setMessage("Acceso concedido");
-    } catch (err) {
-      console.error("Error en login:", err);
-      const msg =
-        err.response?.data?.message ||
-        err.message ||
-        "Error de conexión, intenta nuevamente en unos segundos.";
-      setMessage(msg);
-    } finally {
-      setIsLoggingIn(false);
-    }
+  if (!isEmail && cleanValue.length < 2) {
+    setMessage("❌ El RUT ingresado no es válido");
+    setIsLoggingIn(false);
+    return;
   }
+
+  if (import.meta.env.DEV) {
+    console.log("[LOGIN] payload:", { identifier: cleanValue, isEmail });
+  }
+
+  try {
+    const res = await api.post("/auth/login", {
+      identifier: cleanValue,
+      password,
+    });
+
+    const data = res.data;
+    setToken(data.token);
+    setUser(data.user);
+    localStorage.setItem("token", data.token);
+    localStorage.setItem("user", JSON.stringify(data.user));
+    setMessage("Acceso concedido");
+    setView("list");
+  } catch (err) {
+    console.error("[LOGIN ERROR]", err);
+    const msg = err.response?.data?.message || err.message ||
+      "Error de conexión, intenta nuevamente.";
+    setMessage("❌ " + msg);
+  } finally {
+    setIsLoggingIn(false);
+  }
+}
 
   /* =============================== */
   /* ACCIONES: FIRMAR / VISAR ...    */

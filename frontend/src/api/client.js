@@ -1,57 +1,60 @@
 // src/api/client.js
 import axios from "axios";
 
-// 1. Base URL de la API (prod: VITE_API_URL, dev: localhost)
-const API_BASE_URL =
-  (import.meta.env.VITE_API_URL &&
-    import.meta.env.VITE_API_URL.replace(/\/+$/, "")) ||
-  "http://localhost:3000/api";
+// Base URL de la API: prod usa VITE_API_URL, dev usa localhost
+const getApiBaseUrl = () => {
+  const raw = import.meta.env.VITE_API_URL;
+  if (raw && raw.trim()) {
+    return raw.replace(/\/+$/, "");
+  }
+  return "http://localhost:3000/api";
+};
 
-// Log solo en producción para confirmar qué URL usa el bundle
+const API_BASE_URL = getApiBaseUrl();
+
+// Log único en producción para depuración
 if (!import.meta.env.DEV) {
-  console.log("[API BASE URL]", API_BASE_URL);
+  console.log("[API] Base URL:", API_BASE_URL);
 }
 
-// 2. Instancia principal de Axios
 const api = axios.create({
   baseURL: API_BASE_URL,
-  timeout: 30000, // 30s para evitar timeouts tontos en Render
+  timeout: 30000,
   withCredentials: false,
 });
 
-// 3. Helpers de sesión
-function getAccessToken() {
+// Token storage
+const getAccessToken = () => {
   try {
     return localStorage.getItem("token") || null;
   } catch {
     return null;
   }
-}
+};
 
-function clearSessionAndRedirect() {
+const clearSessionAndRedirect = () => {
   try {
     localStorage.removeItem("token");
     localStorage.removeItem("user");
   } catch {
-    // ignorar errores de storage
+    // Ignorar errores de storage
   }
   window.location.href = "/login";
-}
+};
 
-// 4. Interceptor de request (adjunta token y loguea en dev)
+// Request interceptor
 api.interceptors.request.use(
   (config) => {
     const token = getAccessToken();
-
     if (token) {
       config.headers = config.headers || {};
       config.headers.Authorization = `Bearer ${token}`;
     }
 
     if (import.meta.env.DEV) {
-      console.debug("[API REQUEST]", {
+      console.debug("[API REQ]", {
+        method: config.method?.toUpperCase(),
         url: config.url,
-        method: config.method,
         baseURL: config.baseURL,
         hasToken: !!token,
       });
@@ -61,23 +64,24 @@ api.interceptors.request.use(
   },
   (error) => {
     if (import.meta.env.DEV) {
-      console.error("[API REQUEST ERROR]", error);
+      console.error("[API REQ ERROR]", error);
     }
     return Promise.reject(error);
   }
 );
 
-// 5. Interceptor de response (maneja 401 y loguea errores en dev)
+// Response interceptor
 api.interceptors.response.use(
   (response) => response,
   (error) => {
     const status = error?.response?.status;
-    const message = error?.response?.data?.message;
+    const data = error?.response?.data;
+    const message = data?.message;
 
     if (import.meta.env.DEV) {
-      console.error("[API RESPONSE ERROR]", {
+      console.error("[API RES ERROR]", {
+        method: error?.config?.method?.toUpperCase(),
         url: error?.config?.url,
-        method: error?.config?.method,
         status,
         message,
       });
