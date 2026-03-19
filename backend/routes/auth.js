@@ -88,7 +88,6 @@ function requireAuth(req, res, next) {
       console.log("DEBUG REQ.USER en requireAuth:", req.user);
     }
 
-    // Contexto Sentry
     Sentry.setUser({
       id: String(payload.id),
       username: payload.name || undefined,
@@ -120,7 +119,6 @@ function requireRole(requiredRole) {
 
     const role = req.user.role;
 
-    // SUPER_ADMIN siempre entra
     if (role === "SUPER_ADMIN") {
       return next();
     }
@@ -297,7 +295,7 @@ router.post("/login", async (req, res) => {
     try {
       token = jwt.sign(tokenPayload, JWT_SECRET, { expiresIn: "8h" });
     } catch (err) {
-      console.error("❌ Error firmando JWT en /login:", err);
+      console.error("❌ Error firmando JWT en /api/auth/login:", err);
       Sentry.captureException(err);
       return res
         .status(500)

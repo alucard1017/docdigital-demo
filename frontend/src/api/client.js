@@ -1,13 +1,15 @@
-// src/api/client.js
+// frontend/src/api/client.js
 import axios from "axios";
 
 const getApiBaseUrl = () => {
   const raw = import.meta.env.VITE_API_URL;
 
   if (raw && raw.trim()) {
-    return raw.replace(/\/+$/, ""); // quita barras finales
+    // quita barras finales
+    return raw.replace(/\/+$/, "");
   }
 
+  // fallback local
   return "http://localhost:4000/api";
 };
 
@@ -18,7 +20,7 @@ if (import.meta.env.DEV) {
 }
 
 const api = axios.create({
-  baseURL: API_BASE_URL, // ej: http://localhost:4000/api
+  baseURL: API_BASE_URL, // ej: http://localhost:4000/api o https://firma-express-1.onrender.com/api
   timeout: 30000,
   withCredentials: false,
 });

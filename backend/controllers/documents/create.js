@@ -113,7 +113,11 @@ async function createDocument(req, res) {
     if (!companyId) {
       console.error(
         "❌ Error creando documento: usuario sin company_id",
-        req.user && { id: req.user.id, email: req.user.email, role: req.user.role }
+        req.user && {
+          id: req.user.id,
+          email: req.user.email,
+          role: req.user.role,
+        }
       );
       return res.status(400).json({
         message:
@@ -197,6 +201,7 @@ async function createDocument(req, res) {
     let watermarkedKey = null;
     let pdfHash = null;
 
+    // Subida a S3 + marca de agua
     try {
       const fileBuffer = fs.readFileSync(file.path);
       pdfHash = computeHash(fileBuffer);
@@ -211,7 +216,10 @@ async function createDocument(req, res) {
       await uploadPdfToS3(file.path, watermarkedKey);
       console.log(`✅ Archivo CON MARCA subido a S3: ${watermarkedKey}`);
     } catch (s3Error) {
-      console.error("⚠️ Error subiendo a S3 / generando hash:", s3Error.message);
+      console.error(
+        "⚠️ Error subiendo a S3 / generando hash:",
+        s3Error.message
+      );
       return res
         .status(500)
         .json({ message: "No se pudo procesar/subir el archivo PDF" });
@@ -288,7 +296,7 @@ async function createDocument(req, res) {
         originalKey,
         null,
         requiereNotaria,
-        companyId,      // <- ahora nunca null
+        companyId,
         pdfHash,
       ]
     );
@@ -323,7 +331,7 @@ async function createDocument(req, res) {
       [numeroContratoInterno, doc.id]
     );
 
-    // Nuevo documento "v2" para trazabilidad
+    // Documento "v2" para trazabilidad
     const codigoVerificacion = generarCodigoVerificacion();
     const categoriaFirma = "SIMPLE";
 
@@ -349,7 +357,7 @@ async function createDocument(req, res) {
         categoriaFirma,
         codigoVerificacion,
         req.user.id,
-        companyId,     // <- mismo company_id
+        companyId,
       ]
     );
 
@@ -537,9 +545,8 @@ async function createDocument(req, res) {
     }
 
     if (destinatario_email && destinatario_email !== firmante_email) {
-      const {
-        sendDestinationNotification,
-      } = require("../../services/emailService");
+      const { sendDestinationNotification } =
+        require("../../services/emailService");
 
       emailPromises.push(
         sendDestinationNotification(
@@ -551,13 +558,21 @@ async function createDocument(req, res) {
       );
     }
 
-    try {
-      await Promise.all(emailPromises);
-    } catch (emailError) {
-      console.error(
-        "⚠️ [DOC EMAIL] Algún correo falló al enviar:",
-        emailError.message
-      );
+    // Enviar correos en segundo plano (no bloquea la respuesta)
+    if (emailPromises.length > 0) {
+      (async () => {
+        try {
+          await Promise.all(emailPromises);
+          console.log(
+            `✅ [DOC EMAIL] Correos procesados para documento ${doc.id}`
+          );
+        } catch (emailError) {
+          console.error(
+            "⚠️ [DOC EMAIL] Algún correo falló al enviar:",
+            emailError.message
+          );
+        }
+      })();
     }
 
     return res.status(201).json({
@@ -568,7 +583,7 @@ async function createDocument(req, res) {
       codigoVerificacion: documentoNuevo.codigo_verificacion,
       categoriaFirma: documentoNuevo.categoria_firma,
       message:
-        "Documento creado exitosamente. Correos enviados (o intentados enviar) antes de responder.",
+        "Documento creado exitosamente. Los correos se están enviando en segundo plano.",
     });
   } catch (err) {
     console.error("❌ Error creando documento:", err);
