@@ -95,14 +95,19 @@ async function sendEmail({ to, subject, html }) {
       console.warn("⏳ [EMAIL] Throttling: reintentando en 1500ms...");
       await sleep(1500);
       try {
-        const info = await transporter.sendMail({
-          from: `"${SENDER_NAME}" <${SENDER_EMAIL}>`,
-          to,
-          subject,
-          html,
-        });
-        console.log("✅ [EMAIL] Reintento OK (SMTP):", info.messageId);
-        return true;
+	const info = await transporter.sendMail({
+	  from: `"${SENDER_NAME}" <${SENDER_EMAIL}>`,
+	  to,
+	  subject,
+	  html,
+	});
+
+	// Log más detallado
+	console.log("✅ [EMAIL] Enviado OK (SMTP):", {
+	  messageId: info.messageId,
+	  response: info.response,
+	  envelope: info.envelope,
+	});
       } catch (err2) {
         console.error("❌ [EMAIL] Reintento falló:", err2.message);
       }
