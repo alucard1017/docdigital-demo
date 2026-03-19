@@ -9,15 +9,34 @@ const envFile =
 require("dotenv").config({ path: envFile });
 require("./instrument"); // Inicializa Sentry antes de todo
 
+/* ================================
+   IMPORTS PRINCIPALES
+   ================================ */
 const express = require("express");
 const path = require("path");
 const fs = require("fs");
 const rateLimit = require("express-rate-limit");
 const helmet = require("helmet");
 const Sentry = require("@sentry/node");
+
 const requestMeta = require("./middlewares/requestMeta");
 const db = require("./db");
+const { swaggerUi, specs } = require("./swagger");
+const { requireAuth, requireRole } = require("./routes/auth");
 
+// Rutas
+const authRoutes = require("./routes/auth");
+const docRoutes = require("./routes/documents");
+const publicRoutes = require("./routes/public");
+const usersRouter = require("./routes/users");
+const publicRegisterRoutes = require("./routes/publicRegister");
+const companiesRoutes = require("./routes/companies");
+const statusRoutes = require("./routes/status");
+const logsRoutes = require("./routes/logs");
+
+/* ================================
+   LOG DE INICIO
+   ================================ */
 console.log("=====================================");
 console.log("🚀 INICIANDO SERVER.JS");
 console.log("NODE_ENV:", process.env.NODE_ENV);
@@ -35,8 +54,17 @@ app.use(requestMeta);
 /* ================================
    BODY PARSERS
    ================================ */
-app.use(express.json());
-app.use(express.urlencoded({ extended: true }));
+app.use(
+  express.json({
+    limit: "2mb", // evita bodies gigantes accidentales
+  })
+);
+app.use(
+  express.urlencoded({
+    extended: true,
+    limit: "2mb",
+  })
+);
 
 /* ================================
    SECURITY HEADERS (HELMET)
@@ -82,7 +110,7 @@ const requiredEnvVars = [
   "R2_ENDPOINT",
 ];
 
-const missingVars = requiredEnvVars.filter((variable) => !process.env[variable]);
+const missingVars = requiredEnvVars.filter((v) => !process.env[v]);
 if (missingVars.length > 0) {
   console.warn("⚠️  Variables de entorno faltantes:", missingVars.join(", "));
 }
@@ -94,19 +122,27 @@ console.log("✓ Variables de entorno validadas");
 const generalLimiter = rateLimit({
   windowMs: 15 * 60 * 1000,
   max: 100,
-  message: "Demasiadas solicitudes, intenta después",
+  standardHeaders: true,
+  legacyHeaders: false,
+  message: { message: "Demasiadas solicitudes, intenta después" },
 });
 
 const loginLimiter = rateLimit({
   windowMs: 15 * 60 * 1000,
   max: 5,
-  message: "Demasiados intentos de login, intenta después",
+  standardHeaders: true,
+  legacyHeaders: false,
+  message: { message: "Demasiados intentos de login, intenta después" },
 });
 
 const publicLimiter = rateLimit({
   windowMs: 10 * 60 * 1000,
   max: 60,
-  message: "Demasiadas solicitudes desde este origen. Intenta más tarde.",
+  standardHeaders: true,
+  legacyHeaders: false,
+  message: {
+    message: "Demasiadas solicitudes desde este origen. Intenta más tarde.",
+  },
 });
 
 app.use(generalLimiter);
@@ -153,7 +189,7 @@ app.use((req, res, next) => {
 });
 
 /* ================================
-   ARCHIVOS PÚBLICOS (VERIFICACIÓN)
+   ARCHIVOS PÚBLICOS (HTML VERIFICACIÓN)
    ================================ */
 const publicDir = path.join(__dirname, "public");
 if (!fs.existsSync(publicDir)) {
@@ -169,7 +205,6 @@ console.log("✓ Ruta pública /public/verificar registrada");
 /* ================================
    SWAGGER / DOCUMENTACIÓN API
    ================================ */
-const { swaggerUi, specs } = require("./swagger");
 app.use("/api-docs", swaggerUi.serve, swaggerUi.setup(specs));
 console.log("✓ Swagger UI disponible en /api-docs");
 
@@ -211,7 +246,6 @@ app.get("/api/health", async (req, res) => {
 });
 console.log("✓ Ruta GET /api/health registrada");
 
-// Info simple
 app.get("/api/info", (req, res) => {
   res.json({
     message: "API de VeriFirma funcionando",
@@ -239,62 +273,60 @@ console.log("✓ Ruta GET /api/sentry-test registrada");
 /* ================================
    RUTAS PRINCIPALES API
    ================================ */
-const authRoutes = require("./routes/auth");
-const docRoutes = require("./routes/documents");
-const publicRoutes = require("./routes/public");
-const usersRouter = require("./routes/users");
-const publicRegisterRoutes = require("./routes/publicRegister");
-const companiesRoutes = require("./routes/companies");
-const statusRoutes = require("./routes/status");
-const logsRoutes = require("./routes/logs");
-const { requireAuth, requireRole } = require("./routes/auth");
 
+// Auth
 app.use("/api/auth", loginLimiter, authRoutes);
 console.log("✓ Rutas /api/auth registradas");
 
+// Usuarios
 app.use("/api/users", usersRouter);
 console.log("✓ Rutas /api/users registradas");
 
+// Estado del sistema
 app.use("/api/status", statusRoutes);
 console.log("✓ Rutas /api/status registradas");
 
+// Logs / auditoría
 app.use("/api/logs", logsRoutes);
 console.log("✓ Rutas /api/logs registradas");
 
+// Documentos (alias antiguo + nuevo prefijo)
 app.use(
   "/api/docs",
   (req, res, next) => {
-    console.log(`DEBUG DOCS (alias) >> ${req.method} ${req.originalUrl} llamado`);
+    console.log(`DEBUG DOCS (alias) >> ${req.method} ${req.originalUrl}`);
     next();
   },
   docRoutes
 );
 
-// Prefijo nuevo que usa el frontend
 app.use(
   "/api/documents",
   (req, res, next) => {
-    console.log(`DEBUG DOCUMENTS >> ${req.method} ${req.originalUrl} llamado`);
+    console.log(`DEBUG DOCUMENTS >> ${req.method} ${req.originalUrl}`);
     next();
   },
   docRoutes
 );
 console.log("✓ Rutas /api/documents registradas");
 
+// Público (firma, visado, verificación por token)
 app.use(
   "/api/public",
   publicLimiter,
   (req, res, next) => {
-    console.log(`DEBUG PUBLIC >> ${req.method} ${req.originalUrl} llamado`);
+    console.log(`DEBUG PUBLIC >> ${req.method} ${req.originalUrl}`);
     next();
   },
   publicRoutes
 );
 console.log("✓ Rutas /api/public registradas");
 
+// Registro público (autoregistro de empresas/usuarios)
 app.use("/api/public", publicRegisterRoutes);
 console.log("✓ Rutas /api/public/register registradas");
 
+// Empresas
 app.use("/api/companies", companiesRoutes);
 console.log("✓ Rutas /api/companies registradas");
 
@@ -304,7 +336,6 @@ console.log("✓ Rutas /api/companies registradas");
 app.get("/api/s3/download/:fileKey", requireAuth, async (req, res) => {
   try {
     const { getSignedUrl } = require("./services/s3");
-    const db = require("./db");
     const fileKey = req.params.fileKey;
 
     const docCheck = await db.query(
@@ -367,7 +398,6 @@ app.post(
   async (req, res) => {
     try {
       const { sendReminderEmail } = require("./services/sendReminderEmails");
-      const db = require("./db");
 
       const docResult = await db.query(
         `SELECT id, firmante_email, firmante_nombre, title, signature_token_expires_at
@@ -422,8 +452,6 @@ console.log("✓ Ruta POST /api/recordatorios/pendientes registrada");
    ================================ */
 app.get("/api/stats", requireAuth, async (req, res) => {
   try {
-    const db = require("./db");
-
     const docsResult = await db.query(
       `SELECT 
          COUNT(*) as total,

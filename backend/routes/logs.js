@@ -21,7 +21,7 @@ function parseDate(value) {
  * Solo SUPER_ADMIN y ADMIN_GLOBAL.
  *
  * Query params opcionales:
- * - action: filtra por acción exacta (document_signed, user_created, etc.)
+ * - action: filtra por acción exacta (DOCUMENT_SIGNED, USER_CREATED, etc.)
  * - entity_type: filtra por tipo de entidad (document, user, company, etc.)
  * - user_id: id de usuario actor
  * - company_id: id de empresa
@@ -59,13 +59,19 @@ router.get(
       }
 
       if (user_id) {
-        values.push(Number(user_id));
-        where.push(`user_id = $${values.length}`);
+        const userIdNum = Number(user_id);
+        if (!Number.isNaN(userIdNum)) {
+          values.push(userIdNum);
+          where.push(`user_id = $${values.length}`);
+        }
       }
 
       if (company_id) {
-        values.push(Number(company_id));
-        where.push(`company_id = $${values.length}`);
+        const companyIdNum = Number(company_id);
+        if (!Number.isNaN(companyIdNum)) {
+          values.push(companyIdNum);
+          where.push(`company_id = $${values.length}`);
+        }
       }
 
       const fromIso = parseDate(from);
@@ -123,7 +129,7 @@ router.get(
  * Solo SUPER_ADMIN y ADMIN_GLOBAL.
  *
  * Query params opcionales:
- * - action: login_success, login_failed, password_change, etc.
+ * - action: LOGIN_SUCCESS, LOGIN_FAILED, PASSWORD_CHANGE, etc.
  * - user_id: id de usuario
  * - run: RUN/RUT normalizado
  * - from: ISO date (incluyente)
@@ -147,8 +153,11 @@ router.get(
       }
 
       if (user_id) {
-        values.push(Number(user_id));
-        where.push(`user_id = $${values.length}`);
+        const userIdNum = Number(user_id);
+        if (!Number.isNaN(userIdNum)) {
+          values.push(userIdNum);
+          where.push(`user_id = $${values.length}`);
+        }
       }
 
       if (run) {
@@ -174,22 +183,22 @@ router.get(
       values.push(safeLimit);
       const limitIndex = values.length;
 
-const result = await db.query(
-  `SELECT
-     id,
-     user_id,
-     run,
-     action,
-     ip,
-     user_agent,
-     metadata,
-     created_at
-   FROM auth_log
-   ${whereSql}
-   ORDER BY created_at DESC
-   LIMIT $${limitIndex}`,
-  values
-);
+      const result = await db.query(
+        `SELECT
+           id,
+           user_id,
+           run,
+           action,
+           ip,
+           user_agent,
+           metadata,
+           created_at
+         FROM auth_log
+         ${whereSql}
+         ORDER BY created_at DESC
+         LIMIT $${limitIndex}`,
+        values
+      );
 
       return res.json(result.rows);
     } catch (err) {

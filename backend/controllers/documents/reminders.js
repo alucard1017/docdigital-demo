@@ -1,5 +1,20 @@
 // backend/controllers/documents/reminders.js
-const { db, sendSigningInvitation, sendVisadoInvitation } = require('./common');
+const { db, sendSigningInvitation, sendVisadoInvitation } = require("./common");
+const { logAudit } = require("../../utils/auditLog");
+
+const FRONT_BASE_URL =
+  process.env.FRONTEND_URL || "https://docdigital-demo.onrender.com";
+
+/* ================================
+   Helpers internos
+   ================================ */
+function buildPublicSignUrl(token) {
+  return `${FRONT_BASE_URL}/firma-publica?token=${token}`;
+}
+
+function buildVisadoUrl(token) {
+  return `${FRONT_BASE_URL}/firma-publica?token=${token}&mode=visado`;
+}
 
 /* ================================
    POST: Reenviar recordatorio
@@ -7,34 +22,37 @@ const { db, sendSigningInvitation, sendVisadoInvitation } = require('./common');
 async function resendReminder(req, res) {
   try {
     const { id } = req.params;
-    const { tipo, signerId } = req.body; // tipo: 'VISADO' | 'FIRMA'
+    const { tipo, signerId } = req.body; // 'VISADO' | 'FIRMA'
+
+    if (!tipo) {
+      return res
+        .status(400)
+        .json({ message: "El campo 'tipo' es obligatorio" });
+    }
 
     const docRes = await db.query(
       `SELECT * FROM documents WHERE id = $1 AND owner_id = $2`,
       [id, req.user.id]
     );
     if (docRes.rowCount === 0) {
-      return res.status(404).json({ message: 'Documento no encontrado' });
+      return res.status(404).json({ message: "Documento no encontrado" });
     }
     const doc = docRes.rows[0];
 
-    const frontBaseUrl =
-      process.env.FRONTEND_URL || 'https://docdigital-demo.onrender.com';
-
-    if (tipo === 'VISADO') {
+    if (tipo === "VISADO") {
       if (!doc.requires_visado || !doc.visador_email) {
-        return res
-          .status(400)
-          .json({ message: 'Este documento no tiene visador configurado' });
+        return res.status(400).json({
+          message: "Este documento no tiene visador configurado",
+        });
       }
 
-      const url = `${frontBaseUrl}/firma-publica?token=${doc.signature_token}&mode=visado`;
+      const url = buildVisadoUrl(doc.signature_token);
 
       await sendVisadoInvitation(
         doc.visador_email,
         doc.title,
         url,
-        doc.visador_nombre || ''
+        doc.visador_nombre || ""
       );
 
       await db.query(
@@ -44,34 +62,53 @@ async function resendReminder(req, res) {
          VALUES ($1, $2, $3, $4, $5, $6)`,
         [
           doc.id,
-          req.user.name || 'Sistema',
-          'REENVIO_VISADO',
-          'Recordatorio enviado al visador',
+          req.user.name || "Sistema",
+          "REENVIO_VISADO",
+          "Recordatorio enviado al visador",
           doc.status,
           doc.status,
         ]
       );
 
-      return res.json({ message: 'Recordatorio de visado reenviado' });
+      await logAudit({
+        user: req.user,
+        action: "document_reminder_visado_resent",
+        entityType: "document",
+        entityId: doc.id,
+        metadata: {
+          tipo: "VISADO",
+          visador_email: doc.visador_email,
+          status: doc.status,
+        },
+        req,
+      });
+
+      return res.json({ message: "Recordatorio de visado reenviado" });
     }
 
-    if (tipo === 'FIRMA') {
+    if (tipo === "FIRMA") {
+      if (!signerId) {
+        return res
+          .status(400)
+          .json({ message: "El campo 'signerId' es obligatorio" });
+      }
+
       const signerRes = await db.query(
         `SELECT * FROM document_signers WHERE id = $1 AND document_id = $2`,
         [signerId, id]
       );
       if (signerRes.rowCount === 0) {
-        return res.status(404).json({ message: 'Firmante no encontrado' });
+        return res.status(404).json({ message: "Firmante no encontrado" });
       }
       const signer = signerRes.rows[0];
 
-      const url = `${frontBaseUrl}/firma-publica?token=${signer.sign_token}`;
+      const url = buildPublicSignUrl(signer.sign_token);
 
       await sendSigningInvitation(
         signer.email,
         doc.title,
         url,
-        signer.name || ''
+        signer.name || ""
       );
 
       await db.query(
@@ -81,21 +118,35 @@ async function resendReminder(req, res) {
          VALUES ($1, $2, $3, $4, $5, $6)`,
         [
           doc.id,
-          req.user.name || 'Sistema',
-          'REENVIO_FIRMA',
+          req.user.name || "Sistema",
+          "REENVIO_FIRMA",
           `Recordatorio de firma reenviado a ${signer.email}`,
           doc.status,
           doc.status,
         ]
       );
 
-      return res.json({ message: 'Recordatorio de firma reenviado' });
+      await logAudit({
+        user: req.user,
+        action: "document_reminder_signer_resent",
+        entityType: "document",
+        entityId: doc.id,
+        metadata: {
+          tipo: "FIRMA",
+          signer_id: signer.id,
+          signer_email: signer.email,
+          status: doc.status,
+        },
+        req,
+      });
+
+      return res.json({ message: "Recordatorio de firma reenviado" });
     }
 
-    return res.status(400).json({ message: 'Tipo de reenvío inválido' });
+    return res.status(400).json({ message: "Tipo de reenvío inválido" });
   } catch (err) {
-    console.error('❌ Error reenviando invitación:', err);
-    return res.status(500).json({ message: 'Error interno del servidor' });
+    console.error("❌ Error reenviando invitación:", err);
+    return res.status(500).json({ message: "Error interno del servidor" });
   }
 }
 
@@ -124,12 +175,10 @@ async function sendAutomaticReminders(req, res) {
 
     for (const doc of docs) {
       try {
+        // Recordatorio a visador
         if (doc.requires_visado && doc.status === "PENDIENTE_VISADO") {
           if (doc.visador_email) {
-            const frontBaseUrl =
-              process.env.FRONTEND_URL ||
-              "https://docdigital-demo.onrender.com";
-            const urlVisado = `${frontBaseUrl}/firma-publica?token=${doc.signature_token}&mode=visado`;
+            const urlVisado = buildVisadoUrl(doc.signature_token);
 
             await sendVisadoInvitation(
               doc.visador_email,
@@ -149,6 +198,7 @@ async function sendAutomaticReminders(req, res) {
           }
         }
 
+        // Recordatorio a firmantes
         if (doc.status === "PENDIENTE_FIRMA") {
           const signersRes = await db.query(
             `SELECT * FROM document_signers
@@ -158,10 +208,7 @@ async function sendAutomaticReminders(req, res) {
 
           for (const signer of signersRes.rows) {
             try {
-              const frontBaseUrl =
-                process.env.FRONTEND_URL ||
-                "https://docdigital-demo.onrender.com";
-              const urlFirma = `${frontBaseUrl}/firma-publica?token=${signer.sign_token}`;
+              const urlFirma = buildPublicSignUrl(signer.sign_token);
 
               await sendSigningInvitation(
                 signer.email,
@@ -210,6 +257,19 @@ async function sendAutomaticReminders(req, res) {
         ]
       );
     }
+
+    await logAudit({
+      user: req.user,
+      action: "document_automatic_reminders_sent",
+      entityType: "document",
+      entityId: null,
+      metadata: {
+        owner_id: userId,
+        documentsProcessed: docs.length,
+        remindersSent: remindersCount,
+      },
+      req,
+    });
 
     return res.json({
       message: `${remindersCount} recordatorio(s) automático(s) enviado(s)`,

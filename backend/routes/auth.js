@@ -64,7 +64,6 @@ function requireAuth(req, res, next) {
     try {
       payload = jwt.verify(token, JWT_SECRET);
     } catch (err) {
-      // Diferenciamos explícitamente expirado vs inválido
       if (err.name === "TokenExpiredError") {
         console.warn("⚠️ Token expirado en requireAuth:", {
           expiredAt: err.expiredAt,
@@ -219,7 +218,7 @@ router.post("/login", async (req, res) => {
       await logAuth({
         userId: null,
         run: isEmail ? null : normalizedIdentifier,
-        action: "login_failed",
+        action: "LOGIN_FAILED",
         metadata: { reason: "user_not_found", isEmail },
         req,
       });
@@ -231,7 +230,7 @@ router.post("/login", async (req, res) => {
       await logAuth({
         userId: user.id,
         run: user.run,
-        action: "login_failed",
+        action: "LOGIN_FAILED",
         metadata: { reason: "user_inactive" },
         req,
       });
@@ -247,7 +246,7 @@ router.post("/login", async (req, res) => {
       await logAuth({
         userId: user.id,
         run: user.run,
-        action: "login_failed",
+        action: "LOGIN_FAILED",
         metadata: { reason: "missing_password_hash" },
         req,
       });
@@ -277,7 +276,7 @@ router.post("/login", async (req, res) => {
       await logAuth({
         userId: user.id,
         run: user.run,
-        action: "login_failed",
+        action: "LOGIN_FAILED",
         metadata: { reason: "bad_password" },
         req,
       });
@@ -308,7 +307,7 @@ router.post("/login", async (req, res) => {
     await logAuth({
       userId: user.id,
       run: user.run,
-      action: "login_success",
+      action: "LOGIN_SUCCESS",
       metadata: { role: user.role, company_id: user.company_id ?? null },
       req,
     });

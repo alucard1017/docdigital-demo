@@ -6,6 +6,8 @@ import { DetailActions } from "./DetailActions";
 import { DOC_STATUS } from "../constants";
 import api from "../api/client";
 
+/* ========= Helpers de labels ========= */
+
 function getTramiteLabel(value) {
   if (value === "notaria") return "Notaría";
   if (value === "propio") return "Propio";
@@ -36,6 +38,7 @@ export function DetailView({
 
   const [signers, setSigners] = useState([]);
   const [loadingSigners, setLoadingSigners] = useState(false);
+
   const [reenviarLoadingVisado, setReenviarLoadingVisado] = useState(false);
   const [reenviarSignerId, setReenviarSignerId] = useState(null);
   const [recordatorioLoading, setRecordatorioLoading] = useState(false);
@@ -46,6 +49,10 @@ export function DetailView({
     (currentUser.email === "tu-correo@loqueuses.com" ||
       currentUser.name === "Jean");
   const displayName = isJean ? "Alucard" : rawName;
+
+  /* ===============================
+     Carga de timeline + firmantes
+     =============================== */
 
   useEffect(() => {
     if (!selectedDoc?.id) return;
@@ -60,14 +67,8 @@ export function DetailView({
         const res = await api.get(`/documents/${docId}/timeline`, {
           signal: controller.signal,
         });
-
         const data = res.data;
-
-        if (data && data.timeline) {
-          setTimeline(data.timeline);
-        } else {
-          setTimeline(null);
-        }
+        setTimeline(data?.timeline || null);
       } catch (err) {
         if (err.name === "CanceledError" || err.name === "AbortError") return;
         console.error("Error fetching timeline:", err);
@@ -115,16 +116,21 @@ export function DetailView({
     selectedDoc.status === DOC_STATUS.PENDIENTE_VISADO ||
     selectedDoc.status === DOC_STATUS.PENDIENTE_FIRMA;
 
+  /* ========= Handlers de recordatorios ========= */
+
   async function handleReenviarVisado() {
     if (!selectedDoc) return;
     try {
       setReenviarLoadingVisado(true);
-      const res = await api.post(`/docs/${selectedDoc.id}/reenviar`, {
+
+      // Ruta real backend: POST /api/documents/:id/reenviar
+      const res = await api.post(`/documents/${selectedDoc.id}/reenviar`, {
         tipo: "VISADO",
       });
       const data = res.data;
-      alert(data?.message || "Recordatorio de visado reenviado");
+      alert(data?.message || "Recordatorio de visado reenviado correctamente");
     } catch (err) {
+      console.error("Error reenviando visado:", err);
       const msg =
         err.response?.data?.message ||
         err.message ||
@@ -139,13 +145,16 @@ export function DetailView({
     if (!selectedDoc || !signerId) return;
     try {
       setReenviarSignerId(signerId);
-      const res = await api.post(`/docs/${selectedDoc.id}/reenviar`, {
+
+      // Ruta real backend: POST /api/documents/:id/reenviar
+      const res = await api.post(`/documents/${selectedDoc.id}/reenviar`, {
         tipo: "FIRMA",
         signerId,
       });
       const data = res.data;
-      alert(data?.message || "Recordatorio de firma reenviado");
+      alert(data?.message || "Recordatorio de firma reenviado correctamente");
     } catch (err) {
+      console.error("Error reenviando firma:", err);
       const msg =
         err.response?.data?.message ||
         err.message ||
@@ -160,10 +169,15 @@ export function DetailView({
     if (!selectedDoc) return;
     try {
       setRecordatorioLoading(true);
-      const res = await api.post(`/docs/${selectedDoc.id}/recordatorio`);
+
+      // Ruta real backend: POST /api/documents/:id/recordatorio
+      const res = await api.post(
+        `/documents/${selectedDoc.id}/recordatorio`
+      );
       const data = res.data;
       alert(`✅ ${data?.message || "Recordatorio enviado"}`);
     } catch (err) {
+      console.error("Error enviando recordatorio a todos:", err);
       const msg =
         err.response?.data?.message ||
         err.message ||
@@ -174,9 +188,11 @@ export function DetailView({
     }
   }
 
+  /* ========= URLs de descarga / visualización ========= */
+
   const baseUrl = api.defaults.baseURL || "";
   const downloadUrl = selectedDoc
-    ? `${baseUrl}/docs/${selectedDoc.id}/download`
+    ? `${baseUrl}/documents/${selectedDoc.id}/download`
     : null;
 
   const numeroInterno =
@@ -197,27 +213,32 @@ export function DetailView({
       <aside className="detail-sidebar">
         <h2 className="detail-sidebar-header">VeriFirma</h2>
 
-        <div
+        <button
+          type="button"
           className="nav-item"
           onClick={() => {
             setView("list");
             setSelectedDoc(null);
           }}
         >
-          <span>⬅️</span> Volver a la Bandeja
-        </div>
+          <span>⬅️</span> Volver a la bandeja
+        </button>
 
-        <div className="nav-item detail-sidebar-footer" onClick={logout}>
-          <span>🚪</span> Cerrar Sesión
-        </div>
+        <button
+          type="button"
+          className="nav-item detail-sidebar-footer"
+          onClick={logout}
+        >
+          <span>🚪</span> Cerrar sesión
+        </button>
       </aside>
 
       <main className="main-area">
         <header className="detail-topbar">
           <span className="detail-topbar-title">
-            Revisión de Documento{" "}
-            {numeroInterno ? `(${numeroInterno})` : `#${selectedDoc.id}`} - Estado{" "}
-            {selectedDoc.status}
+            Revisión de documento{" "}
+            {numeroInterno ? `(${numeroInterno})` : `#${selectedDoc.id}`} ·
+            Estado {selectedDoc.status}
           </span>
           <span className="detail-topbar-user">
             Hola, <span>{displayName}</span>
@@ -233,8 +254,8 @@ export function DetailView({
             <div className="detail-meta">
               <p>
                 N° interno:{" "}
-                <strong>{numeroInterno || `#${selectedDoc.id}`}</strong> · Estado:{" "}
-                <strong>{selectedDoc.status}</strong>
+                <strong>{numeroInterno || `#${selectedDoc.id}`}</strong> ·
+                Estado: <strong>{selectedDoc.status}</strong>
               </p>
               <p>
                 Tipo de trámite:{" "}
@@ -277,7 +298,7 @@ export function DetailView({
                   >
                     {recordatorioLoading
                       ? "Enviando recordatorio..."
-                      : "🔔 Enviar recordatorio"}
+                      : "🔔 Recordatorio a todos"}
                   </button>
                 )}
 
@@ -289,7 +310,7 @@ export function DetailView({
                     disabled={reenviarLoadingVisado}
                   >
                     {reenviarLoadingVisado
-                      ? "Reenviando..."
+                      ? "Reenviando visado..."
                       : "Reenviar visado"}
                   </button>
                 )}
@@ -310,7 +331,7 @@ export function DetailView({
                     rel="noopener noreferrer"
                     className="btn-main detail-btn-view"
                   >
-                    👁️ Ver PDF
+                    👁️ Ver PDF"
                   </a>
                 )}
               </div>
@@ -381,7 +402,7 @@ export function DetailView({
                 <Timeline timeline={timeline} />
               ) : (
                 <div className="detail-timeline-empty">
-                  No hay datos de progreso disponibles
+                  No hay datos de progreso disponibles.
                 </div>
               )}
             </div>

@@ -1,9 +1,5 @@
 // backend/controllers/documents/report.js
-const {
-  db,
-  getSignedUrl,
-  computeHash,
-} = require("./common");
+const { db, getSignedUrl, computeHash } = require("./common");
 const { PDFDocument, rgb } = require("pdf-lib");
 const axios = require("axios");
 const { logAudit } = require("../../utils/auditLog");
@@ -15,11 +11,13 @@ async function downloadDocument(req, res) {
   try {
     const id = req.params.id;
 
-    // Si la ruta está protegida con requireAuth, aquí tienes req.user; si no, solo filtras por id.
+    if (!id) {
+      return res.status(400).json({ message: "ID de documento requerido" });
+    }
+
     const params = [id];
     let where = "id = $1";
 
-    // Si quieres limitar por empresa cuando hay usuario autenticado:
     if (req.user && req.user.company_id) {
       params.push(req.user.company_id);
       where += " AND company_id = $2";
@@ -52,14 +50,10 @@ async function downloadDocument(req, res) {
 
     const buffer = Buffer.from(fileResponse.data);
 
-    // Verificación de integridad si hay hash guardado
     if (doc.pdf_hash) {
       const currentHash = computeHash(buffer);
       if (currentHash !== doc.pdf_hash) {
-        console.error(
-          "❌ Hash de PDF no coincide para documento",
-          doc.id
-        );
+        console.error("❌ Hash de PDF no coincide para documento", doc.id);
 
         await logAudit({
           user: req.user || null,
@@ -69,6 +63,7 @@ async function downloadDocument(req, res) {
           metadata: {
             stored_hash: doc.pdf_hash,
             current_hash: currentHash,
+            file_path: doc.file_path,
           },
           req,
         });
@@ -116,7 +111,7 @@ async function getDocumentAnalytics(req, res) {
       [userId]
     );
 
-    const stats = docsRes.rows[0];
+    const stats = docsRes.rows[0] || {};
 
     const eventsRes = await db.query(
       `SELECT 
@@ -135,23 +130,21 @@ async function getDocumentAnalytics(req, res) {
 
     const timeline = eventsRes.rows;
 
+    const total = Number(stats.total || 0);
+    const firmados = Number(stats.firmados || 0);
+    const rechazados = Number(stats.rechazados || 0);
+    const pendientes = Number(stats.pendientes || 0);
+
     return res.json({
       summary: {
-        total: Number(stats.total || 0),
-        firmados: Number(stats.firmados || 0),
-        rechazados: Number(stats.rechazados || 0),
-        pendientes: Number(stats.pendientes || 0),
+        total,
+        firmados,
+        rechazados,
+        pendientes,
         tasa_firma_pct:
-          stats.total > 0
-            ? ((Number(stats.firmados) / Number(stats.total)) * 100).toFixed(1)
-            : 0,
+          total > 0 ? ((firmados / total) * 100).toFixed(1) : 0,
         tasa_rechazo_pct:
-          stats.total > 0
-            ? (
-                (Number(stats.rechazados) / Number(stats.total)) *
-                100
-              ).toFixed(1)
-            : 0,
+          total > 0 ? ((rechazados / total) * 100).toFixed(1) : 0,
         horas_promedio: stats.horas_promedio_firma
           ? parseFloat(stats.horas_promedio_firma).toFixed(1)
           : "N/A",

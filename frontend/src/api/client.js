@@ -1,24 +1,24 @@
 // src/api/client.js
 import axios from "axios";
 
-// Base URL de la API: prod usa VITE_API_URL, dev usa localhost
 const getApiBaseUrl = () => {
   const raw = import.meta.env.VITE_API_URL;
+
   if (raw && raw.trim()) {
-    return raw.replace(/\/+$/, "");
+    return raw.replace(/\/+$/, ""); // quita barras finales
   }
-  return "http://localhost:3000/api";
+
+  return "http://localhost:4000/api";
 };
 
 const API_BASE_URL = getApiBaseUrl();
 
-// Log único en producción para depuración
-if (!import.meta.env.DEV) {
+if (import.meta.env.DEV) {
   console.log("[API] Base URL:", API_BASE_URL);
 }
 
 const api = axios.create({
-  baseURL: API_BASE_URL,
+  baseURL: API_BASE_URL, // ej: http://localhost:4000/api
   timeout: 30000,
   withCredentials: false,
 });
@@ -36,9 +36,7 @@ const clearSessionAndRedirect = () => {
   try {
     localStorage.removeItem("token");
     localStorage.removeItem("user");
-  } catch {
-    // Ignorar errores de storage
-  }
+  } catch {}
   window.location.href = "/login";
 };
 

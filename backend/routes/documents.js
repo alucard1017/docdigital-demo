@@ -6,6 +6,15 @@ const { requireAuth } = require("./auth");
 const { upload, handleMulterError } = require("../middlewares/uploadPdf");
 const documentsController = require("../controllers/documents");
 const {
+  resendReminder,
+  sendAutomaticReminders,
+} = require("../controllers/documents/reminders");
+const {
+  downloadDocument,
+  downloadReportPdf,
+  getDocumentAnalytics,
+} = require("../controllers/documents/report");
+const {
   logAudit,
   buildDocumentAuditMetadata,
 } = require("../utils/auditLog");
@@ -195,12 +204,13 @@ function withDocumentAudit(action) {
 }
 
 /* ================================
-   RUTAS GET - ESPECÍFICAS (SIN PARÁMETROS)
+   RUTAS GET - ESPECÍFICAS (SIN ID)
    ================================ */
 
 router.get("/stats", requireAuth, documentsController.getDocumentStats);
 
-router.get("/analytics", requireAuth, documentsController.getDocumentAnalytics);
+// Usamos la versión de analytics del controlador dedicado (report.js)
+router.get("/analytics", requireAuth, getDocumentAnalytics);
 
 router.get("/export/excel", requireAuth, async (req, res) => {
   try {
@@ -228,6 +238,10 @@ router.get("/export/excel", requireAuth, async (req, res) => {
   }
 });
 
+/* ================================
+   RUTAS GET - AUDITORÍA LEGACY
+   ================================ */
+
 router.get("/audit", requireAuth, async (req, res) => {
   try {
     const { documento_id, usuario_id, evento_tipo, limit = 100 } = req.query;
@@ -236,13 +250,21 @@ router.get("/audit", requireAuth, async (req, res) => {
     const where = [];
 
     if (documento_id) {
-      values.push(Number(documento_id));
-      where.push(`documento_id = $${values.length}`);
+      const docIdNum = Number(documento_id);
+      if (!Number.isNaN(docIdNum)) {
+        values.push(docIdNum);
+        where.push(`documento_id = $${values.length}`);
+      }
     }
+
     if (usuario_id) {
-      values.push(Number(usuario_id));
-      where.push(`usuario_id = $${values.length}`);
+      const userIdNum = Number(usuario_id);
+      if (!Number.isNaN(userIdNum)) {
+        values.push(userIdNum);
+        where.push(`usuario_id = $${values.length}`);
+      }
     }
+
     if (evento_tipo) {
       values.push(evento_tipo);
       where.push(`evento_tipo = $${values.length}`);
@@ -250,7 +272,8 @@ router.get("/audit", requireAuth, async (req, res) => {
 
     const whereSql = where.length ? `WHERE ${where.join(" AND ")}` : "";
 
-    values.push(Number(limit));
+    const safeLimit = Math.min(Number(limit) || 100, 1000);
+    values.push(safeLimit);
     const limitIndex = values.length;
 
     const result = await db.query(
@@ -292,9 +315,14 @@ router.post(
   requireAuth,
   upload.single("file"),
   handleMulterError,
+  withDocumentAudit("DOCUMENT_CREATED"),
   documentsController.createDocument
 );
 
+/**
+ * Recordatorios automáticos (por usuario).
+ * Ruta real: POST /api/documents/recordatorios-automaticos
+ */
 router.post(
   "/recordatorios-automaticos",
   requireAuth,
@@ -308,304 +336,25 @@ router.post(
     }
     return next();
   },
-  documentsController.sendAutomaticReminders
+  sendAutomaticReminders
 );
 
 /* ================================
-   RUTAS DE FLUJO (TABLA documentos / firmantes)
+   RUTAS DE FLUJO
    ================================ */
 
-router.post("/crear-flujo", requireAuth, async (req, res) => {
-  console.log("DEBUG crear-flujo body >>>", req.body);
+router.post("/crear-flujo", requireAuth, documentsController.createFlow);
 
-  const { tipo, titulo, categoriaFirma, firmantes } = req.body;
+router.post("/enviar-flujo/:id", requireAuth, documentsController.sendFlow);
 
-  if (!tipo || !titulo || !categoriaFirma || !Array.isArray(firmantes)) {
-    return res.status(400).json({ error: "Datos incompletos" });
-  }
-
-  try {
-    await db.query("BEGIN");
-
-    const codigoVerificacion = crypto.randomUUID().slice(0, 8);
-
-    const docResult = await db.query(
-      `INSERT INTO documentos (
-         tipo,
-         titulo,
-         estado,
-         hash_pdf,
-         codigo_verificacion,
-         categoria_firma,
-         creado_por,
-         company_id,
-         created_at,
-         updated_at
-       )
-       VALUES ($1, $2, 'BORRADOR', NULL, $3, $4, $5, $6, NOW(), NOW())
-       RETURNING *`,
-      [
-        tipo,
-        titulo,
-        codigoVerificacion,
-        categoriaFirma,
-        req.user.id,
-        req.user.company_id,
-      ]
-    );
-
-    const documento = docResult.rows[0];
-
-    Sentry.setContext("document", {
-      id: documento.id,
-      title: documento.titulo,
-      status: documento.estado,
-      owner_id: documento.creado_por,
-      verification_code: documento.codigo_verificacion,
-      company_id: documento.company_id,
-    });
-
-    for (const [index, f] of firmantes.entries()) {
-      await db.query(
-        `INSERT INTO firmantes (
-           documento_id,
-           nombre,
-           email,
-           rut,
-           rol,
-           orden_firma,
-           created_at,
-           updated_at
-         )
-         VALUES ($1, $2, $3, $4, $5, $6, NOW(), NOW())`,
-        [
-          documento.id,
-          f.nombre,
-          f.email,
-          f.rut || null,
-          f.rol || null,
-          f.ordenFirma ?? index + 1,
-        ]
-      );
-    }
-
-    await db.query(
-      `INSERT INTO eventos_firma (
-         documento_id,
-         tipo_evento,
-         metadata,
-         created_at
-       )
-       VALUES ($1, 'CREADO', $2, NOW())`,
-      [
-        documento.id,
-        JSON.stringify({ fuente: "API", creado_por: req.user.id }),
-      ]
-    );
-
-    await db.query("COMMIT");
-
-    const metadata = buildDocumentAuditMetadata({
-      documentId: documento.id,
-      title: documento.titulo,
-      status: documento.estado,
-      companyId: documento.company_id,
-      extra: {
-        categoria_firma: documento.categoria_firma,
-        firmantes: firmantes.length,
-      },
-    });
-
-    logAudit({
-      user: req.user,
-      action: "document_flow_created",
-      entityType: "document",
-      entityId: documento.id,
-      metadata,
-      req,
-    });
-
-    return res.status(201).json({
-      documentoId: documento.id,
-      codigoVerificacion,
-      message: "Flujo de documento creado exitosamente",
-    });
-  } catch (error) {
-    await db.query("ROLLBACK");
-    console.error("❌ Error creando flujo de documento:", error);
-    return res.status(500).json({ error: "Error creando flujo de documento" });
-  }
-});
-
-router.post("/firmar-flujo/:firmanteId", async (req, res) => {
-  const { firmanteId } = req.params;
-
-  try {
-    await db.query("BEGIN");
-
-    const firmanteRes = await db.query(
-      `SELECT
-         f.*,
-         d.id     AS documento_id,
-         d.estado AS documento_estado,
-         d.titulo,
-         d.company_id
-       FROM firmantes f
-       JOIN documentos d ON d.id = f.documento_id
-       WHERE f.id = $1`,
-      [firmanteId]
-    );
-
-    if (firmanteRes.rowCount === 0) {
-      await db.query("ROLLBACK");
-      return res.status(404).json({ error: "Firmante no encontrado" });
-    }
-
-    const firmante = firmanteRes.rows[0];
-
-    Sentry.setContext("document", {
-      id: firmante.documento_id,
-      title: firmante.titulo,
-      status: firmante.documento_estado,
-    });
-    Sentry.setContext("firmante", {
-      id: firmante.id,
-      nombre: firmante.nombre,
-      email: firmante.email,
-      estado: firmante.estado,
-      orden_firma: firmante.orden_firma,
-    });
-
-    if (firmante.estado === "FIRMADO") {
-      await db.query("ROLLBACK");
-      return res.status(400).json({ error: "Este firmante ya firmó" });
-    }
-
-    if (firmante.estado === "RECHAZADO") {
-      await db.query("ROLLBACK");
-      return res
-        .status(400)
-        .json({ error: "Este firmante rechazó el documento" });
-    }
-
-    await db.query(
-      `UPDATE firmantes
-       SET estado = 'FIRMADO',
-           fecha_firma = NOW(),
-           tipo_firma = 'SIMPLE',
-           updated_at = NOW()
-       WHERE id = $1`,
-      [firmanteId]
-    );
-
-    await db.query(
-      `INSERT INTO eventos_firma (
-         documento_id,
-         firmante_id,
-         tipo_evento,
-         ip,
-         user_agent,
-         metadata,
-         created_at
-       )
-       VALUES ($1, $2, 'FIRMADO', $3, $4, $5, NOW())`,
-      [
-        firmante.documento_id,
-        firmanteId,
-        req.ip || null,
-        req.headers["user-agent"] || null,
-        JSON.stringify({ fuente: "API", via: "firmar-flujo" }),
-      ]
-    );
-
-    const countRes = await db.query(
-      `SELECT
-         COUNT(*) FILTER (WHERE estado = 'FIRMADO') AS firmados,
-         COUNT(*) AS total
-       FROM firmantes
-       WHERE documento_id = $1`,
-      [firmante.documento_id]
-    );
-
-    const { firmados, total } = countRes.rows[0];
-    const firmadosNum = Number(firmados);
-    const totalNum = Number(total);
-    const allSigned = firmadosNum >= totalNum;
-
-    if (allSigned) {
-      await db.query(
-        `UPDATE documentos
-         SET estado = 'FIRMADO',
-             updated_at = NOW()
-         WHERE id = $1`,
-        [firmante.documento_id]
-      );
-
-      await db.query(
-        `INSERT INTO eventos_firma (
-           documento_id,
-           tipo_evento,
-           metadata,
-           created_at
-         )
-         VALUES ($1, 'DOCUMENTO_FIRMADO_COMPLETO', $2, NOW())`,
-        [
-          firmante.documento_id,
-          JSON.stringify({
-            descripcion: "Todos los firmantes han firmado",
-            firmados: firmadosNum,
-            total: totalNum,
-          }),
-        ]
-      );
-    }
-
-    await db.query("COMMIT");
-
-    const metadata = buildDocumentAuditMetadata({
-      documentId: firmante.documento_id,
-      title: firmante.titulo,
-      status: allSigned ? "FIRMADO" : firmante.documento_estado,
-      companyId: firmante.company_id || null,
-      extra: {
-        firmante_id: firmante.id,
-        firmante_email: firmante.email,
-        all_signed: allSigned,
-        progress: `${((firmadosNum / totalNum) * 100).toFixed(1)}%`,
-      },
-    });
-
-    logAudit({
-      user: null,
-      action: "document_flow_signed",
-      entityType: "document",
-      entityId: firmante.documento_id,
-      metadata,
-      req,
-    });
-
-    return res.json({
-      mensaje: allSigned
-        ? "Firma registrada y documento completado"
-        : "Firma registrada. Faltan firmantes",
-      documentoId: firmante.documento_id,
-      allSigned,
-      progress: ((firmadosNum / totalNum) * 100).toFixed(1) + "%",
-    });
-  } catch (error) {
-    await db.query("ROLLBACK");
-    console.error("❌ Error firmando flujo de documento:", error);
-    return res
-      .status(500)
-      .json({ error: "Error firmando flujo de documento" });
-  }
-});
+router.post("/firmar-flujo/:firmanteId", documentsController.signFlow);
 
 /* ================================
-   RUTAS GET - CON PARÁMETROS (:id/...)
+   RUTAS GET - CON :id
    ================================ */
 
 router.get("/:id/pdf", documentsController.getDocumentPdf);
+
 router.get("/:id/timeline", documentsController.getTimeline);
 
 router.get(
@@ -615,24 +364,32 @@ router.get(
   documentsController.getSigners
 );
 
-router.get("/:id/download", documentsController.downloadDocument);
+/**
+ * Descargar PDF original del documento.
+ * Ruta real: GET /api/documents/:id/download
+ */
+router.get("/:id/download", downloadDocument);
 
+/**
+ * Descargar reporte PDF con detalles.
+ * Ruta real: GET /api/documents/:id/reporte
+ */
 router.get(
   "/:id/reporte",
   requireAuth,
   checkDocumentCompanyScope,
-  documentsController.downloadReportPdf
+  downloadReportPdf
 );
 
 /* ================================
-   RUTAS POST - CON PARÁMETROS (:id/...)
+   RUTAS POST - CON :id
    ================================ */
 
 router.post(
   "/:id/firmar",
   requireAuth,
   checkDocumentCompanyScope,
-  withDocumentAudit("document_signed"),
+  withDocumentAudit("DOCUMENT_SIGNED"),
   documentsController.signDocument
 );
 
@@ -640,7 +397,7 @@ router.post(
   "/:id/visar",
   requireAuth,
   checkDocumentCompanyScope,
-  withDocumentAudit("document_visado"),
+  withDocumentAudit("DOCUMENT_VISADO"),
   documentsController.visarDocument
 );
 
@@ -648,17 +405,25 @@ router.post(
   "/:id/rechazar",
   requireAuth,
   checkDocumentCompanyScope,
-  withDocumentAudit("document_rejected"),
+  withDocumentAudit("DOCUMENT_REJECTED"),
   documentsController.rejectDocument
 );
 
+/**
+ * Reenviar recordatorio (visado o firma).
+ * Ruta real: POST /api/documents/:id/reenviar
+ */
 router.post(
   "/:id/reenviar",
   requireAuth,
   checkDocumentCompanyScope,
-  documentsController.resendReminder
+  resendReminder
 );
 
+/**
+ * Recordatorio manual “a todos” para un documento concreto.
+ * Ruta real: POST /api/documents/:id/recordatorio
+ */
 router.post(
   "/:id/recordatorio",
   requireAuth,
@@ -667,7 +432,8 @@ router.post(
     try {
       const id = Number(req.params.id);
 
-      const { enviarRecordatorioManual } = require("../services/reminderService");
+      const { enviarRecordatorioManual } =
+        require("../services/reminderService");
       const result = await enviarRecordatorioManual(id);
 
       const metadata = buildDocumentAuditMetadata({
@@ -683,7 +449,7 @@ router.post(
 
       logAudit({
         user: req.user,
-        action: "document_reminder_manual",
+        action: "DOCUMENT_REMINDER_MANUAL",
         entityType: "document",
         entityId: id,
         metadata,

@@ -6,4 +6,5 @@ module.exports = {
   ...require('./reminders'),
   ...require('./report'),
   ...require('./stats'),
+  ...require("./flow"),
 };

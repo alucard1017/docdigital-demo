@@ -4,15 +4,15 @@ import { resolve } from 'path';
 
 export default defineConfig({
   plugins: [react()],
+  base: '/',
   build: {
     outDir: 'dist',
     assetsDir: 'assets',
     rollupOptions: {
       input: {
         main: resolve(__dirname, 'index.html'),
-        verificar: resolve(__dirname, 'verificar.html'),
-      },
-    },
-  },
-  base: '/',
+        verificar: resolve(__dirname, 'verificar.html')
+      }
+    }
+  }
 });
