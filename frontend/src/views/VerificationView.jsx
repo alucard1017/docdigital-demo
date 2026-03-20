@@ -258,7 +258,7 @@ export function VerificationView({ API_URL }) {
               marginTop: 8,
               padding: 20,
               borderRadius: 16,
-              border: "1px solid "#e5e7eb",
+              border: "1px solid #e5e7eb",
               background: "#f9fafb",
             }}
           >
