@@ -1,125 +1,21 @@
 // backend/services/emailService.js
-const nodemailer = require("nodemailer");
 const QRCode = require("qrcode");
 const crypto = require("crypto");
+const { sendEmailHttp } = require("./brevoHttp");
 const { uploadBufferToS3, getSignedUrl } = require("./storageR2");
 
-console.log("📬 [EMAIL] Cargando emailService.js (SMTP Brevo)");
+console.log("📬 [EMAIL] Cargando emailService.js (Brevo API HTTP)");
 
-// Config SMTP desde .env
-const SMTP_HOST = process.env.SMTP_HOST;
-const SMTP_PORT = Number(process.env.SMTP_PORT) || 587;
-const SMTP_USER = process.env.SMTP_USER;
-const SMTP_PASS = process.env.SMTP_PASS;
-const SENDER_EMAIL = process.env.SMTP_FROM_EMAIL;
-const SENDER_NAME = process.env.SMTP_FROM_NAME || "VeriFirma";
-
-// URL pública fija de verificación de documentos
 const PUBLIC_VERIFY_BASE_URL =
   process.env.PUBLIC_VERIFY_URL || "https://app.verifirma.cl/verificar";
 
-// URL del dashboard interno (para que el emisor vea detalles del rechazo)
 const DASHBOARD_BASE_URL =
   process.env.DASHBOARD_URL || "https://app.verifirma.cl";
-
-// DEBUG: ver qué llega desde .env
-console.log("🔎 [EMAIL] DEBUG SMTP:", {
-  SMTP_HOST,
-  SMTP_PORT,
-  SMTP_USER: SMTP_USER ? "[OK]" : "[FALTA]",
-  SMTP_PASS: SMTP_PASS ? "[OK]" : "[FALTA]",
-  SENDER_EMAIL: SENDER_EMAIL || "[FALTA]",
-  SENDER_NAME,
-});
-
-if (!SMTP_HOST || !SMTP_USER || !SMTP_PASS || !SENDER_EMAIL) {
-  console.warn(
-    "⚠️ [EMAIL] Faltan variables SMTP_* o SMTP_FROM_EMAIL",
-    {
-      SMTP_HOST: !!SMTP_HOST,
-      SMTP_USER: !!SMTP_USER,
-      SMTP_PASS: !!SMTP_PASS,
-      SENDER_EMAIL: !!SENDER_EMAIL,
-    }
-  );
-}
-
-// Transporter Nodemailer con Mailtrap SMTP sandbox
-const transporter = nodemailer.createTransport({
-  host: SMTP_HOST,
-  port: SMTP_PORT,
-  auth: {
-    user: SMTP_USER,
-    pass: SMTP_PASS,
-  },
-});
 
 /* ================================
    Utilidades
    ================================ */
 
-/**
- * Enviar email genérico HTML vía SMTP
- */
-function sleep(ms) {
-  return new Promise((resolve) => setTimeout(resolve, ms));
-}
-
-/**
- * Enviar email genérico HTML vía SMTP (con throttle)
- */
-async function sendEmail({ to, subject, html }) {
-  if (!SMTP_HOST || !SMTP_USER || !SMTP_PASS || !SENDER_EMAIL) {
-    console.error("❌ [EMAIL] SMTP no configurado correctamente");
-    return false;
-  }
-
-  try {
-    console.log("📬 [EMAIL] Enviando email (SMTP):", { to, subject });
-
-    const info = await transporter.sendMail({
-      from: `"${SENDER_NAME}" <${SENDER_EMAIL}>`,
-      to,
-      subject,
-      html,
-    });
-
-    console.log("✅ [EMAIL] Enviado OK (SMTP):", info.messageId);
-    return true;
-  } catch (error) {
-    const msg = String(error?.message || "");
-    console.error("❌ [EMAIL] Error enviando email (SMTP):", msg);
-
-    // Si Mailtrap devuelve "Too many emails per second", reintenta una vez
-    if (msg.includes("Too many emails per second")) {
-      console.warn("⏳ [EMAIL] Throttling: reintentando en 1500ms...");
-      await sleep(1500);
-      try {
-	const info = await transporter.sendMail({
-	  from: `"${SENDER_NAME}" <${SENDER_EMAIL}>`,
-	  to,
-	  subject,
-	  html,
-	});
-
-	// Log más detallado
-	console.log("✅ [EMAIL] Enviado OK (SMTP):", {
-	  messageId: info.messageId,
-	  response: info.response,
-	  envelope: info.envelope,
-	});
-      } catch (err2) {
-        console.error("❌ [EMAIL] Reintento falló:", err2.message);
-      }
-    }
-
-    return false;
-  }
-}
-
-/**
- * Genera un PNG de QR, lo sube a R2 y devuelve una URL firmada
- */
 async function generateQrImageUrl(targetUrl) {
   if (!targetUrl) return "";
 
@@ -133,7 +29,6 @@ async function generateQrImageUrl(targetUrl) {
     const key = `qrs/email-${crypto.randomUUID()}.png`;
     await uploadBufferToS3(key, buffer, "image/png");
 
-    // URL firmada por 7 días
     const url = await getSignedUrl(key, 7 * 24 * 3600);
     return url;
   } catch (err) {
@@ -142,9 +37,20 @@ async function generateQrImageUrl(targetUrl) {
   }
 }
 
-/**
- * CSS base reutilizable para todos los templates
- */
+// Wrapper genérico para enviar HTML usando Brevo HTTP
+async function sendEmail({ to, subject, html }) {
+  console.log("📬 [EMAIL] Enviando email (Brevo HTTP):", { to, subject });
+  const ok = await sendEmailHttp({ to, subject, html });
+  if (!ok) {
+    console.error("❌ [EMAIL] Falló el envío (Brevo HTTP)");
+  }
+  return ok;
+}
+
+/* ================================
+   CSS base para todos los templates
+   ================================ */
+
 const baseStyles = `
   body {
     font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
@@ -369,9 +275,6 @@ const baseStyles = `
    Templates
    ================================ */
 
-/**
- * Invitación a FIRMAR documento
- */
 async function sendSigningInvitation(
   email,
   docTitle,
@@ -491,9 +394,6 @@ async function sendSigningInvitation(
   return sendEmail({ to: email, subject, html });
 }
 
-/**
- * Invitación a VISAR documento
- */
 async function sendVisadoInvitation(
   email,
   docTitle,
@@ -561,9 +461,6 @@ async function sendVisadoInvitation(
   return sendEmail({ to: email, subject, html });
 }
 
-/**
- * Notificación al EMISOR cuando un documento es RECHAZADO
- */
 async function sendRejectionNotification(
   emisorEmail,
   emisorName = "",
@@ -643,9 +540,6 @@ async function sendRejectionNotification(
   return sendEmail({ to: emisorEmail, subject, html });
 }
 
-/**
- * Recordatorio automático (7 días sin actividad)
- */
 async function sendReminder(
   email,
   docTitle,
@@ -653,7 +547,9 @@ async function sendReminder(
   recipientName = "",
   tipo = "FIRMA"
 ) {
-  const subject = `Recordatorio: ${tipo === "VISADO" ? "Visar" : "Firmar"} documento "${docTitle}"`;
+  const subject = `Recordatorio: ${
+    tipo === "VISADO" ? "Visar" : "Firmar"
+  } documento "${docTitle}"`;
 
   const html = `
     <!DOCTYPE html>
@@ -674,7 +570,9 @@ async function sendReminder(
           <div class="content">
             <p>Hola ${recipientName ? `<strong>${recipientName}</strong>` : ""},</p>
             <p>
-              Te recordamos que tienes pendiente ${tipo === "VISADO" ? "visar" : "firmar"} 
+              Te recordamos que tienes pendiente ${
+                tipo === "VISADO" ? "visar" : "firmar"
+              } 
               el siguiente documento:
             </p>
 
@@ -690,7 +588,9 @@ async function sendReminder(
           <div class="info-box warning">
             <h4>⏰ Acción pendiente</h4>
             <p>
-              Este documento lleva varios días esperando tu ${tipo === "VISADO" ? "visación" : "firma"}. 
+              Este documento lleva varios días esperando tu ${
+                tipo === "VISADO" ? "visación" : "firma"
+              }. 
               Por favor, revisa el contenido y completa la acción a la brevedad.
             </p>
           </div>
@@ -712,16 +612,10 @@ async function sendReminder(
   return sendEmail({ to: email, subject, html });
 }
 
-/**
- * Notificación genérica HTML
- */
 async function sendNotification(email, subject, html) {
   return sendEmail({ to: email, subject, html });
 }
 
-/**
- * Notificación INFORMATIVA al destinatario (NO puede firmar, solo informar)
- */
 async function sendDestinationNotification(
   email,
   docTitle,
@@ -827,4 +721,4 @@ module.exports = {
   sendReminder,
   sendNotification,
   sendDestinationNotification,
-};            
+};
