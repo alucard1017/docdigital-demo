@@ -127,6 +127,23 @@ function App() {
   // API raíz ya normalizada desde constants.js (termina en /api, sin /api/api)
   const apiRoot = API_BASE_URL;
 
+  // Cargar URL de PDF para la vista de detalle
+  useEffect(() => {
+    if (!selectedDoc?.id) {
+      setPdfUrl(null);
+      return;
+    }
+
+    try {
+      const baseUrl = api.defaults.baseURL || API_BASE_URL;
+      const url = `${baseUrl}/documents/${selectedDoc.id}/download`;
+      setPdfUrl(url);
+    } catch (err) {
+      console.error("Error preparando URL de PDF:", err);
+      setPdfUrl(null);
+    }
+  }, [selectedDoc?.id]);
+
   /* =============================== */
   /* FIRMA / VISADO PÚBLICO          */
   /* =============================== */
