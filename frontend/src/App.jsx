@@ -124,7 +124,16 @@ function App() {
   const [firmanteRunValue, setFirmanteRunValue] = useState("");
   const [empresaRutValue, setEmpresaRutValue] = useState("");
 
-  const apiRoot = API_BASE_URL.replace(/\/+$/, "");
+// Normalizar API_BASE_URL:
+// - quitar / finales
+// - asegurar que termina con /api
+// - nunca permitir /api/api
+const apiRoot = (() => {
+  let base = (API_BASE_URL || "").replace(/\/+$/, "");
+  base = base.replace(/\/api\/api$/, "/api");
+  if (base.endsWith("/api")) return base;
+  return `${base}/api`;
+})();
 
   /* =============================== */
   /* FIRMA / VISADO PÚBLICO          */
@@ -143,12 +152,12 @@ function App() {
         const isVisado = modeUrl === "visado";
         const isConsultaPublica = pathname === "/consulta-publica";
 
-        const path =
-          isVisado || isConsultaPublica
-            ? `/api/public/docs/document/${tokenParam}`
-            : `/api/public/docs/${tokenParam}`;
+	const path =
+	  isVisado || isConsultaPublica
+	    ? `/public/docs/document/${tokenParam}`
+	    : `/public/docs/${tokenParam}`;
 
-        const res = await fetch(`${apiRoot}${path}`);
+	const res = await fetch(`${apiRoot}${path}`);
         const data = await res.json();
 
         if (!res.ok) {
