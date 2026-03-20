@@ -73,10 +73,10 @@ app.use(
   helmet({
     contentSecurityPolicy: false,
     crossOriginEmbedderPolicy: false,
+    frameguard: false, // << permitir que otros orígenes embeban (PDF en iframe)
   })
 );
 app.use(helmet.hidePoweredBy());
-app.use(helmet.frameguard({ action: "sameorigin" }));
 app.use(helmet.noSniff());
 app.use(
   helmet.referrerPolicy({
