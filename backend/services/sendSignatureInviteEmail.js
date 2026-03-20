@@ -2,9 +2,8 @@
 
 const nodemailer = require("nodemailer");
 const QRCode = require("qrcode");
-require("dotenv").config();
 
-console.log("DEBUG EMAIL >> Cargando sendSignatureInviteEmail.js");
+console.log("📧 Cargando sendSignatureInviteEmail.js");
 
 const {
   SMTP_HOST,
@@ -13,8 +12,8 @@ const {
   SMTP_PASS,
   SMTP_FROM_EMAIL,
   SMTP_FROM_NAME,
-  FRONTEND_URL, // ej: https://docdigital-demo.vercel.app
-  PUBLIC_VERIFY_BASE_URL, // ej: https://docdigital-demo.vercel.app/verificar
+  FRONTEND_URL,          // ej: https://docdigital.vercel.app
+  PUBLIC_VERIFY_BASE_URL // ej: https://docdigital.vercel.app/verificar
 } = process.env;
 
 /* =========================
@@ -22,7 +21,7 @@ const {
    ========================= */
 
 if (!SMTP_HOST || !SMTP_PORT || !SMTP_USER || !SMTP_PASS || !SMTP_FROM_EMAIL) {
-  console.warn("DEBUG EMAIL >> Faltan variables SMTP:", {
+  console.warn("📧 [EMAIL] Faltan variables SMTP:", {
     SMTP_HOST: !!SMTP_HOST,
     SMTP_PORT: !!SMTP_PORT,
     SMTP_USER: !!SMTP_USER,
@@ -32,7 +31,7 @@ if (!SMTP_HOST || !SMTP_PORT || !SMTP_USER || !SMTP_PASS || !SMTP_FROM_EMAIL) {
 }
 
 if (!FRONTEND_URL || !PUBLIC_VERIFY_BASE_URL) {
-  console.warn("DEBUG EMAIL >> Faltan URLs de frontend:", {
+  console.warn("📧 [EMAIL] Faltan URLs de frontend:", {
     FRONTEND_URL: !!FRONTEND_URL,
     PUBLIC_VERIFY_BASE_URL: !!PUBLIC_VERIFY_BASE_URL,
   });
@@ -78,7 +77,7 @@ async function generateQrDataUrl(url) {
     });
     return dataUrl;
   } catch (err) {
-    console.error("DEBUG EMAIL >> error generando QR:", err.message);
+    console.error("📧 [EMAIL] Error generando QR:", err.message);
     return "";
   }
 }
@@ -98,22 +97,23 @@ async function sendSignatureInviteEmail({
   signer_email,
   signer_name,
   document_title,
-  signature_token, // token para firma pública
+  signature_token,   // token para firma pública
   verification_code, // ej: VF-2026-000008
 }) {
   const fromEmail = SMTP_FROM_EMAIL;
   const fromName = SMTP_FROM_NAME || "VeriFirma";
 
   if (!signer_email) {
-    console.error("DEBUG EMAIL >> signer_email requerido");
+    console.error("📧 [EMAIL] signer_email requerido");
     return false;
   }
 
   const frontendBase = normalizeBaseUrl(FRONTEND_URL);
-  const verifyBase = normalizeBaseUrl(PUBLIC_VERIFY_BASE_URL);
+  const verifyBaseEnv = PUBLIC_VERIFY_BASE_URL || "";
+  const verifyBase = normalizeBaseUrl(verifyBaseEnv);
 
-  // URL pública de firma en el frontend (Vercel)
-  // Ej: https://docdigital-demo.vercel.app/public/sign?token=...
+  // URL pública de firma en el frontend
+  // Ej: https://docdigital.vercel.app/public/sign?token=...
   const signUrl =
     frontendBase && signature_token
       ? `${frontendBase}/public/sign?token=${encodeURIComponent(
@@ -122,7 +122,7 @@ async function sendSignatureInviteEmail({
       : "";
 
   // URL pública de verificación por código
-  // Ej: https://docdigital-demo.vercel.app/verificar?code=...
+  // Ej: https://docdigital.vercel.app/verificar?code=VF-2026-000008
   const publicVerifyUrl =
     verifyBase && verification_code
       ? `${verifyBase}?code=${encodeURIComponent(verification_code)}`
@@ -270,7 +270,7 @@ async function sendSignatureInviteEmail({
   `;
 
   try {
-    console.log("DEBUG EMAIL >> preparando envío", {
+    console.log("📧 [EMAIL] Enviando invitación", {
       to: signer_email,
       subject,
       signUrl,
@@ -284,13 +284,10 @@ async function sendSignatureInviteEmail({
       html,
     });
 
-    console.log(
-      "DEBUG EMAIL >> enviado OK, messageId:",
-      info && info.messageId
-    );
+    console.log("📧 [EMAIL] Enviado OK, messageId:", info && info.messageId);
     return true;
   } catch (error) {
-    console.error("DEBUG EMAIL >> error enviando correo:", error.message);
+    console.error("📧 [EMAIL] Error enviando correo:", error.message);
     return false;
   }
 }

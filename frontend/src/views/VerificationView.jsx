@@ -9,6 +9,20 @@ export function VerificationView({ API_URL }) {
   const [result, setResult] = useState(null);
   const [error, setError] = useState("");
 
+  // Normaliza la API base: quita / al final y /api si viene duplicado
+  const getApiBase = () => {
+    const baseFromProp = API_URL || process.env.NEXT_PUBLIC_API_URL || "";
+    const trimmed = baseFromProp.replace(/\/+$/, ""); // sin / al final
+
+    // si ya viene con /api al final, lo usamos tal cual
+    if (trimmed.endsWith("/api")) return trimmed;
+
+    // si viene sin /api, lo agregamos
+    return `${trimmed}/api`;
+  };
+
+  const API_BASE = getApiBase();
+
   // Prellenar el código si viene en la URL ?code=...
   useEffect(() => {
     try {
@@ -31,7 +45,7 @@ export function VerificationView({ API_URL }) {
       return;
     }
 
-    if (!API_URL) {
+    if (!API_BASE) {
       setError("La URL del servicio de verificación no está configurada.");
       return;
     }
@@ -41,7 +55,8 @@ export function VerificationView({ API_URL }) {
     setResult(null);
 
     try {
-      const url = `${API_URL.replace(/\/+$/, "")}/api/public/verificar/${encodeURIComponent(
+      // IMPORTANTE: aquí ya no agregamos otro /api, solo /public/...
+      const url = `${API_BASE}/public/verificar/${encodeURIComponent(
         cleanCode
       )}`;
 
@@ -158,8 +173,8 @@ export function VerificationView({ API_URL }) {
           Verificación pública de documento
         </h1>
         <p style={{ color: "#6b7280", marginBottom: 24 }}>
-          Ingresa el código de verificación que aparece en el PDF o en el correo
-          de invitación para comprobar el estado actual del documento.
+          Ingresa el código de verificación que aparece en el PDF o en el
+          correo de invitación para comprobar el estado actual del documento.
         </p>
 
         <form
@@ -240,7 +255,7 @@ export function VerificationView({ API_URL }) {
               marginTop: 8,
               padding: 20,
               borderRadius: 16,
-              border: "1px solid #e5e7eb",
+              border: "1px solid "#e5e7eb",
               background: "#f9fafb",
             }}
           >
