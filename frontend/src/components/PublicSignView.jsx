@@ -1,328 +1,283 @@
 // src/views/PublicSignView.jsx
-import React, { useEffect, useMemo, useState } from "react";
-import { API_BASE_URL } from "../constants";
+import React, { useState } from "react";
 
-const API_URL = API_BASE_URL;
+export function PublicSignView({
+  publicSignLoading,
+  publicSignError,
+  publicSignDoc,      // { document, signer } o { document, signer: null }
+  publicSignPdfUrl,
+  publicSignToken,    // token de firma/visado
+  publicSignMode,     // "visado" o null
+  API_URL,            // https://verifirma-api.onrender.com/api
+  cargarFirmaPublica, // función que recarga datos de firma pública
+}) {
+  const isVisado = publicSignMode === "visado";
+  const pdfUrl = publicSignPdfUrl || "";
 
-function apiUrl(path) {
-  return `${API_URL}${path}`;
-}
+  const document = publicSignDoc?.document || null;
+  const signer = publicSignDoc?.signer || null;
 
-const STATUS_LABELS = {
-  BORRADOR: "Borrador",
-  EN_REVISION: "En revisión",
-  EN_FIRMA: "En firma",
-  FIRMADO: "Firmado",
-  RECHAZADO: "Rechazado",
-  EXPIRADO: "Expirado",
-};
+  const [showReject, setShowReject] = useState(false);
+  const [rejectReason, setRejectReason] = useState("");
+  const [rejecting, setRejecting] = useState(false);
+  const [rejectError, setRejectError] = useState("");
 
-export function PublicSignView({ token }) {
-  const [loading, setLoading] = useState(true);
-  const [doc, setDoc] = useState(null);          // incluye info de firmante actual
-  const [pdfUrl, setPdfUrl] = useState("");
-  const [error, setError] = useState("");
+  const [showLegal, setShowLegal] = useState(false);
   const [accepted, setAccepted] = useState(false);
   const [signing, setSigning] = useState(false);
-  const [showLegal, setShowLegal] = useState(false);
 
-  // Leer ?mode=visado desde la URL (permite forzar modo visador)
-  const [mode, setMode] = useState(null); // "visado" o null
-  useEffect(() => {
-    const params = new URLSearchParams(window.location.search);
-    const modeFromUrl = params.get("mode");
-    setMode(modeFromUrl || null);
-  }, []);
+  const alreadySignedByThisSigner =
+    !isVisado && signer && signer.status === "FIRMADO";
 
-  const isVisado = mode === "visado" || doc?.currentSigner?.role === "VISADOR";
+  const docFullySigned =
+    !isVisado && document && document.status === "FIRMADO";
 
-  const isDocumentSigned = useMemo(
-    () => doc?.document?.status === "FIRMADO",
-    [doc]
-  );
+  const docRejected = document && document.status === "RECHAZADO";
 
-  const isCurrentSignerSigned = useMemo(
-    () =>
-      doc?.currentSigner?.status === "FIRMADO" ||
-      doc?.currentSigner?.status === "RECHAZADO",
-    [doc]
-  );
+  const canActOnDocument =
+    document &&
+    !publicSignLoading &&
+    !publicSignError &&
+    !docFullySigned &&
+    !alreadySignedByThisSigner &&
+    !docRejected;
 
-  const isActionDisabled = isDocumentSigned || isCurrentSignerSigned;
+  const showSkeleton = publicSignLoading && !document && !publicSignError;
 
-  /* ================================
-     CARGA INICIAL DEL DOCUMENTO
-     ================================ */
+  function getDefaultErrorMessage() {
+    if (isVisado) return "No se pudo registrar el visado.";
+    return "No se pudo registrar la firma.";
+  }
 
-  useEffect(() => {
-    const fetchDoc = async () => {
-      setLoading(true);
-      setError("");
-
-      try {
-        const res = await fetch(apiUrl(`/public/docs/${token}`));
-        const data = await res.json();
-
-        if (!res.ok) {
-          throw new Error(
-            data.message || data.error || "No se pudo cargar el documento"
-          );
-        }
-
-        // Estructura esperada:
-        // {
-        //   document: { id, title, status, company_rut, company_name, destinatario_nombre, ... },
-        //   currentSigner: { id, name, email, role, status },
-        //   pdfUrl: "https://..."
-        // }
-        setDoc({
-          document: data.document,
-          currentSigner: data.currentSigner,
-        });
-        setPdfUrl(data.pdfUrl || "");
-      } catch (err) {
-        console.error("❌ Error cargando documento público:", err);
-        setError(
-          err.message || "Error inesperado al cargar el documento para firma."
-        );
-      } finally {
-        setLoading(false);
-      }
-    };
-
-    if (token) {
-      fetchDoc();
-    }
-  }, [token]);
-
-  /* ================================
-     MANEJO DE ACCIONES
-     ================================ */
-
-  const handlePrimaryClick = () => {
-    if (isActionDisabled) return;
-    setShowLegal(true);
-  };
-
-  const handleConfirm = async () => {
+  async function handleConfirm() {
     if (!accepted) {
       alert("Debes aceptar la declaración para continuar.");
       return;
     }
 
-    setSigning(true);
-    setError("");
-
     try {
+      setSigning(true);
       const actionPath = isVisado ? "visar" : "firmar";
 
-      const res = await fetch(apiUrl(`/public/docs/${token}/${actionPath}`), {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-      });
+      const res = await fetch(
+        `${API_URL}/public/docs/${publicSignToken}/${actionPath}`,
+        {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+        }
+      );
+
+      const data = await res.json();
+
+      if (!res.ok) {
+        throw new Error(data.message || getDefaultErrorMessage());
+      }
+
+      alert(
+        isVisado
+          ? "✅ Visado registrado correctamente."
+          : "✅ Firma registrada correctamente."
+      );
+
+      setShowLegal(false);
+      setAccepted(false);
+      await cargarFirmaPublica(publicSignToken);
+    } catch (err) {
+      alert(
+        "❌ " +
+          (err?.message ||
+            "Ocurrió un error al procesar la acción. Intenta nuevamente.")
+      );
+    } finally {
+      setSigning(false);
+    }
+  }
+
+  async function handleReject() {
+    try {
+      setRejectError("");
+
+      const motivo = (rejectReason || "").trim();
+      if (!motivo) {
+        setRejectError("Debes ingresar un motivo de rechazo.");
+        return;
+      }
+
+      setRejecting(true);
+
+      const res = await fetch(
+        `${API_URL}/public/docs/${publicSignToken}/rechazar`,
+        {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ motivo }),
+        }
+      );
 
       const data = await res.json();
 
       if (!res.ok) {
         throw new Error(
-          data.message ||
-            data.error ||
-            (isVisado
-              ? "No se pudo registrar el visado."
-              : "No se pudo firmar el documento.")
+          data.message || "No se pudo registrar el rechazo del documento."
         );
       }
 
-      // Notificación básica
-      alert(
-        isVisado
-          ? "Documento visado correctamente."
-          : "Documento firmado correctamente."
-      );
+      alert("✅ Documento rechazado correctamente.");
 
-      // Actualizar solo el firmante actual y, si viene desde backend, el estado del documento
-      setDoc((prev) => {
-        if (!prev) return prev;
-
-        const updatedSigner = {
-          ...prev.currentSigner,
-          status: "FIRMADO",
-        };
-
-        const updatedDocument = {
-          ...prev.document,
-          status: data.documentStatus || prev.document.status, // backend puede devolver nuevo estado
-        };
-
-        return {
-          document: updatedDocument,
-          currentSigner: updatedSigner,
-        };
-      });
-
-      setShowLegal(false);
-      setAccepted(false);
+      await cargarFirmaPublica(publicSignToken);
+      setShowReject(false);
+      setRejectReason("");
+      setRejectError("");
     } catch (err) {
-      console.error("❌ Error confirmando firma:", err);
-      setError(
-        err.message ||
-          (isVisado
-            ? "Error inesperado al registrar el visado."
-            : "Error inesperado al registrar la firma.")
-      );
-      alert(
-        err.message ||
-          (isVisado
-            ? "Error inesperado al registrar el visado."
-            : "Error inesperado al registrar la firma.")
+      setRejectError(
+        err?.message ||
+          "Error al registrar el rechazo. Intenta nuevamente."
       );
     } finally {
-      setSigning(false);
+      setRejecting(false);
     }
-  };
-
-  /* ================================
-     RENDER
-     ================================ */
-
-  if (loading) {
-    return <p style={{ padding: 24 }}>Cargando documento...</p>;
   }
 
-  if (error) {
+  // Estados de carga / error
+  if (showSkeleton) {
     return (
-      <div style={{ padding: 24 }}>
-        <h1 style={{ fontSize: "1.25rem", marginBottom: 8 }}>
-          No se pudo cargar el documento
-        </h1>
-        <p style={{ color: "red" }}>{error}</p>
+      <div className="login-bg">
+        <div className="login-card" style={{ maxWidth: 840 }}>
+          <p style={{ padding: 32, textAlign: "center" }}>
+            Cargando información del documento…
+          </p>
+        </div>
       </div>
     );
   }
 
-  if (!doc?.document) {
+  if (publicSignError) {
     return (
-      <p style={{ padding: 24 }}>
-        Documento no encontrado o el enlace ya no es válido.
-      </p>
+      <div className="login-bg">
+        <div className="login-card" style={{ maxWidth: 840 }}>
+          <div
+            style={{
+              marginTop: 12,
+              marginBottom: 16,
+              padding: 12,
+              borderRadius: 12,
+              backgroundColor: "#fef2f2",
+              border: "1px solid #fecaca",
+              color: "#b91c1c",
+              fontSize: "0.9rem",
+            }}
+          >
+            <div style={{ fontWeight: 700, marginBottom: 4 }}>
+              No se pudo cargar el documento.
+            </div>
+            <div>{publicSignError}</div>
+            <button
+              type="button"
+              className="btn-main"
+              style={{
+                marginTop: 10,
+                padding: "8px 14px",
+                borderRadius: 999,
+                backgroundColor: "#0f172a",
+                color: "#e5e7eb",
+                border: "none",
+              }}
+              onClick={() => cargarFirmaPublica(publicSignToken)}
+              disabled={publicSignLoading}
+            >
+              Reintentar carga
+            </button>
+          </div>
+        </div>
+      </div>
     );
   }
 
-  const { document, currentSigner } = doc;
-  const statusLabel = STATUS_LABELS[document.status] || document.status;
+  if (!document) {
+    return (
+      <div className="login-bg">
+        <div className="login-card" style={{ maxWidth: 840 }}>
+          <p style={{ padding: 24 }}>
+            Documento no encontrado o el enlace ya no es válido.
+          </p>
+        </div>
+      </div>
+    );
+  }
 
-  const primaryButtonLabel = (() => {
-    if (isDocumentSigned) return "Documento ya completado";
-    if (isCurrentSignerSigned) return "Tu acción ya fue registrada";
-    if (isVisado) return "VISAR DOCUMENTO";
-    return "FIRMAR DOCUMENTO";
-  })();
-
-  const headerTitle = isVisado ? "Visado de documento" : "Firma de documento";
+  const primaryLabel = isVisado ? "VISAR DOCUMENTO" : "FIRMAR DOCUMENTO";
 
   return (
-    <div
-      style={{
-        display: "flex",
-        flexDirection: "column",
-        gap: 24,
-        padding: 16,
-        maxWidth: 1200,
-        margin: "0 auto",
-      }}
-    >
-      {/* Encabezado */}
-      <header>
-        <h1 style={{ fontSize: "1.5rem", marginBottom: 8 }}>{headerTitle}</h1>
+    <div className="login-bg">
+      <div className="login-card" style={{ maxWidth: 840 }}>
+        <h1
+          style={{
+            textAlign: "center",
+            color: isVisado ? "#b45309" : "#1e3a8a",
+            marginBottom: 10,
+            fontSize: "2rem",
+            fontWeight: 800,
+          }}
+        >
+          {isVisado ? "Visado de documento" : "Firma de documento"}
+        </h1>
 
-        <p style={{ marginBottom: 4 }}>
+        <p
+          style={{
+            textAlign: "center",
+            color: "#64748b",
+            marginBottom: 16,
+            fontSize: "0.9rem",
+          }}
+        >
           Documento: <strong>{document.title}</strong>
         </p>
-        {document.company_name && (
-          <p style={{ marginBottom: 4 }}>
-            Empresa:{" "}
-            <strong>
-              {document.company_name}
-              {document.company_rut ? ` (${document.company_rut})` : ""}
-            </strong>
-          </p>
-        )}
-        {document.destinatario_nombre && (
-          <p style={{ marginBottom: 4 }}>
-            Destinatario: <strong>{document.destinatario_nombre}</strong>
-          </p>
-        )}
 
-        {currentSigner && (
-          <p style={{ marginBottom: 4 }}>
-            Usted está actuando como{" "}
-            <strong>
-              {isVisado ? "VISADOR" : "FIRMANTE"}
-              {currentSigner.name ? `: ${currentSigner.name}` : ""}
-            </strong>
+        {signer && (
+          <p
+            style={{
+              fontSize: "0.9rem",
+              color: "#64748b",
+              marginBottom: 10,
+              textAlign: "center",
+            }}
+          >
+            Estás actuando como{" "}
+            <strong>{isVisado ? "visador" : "firmante"}: {signer.name}</strong>
           </p>
         )}
 
-        <p style={{ marginBottom: 0 }}>
-          Estado actual del documento: <strong>{statusLabel}</strong>
-        </p>
-      </header>
-
-      {/* Visor PDF */}
-      {pdfUrl ? (
-        <div
-          style={{
-            border: "1px solid #e5e7eb",
-            borderRadius: 8,
-            overflow: "hidden",
-            height: "70vh",
-            backgroundColor: "#000",
-          }}
-        >
-          <iframe
-            title="Documento PDF"
-            src={pdfUrl}
-            style={{ width: "100%", height: "100%", border: "none" }}
-          />
+        <div style={{ textAlign: "center", marginBottom: 20 }}>
+          {pdfUrl ? (
+            <a
+              href={pdfUrl}
+              target="_blank"
+              rel="noopener noreferrer"
+              className="btn-main btn-primary"
+              style={{ textDecoration: "none" }}
+            >
+              Ver documento en PDF
+            </a>
+          ) : (
+            <p style={{ fontSize: "0.85rem", color: "#6b7280" }}>
+              No se pudo cargar el PDF adjunto.
+            </p>
+          )}
         </div>
-      ) : (
-        <p>No se pudo cargar el PDF adjunto.</p>
-      )}
 
-      {/* Panel de acción principal */}
-      <section
-        style={{
-          border: "1px solid #e5e7eb",
-          borderRadius: 8,
-          padding: 16,
-          background: "#f9fafb",
-        }}
-      >
-        <button
-          type="button"
-          className="btn-main btn-primary"
-          style={{
-            width: "100%",
-            opacity: isActionDisabled ? 0.6 : 1,
-            cursor: isActionDisabled ? "not-allowed" : "pointer",
-          }}
-          onClick={handlePrimaryClick}
-          disabled={isActionDisabled}
-          aria-label={
-            isVisado
-              ? isActionDisabled
-                ? "Documento ya visado/finalizado"
-                : "Visar documento"
-              : isActionDisabled
-              ? "Documento ya firmado/finalizado"
-              : "Firmar documento"
-          }
-        >
-          {primaryButtonLabel}
-        </button>
+        {canActOnDocument && (
+          <button
+            className="btn-main btn-primary"
+            style={{ width: "100%" }}
+            onClick={() => setShowLegal(true)}
+            disabled={signing}
+          >
+            {primaryLabel}
+          </button>
+        )}
 
-        {/* Panel legal */}
-        {showLegal && !isActionDisabled && (
+        {/* Panel legal antes de firmar/visar */}
+        {showLegal && canActOnDocument && (
           <div
             style={{
               marginTop: 16,
@@ -367,39 +322,65 @@ La presente visación tiene carácter de constancia de revisión y conformidad, 
               </span>
             </label>
 
-            <button
-              type="button"
-              className="btn-main btn-primary"
-              style={{ marginTop: 12, width: "100%" }}
-              onClick={handleConfirm}
-              disabled={!accepted || signing}
+            <div
+              style={{
+                display: "flex",
+                gap: 8,
+                justifyContent: "flex-end",
+                marginTop: 12,
+              }}
             >
-              {signing
-                ? isVisado
-                  ? "Visando..."
-                  : "Firmando..."
-                : isVisado
-                ? "Confirmar visado"
-                : "Confirmar firma"}
-            </button>
+              <button
+                type="button"
+                className="btn-main"
+                style={{
+                  padding: "8px 14px",
+                  borderRadius: 999,
+                  border: "1px solid #e5e7eb",
+                  backgroundColor: "#ffffff",
+                  color: "#374151",
+                }}
+                onClick={() => {
+                  setShowLegal(false);
+                  setAccepted(false);
+                }}
+                disabled={signing}
+              >
+                Cancelar
+              </button>
+              <button
+                type="button"
+                className="btn-main btn-primary"
+                style={{ padding: "8px 14px", borderRadius: 999 }}
+                onClick={handleConfirm}
+                disabled={!accepted || signing}
+              >
+                {signing
+                  ? isVisado
+                    ? "Visando..."
+                    : "Firmando..."
+                  : isVisado
+                  ? "Confirmar visado"
+                  : "Confirmar firma"}
+              </button>
+            </div>
           </div>
         )}
 
-        {/* Mensaje de estado del firmante actual */}
-        {isCurrentSignerSigned && (
+        {docRejected && (
           <p
             style={{
               marginTop: 12,
               fontSize: 13,
-              color: "#6b7280",
+              color: "#b91c1c",
               textAlign: "center",
             }}
           >
-            Ya registraste tu respuesta para este documento. Si crees que esto
-            es un error, contacta a quien te envió el enlace.
+            Este documento fue rechazado. No es posible firmarlo ni modificar su
+            estado.
           </p>
         )}
-      </section>
+      </div>
     </div>
   );
 }

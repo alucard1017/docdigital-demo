@@ -752,7 +752,6 @@ async function handleLogin(e) {
                           onOpenDetail={(doc) => {
                             setSelectedDoc(doc);
                             setView("detail");
-                            setPdfUrl(null); // opcional: limpiar pdfUrl
                           }}
                         />
                       ))}

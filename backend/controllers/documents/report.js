@@ -24,7 +24,7 @@ async function downloadDocument(req, res) {
     }
 
     const result = await db.query(
-      `SELECT id, title, file_path, pdf_hash 
+      `SELECT id, title, file_path, pdf_hash
        FROM documents
        WHERE ${where}`,
       params
@@ -51,7 +51,7 @@ async function downloadDocument(req, res) {
     const buffer = Buffer.from(fileResponse.data);
 
     // Verificación de integridad: si falla, registramos en auditoría
-    // pero NO bloqueamos la descarga (evitamos el 409).
+    // pero NO bloqueamos la descarga.
     if (doc.pdf_hash) {
       const currentHash = computeHash(buffer);
       if (currentHash !== doc.pdf_hash) {
@@ -70,7 +70,6 @@ async function downloadDocument(req, res) {
           req,
         });
 
-        // En lugar de 409, solo avisamos en cabecera opcional
         res.setHeader(
           "X-Document-Hash-Warning",
           "El hash del PDF no coincide con el registrado"
@@ -96,6 +95,88 @@ async function downloadDocument(req, res) {
 }
 
 /* ================================
+   GET: Vista previa de PDF (sin attachment)
+   ================================ */
+async function previewDocument(req, res) {
+  try {
+    const id = req.params.id;
+
+    if (!id) {
+      return res.status(400).json({ message: "ID de documento requerido" });
+    }
+
+    const params = [id];
+    let where = "id = $1";
+
+    if (req.user && req.user.company_id) {
+      params.push(req.user.company_id);
+      where += " AND company_id = $2";
+    }
+
+    const result = await db.query(
+      `SELECT id, title, file_path, pdf_hash
+       FROM documents
+       WHERE ${where}`,
+      params
+    );
+
+    if (result.rowCount === 0) {
+      return res.status(404).json({ message: "Documento no encontrado" });
+    }
+
+    const doc = result.rows[0];
+
+    if (!doc.file_path) {
+      return res
+        .status(404)
+        .json({ message: "Documento sin archivo asociado" });
+    }
+
+    const signedUrl = await getSignedUrl(doc.file_path, 3600);
+
+    const fileResponse = await axios.get(signedUrl, {
+      responseType: "arraybuffer",
+    });
+
+    const buffer = Buffer.from(fileResponse.data);
+
+    // Misma verificación de hash, solo como aviso
+    if (doc.pdf_hash) {
+      const currentHash = computeHash(buffer);
+      if (currentHash !== doc.pdf_hash) {
+        await logAudit({
+          user: req.user || null,
+          action: "document_hash_mismatch_preview",
+          entityType: "document",
+          entityId: doc.id,
+          metadata: {
+            stored_hash: doc.pdf_hash,
+            current_hash: currentHash,
+            file_path: doc.file_path,
+          },
+          req,
+        });
+
+        res.setHeader(
+          "X-Document-Hash-Warning",
+          "El hash del PDF no coincide con el registrado (preview)"
+        );
+      }
+    }
+
+    res.setHeader("Content-Type", "application/pdf");
+    // Importante: sin Content-Disposition: attachment, para que el iframe lo muestre
+    // (si quisieras, podrías usar inline)
+    // res.setHeader("Content-Disposition", 'inline; filename="preview.pdf"');
+
+    return res.send(buffer);
+  } catch (err) {
+    console.error("❌ Error en vista previa de documento:", err);
+    return res.status(500).json({ message: "Error interno del servidor" });
+  }
+}
+
+/* ================================
    GET: Analytics del documento
    ================================ */
 async function getDocumentAnalytics(req, res) {
@@ -103,7 +184,7 @@ async function getDocumentAnalytics(req, res) {
     const userId = req.user.id;
 
     const docsRes = await db.query(
-      `SELECT 
+      `SELECT
          COUNT(*) AS total,
          COUNT(*) FILTER (WHERE status = 'FIRMADO') AS firmados,
          COUNT(*) FILTER (WHERE status = 'RECHAZADO') AS rechazados,
@@ -117,7 +198,7 @@ async function getDocumentAnalytics(req, res) {
     const stats = docsRes.rows[0] || {};
 
     const eventsRes = await db.query(
-      `SELECT 
+      `SELECT
          DATE(created_at) AS fecha,
          COUNT(*) FILTER (WHERE action IN ('FIRMADO_PUBLICO', 'FIRMADO')) AS firmas_dia,
          COUNT(*) FILTER (WHERE action IN ('RECHAZO_PUBLICO', 'RECHAZADO')) AS rechazos_dia
@@ -358,6 +439,7 @@ async function downloadReportPdf(req, res) {
 
 module.exports = {
   downloadDocument,
+  previewDocument,
   getDocumentAnalytics,
   downloadReportPdf,
 };

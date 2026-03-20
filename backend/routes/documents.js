@@ -13,6 +13,7 @@ const {
   downloadDocument,
   downloadReportPdf,
   getDocumentAnalytics,
+  previewDocument,
 } = require("../controllers/documents/report");
 const {
   logAudit,
@@ -363,6 +364,12 @@ router.get(
   checkDocumentCompanyScope,
   documentsController.getSigners
 );
+
+/**
+ * Vista previa del PDF original del documento.
+ * Ruta real: GET /api/documents/:id/preview
+ */
+router.get("/:id/preview", previewDocument);
 
 /**
  * Descargar PDF original del documento.
