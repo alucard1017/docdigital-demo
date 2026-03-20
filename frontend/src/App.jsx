@@ -124,16 +124,8 @@ function App() {
   const [firmanteRunValue, setFirmanteRunValue] = useState("");
   const [empresaRutValue, setEmpresaRutValue] = useState("");
 
-// Normalizar API_BASE_URL:
-// - quitar / finales
-// - asegurar que termina con /api
-// - nunca permitir /api/api
-const apiRoot = (() => {
-  let base = (API_BASE_URL || "").replace(/\/+$/, "");
-  base = base.replace(/\/api\/api$/, "/api");
-  if (base.endsWith("/api")) return base;
-  return `${base}/api`;
-})();
+  // API raíz ya normalizada desde constants.js (termina en /api, sin /api/api)
+  const apiRoot = API_BASE_URL;
 
   /* =============================== */
   /* FIRMA / VISADO PÚBLICO          */

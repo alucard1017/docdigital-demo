@@ -9,10 +9,13 @@ export function VerificationView({ API_URL }) {
   const [result, setResult] = useState(null);
   const [error, setError] = useState("");
 
-  // Normaliza la API base: quita / al final y /api si viene duplicado
+  // Normaliza la API base: quita / al final, corrige /api/api y asegura /api
   const getApiBase = () => {
-    const baseFromProp = API_URL || process.env.NEXT_PUBLIC_API_URL || "";
-    const trimmed = baseFromProp.replace(/\/+$/, ""); // sin / al final
+    const baseFromProp = API_URL || import.meta.env.VITE_API_URL || "";
+    let trimmed = baseFromProp.replace(/\/+$/, ""); // sin / al final
+
+    // si viene con /api/api al final, dejar solo /api
+    trimmed = trimmed.replace(/\/api\/api$/, "/api");
 
     // si ya viene con /api al final, lo usamos tal cual
     if (trimmed.endsWith("/api")) return trimmed;
