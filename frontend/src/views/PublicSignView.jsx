@@ -52,7 +52,7 @@ export function PublicSignView({
       const actionPath = isVisado ? "visar" : "firmar";
 
       const res = await fetch(
-        `${API_URL}/api/public/docs/${publicSignToken}/${actionPath}`,
+        `${API_URL}/public/docs/${publicSignToken}/${actionPath}`,
         {
           method: "POST",
           headers: { "Content-Type": "application/json" },
@@ -94,7 +94,7 @@ export function PublicSignView({
       setRejecting(true);
 
       const res = await fetch(
-        `${API_URL}/api/public/docs/${publicSignToken}/rechazar`,
+        `${API_URL}/public/docs/${publicSignToken}/rechazar`,
         {
           method: "POST",
           headers: { "Content-Type": "application/json" },

@@ -22,7 +22,7 @@ function getDocumentoLabel(value) {
 
 export function DetailView({
   selectedDoc,
-  pdfUrl,
+  pdfUrl,                // URL del PDF que viene desde App.jsx
   puedeFirmar,
   puedeVisar,
   puedeRechazar,
@@ -63,7 +63,6 @@ export function DetailView({
     const fetchTimeline = async () => {
       try {
         setLoadingTimeline(true);
-
         const res = await api.get(`/documents/${docId}/timeline`, {
           signal: controller.signal,
         });
@@ -96,7 +95,6 @@ export function DetailView({
     fetchSigners();
 
     const interval = setInterval(fetchTimeline, 5000);
-
     return () => {
       controller.abort();
       clearInterval(interval);
@@ -122,8 +120,6 @@ export function DetailView({
     if (!selectedDoc) return;
     try {
       setReenviarLoadingVisado(true);
-
-      // Ruta real backend: POST /api/documents/:id/reenviar
       const res = await api.post(`/documents/${selectedDoc.id}/reenviar`, {
         tipo: "VISADO",
       });
@@ -145,8 +141,6 @@ export function DetailView({
     if (!selectedDoc || !signerId) return;
     try {
       setReenviarSignerId(signerId);
-
-      // Ruta real backend: POST /api/documents/:id/reenviar
       const res = await api.post(`/documents/${selectedDoc.id}/reenviar`, {
         tipo: "FIRMA",
         signerId,
@@ -169,8 +163,6 @@ export function DetailView({
     if (!selectedDoc) return;
     try {
       setRecordatorioLoading(true);
-
-      // Ruta real backend: POST /api/documents/:id/recordatorio
       const res = await api.post(
         `/documents/${selectedDoc.id}/recordatorio`
       );
@@ -194,6 +186,11 @@ export function DetailView({
   const downloadUrl = selectedDoc
     ? `${baseUrl}/documents/${selectedDoc.id}/download`
     : null;
+
+  // Opcional: log para verificar qué pdfUrl llega
+  if (import.meta.env.DEV) {
+    console.debug("DetailView pdfUrl:", pdfUrl);
+  }
 
   const numeroInterno =
     (timeline &&
@@ -331,7 +328,7 @@ export function DetailView({
                     rel="noopener noreferrer"
                     className="btn-main detail-btn-view"
                   >
-                    👁️ Ver PDF"
+                    👁️ Ver PDF
                   </a>
                 )}
               </div>
