@@ -50,6 +50,8 @@ async function downloadDocument(req, res) {
 
     const buffer = Buffer.from(fileResponse.data);
 
+    // Verificación de integridad: si falla, registramos en auditoría
+    // pero NO bloqueamos la descarga (evitamos el 409).
     if (doc.pdf_hash) {
       const currentHash = computeHash(buffer);
       if (currentHash !== doc.pdf_hash) {
@@ -68,10 +70,11 @@ async function downloadDocument(req, res) {
           req,
         });
 
-        return res.status(409).json({
-          message:
-            "El archivo del documento parece haber sido alterado. Contacta al administrador.",
-        });
+        // En lugar de 409, solo avisamos en cabecera opcional
+        res.setHeader(
+          "X-Document-Hash-Warning",
+          "El hash del PDF no coincide con el registrado"
+        );
       }
     }
 
