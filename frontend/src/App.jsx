@@ -85,17 +85,17 @@ function App() {
   const [tipoTramite, setTipoTramite] = useState("propio");
 
   const [token, setToken] = useState(() =>
-  typeof localStorage !== "undefined" ? localStorage.getItem("token") || "" : ""
+    typeof localStorage !== "undefined" ? localStorage.getItem("token") || "" : ""
   );
   const [user, setUser] = useState(() => {
-  try {
-    return typeof localStorage !== "undefined"
-      ? JSON.parse(localStorage.getItem("user") || "null")
-      : null;
-  } catch {
-    return null;
-  }
-});
+    try {
+      return typeof localStorage !== "undefined"
+        ? JSON.parse(localStorage.getItem("user") || "null")
+        : null;
+    } catch {
+      return null;
+    }
+  });
 
   const [loadingDocs, setLoadingDocs] = useState(false);
   const [errorDocs, setErrorDocs] = useState("");
@@ -127,7 +127,7 @@ function App() {
   // API raíz ya normalizada desde constants.js (termina en /api, sin /api/api)
   const apiRoot = API_BASE_URL;
 
-  // Cargar URL de PDF para la vista de detalle
+  // Cargar URL de PDF para la vista de detalle (usa /preview, no /download)
   useEffect(() => {
     if (!selectedDoc?.id) {
       setPdfUrl(null);
@@ -136,7 +136,7 @@ function App() {
 
     try {
       const baseUrl = api.defaults.baseURL || API_BASE_URL;
-      const url = `${baseUrl}/documents/${selectedDoc.id}/download`;
+      const url = `${baseUrl}/documents/${selectedDoc.id}/preview`;
       setPdfUrl(url);
     } catch (err) {
       console.error("Error preparando URL de PDF:", err);
@@ -161,12 +161,12 @@ function App() {
         const isVisado = modeUrl === "visado";
         const isConsultaPublica = pathname === "/consulta-publica";
 
-	const path =
-	  isVisado || isConsultaPublica
-	    ? `/public/docs/document/${tokenParam}`
-	    : `/public/docs/${tokenParam}`;
+        const path =
+          isVisado || isConsultaPublica
+            ? `/public/docs/document/${tokenParam}`
+            : `/public/docs/${tokenParam}`;
 
-	const res = await fetch(`${apiRoot}${path}`);
+        const res = await fetch(`${apiRoot}${path}`);
         const data = await res.json();
 
         if (!res.ok) {
@@ -274,50 +274,52 @@ function App() {
   /* LOGIN                           */
   /* =============================== */
 
-async function handleLogin(e) {
-  e.preventDefault();
-  setIsLoggingIn(true);
-  setMessage("Conectando con el servidor seguro...");
+  async function handleLogin(e) {
+    e.preventDefault();
+    setIsLoggingIn(true);
+    setMessage("Conectando con el servidor seguro...");
 
-  const inputVal = identifier.trim();
-  const isEmail = inputVal.includes("@");
+    const inputVal = identifier.trim();
+    const isEmail = inputVal.includes("@");
 
-  const cleanValue = isEmail
-    ? inputVal.toLowerCase()
-    : inputVal.replace(/[^0-9kK]/g, "").toUpperCase();
+    const cleanValue = isEmail
+      ? inputVal.toLowerCase()
+      : inputVal.replace(/[^0-9kK]/g, "").toUpperCase();
 
-  if (!isEmail && cleanValue.length < 2) {
-    setMessage("❌ El RUT ingresado no es válido");
-    setIsLoggingIn(false);
-    return;
+    if (!isEmail && cleanValue.length < 2) {
+      setMessage("❌ El RUT ingresado no es válido");
+      setIsLoggingIn(false);
+      return;
+    }
+
+    if (import.meta.env.DEV) {
+      console.log("[LOGIN] payload:", { identifier: cleanValue, isEmail });
+    }
+
+    try {
+      const res = await api.post("/auth/login", {
+        identifier: cleanValue,
+        password,
+      });
+
+      const data = res.data;
+      setToken(data.token);
+      setUser(data.user);
+      localStorage.setItem("token", data.token);
+      localStorage.setItem("user", JSON.stringify(data.user));
+      setMessage("Acceso concedido");
+      setView("list");
+    } catch (err) {
+      console.error("[LOGIN ERROR]", err);
+      const msg =
+        err.response?.data?.message ||
+        err.message ||
+        "Error de conexión, intenta nuevamente.";
+      setMessage("❌ " + msg);
+    } finally {
+      setIsLoggingIn(false);
+    }
   }
-
-  if (import.meta.env.DEV) {
-    console.log("[LOGIN] payload:", { identifier: cleanValue, isEmail });
-  }
-
-  try {
-    const res = await api.post("/auth/login", {
-      identifier: cleanValue,
-      password,
-    });
-
-    const data = res.data;
-    setToken(data.token);
-    setUser(data.user);
-    localStorage.setItem("token", data.token);
-    localStorage.setItem("user", JSON.stringify(data.user));
-    setMessage("Acceso concedido");
-    setView("list");
-  } catch (err) {
-    console.error("[LOGIN ERROR]", err);
-    const msg = err.response?.data?.message || err.message ||
-      "Error de conexión, intenta nuevamente.";
-    setMessage("❌ " + msg);
-  } finally {
-    setIsLoggingIn(false);
-  }
-}
 
   /* =============================== */
   /* ACCIONES: FIRMAR / VISAR ...    */
@@ -846,5 +848,3 @@ async function handleLogin(e) {
 }
 
 export default App;
-
-

@@ -10,7 +10,6 @@ const { logAudit } = require("../../utils/auditLog");
 async function downloadDocument(req, res) {
   try {
     const id = req.params.id;
-
     if (!id) {
       return res.status(400).json({ message: "ID de documento requerido" });
     }
@@ -50,7 +49,7 @@ async function downloadDocument(req, res) {
 
     const buffer = Buffer.from(fileResponse.data);
 
-    // Verificación de integridad: si falla, registramos en auditoría
+    // Verificación de integridad: si falla, registramos en auditoría,
     // pero NO bloqueamos la descarga.
     if (doc.pdf_hash) {
       const currentHash = computeHash(buffer);
@@ -100,7 +99,6 @@ async function downloadDocument(req, res) {
 async function previewDocument(req, res) {
   try {
     const id = req.params.id;
-
     if (!id) {
       return res.status(400).json({ message: "ID de documento requerido" });
     }
@@ -165,9 +163,7 @@ async function previewDocument(req, res) {
     }
 
     res.setHeader("Content-Type", "application/pdf");
-    // Importante: sin Content-Disposition: attachment, para que el iframe lo muestre
-    // (si quisieras, podrías usar inline)
-    // res.setHeader("Content-Disposition", 'inline; filename="preview.pdf"');
+    // Importante: NO ponemos Content-Disposition aquí para que el navegador lo pueda renderizar.
 
     return res.send(buffer);
   } catch (err) {

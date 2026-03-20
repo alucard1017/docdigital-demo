@@ -209,8 +209,6 @@ function withDocumentAudit(action) {
    ================================ */
 
 router.get("/stats", requireAuth, documentsController.getDocumentStats);
-
-// Usamos la versión de analytics del controlador dedicado (report.js)
 router.get("/analytics", requireAuth, getDocumentAnalytics);
 
 router.get("/export/excel", requireAuth, async (req, res) => {
@@ -320,10 +318,6 @@ router.post(
   documentsController.createDocument
 );
 
-/**
- * Recordatorios automáticos (por usuario).
- * Ruta real: POST /api/documents/recordatorios-automaticos
- */
 router.post(
   "/recordatorios-automaticos",
   requireAuth,
@@ -345,9 +339,7 @@ router.post(
    ================================ */
 
 router.post("/crear-flujo", requireAuth, documentsController.createFlow);
-
 router.post("/enviar-flujo/:id", requireAuth, documentsController.sendFlow);
-
 router.post("/firmar-flujo/:firmanteId", documentsController.signFlow);
 
 /* ================================
@@ -416,10 +408,6 @@ router.post(
   documentsController.rejectDocument
 );
 
-/**
- * Reenviar recordatorio (visado o firma).
- * Ruta real: POST /api/documents/:id/reenviar
- */
 router.post(
   "/:id/reenviar",
   requireAuth,
@@ -427,10 +415,6 @@ router.post(
   resendReminder
 );
 
-/**
- * Recordatorio manual “a todos” para un documento concreto.
- * Ruta real: POST /api/documents/:id/recordatorio
- */
 router.post(
   "/:id/recordatorio",
   requireAuth,
