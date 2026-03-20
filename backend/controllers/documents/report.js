@@ -5,7 +5,29 @@ const axios = require("axios");
 const { logAudit } = require("../../utils/auditLog");
 
 /* ================================
-   GET: Descargar PDF (con verificación de hash)
+   HELPERS
+   ================================ */
+
+function buildDocumentWhereClause({ id, user }) {
+  const params = [id];
+  let where = "id = $1";
+
+  if (user && user.company_id) {
+    params.push(user.company_id);
+    where += " AND company_id = $2";
+  }
+
+  return { where, params };
+}
+
+function buildSafeFilename(base, fallbackPrefix) {
+  const clean =
+    (base || fallbackPrefix).toString().replace(/[^a-zA-Z0-9-_]/g, "_") || fallbackPrefix;
+  return `${clean}.pdf`;
+}
+
+/* ================================
+   GET: Descargar PDF (prioriza copia firmada)
    ================================ */
 async function downloadDocument(req, res) {
   try {
@@ -14,16 +36,18 @@ async function downloadDocument(req, res) {
       return res.status(400).json({ message: "ID de documento requerido" });
     }
 
-    const params = [id];
-    let where = "id = $1";
-
-    if (req.user && req.user.company_id) {
-      params.push(req.user.company_id);
-      where += " AND company_id = $2";
-    }
+    const { where, params } = buildDocumentWhereClause({
+      id,
+      user: req.user,
+    });
 
     const result = await db.query(
-      `SELECT id, title, file_path, pdf_hash
+      `SELECT
+         id,
+         title,
+         file_path,
+         signed_file_path,
+         pdf_hash
        FROM documents
        WHERE ${where}`,
       params
@@ -35,13 +59,14 @@ async function downloadDocument(req, res) {
 
     const doc = result.rows[0];
 
-    if (!doc.file_path) {
+    const storageKey = doc.signed_file_path || doc.file_path;
+    if (!storageKey) {
       return res
         .status(404)
         .json({ message: "Documento sin archivo asociado" });
     }
 
-    const signedUrl = await getSignedUrl(doc.file_path, 3600);
+    const signedUrl = await getSignedUrl(storageKey, 3600);
 
     const fileResponse = await axios.get(signedUrl, {
       responseType: "arraybuffer",
@@ -49,8 +74,7 @@ async function downloadDocument(req, res) {
 
     const buffer = Buffer.from(fileResponse.data);
 
-    // Verificación de integridad: si falla, registramos en auditoría,
-    // pero NO bloqueamos la descarga.
+    // Verificación de integridad (solo aviso)
     if (doc.pdf_hash) {
       const currentHash = computeHash(buffer);
       if (currentHash !== doc.pdf_hash) {
@@ -64,7 +88,7 @@ async function downloadDocument(req, res) {
           metadata: {
             stored_hash: doc.pdf_hash,
             current_hash: currentHash,
-            file_path: doc.file_path,
+            file_path: storageKey,
           },
           req,
         });
@@ -76,9 +100,7 @@ async function downloadDocument(req, res) {
       }
     }
 
-    const filename =
-      (doc.title || `documento-${doc.id}`).replace(/[^a-zA-Z0-9-_]/g, "_") +
-      ".pdf";
+    const filename = buildSafeFilename(doc.title, `documento-${doc.id}`);
 
     res.setHeader("Content-Type", "application/pdf");
     res.setHeader(
@@ -94,7 +116,7 @@ async function downloadDocument(req, res) {
 }
 
 /* ================================
-   GET: Vista previa de PDF (sin attachment)
+   GET: Vista previa de PDF (prioriza copia firmada)
    ================================ */
 async function previewDocument(req, res) {
   try {
@@ -103,16 +125,18 @@ async function previewDocument(req, res) {
       return res.status(400).json({ message: "ID de documento requerido" });
     }
 
-    const params = [id];
-    let where = "id = $1";
-
-    if (req.user && req.user.company_id) {
-      params.push(req.user.company_id);
-      where += " AND company_id = $2";
-    }
+    const { where, params } = buildDocumentWhereClause({
+      id,
+      user: req.user,
+    });
 
     const result = await db.query(
-      `SELECT id, title, file_path, pdf_hash
+      `SELECT
+         id,
+         title,
+         file_path,
+         signed_file_path,
+         pdf_hash
        FROM documents
        WHERE ${where}`,
       params
@@ -124,13 +148,14 @@ async function previewDocument(req, res) {
 
     const doc = result.rows[0];
 
-    if (!doc.file_path) {
+    const storageKey = doc.signed_file_path || doc.file_path;
+    if (!storageKey) {
       return res
         .status(404)
         .json({ message: "Documento sin archivo asociado" });
     }
 
-    const signedUrl = await getSignedUrl(doc.file_path, 3600);
+    const signedUrl = await getSignedUrl(storageKey, 3600);
 
     const fileResponse = await axios.get(signedUrl, {
       responseType: "arraybuffer",
@@ -138,7 +163,7 @@ async function previewDocument(req, res) {
 
     const buffer = Buffer.from(fileResponse.data);
 
-    // Misma verificación de hash, solo como aviso
+    // Verificación de hash (solo log y header de warning)
     if (doc.pdf_hash) {
       const currentHash = computeHash(buffer);
       if (currentHash !== doc.pdf_hash) {
@@ -150,7 +175,7 @@ async function previewDocument(req, res) {
           metadata: {
             stored_hash: doc.pdf_hash,
             current_hash: currentHash,
-            file_path: doc.file_path,
+            file_path: storageKey,
           },
           req,
         });
@@ -163,8 +188,7 @@ async function previewDocument(req, res) {
     }
 
     res.setHeader("Content-Type", "application/pdf");
-    // Importante: NO ponemos Content-Disposition aquí para que el navegador lo pueda renderizar.
-
+    // Ojo: sin Content-Disposition para que el navegador renderice en iframe
     return res.send(buffer);
   } catch (err) {
     console.error("❌ Error en vista previa de documento:", err);

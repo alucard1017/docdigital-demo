@@ -39,6 +39,7 @@ async function signDocument(req, res) {
       });
     }
 
+    // 1) Actualizar estado a FIRMADO
     const result = await db.query(
       `UPDATE documents 
        SET status = $1, updated_at = NOW()
@@ -48,6 +49,7 @@ async function signDocument(req, res) {
     );
     const doc = result.rows[0];
 
+    // 2) Registrar evento
     await db.query(
       `INSERT INTO document_events (
          document_id, actor, action, details, from_status, to_status
@@ -75,8 +77,9 @@ async function signDocument(req, res) {
       req,
     });
 
-    if (doc.nuevo_documento_id) {
-      try {
+    // 3) Sellar PDF con QR / código y guardar ruta firmada
+    try {
+      if (doc.nuevo_documento_id) {
         const docNuevoRes = await db.query(
           `SELECT id, codigo_verificacion, categoria_firma
            FROM documentos
@@ -87,29 +90,37 @@ async function signDocument(req, res) {
         if (docNuevoRes.rowCount > 0) {
           const docNuevo = docNuevoRes.rows[0];
 
-          const newKey = await sellarPdfConQr({
-            s3Key: doc.pdf_original_url || doc.file_path,
-            documentoId: docNuevo.id,
-            codigoVerificacion: docNuevo.codigo_verificacion,
-            categoriaFirma: docNuevo.categoria_firma || "SIMPLE",
-            numeroContratoInterno: doc.numero_contrato_interno,
-          });
+          const sourceKey = doc.pdf_original_url || doc.file_path;
+          if (sourceKey) {
+            const newKey = await sellarPdfConQr({
+              s3Key: sourceKey,
+              documentoId: docNuevo.id,
+              codigoVerificacion: docNuevo.codigo_verificacion,
+              categoriaFirma: docNuevo.categoria_firma || "SIMPLE",
+              numeroContratoInterno: doc.numero_contrato_interno,
+            });
 
-          await db.query(
-            `UPDATE documents
-             SET pdf_final_url = $1
-             WHERE id = $2`,
-            [newKey, doc.id]
-          );
+            // Guardamos la ruta del PDF final firmado/sellado
+            await db.query(
+              `UPDATE documents
+               SET pdf_final_url = $1,
+                   signed_file_path = $1
+               WHERE id = $2`,
+              [newKey, doc.id]
+            );
+
+            doc.pdf_final_url = newKey;
+            doc.signed_file_path = newKey;
+          }
         }
-      } catch (sealError) {
-        console.error("⚠️ Error sellando PDF con QR:", sealError);
       }
+    } catch (sealError) {
+      console.error("⚠️ Error sellando PDF con QR:", sealError);
     }
 
     return res.json({
       ...doc,
-      file_url: doc.file_path,
+      file_url: doc.signed_file_path || doc.pdf_final_url || doc.file_path,
       message: "Documento firmado exitosamente",
     });
   } catch (err) {
