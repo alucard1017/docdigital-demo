@@ -5,6 +5,7 @@ import { EventList } from "./EventList";
 import { DetailActions } from "./DetailActions";
 import { DOC_STATUS } from "../constants";
 import api from "../api/client";
+import { ElectronicSignatureNotice } from "./Legal/ElectronicSignatureNotice";
 
 /* ========= Helpers de labels ========= */
 
@@ -22,7 +23,7 @@ function getDocumentoLabel(value) {
 
 export function DetailView({
   selectedDoc,
-  pdfUrl,                // URL del PDF que viene desde App.jsx
+  pdfUrl, // URL del PDF que viene desde App.jsx
   puedeFirmar,
   puedeVisar,
   puedeRechazar,
@@ -42,6 +43,9 @@ export function DetailView({
   const [reenviarLoadingVisado, setReenviarLoadingVisado] = useState(false);
   const [reenviarSignerId, setReenviarSignerId] = useState(null);
   const [recordatorioLoading, setRecordatorioLoading] = useState(false);
+
+  const [acceptedLegal, setAcceptedLegal] = useState(false);
+  const [signError, setSignError] = useState("");
 
   const rawName = currentUser?.name || currentUser?.fullName || "Usuario";
   const isJean =
@@ -163,9 +167,7 @@ export function DetailView({
     if (!selectedDoc) return;
     try {
       setRecordatorioLoading(true);
-      const res = await api.post(
-        `/documents/${selectedDoc.id}/recordatorio`
-      );
+      const res = await api.post(`/documents/${selectedDoc.id}/recordatorio`);
       const data = res.data;
       alert(`✅ ${data?.message || "Recordatorio enviado"}`);
     } catch (err) {
@@ -187,7 +189,6 @@ export function DetailView({
     ? `${baseUrl}/documents/${selectedDoc.id}/download`
     : null;
 
-  // Opcional: log para verificar qué pdfUrl llega
   if (import.meta.env.DEV) {
     console.debug("DetailView pdfUrl:", pdfUrl);
   }
@@ -204,6 +205,26 @@ export function DetailView({
   const documentoLabel = getDocumentoLabel(
     selectedDoc.tipo_documento || selectedDoc.tipoDocumento
   );
+
+  const isSigned = selectedDoc.status === DOC_STATUS.FIRMADO;
+  const isRejected = selectedDoc.status === DOC_STATUS.RECHAZADO;
+
+  // Wrapper para insertar el aviso legal antes de firmar
+  const manejarAccionDocumentoConLegal = async (id, accion, extraData = {}) => {
+    if (accion === "firmar") {
+      if (!acceptedLegal) {
+        setSignError(
+          "Debes aceptar el aviso legal de firma electrónica antes de firmar."
+        );
+        alert(
+          "Debes aceptar el aviso legal de firma electrónica antes de firmar."
+        );
+        return;
+      }
+      setSignError("");
+    }
+    await manejarAccionDocumento(id, accion, extraData);
+  };
 
   return (
     <div className="detail-layout">
@@ -348,6 +369,27 @@ export function DetailView({
               )}
             </div>
 
+            {/* Aviso legal interno sólo si se puede firmar y aún no está firmado/rechazado */}
+            {puedeFirmar && !isSigned && !isRejected && (
+              <ElectronicSignatureNotice
+                checked={acceptedLegal}
+                onChange={setAcceptedLegal}
+              />
+            )}
+
+            {signError && (
+              <p
+                style={{
+                  color: "#b91c1c",
+                  fontSize: 13,
+                  marginBottom: 12,
+                  marginTop: -4,
+                }}
+              >
+                {signError}
+              </p>
+            )}
+
             <div className="detail-signers">
               <h3 className="detail-signers-title">Firmantes</h3>
 
@@ -421,7 +463,7 @@ export function DetailView({
               selectedDoc={selectedDoc}
               setView={setView}
               setSelectedDoc={setSelectedDoc}
-              manejarAccionDocumento={manejarAccionDocumento}
+              manejarAccionDocumento={manejarAccionDocumentoConLegal}
               isAdmin={true}
             />
           </div>

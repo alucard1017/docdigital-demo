@@ -8,8 +8,8 @@ export function PublicSignView({
   publicSignPdfUrl,
   publicSignToken,    // token de firma/visado
   publicSignMode,     // "visado" o null
-  API_URL,            // https://verifirma-api.onrender.com/api
-  cargarFirmaPublica, // función que recarga datos de firma pública
+  API_URL,
+  cargarFirmaPublica,
 }) {
   const isVisado = publicSignMode === "visado";
   const pdfUrl = publicSignPdfUrl || "";
@@ -243,7 +243,9 @@ export function PublicSignView({
             }}
           >
             Estás actuando como{" "}
-            <strong>{isVisado ? "visador" : "firmante"}: {signer.name}</strong>
+            <strong>
+              {isVisado ? "visador" : "firmante"}: {signer.name}
+            </strong>
           </p>
         )}
 
@@ -300,7 +302,9 @@ export function PublicSignView({
                 ? `Mediante este acto, el visador declara que ha revisado íntegramente el documento individualizado y que su contenido se ajusta a las normas internas y a la legislación aplicable, para los fines de control y validación administrativa que correspondan.
 
 La presente visación tiene carácter de constancia de revisión y conformidad, y no reemplaza ni equivale a la firma electrónica del representante legal, de acuerdo con lo dispuesto en la Ley N° 19.799 sobre documentos electrónicos y firma electrónica y su normativa complementaria.`
-                : `Declaro que he leído íntegramente el documento mostrado arriba, que estoy de acuerdo con su contenido y que autorizo su suscripción mediante firma electrónica, otorgándole la misma validez y efecto jurídico que a mi firma manuscrita, conforme a la Ley N° 19.799 sobre documentos electrónicos y firma electrónica y su normativa complementaria.`}
+                : `Declaro que he leído íntegramente el documento mostrado arriba, que estoy de acuerdo con su contenido y que autorizo su suscripción mediante firma electrónica, otorgándole la misma validez y efecto jurídico que a mi firma manuscrita, conforme a la Ley N° 19.799 sobre documentos electrónicos y firma electrónica y su normativa complementaria.
+
+Puedes revisar el texto completo de la Ley N° 19.799 en la Biblioteca del Congreso Nacional de Chile: https://www.bcn.cl/leychile/navegar?idNorma=196640`}
             </p>
 
             <label

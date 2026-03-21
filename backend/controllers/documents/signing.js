@@ -49,7 +49,7 @@ async function signDocument(req, res) {
     );
     const doc = result.rows[0];
 
-    // 2) Registrar evento
+    // 2) Registrar evento (incluye aceptación de aviso legal de firma electrónica)
     await db.query(
       `INSERT INTO document_events (
          document_id, actor, action, details, from_status, to_status
@@ -59,7 +59,7 @@ async function signDocument(req, res) {
         doc.id,
         req.user.name || "Sistema",
         "FIRMADO",
-        "Firmado por propietario",
+        "Firmado por propietario (aceptó aviso legal de uso de firma electrónica simple, con equivalencia a firma manuscrita conforme a la Ley N° 19.799).",
         docActual.status,
         "FIRMADO",
       ]
