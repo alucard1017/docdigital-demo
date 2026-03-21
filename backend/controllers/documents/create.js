@@ -148,6 +148,7 @@ async function createDocument(req, res) {
     const requiereNotaria =
       requiere_firma_notarial === "true" || requiere_firma_notarial === true;
 
+    // Validaciones de campos obligatorios
     if (
       !title ||
       !firmante_nombre_completo ||
@@ -181,7 +182,9 @@ async function createDocument(req, res) {
     }
 
     console.log("DEBUG RUN ORIGINAL:", firmante_run, typeof firmante_run);
-    const runValue = Array.isArray(firmante_run) ? firmante_run[0] : firmante_run;
+    const runValue = Array.isArray(firmante_run)
+      ? firmante_run[0]
+      : firmante_run;
     console.log("DEBUG RUN NORMALIZADO:", runValue, typeof runValue);
 
     if (!isValidRun(runValue)) {
@@ -302,6 +305,13 @@ async function createDocument(req, res) {
     );
 
     const doc = result.rows[0];
+    console.log("✅ DOCUMENTO INSERTADO EN DB:", {
+      id: doc.id,
+      title: doc.title,
+      owner_id: doc.owner_id,
+      company_id: doc.company_id,
+      status: doc.status,
+    });
 
     // Correlativo interno
     const correlativoRes = await db.query(
