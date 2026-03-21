@@ -45,10 +45,10 @@ console.log("=====================================");
 
 const app = express();
 
-// Confía en proxy (Render/Nginx) para X-Forwarded-For
+// Confiar en proxy (Render/Nginx) para X-Forwarded-For
 app.set("trust proxy", 1);
 
-// Middleware global de metadatos de request (requestId, ip, userAgent)
+// Metadatos de request (requestId, ip, userAgent)
 app.use(requestMeta);
 
 /* ================================
@@ -56,7 +56,7 @@ app.use(requestMeta);
    ================================ */
 app.use(
   express.json({
-    limit: "2mb", // evita bodies gigantes accidentales
+    limit: "2mb",
   })
 );
 app.use(
@@ -73,7 +73,7 @@ app.use(
   helmet({
     contentSecurityPolicy: false,
     crossOriginEmbedderPolicy: false,
-    frameguard: false, // << permitir que otros orígenes embeban (PDF en iframe)
+    frameguard: false, // permitir PDF embebido en iframe
   })
 );
 app.use(helmet.hidePoweredBy());
@@ -213,7 +213,7 @@ console.log("✓ Swagger UI disponible en /api-docs");
    ================================ */
 app.get("/api/health", async (req, res) => {
   try {
-    const started = process.uptime();
+    const uptime = process.uptime();
     let dbStatus = "unknown";
 
     try {
@@ -228,7 +228,7 @@ app.get("/api/health", async (req, res) => {
 
     res.status(status === "ok" ? 200 : 503).json({
       status,
-      uptime_seconds: Math.round(started),
+      uptime_seconds: Math.round(uptime),
       timestamp: new Date().toISOString(),
       checks: {
         database: dbStatus,
@@ -381,7 +381,7 @@ app.get("/api/test-auth", (req, res) => {
   const header = req.headers.authorization || "";
   const token = header.replace("Bearer ", "");
   res.json({
-    token_recibido: !!token ? "sí" : "no",
+    token_recibido: token ? "sí" : "no",
     token,
     header_completo: header || "ninguno",
   });
@@ -455,7 +455,7 @@ app.get("/api/stats", requireAuth, async (req, res) => {
     const docsResult = await db.query(
       `SELECT 
          COUNT(*) as total,
-         SUM(CASE WHEN status = 'PENDIENTE_VISADO' OR status = 'PENDIENTE_FIRMA' THEN 1 ELSE 0 END) as pendientes,
+         SUM(CASE WHEN status IN ('PENDIENTE_VISADO', 'PENDIENTE_FIRMA') THEN 1 ELSE 0 END) as pendientes,
          SUM(CASE WHEN status = 'VISADO' THEN 1 ELSE 0 END) as visados,
          SUM(CASE WHEN status = 'FIRMADO' THEN 1 ELSE 0 END) as firmados,
          SUM(CASE WHEN status = 'RECHAZADO' THEN 1 ELSE 0 END) as rechazados

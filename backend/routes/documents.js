@@ -1,7 +1,7 @@
 // backend/routes/documents.js
 const express = require("express");
-const crypto = require("crypto");
 const Sentry = require("@sentry/node");
+
 const { requireAuth } = require("./auth");
 const { upload, handleMulterError } = require("../middlewares/uploadPdf");
 const documentsController = require("../controllers/documents");
@@ -27,7 +27,7 @@ const router = express.Router();
    RATE LIMITING SIMPLE EN MEMORIA
    ================================ */
 
-const rateLimitStore = {};
+const rateLimitStore = Object.create(null);
 
 function checkRateLimit(key, maxAttempts = 5, windowMs = 60000) {
   const now = Date.now();
@@ -59,6 +59,27 @@ function isGlobalAdmin(user) {
   return user?.role === "SUPER_ADMIN" || user?.role === "ADMIN_GLOBAL";
 }
 
+async function loadDocumentById(id) {
+  const docRes = await db.query(
+    `SELECT id, owner_id, title, status, company_id
+     FROM documents
+     WHERE id = $1`,
+    [id]
+  );
+  return docRes.rowCount > 0 ? docRes.rows[0] : null;
+}
+
+function setSentryDocumentContext(doc) {
+  if (!doc) return;
+  Sentry.setContext("document", {
+    id: doc.id,
+    owner_id: doc.owner_id,
+    title: doc.title || undefined,
+    status: doc.status || undefined,
+    company_id: doc.company_id,
+  });
+}
+
 async function checkDocumentCompanyScope(req, res, next) {
   try {
     const id = Number(req.params.id);
@@ -68,18 +89,10 @@ async function checkDocumentCompanyScope(req, res, next) {
       return res.status(400).json({ message: "ID de documento inválido" });
     }
 
-    const docRes = await db.query(
-      `SELECT id, owner_id, title, status, company_id
-       FROM documents
-       WHERE id = $1`,
-      [id]
-    );
-
-    if (docRes.rowCount === 0) {
+    const doc = await loadDocumentById(id);
+    if (!doc) {
       return res.status(404).json({ message: "Documento no encontrado" });
     }
-
-    const doc = docRes.rows[0];
 
     if (!isGlobalAdmin(user)) {
       if (!user.company_id || doc.company_id !== user.company_id) {
@@ -89,14 +102,7 @@ async function checkDocumentCompanyScope(req, res, next) {
       }
     }
 
-    Sentry.setContext("document", {
-      id: doc.id,
-      owner_id: doc.owner_id,
-      title: doc.title || undefined,
-      status: doc.status || undefined,
-      company_id: doc.company_id,
-    });
-
+    setSentryDocumentContext(doc);
     req.document = doc;
     return next();
   } catch (err) {
@@ -114,18 +120,10 @@ async function checkDocumentOwnership(req, res, next) {
       return res.status(400).json({ message: "ID de documento inválido" });
     }
 
-    const docRes = await db.query(
-      `SELECT id, owner_id, title, status, company_id
-       FROM documents
-       WHERE id = $1`,
-      [id]
-    );
-
-    if (docRes.rowCount === 0) {
+    const doc = await loadDocumentById(id);
+    if (!doc) {
       return res.status(404).json({ message: "Documento no encontrado" });
     }
-
-    const doc = docRes.rows[0];
 
     if (!isGlobalAdmin(user)) {
       if (!user.company_id || doc.company_id !== user.company_id) {
@@ -141,14 +139,7 @@ async function checkDocumentOwnership(req, res, next) {
       }
     }
 
-    Sentry.setContext("document", {
-      id: doc.id,
-      owner_id: doc.owner_id,
-      title: doc.title || undefined,
-      status: doc.status || undefined,
-      company_id: doc.company_id,
-    });
-
+    setSentryDocumentContext(doc);
     req.document = doc;
     return next();
   } catch (err) {
@@ -358,13 +349,13 @@ router.get(
 );
 
 /**
- * Vista previa del PDF original del documento.
+ * Vista previa del PDF del documento.
  * Ruta real: GET /api/documents/:id/preview
  */
 router.get("/:id/preview", previewDocument);
 
 /**
- * Descargar PDF original del documento.
+ * Descargar PDF del documento.
  * Ruta real: GET /api/documents/:id/download
  */
 router.get("/:id/download", downloadDocument);

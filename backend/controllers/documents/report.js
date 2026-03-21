@@ -75,7 +75,7 @@ async function downloadDocument(req, res) {
 
     const buffer = Buffer.from(fileResponse.data);
 
-    // Verificación de integridad (solo aviso)
+    // Verificación de integridad (solo log + header de warning)
     if (doc.pdf_hash) {
       const currentHash = computeHash(buffer);
       if (currentHash !== doc.pdf_hash) {
@@ -164,7 +164,7 @@ async function previewDocument(req, res) {
 
     const buffer = Buffer.from(fileResponse.data);
 
-    // Verificación de hash (solo log y header de warning)
+    // Verificación de hash (solo log + header de warning)
     if (doc.pdf_hash) {
       const currentHash = computeHash(buffer);
       if (currentHash !== doc.pdf_hash) {
@@ -189,7 +189,7 @@ async function previewDocument(req, res) {
     }
 
     res.setHeader("Content-Type", "application/pdf");
-    // Importante: sin Content-Disposition, para que el navegador renderice en iframe
+    // Sin Content-Disposition para que el navegador lo muestre en iframe / visor
     return res.send(buffer);
   } catch (err) {
     console.error("❌ Error en vista previa de documento:", err);
@@ -198,7 +198,7 @@ async function previewDocument(req, res) {
 }
 
 /* ================================
-   GET: Analytics del documento
+   GET: Analytics del documento / usuario
    ================================ */
 async function getDocumentAnalytics(req, res) {
   try {
@@ -296,6 +296,7 @@ async function downloadReportPdf(req, res) {
 
     let yPos = height - 50;
 
+    // Título
     page.drawText(`REPORTE: ${doc.title}`, {
       x: 50,
       y: yPos,
@@ -318,6 +319,7 @@ async function downloadReportPdf(req, res) {
     );
 
     yPos -= 20;
+
     page.drawText(
       `Creado: ${new Date(doc.created_at).toLocaleString("es-CL")}`,
       {
@@ -330,6 +332,7 @@ async function downloadReportPdf(req, res) {
 
     yPos -= 25;
 
+    // Firmantes
     page.drawText("FIRMANTES:", {
       x: 50,
       y: yPos,
@@ -346,6 +349,7 @@ async function downloadReportPdf(req, res) {
           : signer.status === "RECHAZADO"
           ? "✗"
           : "○";
+
       const statusColor =
         signer.status === "FIRMADO"
           ? rgb(0.2, 0.7, 0.2)
@@ -404,6 +408,7 @@ async function downloadReportPdf(req, res) {
 
     yPos -= 20;
 
+    // Historial de eventos
     page.drawText("HISTORIAL DE EVENTOS:", {
       x: 50,
       y: yPos,

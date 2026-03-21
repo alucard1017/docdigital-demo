@@ -77,7 +77,7 @@ async function signDocument(req, res) {
       req,
     });
 
-    // 3) Sellar PDF con QR / código y guardar ruta firmada
+    // 3) Sellar PDF con QR / código y guardar ruta firmada en pdf_final_url
     try {
       if (doc.nuevo_documento_id) {
         const docNuevoRes = await db.query(
@@ -100,21 +100,14 @@ async function signDocument(req, res) {
               numeroContratoInterno: doc.numero_contrato_interno,
             });
 
-            // Guardamos la ruta del PDF final firmado/sellado.
-            // Usamos pdf_final_url (campo ya existente) y, si signed_file_path existe en la BD,
-            // también lo actualizamos; si no existe, el UPDATE simplemente ignorará esa columna.
             await db.query(
               `UPDATE documents
                SET pdf_final_url = $1
-               ${"signed_file_path" in doc ? ", signed_file_path = $1" : ""}
                WHERE id = $2`,
               [newKey, doc.id]
             );
 
             doc.pdf_final_url = newKey;
-            if ("signed_file_path" in doc) {
-              doc.signed_file_path = newKey;
-            }
           }
         }
       }
@@ -124,8 +117,7 @@ async function signDocument(req, res) {
 
     return res.json({
       ...doc,
-      file_url:
-        (doc.signed_file_path || doc.pdf_final_url || doc.file_path) ?? null,
+      file_url: doc.pdf_final_url || doc.file_path,
       message: "Documento firmado exitosamente",
     });
   } catch (err) {
