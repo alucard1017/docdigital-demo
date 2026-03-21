@@ -22,7 +22,8 @@ function buildDocumentWhereClause({ id, user }) {
 
 function buildSafeFilename(base, fallbackPrefix) {
   const clean =
-    (base || fallbackPrefix).toString().replace(/[^a-zA-Z0-9-_]/g, "_") || fallbackPrefix;
+    (base || fallbackPrefix).toString().replace(/[^a-zA-Z0-9-_]/g, "_") ||
+    fallbackPrefix;
   return `${clean}.pdf`;
 }
 
@@ -46,7 +47,7 @@ async function downloadDocument(req, res) {
          id,
          title,
          file_path,
-         signed_file_path,
+         pdf_final_url,
          pdf_hash
        FROM documents
        WHERE ${where}`,
@@ -59,7 +60,7 @@ async function downloadDocument(req, res) {
 
     const doc = result.rows[0];
 
-    const storageKey = doc.signed_file_path || doc.file_path;
+    const storageKey = doc.pdf_final_url || doc.file_path;
     if (!storageKey) {
       return res
         .status(404)
@@ -135,7 +136,7 @@ async function previewDocument(req, res) {
          id,
          title,
          file_path,
-         signed_file_path,
+         pdf_final_url,
          pdf_hash
        FROM documents
        WHERE ${where}`,
@@ -148,7 +149,7 @@ async function previewDocument(req, res) {
 
     const doc = result.rows[0];
 
-    const storageKey = doc.signed_file_path || doc.file_path;
+    const storageKey = doc.pdf_final_url || doc.file_path;
     if (!storageKey) {
       return res
         .status(404)
@@ -188,7 +189,7 @@ async function previewDocument(req, res) {
     }
 
     res.setHeader("Content-Type", "application/pdf");
-    // Ojo: sin Content-Disposition para que el navegador renderice en iframe
+    // Importante: sin Content-Disposition, para que el navegador renderice en iframe
     return res.send(buffer);
   } catch (err) {
     console.error("❌ Error en vista previa de documento:", err);

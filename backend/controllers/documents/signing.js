@@ -100,17 +100,21 @@ async function signDocument(req, res) {
               numeroContratoInterno: doc.numero_contrato_interno,
             });
 
-            // Guardamos la ruta del PDF final firmado/sellado
+            // Guardamos la ruta del PDF final firmado/sellado.
+            // Usamos pdf_final_url (campo ya existente) y, si signed_file_path existe en la BD,
+            // también lo actualizamos; si no existe, el UPDATE simplemente ignorará esa columna.
             await db.query(
               `UPDATE documents
-               SET pdf_final_url = $1,
-                   signed_file_path = $1
+               SET pdf_final_url = $1
+               ${"signed_file_path" in doc ? ", signed_file_path = $1" : ""}
                WHERE id = $2`,
               [newKey, doc.id]
             );
 
             doc.pdf_final_url = newKey;
-            doc.signed_file_path = newKey;
+            if ("signed_file_path" in doc) {
+              doc.signed_file_path = newKey;
+            }
           }
         }
       }
@@ -120,7 +124,8 @@ async function signDocument(req, res) {
 
     return res.json({
       ...doc,
-      file_url: doc.signed_file_path || doc.pdf_final_url || doc.file_path,
+      file_url:
+        (doc.signed_file_path || doc.pdf_final_url || doc.file_path) ?? null,
       message: "Documento firmado exitosamente",
     });
   } catch (err) {
@@ -132,66 +137,86 @@ async function signDocument(req, res) {
 /* ================================
    POST: Visar documento (propietario)
    ================================ */
+async function viserDocumentInternalUpdate(id, userId) {
+  const current = await db.query(
+    `SELECT * 
+     FROM documents 
+     WHERE id = $1 AND owner_id = $2`,
+    [id, userId]
+  );
+
+  if (current.rowCount === 0) {
+    return { error: { status: 404, body: { message: "No encontrado" } } };
+  }
+
+  const docActual = current.rows[0];
+
+  if (docActual.status === "FIRMADO") {
+    return { error: { status: 400, body: { message: "Ya firmado" } } };
+  }
+
+  if (docActual.status === "RECHAZADO") {
+    return { error: { status: 400, body: { message: "Documento rechazado" } } };
+  }
+
+  if (docActual.requires_visado !== true) {
+    return {
+      error: {
+        status: 400,
+        body: { message: "Este documento no requiere visación" },
+      },
+    };
+  }
+
+  if (docActual.status !== "PENDIENTE_VISADO") {
+    return {
+      error: {
+        status: 400,
+        body: {
+          message:
+            "Solo se pueden visar documentos en estado PENDIENTE_VISADO",
+        },
+      },
+    };
+  }
+
+  const result = await db.query(
+    `UPDATE documents 
+     SET status = $1, updated_at = NOW() 
+     WHERE id = $2 AND owner_id = $3 
+     RETURNING *`,
+    ["PENDIENTE_FIRMA", id, userId]
+  );
+  const doc = result.rows[0];
+
+  await db.query(
+    `INSERT INTO document_events (
+       document_id, actor, action, details, from_status, to_status
+     ) 
+     VALUES ($1, $2, $3, $4, $5, $6)`,
+    [
+      doc.id,
+      "Sistema",
+      "VISADO",
+      "Documento visado por el propietario",
+      docActual.status,
+      "PENDIENTE_FIRMA",
+    ]
+  );
+
+  return { doc, docActual };
+}
+
 async function visarDocument(req, res) {
   try {
     const id = req.params.id;
 
-    const current = await db.query(
-      `SELECT * 
-       FROM documents 
-       WHERE id = $1 AND owner_id = $2`,
-      [id, req.user.id]
-    );
-
-    if (current.rowCount === 0) {
-      return res.status(404).json({ message: "No encontrado" });
+    const result = await viserDocumentInternalUpdate(id, req.user.id);
+    if (result.error) {
+      return res.status(result.error.status).json(result.error.body);
     }
 
-    const docActual = current.rows[0];
-
-    if (docActual.status === "FIRMADO") {
-      return res.status(400).json({ message: "Ya firmado" });
-    }
-
-    if (docActual.status === "RECHAZADO") {
-      return res.status(400).json({ message: "Documento rechazado" });
-    }
-
-    if (docActual.requires_visado !== true) {
-      return res.status(400).json({
-        message: "Este documento no requiere visación",
-      });
-    }
-
-    if (docActual.status !== "PENDIENTE_VISADO") {
-      return res.status(400).json({
-        message: "Solo se pueden visar documentos en estado PENDIENTE_VISADO",
-      });
-    }
-
-    const result = await db.query(
-      `UPDATE documents 
-       SET status = $1, updated_at = NOW() 
-       WHERE id = $2 AND owner_id = $3 
-       RETURNING *`,
-      ["PENDIENTE_FIRMA", id, req.user.id]
-    );
-    const doc = result.rows[0];
-
-    await db.query(
-      `INSERT INTO document_events (
-         document_id, actor, action, details, from_status, to_status
-       ) 
-       VALUES ($1, $2, $3, $4, $5, $6)`,
-      [
-        doc.id,
-        req.user.name || "Sistema",
-        "VISADO",
-        "Documento visado por el propietario",
-        docActual.status,
-        "PENDIENTE_FIRMA",
-      ]
-    );
+    const { doc, docActual } = result;
 
     await logAudit({
       user: req.user,
