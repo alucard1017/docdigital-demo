@@ -290,20 +290,55 @@ async function rejectDocument(req, res) {
       ]
     );
 
-    await logAudit({
-      user: req.user,
-      action: "document_rejected",
-      entityType: "document",
-      entityId: doc.id,
-      metadata: { motivo: motivo || "Sin especificar" },
-      req,
-    });
+await logAudit({
+  user: req.user,
+  action: "document_rejected",
+  entityType: "document",
+  entityId: doc.id,
+  metadata: { motivo: motivo || "Sin especificar" },
+  req,
+});
 
-    return res.json({
-      ...doc,
-      file_url: doc.file_path,
-      message: "Documento rechazado exitosamente",
-    });
+// ========= NOTIFICAR AL CREADOR POR EMAIL =========
+const creadorRes = await db.query(
+  `SELECT u.email, u.name
+   FROM users u
+   WHERE u.id = $1`,
+  [doc.owner_id]
+);
+
+if (creadorRes.rowCount > 0) {
+  const creador = creadorRes.rows[0];
+  const { sendNotification } = require("../../services/emailService");
+  
+  const subject = `❌ Documento rechazado: ${doc.title}`;
+  const html = `
+    <div style="font-family: sans-serif; max-width: 600px; margin: 0 auto; padding: 20px;">
+      <h2 style="color: #b91c1c;">❌ Documento Rechazado</h2>
+      <p>Hola <strong>${creador.name}</strong>,</p>
+      <p>El documento <strong>${doc.title}</strong> ha sido rechazado.</p>
+      <div style="background: #fef2f2; padding: 16px; border-radius: 8px; border-left: 4px solid #b91c1c; margin: 16px 0;">
+        <strong>Motivo del rechazo:</strong><br/>
+        ${motivo || "Sin especificar"}
+      </div>
+      <p>Por favor, revisa el motivo y toma las acciones necesarias.</p>
+      <a href="${process.env.FRONTEND_URL}" style="display:inline-block;padding:12px 24px;background:#2563eb;color:#fff;text-decoration:none;border-radius:8px;margin-top:16px;">
+        Ver en VeriFirma
+      </a>
+    </div>
+  `;
+
+  sendNotification(creador.email, subject, html).catch(err => 
+    console.error("Error enviando notificación de rechazo:", err)
+  );
+}
+
+return res.json({
+  ...doc,
+  file_url: doc.file_path,
+  message: "Documento rechazado exitosamente",
+});
+
   } catch (err) {
     console.error("❌ Error rechazando documento:", err);
     return res.status(500).json({ message: "Error interno del servidor" });

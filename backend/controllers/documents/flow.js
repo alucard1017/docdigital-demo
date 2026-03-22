@@ -311,6 +311,36 @@ if (documento.company_id) {
   });
 }
 
+// ========= NOTIFICAR AL CREADOR POR EMAIL =========
+const creadorRes = await db.query(
+  `SELECT u.email, u.name
+   FROM users u
+   JOIN documentos d ON d.creado_por = u.id
+   WHERE d.id = $1`,
+  [firmante.documento_id]
+);
+
+if (creadorRes.rowCount > 0) {
+  const creador = creadorRes.rows[0];
+  const { sendNotification } = require("../../services/emailService");
+  
+  const subject = `✅ Documento firmado completamente: ${firmante.titulo}`;
+  const html = `
+    <h2>Documento firmado exitosamente</h2>
+    <p>Hola <strong>${creador.name}</strong>,</p>
+    <p>El documento <strong>${firmante.titulo}</strong> ha sido firmado por todos los participantes.</p>
+    <p><strong>Total de firmantes:</strong> ${totalNum}</p>
+    <p>Puedes descargar el PDF sellado desde tu dashboard.</p>
+    <a href="${process.env.FRONTEND_URL}" style="display:inline-block;padding:12px 24px;background:#2563eb;color:#fff;text-decoration:none;border-radius:8px;margin-top:16px;">
+      Ver en VeriFirma
+    </a>
+  `;
+
+  sendNotification(creador.email, subject, html).catch(err => 
+    console.error("Error enviando notificación al creador:", err)
+  );
+}
+
     const metadata = buildDocumentAuditMetadata({
       documentId: documento.id,
       title: documento.titulo,
