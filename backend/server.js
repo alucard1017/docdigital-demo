@@ -24,6 +24,7 @@ const db = require("./db");
 const { setupSwagger } = require("./swagger");
 const { requireAuth, requireRole } = require("./routes/auth");
 
+
 /* ================================
    INICIALIZAR WORKER DE BULLMQ (BACKGROUND JOBS)
    ================================ */
@@ -63,6 +64,7 @@ const companiesRoutes = require("./routes/companies");
 const statusRoutes = require("./routes/status");
 const logsRoutes = require("./routes/logs");
 const remindersRoutes = require("./routes/reminders");
+const analyticsRoutes = require("./routes/analytics");
 
 /* ================================
    LOG DE INICIO
@@ -363,6 +365,10 @@ console.log("✓ Rutas /api/companies registradas");
 // Recordatorios
 app.use("/api/reminders", remindersRoutes);
 console.log("✓ Rutas /api/reminders registradas");
+
+// Analytics
+app.use("/api/analytics", analyticsRoutes);
+console.log("✓ Rutas /api/analytics registradas");
 
 /* ================================
    RUTA STORAGE / URLs FIRMADAS

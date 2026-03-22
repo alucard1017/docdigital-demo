@@ -8,6 +8,7 @@ const {
   validateCreateFlowBody,
   validateSendFlowParams,
 } = require("./flowValidation");
+const { triggerWebhook } = require("../../services/webhookService");
 
 /* ================================
    Crear flujo (BORRADOR, sin enviar correos)
@@ -228,71 +229,76 @@ async function sendFlow(req, res) {
       ]
     );
 
-/* ========= CREAR RECORDATORIOS AUTOMÁTICOS ========= */
-// Obtener configuración de recordatorios de la empresa
-const configRes = await db.query(
-  `SELECT interval_days, max_attempts, enabled
-   FROM reminder_config
-   WHERE company_id = $1`,
-  [documento.company_id]
-);
-
-let intervalDays = 3;
-let maxAttempts = 3;
-let reminderEnabled = true;
-
-if (configRes.rowCount > 0) {
-  const config = configRes.rows[0];
-  intervalDays = config.interval_days;
-  maxAttempts = config.max_attempts;
-  reminderEnabled = config.enabled;
-}
-
-if (reminderEnabled) {
-  const ahora = new Date();
-  const proximoRecordatorio = new Date(
-    ahora.getTime() + intervalDays * 24 * 60 * 60 * 1000
-  );
-
-  for (const firmante of firmantes) {
-    await db.query(
-      `INSERT INTO recordatorios (
-         documento_id,
-         firmante_id,
-         email,
-         tipo,
-         status,
-         scheduled_at,
-         max_attempts,
-         created_at,
-         updated_at
-       )
-       VALUES ($1, $2, $3, 'AUTO', 'PENDING', $4, $5, NOW(), NOW())`,
-      [
-        id,
-        firmante.id,
-        firmante.email,
-        proximoRecordatorio,
-        maxAttempts,
-      ]
+    /* ========= CREAR RECORDATORIOS AUTOMÁTICOS ========= */
+    // Obtener configuración de recordatorios de la empresa
+    const configRes = await db.query(
+      `SELECT interval_days, max_attempts, enabled
+       FROM reminder_config
+       WHERE company_id = $1`,
+      [documento.company_id]
     );
-  }
 
-  console.log(
-    `✅ Creados ${firmantes.length} recordatorios automáticos para documento ${id} (intervalo: ${intervalDays} días)`
-  );
-} else {
-  console.log(
-    `⏭️ Recordatorios automáticos deshabilitados para empresa ${documento.company_id}`
-  );
-}
+    let intervalDays = 3;
+    let maxAttempts = 3;
+    let reminderEnabled = true;
 
+    if (configRes.rowCount > 0) {
+      const config = configRes.rows[0];
+      intervalDays = config.interval_days;
+      maxAttempts = config.max_attempts;
+      reminderEnabled = config.enabled;
+    }
 
-    console.log(
-      `✅ Creados ${firmantes.length} recordatorios automáticos para documento ${id}`
-    );
+    if (reminderEnabled) {
+      const ahora = new Date();
+      const proximoRecordatorio = new Date(
+        ahora.getTime() + intervalDays * 24 * 60 * 60 * 1000
+      );
+
+      for (const firmante of firmantes) {
+        await db.query(
+          `INSERT INTO recordatorios (
+             documento_id,
+             firmante_id,
+             email,
+             tipo,
+             status,
+             scheduled_at,
+             max_attempts,
+             created_at,
+             updated_at
+           )
+           VALUES ($1, $2, $3, 'AUTO', 'PENDING', $4, $5, NOW(), NOW())`,
+          [
+            id,
+            firmante.id,
+            firmante.email,
+            proximoRecordatorio,
+            maxAttempts,
+          ]
+        );
+      }
+
+      console.log(
+        `✅ Creados ${firmantes.length} recordatorios automáticos para documento ${id} (intervalo: ${intervalDays} días)`
+      );
+    } else {
+      console.log(
+        `⏭️ Recordatorios automáticos deshabilitados para empresa ${documento.company_id}`
+      );
+    }
 
     await db.query("COMMIT");
+
+    // ========= DISPARAR WEBHOOK =========
+    if (documento.company_id) {
+      triggerWebhook(documento.company_id, "document.sent", {
+        documentoId: documento.id,
+        titulo: documento.titulo,
+        estado: nuevoEstado,
+        firmantes: firmantes.length,
+      }).catch((err) => console.error("Error en webhook:", err));
+    }
 
     const metadata = buildDocumentAuditMetadata({
       documentId: documento.id,
@@ -302,7 +308,7 @@ if (reminderEnabled) {
       extra: {
         firmantes: firmantes.length,
         tieneVisador,
-        recordatorios_creados: firmantes.length,
+        recordatorios_creados: reminderEnabled ? firmantes.length : 0,
       },
     });
 
@@ -318,7 +324,7 @@ if (reminderEnabled) {
     return res.json({
       documentoId: documento.id,
       estado: nuevoEstado,
-      recordatoriosCreados: firmantes.length,
+      recordatoriosCreados: reminderEnabled ? firmantes.length : 0,
       message: "Documento enviado a firma correctamente",
     });
   } catch (error) {
@@ -460,6 +466,15 @@ async function signFlow(req, res) {
         `🛑 Recordatorios cancelados para documento ${firmante.documento_id}`
       );
 
+      // ========= DISPARAR WEBHOOK =========
+      if (firmante.company_id) {
+        triggerWebhook(firmante.company_id, "document.signed", {
+          documentoId: firmante.documento_id,
+          titulo: firmante.titulo,
+          firmantes_totales: totalNum,
+        }).catch((err) => console.error("Error en webhook:", err));
+      }
+
       await db.query(
         `INSERT INTO eventos_firma (
            documento_id,
@@ -468,6 +483,7 @@ async function signFlow(req, res) {
            created_at
          )
          VALUES ($1, 'DOCUMENTO_FIRMADO_COMPLETO', $2, NOW())`,
+        
         [
           firmante.documento_id,
           JSON.stringify({
