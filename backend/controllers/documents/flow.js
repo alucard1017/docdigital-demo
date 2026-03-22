@@ -228,27 +228,65 @@ async function sendFlow(req, res) {
       ]
     );
 
-    /* ========= CREAR RECORDATORIOS AUTOMÁTICOS ========= */
-    const ahora = new Date();
-    const proximoRecordatorio = new Date(ahora.getTime() + 3 * 24 * 60 * 60 * 1000); // 3 días después
+/* ========= CREAR RECORDATORIOS AUTOMÁTICOS ========= */
+// Obtener configuración de recordatorios de la empresa
+const configRes = await db.query(
+  `SELECT interval_days, max_attempts, enabled
+   FROM reminder_config
+   WHERE company_id = $1`,
+  [documento.company_id]
+);
 
-    for (const firmante of firmantes) {
-      await db.query(
-        `INSERT INTO recordatorios (
-           documento_id,
-           firmante_id,
-           email,
-           tipo,
-           status,
-           scheduled_at,
-           max_attempts,
-           created_at,
-           updated_at
-         )
-         VALUES ($1, $2, $3, 'AUTO', 'PENDING', $4, 3, NOW(), NOW())`,
-        [id, firmante.id, firmante.email, proximoRecordatorio]
-      );
-    }
+let intervalDays = 3;
+let maxAttempts = 3;
+let reminderEnabled = true;
+
+if (configRes.rowCount > 0) {
+  const config = configRes.rows[0];
+  intervalDays = config.interval_days;
+  maxAttempts = config.max_attempts;
+  reminderEnabled = config.enabled;
+}
+
+if (reminderEnabled) {
+  const ahora = new Date();
+  const proximoRecordatorio = new Date(
+    ahora.getTime() + intervalDays * 24 * 60 * 60 * 1000
+  );
+
+  for (const firmante of firmantes) {
+    await db.query(
+      `INSERT INTO recordatorios (
+         documento_id,
+         firmante_id,
+         email,
+         tipo,
+         status,
+         scheduled_at,
+         max_attempts,
+         created_at,
+         updated_at
+       )
+       VALUES ($1, $2, $3, 'AUTO', 'PENDING', $4, $5, NOW(), NOW())`,
+      [
+        id,
+        firmante.id,
+        firmante.email,
+        proximoRecordatorio,
+        maxAttempts,
+      ]
+    );
+  }
+
+  console.log(
+    `✅ Creados ${firmantes.length} recordatorios automáticos para documento ${id} (intervalo: ${intervalDays} días)`
+  );
+} else {
+  console.log(
+    `⏭️ Recordatorios automáticos deshabilitados para empresa ${documento.company_id}`
+  );
+}
+
 
     console.log(
       `✅ Creados ${firmantes.length} recordatorios automáticos para documento ${id}`

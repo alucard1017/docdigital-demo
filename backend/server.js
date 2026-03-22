@@ -62,6 +62,7 @@ const publicRegisterRoutes = require("./routes/publicRegister");
 const companiesRoutes = require("./routes/companies");
 const statusRoutes = require("./routes/status");
 const logsRoutes = require("./routes/logs");
+const remindersRoutes = require("./routes/reminders");
 
 /* ================================
    LOG DE INICIO
@@ -358,6 +359,10 @@ console.log("✓ Rutas /api/public/register registradas");
 // Empresas
 app.use("/api/companies", companiesRoutes);
 console.log("✓ Rutas /api/companies registradas");
+
+// Recordatorios
+app.use("/api/reminders", remindersRoutes);
+console.log("✓ Rutas /api/reminders registradas");
 
 /* ================================
    RUTA STORAGE / URLs FIRMADAS
