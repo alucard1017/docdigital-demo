@@ -344,6 +344,14 @@ const {
 router.post("/send-verification", sendVerificationEmail);
 router.post("/verify-email", verifyEmail);
 
+const {
+  forgotPassword,
+  resetPassword,
+} = require("../controllers/auth/passwordReset");
+
+router.post("/forgot-password", forgotPassword);
+router.post("/reset-password", resetPassword);
+
 module.exports = router;
 module.exports.requireAuth = requireAuth;
 module.exports.requireRole = requireRole;

@@ -23,6 +23,8 @@ import { useSocket } from "./hooks/useSocket";
 import PricingView from "./views/PricingView";
 import ProfileView from "./views/ProfileView";
 import TemplatesView from "./views/TemplatesView";
+import ForgotPasswordView from "./views/ForgotPasswordView";
+import ResetPasswordView from "./views/ResetPasswordView";
 import api from "./api/client";
 
 /* ========= Helpers de rol ========= */
@@ -262,6 +264,18 @@ useEffect(() => {
         cargarFirmaPublica(tokenUrl);
         return;
       }
+
+	const pathname = window.location.pathname;
+	
+	if (pathname === "/forgot-password") {
+	  return <ForgotPasswordView />;
+	}
+
+	if (pathname === "/reset-password") {
+	  return <ResetPasswordView />;
+	}
+
+	let mode = "app";
 
       if (isVerificationPublic) {
         setView("verification");

@@ -42,7 +42,7 @@ export function LoginView({
 
         <form onSubmit={handleLogin} autoComplete="on">
           <div style={{ marginBottom: 20 }}>
-            <label
+            abel
               style={{
                 fontWeight: 700,
                 fontSize: '0.8rem',
@@ -65,7 +65,7 @@ export function LoginView({
           </div>
 
           <div style={{ marginBottom: 25 }}>
-            <label
+            abel
               style={{
                 fontWeight: 700,
                 fontSize: '0.8rem',
@@ -114,11 +114,25 @@ export function LoginView({
             {isLoggingIn ? 'Conectando…' : 'ACCEDER AL PORTAL'}
           </button>
 
+          <div style={{ textAlign: 'center', marginTop: 16 }}>
+            <a
+              href="/forgot-password"
+              style={{
+                fontSize: 13,
+                color: '#2563eb',
+                textDecoration: 'none',
+                fontWeight: 600,
+              }}
+            >
+              ¿Olvidaste tu contraseña?
+            </a>
+          </div>
+
           <button
             type="button"
             style={{
               width: '100%',
-              marginTop: 20,
+              marginTop: 12,
               fontSize: 12,
               color: '#64748b',
               background: 'none',
@@ -128,7 +142,7 @@ export function LoginView({
             }}
             onClick={() => setShowHelp(!showHelp)}
           >
-            ¿Perdiste tu contraseña o ClaveÚnica?
+            ¿Problemas con ClaveÚnica?
           </button>
         </form>
 
@@ -137,7 +151,7 @@ export function LoginView({
             <strong>Recuperación de acceso:</strong>
             <br />
             Si utiliza ClaveÚnica, recupérela en <strong>claveunica.gob.cl</strong>. Para cuentas
-            administrativas (Alucard), contacte al soporte técnico.
+            administrativas, contacte al soporte técnico.
           </div>
         )}
 
