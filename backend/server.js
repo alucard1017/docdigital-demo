@@ -27,6 +27,7 @@ const plansRoutes = require("./routes/plans");
 const templatesRoutes = require("./routes/templates");
 
 
+
 /* ================================
    INICIALIZAR WORKER DE BULLMQ (BACKGROUND JOBS)
    ================================ */
@@ -67,6 +68,7 @@ const statusRoutes = require("./routes/status");
 const logsRoutes = require("./routes/logs");
 const remindersRoutes = require("./routes/reminders");
 const analyticsRoutes = require("./routes/analytics");
+const notificationsRoutes = require("./routes/notifications");
 
 
 /* ================================
@@ -380,6 +382,10 @@ console.log("✓ Rutas /api/plans registradas");
 // Templates
 app.use("/api/templates", templatesRoutes);
 console.log("✓ Rutas /api/templates registradas");
+
+// Notificaciones
+app.use("/api/notifications", notificationsRoutes);
+console.log("✓ Rutas /api/notifications registradas");
 
 
 /* ================================
