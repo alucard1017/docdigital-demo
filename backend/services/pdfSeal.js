@@ -5,13 +5,14 @@ const QRCode = require('qrcode');
 const bwipjs = require('@bwip-js/node');
 const { PDFDocument, rgb, StandardFonts, degrees } = require('pdf-lib');
 const { getObjectBuffer, uploadBufferToS3 } = require('./storageR2');
+const db = require('../db');
 
 /**
  * s3Key: clave del PDF original en R2/S3
  * documentoId: ID interno del documento (tabla documentos)
  * codigoVerificacion: código corto para verificación pública
  * categoriaFirma: 'AVANZADA' | 'SIMPLE'
- * numeroContratoInterno: código corto tipo VF-2026-000123 (ya generado afuera)
+ * numeroContratoInterno: código corto tipo VF-2026-000123
  */
 async function sellarPdfConQr({
   s3Key,
@@ -26,7 +27,7 @@ async function sellarPdfConQr({
     throw new Error('codigoVerificacion es obligatorio para sellar el PDF');
   }
 
-  console.log('DEBUG SELLO >> numeroContratoInterno recibido:', numeroContratoInterno);
+  console.log('📄 Sellando PDF con evidencias completas...');
 
   // 1) Descargar y cargar PDF base
   const pdfBytes = await getObjectBuffer(s3Key);
@@ -36,12 +37,29 @@ async function sellarPdfConQr({
   if (!pages || totalPages === 0) throw new Error('El PDF no tiene páginas');
 
   const font = await pdfDoc.embedFont(StandardFonts.Helvetica);
+  const fontBold = await pdfDoc.embedFont(StandardFonts.HelveticaBold);
 
-  // Número interno normalizado (para reutilizar en footer y bloque legal)
   const numeroInternoTexto = numeroContratoInterno || 'N° interno: —';
-  console.log('DEBUG SELLO >> numeroInternoTexto pintado:', numeroInternoTexto);
 
-  // 1.1) Footer en todas las páginas: VF-AAAA-###### · Página X de Y · verifirma.cl
+  // 2) Obtener firmantes del documento
+  const firmantesRes = await db.query(
+    `SELECT 
+       nombre,
+       email,
+       fecha_firma,
+       ip_firma,
+       user_agent_firma,
+       geo_location,
+       tipo_firma
+     FROM firmantes
+     WHERE documento_id = $1 AND estado = 'FIRMADO'
+     ORDER BY fecha_firma ASC`,
+    [documentoId]
+  );
+
+  const firmantes = firmantesRes.rows;
+
+  // 3) Footer en todas las páginas
   const footerFontSize = 8;
   const footerMarginY = 30;
   const footerColor = rgb(0.4, 0.4, 0.4);
@@ -63,11 +81,11 @@ async function sellarPdfConQr({
     });
   });
 
-  // 2) Trabajar sobre la última página para logo, QR y bloque legal
+  // 4) Última página: logo, QR, tabla de evidencias
   const lastPage = pages[pages.length - 1];
   const { width, height } = lastPage.getSize();
 
-  // 2.1) Logo VeriFirma arriba a la derecha
+  // Logo
   const logoPngBytes = await fs.promises.readFile(
     path.join(__dirname, '../assets/verifirma-logo.png')
   );
@@ -85,7 +103,6 @@ async function sellarPdfConQr({
     height: logoHeight,
   });
 
-  // 2.2) Número interno de contrato bajo el logo
   lastPage.drawText(numeroInternoTexto, {
     x: logoX,
     y: logoY - 16,
@@ -94,9 +111,8 @@ async function sellarPdfConQr({
     color: rgb(0.1, 0.1, 0.1),
   });
 
-  // 3) QR con URL pública de verificación
+  // QR
   const urlVerificacion = `https://verifirma.cl/verificar/${codigoVerificacion}`;
-
   const qrDataUrl = await QRCode.toDataURL(urlVerificacion, {
     errorCorrectionLevel: 'M',
   });
@@ -113,22 +129,16 @@ async function sellarPdfConQr({
     height: qrSize,
   });
 
-  const textoBajoQr = [
-    'Verifique este documento escaneando el código QR',
-    'o visitando verifirma.cl',
-  ].join('\n');
-  const textoBajoQrSize = 7;
-
-  lastPage.drawText(textoBajoQr, {
+  lastPage.drawText('Verifique este documento\\nescaneando el código QR\\no visitando verifirma.cl', {
     x: qrX,
-    y: qrY - 18,
-    size: textoBajoQrSize,
+    y: qrY - 28,
+    size: 7,
     font,
     color: rgb(0.25, 0.25, 0.25),
     lineHeight: 9,
   });
 
-  // 3.1) Lateral derecho: código de barras + branding
+  // Código de barras lateral
   let barcodePng;
   try {
     const barcodePngBuffer = await bwipjs.toBuffer({
@@ -161,69 +171,118 @@ async function sellarPdfConQr({
       height: barcodeHeight,
     });
 
-    const textoLateral = [
-      'VeriFirma · Plataforma de firma electrónica',
-      'Seguridad digital sin fronteras',
-      'verifirma.cl',
-    ].join('  ·  ');
-
-    const lateralSize = 7;
+    const textoLateral = 'VeriFirma · Plataforma de firma electrónica · Seguridad digital sin fronteras · verifirma.cl';
 
     lastPage.drawText(textoLateral, {
       x: width - 5,
-      y: barcodeY + barcodeHeight / 2 - lateralSize,
-      size: lateralSize,
+      y: barcodeY + barcodeHeight / 2 - 7,
+      size: 7,
       font,
       color: rgb(0.2, 0.2, 0.2),
       rotate: degrees(90),
       maxWidth: height - 80,
-      lineHeight: lateralSize + 2,
+      lineHeight: 9,
     });
   }
 
-  // Línea divisoria sobre el bloque legal
+  // 5) TABLA DE EVIDENCIAS DE FIRMAS
+  let tableY = 350;
+
+  lastPage.drawText('EVIDENCIAS DE FIRMA ELECTRÓNICA', {
+    x: 40,
+    y: tableY,
+    size: 11,
+    font: fontBold,
+    color: rgb(0, 0, 0),
+  });
+
+  tableY -= 20;
+
+  if (firmantes.length > 0) {
+    firmantes.forEach((f, idx) => {
+      const geo = f.geo_location ? JSON.parse(f.geo_location) : null;
+      const location = geo ? `${geo.city}, ${geo.country}` : 'Desconocido';
+      const fecha = f.fecha_firma 
+        ? new Date(f.fecha_firma).toLocaleString('es-CL', { timeZone: 'America/Santiago' })
+        : 'N/A';
+
+      const firmText = [
+        `Firmante ${idx + 1}: ${f.nombre}`,
+        `Email: ${f.email}`,
+        `Fecha: ${fecha}`,
+        `IP: ${f.ip_firma || 'N/A'}`,
+        `Ubicación: ${location}`,
+        `Tipo: ${f.tipo_firma || 'SIMPLE'}`,
+        '',
+      ].join('\\n');
+
+      lastPage.drawText(firmText, {
+        x: 40,
+        y: tableY,
+        size: 8,
+        font,
+        color: rgb(0.1, 0.1, 0.1),
+        lineHeight: 10,
+      });
+
+      tableY -= 80;
+    });
+  } else {
+    lastPage.drawText('No hay firmas registradas', {
+      x: 40,
+      y: tableY,
+      size: 8,
+      font,
+      color: rgb(0.5, 0.5, 0.5),
+    });
+    tableY -= 20;
+  }
+
+  // Línea divisoria
   lastPage.drawLine({
     start: { x: 40, y: 75 },
-    end: { x: width - 40, y: 75 },
+    end: { x: width - 120, y: 75 },
     thickness: 0.5,
     color: rgb(0.8, 0.8, 0.8),
   });
 
-  // 4) Bloque legal
+  // Bloque legal
   const esAvanzada = categoriaFirma === 'AVANZADA';
 
   const textoLegal = [
     'Certificado de firma electrónica',
     '',
-    `Número interno del contrato: ${numeroInternoTexto}`,
-    `Documento ID (sistema): ${documentoId}`,
+    `Número interno: ${numeroInternoTexto}`,
+    `Documento ID: ${documentoId}`,
     `Código de verificación: ${codigoVerificacion}`,
     `Verificación en línea: ${urlVerificacion}`,
     '',
     esAvanzada
-      ? 'Este documento ha sido firmado mediante Firma Electrónica Avanzada conforme a la Ley N° 19.799 y su normativa complementaria.'
-      : 'Este documento ha sido firmado mediante Firma Electrónica Simple conforme a la Ley N° 19.799 y su normativa complementaria.',
-    'La validez del presente documento puede ser verificada en el sitio indicado utilizando el código de verificación.',
+      ? 'Este documento ha sido firmado mediante Firma Electrónica Avanzada conforme a la Ley N° 19.799.'
+      : 'Este documento ha sido firmado mediante Firma Electrónica Simple conforme a la Ley N° 19.799.',
+    'La validez del presente documento puede ser verificada en el sitio indicado.',
     'Proveedor de servicios de firma: VeriFirma SpA – RUT 77.777.777-7.',
-    'Zona horaria de referencia: Chile/Continental.',
-  ].join('\n');
+    'Zona horaria: America/Santiago (Chile/Continental).',
+  ].join('\\n');
 
   lastPage.drawText(textoLegal, {
     x: 40,
     y: 60,
-    size: 9,
+    size: 8,
     font,
     color: rgb(0, 0, 0),
-    lineHeight: 11,
+    lineHeight: 10,
   });
 
-  // 5) Guardar y subir sellado
+  // 6) Guardar y subir
   const newPdfBytes = await pdfDoc.save();
   const newKey = s3Key.endsWith('.pdf')
-    ? s3Key.replace(/\.pdf$/i, '_sellado.pdf')
+    ? s3Key.replace(/\\.pdf$/i, '_sellado.pdf')
     : `${s3Key}_sellado.pdf`;
 
   await uploadBufferToS3(newKey, newPdfBytes, 'application/pdf');
+
+  console.log(`✅ PDF sellado con ${firmantes.length} evidencias: ${newKey}`);
 
   return newKey;
 }
