@@ -3,7 +3,10 @@ const express = require("express");
 const Sentry = require("@sentry/node");
 
 const { requireAuth } = require("./auth");
+const db = require("../db");
 const { upload, handleMulterError } = require("../middlewares/uploadPdf");
+const { validatePdf } = require("../middlewares/pdfValidator");
+
 const documentsController = require("../controllers/documents");
 const {
   resendReminder,
@@ -15,10 +18,14 @@ const {
   previewDocument,
 } = require("../controllers/documents/report");
 const {
+  getReminderStatus,
+  retryReminder,
+} = require("../controllers/documents/remindersAdmin");
+
+const {
   logAudit,
   buildDocumentAuditMetadata,
 } = require("../utils/auditLog");
-const db = require("../db");
 const {
   createRedisRateLimitMiddleware,
 } = require("../utils/rateLimiter");
@@ -275,8 +282,6 @@ router.get("/", requireAuth, documentsController.getUserDocuments);
    RUTAS POST - SIN PARÁMETROS
    ================================ */
 
-const { validatePdf } = require("../middlewares/pdfValidator");
-
 router.post(
   "/",
   requireAuth,
@@ -287,17 +292,13 @@ router.post(
   documentsController.createDocument
 );
 
-/**
- * Endpoint para encolar recordatorios automáticos on‑demand.
- * El procesamiento real lo hace BullMQ en segundo plano.
- */
 router.post(
   "/recordatorios-automaticos",
   requireAuth,
   createRedisRateLimitMiddleware({
     keyPrefix: "reminders",
     maxAttempts: 3,
-    windowSeconds: 3600, // 1 hora
+    windowSeconds: 3600,
     errorMessage:
       "Demasiados intentos. Espera 1 hora antes de volver a enviar recordatorios.",
   }),
@@ -339,7 +340,7 @@ router.post(
   documentsController.sendFlow
 );
 
-// Firma pública por firmante (no requiere auth, viene con token externo)
+// Firma pública por firmante (no requiere auth)
 router.post("/firmar-flujo/:firmanteId", documentsController.signFlow);
 
 /* ================================
@@ -347,7 +348,6 @@ router.post("/firmar-flujo/:firmanteId", documentsController.signFlow);
    ================================ */
 
 router.get("/:id/pdf", documentsController.getDocumentPdf);
-
 router.get("/:id/timeline", documentsController.getTimeline);
 
 router.get(
@@ -357,22 +357,9 @@ router.get(
   documentsController.getSigners
 );
 
-/**
- * Vista previa del PDF del documento.
- * Ruta real: GET /api/documents/:id/preview
- */
 router.get("/:id/preview", previewDocument);
-
-/**
- * Descargar PDF del documento.
- * Ruta real: GET /api/documents/:id/download
- */
 router.get("/:id/download", downloadDocument);
 
-/**
- * Descargar reporte PDF con detalles.
- * Ruta real: GET /api/documents/:id/reporte
- */
 router.get(
   "/:id/reporte",
   requireAuth,
@@ -381,7 +368,7 @@ router.get(
 );
 
 /* ================================
-   RUTAS POST - CON :id (acciones propietario)
+   RUTAS POST - ACCIONES SOBRE :id
    ================================ */
 
 router.post(
@@ -412,7 +399,6 @@ router.post(
    RUTAS POST - RECORDATORIOS
    ================================ */
 
-// Reenvío puntual (por firmante o visador)
 router.post(
   "/:id/reenviar",
   requireAuth,
@@ -420,7 +406,6 @@ router.post(
   resendReminder
 );
 
-// Recordatorio manual “masivo” (service actual)
 router.post(
   "/:id/recordatorio",
   requireAuth,
@@ -429,8 +414,9 @@ router.post(
     try {
       const id = Number(req.params.id);
 
-      const { enviarRecordatorioManual } =
-        require("../services/reminderService");
+      const {
+        enviarRecordatorioManual,
+      } = require("../services/reminderService");
       const result = await enviarRecordatorioManual(id);
 
       const metadata = buildDocumentAuditMetadata({
@@ -463,61 +449,12 @@ router.post(
   }
 );
 
-const {
-  getReminderStatus,
-  retryReminder,
-} = require("../controllers/documents/remindersAdmin");
-
-// ... resto de rutas ...
-
 /* ================================
    RUTAS ADMIN - RECORDATORIOS
    ================================ */
 
-/**
- * @openapi
- * /api/documents/recordatorios/status:
- *   get:
- *     summary: Ver estado de recordatorios (admin)
- *     tags:
- *       - Recordatorios
- *     parameters:
- *       - in: query
- *         name: documentoId
- *         schema:
- *           type: integer
- *         description: Filtrar por documento (opcional)
- *     security:
- *       - bearerAuth: []
- *     responses:
- *       200:
- *         description: Estado de recordatorios
- */
-router.get(
-  "/recordatorios/status",
-  requireAuth,
-  getReminderStatus
-);
+router.get("/recordatorios/status", requireAuth, getReminderStatus);
 
-/**
- * @openapi
- * /api/documents/recordatorios/reintentar/{recordatorioId}:
- *   post:
- *     summary: Reintentar envío de recordatorio fallido
- *     tags:
- *       - Recordatorios
- *     parameters:
- *       - in: path
- *         name: recordatorioId
- *         required: true
- *         schema:
- *           type: integer
- *     security:
- *       - bearerAuth: []
- *     responses:
- *       200:
- *         description: Recordatorio marcado para reintentar
- */
 router.post(
   "/recordatorios/reintentar/:recordatorioId",
   requireAuth,

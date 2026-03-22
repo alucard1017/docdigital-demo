@@ -15,7 +15,7 @@ const router = express.Router();
 // Normalizar RUN: quitar puntos y guiones
 const normalizeRun = (run) => (run || "").replace(/[.\-]/g, "");
 
-// RUN del dueño que NUNCA se puede borrar ni tocar salvo él mismo
+// RUN del dueño que nunca se puede borrar ni tocar salvo él mismo
 const OWNER_RUN = normalizeRun(process.env.ADMIN_RUN || "1053806586");
 
 const ALLOWED_ROLES = ["SUPER_ADMIN", "ADMIN_GLOBAL", "ADMIN", "USER"];
@@ -28,104 +28,14 @@ function isAdminLike(role) {
    RUTAS DE PERFIL (USUARIO ACTUAL)
    ================================ */
 
-/**
- * @openapi
- * /api/users/profile:
- *   get:
- *     summary: Obtener perfil del usuario actual
- *     tags:
- *       - Usuarios
- *     security:
- *       - bearerAuth: []
- *     responses:
- *       200:
- *         description: Datos del perfil
- */
 router.get("/profile", requireAuth, getProfile);
-
-/**
- * @openapi
- * /api/users/profile:
- *   put:
- *     summary: Actualizar perfil del usuario actual
- *     tags:
- *       - Usuarios
- *     security:
- *       - bearerAuth: []
- *     requestBody:
- *       content:
- *         application/json:
- *           schema:
- *             type: object
- *             properties:
- *               name:
- *                 type: string
- *               email:
- *                 type: string
- *     responses:
- *       200:
- *         description: Perfil actualizado
- */
 router.put("/profile", requireAuth, updateProfile);
-
-/**
- * @openapi
- * /api/users/change-password:
- *   post:
- *     summary: Cambiar contraseña del usuario actual
- *     tags:
- *       - Usuarios
- *     security:
- *       - bearerAuth: []
- *     requestBody:
- *       required: true
- *       content:
- *         application/json:
- *           schema:
- *             type: object
- *             properties:
- *               currentPassword:
- *                 type: string
- *               newPassword:
- *                 type: string
- *     responses:
- *       200:
- *         description: Contraseña actualizada
- */
 router.post("/change-password", requireAuth, changePassword);
 
 /* ================================
    REGISTRO PÚBLICO
    ================================ */
 
-/**
- * @openapi
- * /api/users/register:
- *   post:
- *     summary: Registro público de usuarios
- *     tags:
- *       - Usuarios
- *     requestBody:
- *       required: true
- *       content:
- *         application/json:
- *           schema:
- *             type: object
- *             properties:
- *               run:
- *                 type: string
- *               name:
- *                 type: string
- *               email:
- *                 type: string
- *               password:
- *                 type: string
- *               plan:
- *                 type: string
- *     responses:
- *       201:
- *         description: Usuario creado
- */
 router.post("/register", async (req, res, next) => {
   try {
     const { run, name, email, password, plan } = req.body || {};
@@ -173,10 +83,6 @@ router.post("/register", async (req, res, next) => {
    CRUD DE USUARIOS (ADMIN)
    ================================ */
 
-/**
- * GET /api/users
- * Lista de usuarios según permisos
- */
 router.get("/", requireAuth, requireRole("ADMIN"), async (req, res) => {
   try {
     const { role, company_id, run } = req.user;
@@ -210,14 +116,14 @@ router.get("/", requireAuth, requireRole("ADMIN"), async (req, res) => {
       FROM public.users
     `;
 
-if (whereParts.length > 0) {
-  query += " WHERE " + whereParts.join(" AND ");
-  query += " AND deleted_at IS NULL";
-} else {
-  query += " WHERE deleted_at IS NULL";
-}
+    if (whereParts.length > 0) {
+      query += " WHERE " + whereParts.join(" AND ");
+      query += " AND deleted_at IS NULL";
+    } else {
+      query += " WHERE deleted_at IS NULL";
+    }
 
-query += " ORDER BY id ASC";
+    query += " ORDER BY id ASC";
 
     const result = await db.query(query, params);
     return res.json(result.rows);
@@ -227,10 +133,6 @@ query += " ORDER BY id ASC";
   }
 });
 
-/**
- * POST /api/users
- * Crear usuario (solo admin)
- */
 router.post("/", requireAuth, requireRole("ADMIN"), async (req, res) => {
   try {
     const {
@@ -259,7 +161,6 @@ router.post("/", requireAuth, requireRole("ADMIN"), async (req, res) => {
     const hash = bcrypt.hashSync(password, 10);
 
     const finalCompanyId = company_id || req.user.company_id;
-
     if (!finalCompanyId) {
       return res
         .status(400)
@@ -343,10 +244,6 @@ router.post("/", requireAuth, requireRole("ADMIN"), async (req, res) => {
   }
 });
 
-/**
- * PUT /api/users/:id
- * Editar usuario (solo admin)
- */
 router.put("/:id", requireAuth, requireRole("ADMIN"), async (req, res) => {
   try {
     const { id } = req.params;
@@ -464,18 +361,18 @@ router.put("/:id", requireAuth, requireRole("ADMIN"), async (req, res) => {
 
     const updated = result.rows[0];
 
-await logAudit({
-  user: req.user,
-  action: "USER_UPDATED",
-  entityType: "user",
-  entityId: updated.id,
-  metadata: {
-    before_role: before.role,
-    new_role: updated.role,
-    company_id: updated.company_id,
-  },
-  req,
-});
+    await logAudit({
+      user: req.user,
+      action: "USER_UPDATED",
+      entityType: "user",
+      entityId: updated.id,
+      metadata: {
+        before_role: before.role,
+        new_role: updated.role,
+        company_id: updated.company_id,
+      },
+      req,
+    });
 
     return res.json(updated);
   } catch (err) {
@@ -484,10 +381,6 @@ await logAudit({
   }
 });
 
-/**
- * DELETE /api/users/:id
- * Borrar usuario según reglas de permisos
- */
 router.delete("/:id", requireAuth, requireRole("ADMIN"), async (req, res) => {
   try {
     const { id } = req.params;
@@ -547,11 +440,10 @@ router.delete("/:id", requireAuth, requireRole("ADMIN"), async (req, res) => {
       }
     }
 
-// Soft delete
-await db.query(
-  "UPDATE public.users SET deleted_at = NOW() WHERE id = $1",
-  [id]
-);
+    await db.query(
+      "UPDATE public.users SET deleted_at = NOW() WHERE id = $1",
+      [id]
+    );
 
     await logAudit({
       user: requester,
@@ -573,10 +465,6 @@ await db.query(
   }
 });
 
-/**
- * POST /api/users/:id/reset-password
- * Reset password por admin
- */
 router.post(
   "/:id/reset-password",
   requireAuth,
@@ -625,7 +513,8 @@ router.post(
           requester.company_id !== target.company_id
         ) {
           return res.status(403).json({
-            message: "Solo puedes resetear contraseñas de usuarios de tu empresa",
+            message:
+              "Solo puedes resetear contraseñas de usuarios de tu empresa",
           });
         }
       }
