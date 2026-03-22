@@ -1,0 +1,13 @@
+services:
+  - type: web
+    name: api
+    startCommand: npm --prefix backend run dev
+    envVars:
+      - key: NODE_ENV
+        value: production
+  - type: background_worker
+    name: reminders-worker
+    startCommand: node backend/worker.js
+    envVars:
+      - key: NODE_ENV
+        value: production
