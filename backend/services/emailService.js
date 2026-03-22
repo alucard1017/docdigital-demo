@@ -38,12 +38,50 @@ async function generateQrImageUrl(targetUrl) {
 }
 
 // Wrapper genérico para enviar HTML usando Brevo HTTP
-async function sendEmail({ to, subject, html }) {
-  console.log("📬 [EMAIL] Enviando email (Brevo HTTP):", { to, subject });
-  const ok = await sendEmailHttp({ to, subject, html });
+async function sendEmail({ to, subject, html, documentoId = null, firmanteId = null }) {
+  console.log("📬 [EMAIL] Enviando email (Brevo HTTP):", { to, subject, documentoId });
+  
+  const trackingId = crypto.randomUUID();
+  
+  const ok = await sendEmailHttp({ 
+    to, 
+    subject, 
+    html,
+    headers: {
+      'X-Mailin-custom': JSON.stringify({
+        documentoId,
+        firmanteId,
+        trackingId,
+      }),
+    },
+  });
+  
   if (!ok) {
     console.error("❌ [EMAIL] Falló el envío (Brevo HTTP)");
+    return false;
   }
+
+  if (documentoId) {
+    const db = require("../db");
+    try {
+      await db.query(
+        `INSERT INTO email_tracking (
+           documento_id,
+           firmante_id,
+           email,
+           event_type,
+           tracking_id,
+           created_at
+         )
+         VALUES ($1, $2, $3, 'sent', $4, NOW())`,
+        [documentoId, firmanteId || null, to, trackingId]
+      );
+      console.log(`📊 Email tracking registrado: sent → ${to}`);
+    } catch (err) {
+      console.error("❌ Error registrando email tracking:", err.message);
+    }
+  }
+
   return ok;
 }
 
@@ -280,8 +318,10 @@ async function sendSigningInvitation(
   docTitle,
   signUrl,
   signerName = "",
-  { verificationCode = "", qrTargetUrl = "" } = {}
+  options = {}
 ) {
+  const { verificationCode = "", qrTargetUrl = "", documentoId = null, firmanteId = null } = options;
+
   const subject = `Invitación a firmar: ${docTitle}`;
 
   const verificationUrl = verificationCode
@@ -391,15 +431,24 @@ async function sendSigningInvitation(
     </html>
   `;
 
-  return sendEmail({ to: email, subject, html });
+  return sendEmail({ 
+    to: email, 
+    subject, 
+    html,
+    documentoId,
+    firmanteId,
+  });
 }
 
 async function sendVisadoInvitation(
   email,
   docTitle,
   signUrl,
-  visadorName = ""
+  visadorName = "",
+  options = {}
 ) {
+  const { documentoId = null } = options;
+
   const subject = `Invitación a visar: ${docTitle}`;
 
   const html = `
@@ -458,7 +507,12 @@ async function sendVisadoInvitation(
     </html>
   `;
 
-  return sendEmail({ to: email, subject, html });
+  return sendEmail({ 
+    to: email, 
+    subject, 
+    html,
+    documentoId,
+  });
 }
 
 async function sendRejectionNotification(
@@ -505,9 +559,9 @@ async function sendRejectionNotification(
           <div class="info-box danger">
             <h4>📋 Detalles del rechazo</h4>
             <ul class="details-list">
-              <li><strong>Rechazado por:</strong> ${firmanteNombre} (${firmanteEmail})</li>
-              <li><strong>Fecha:</strong> ${new Date(fechaRechazo).toLocaleString("es-CL")}</li>
-              <li><strong>Motivo:</strong> <em>${motivo || "No especificado"}</em></li>
+              ><strong>Rechazado por:</strong> ${firmanteNombre} (${firmanteEmail})</li>
+              ><strong>Fecha:</strong> ${new Date(fechaRechazo).toLocaleString("es-CL")}</li>
+              ><strong>Motivo:</strong> <em>${motivo || "No especificado"}</em></li>
             </ul>
           </div>
 
@@ -537,7 +591,12 @@ async function sendRejectionNotification(
     </html>
   `;
 
-  return sendEmail({ to: emisorEmail, subject, html });
+  return sendEmail({ 
+    to: emisorEmail, 
+    subject, 
+    html,
+    documentoId: documentId,
+  });
 }
 
 async function sendReminder(
@@ -545,8 +604,11 @@ async function sendReminder(
   docTitle,
   signUrl,
   recipientName = "",
-  tipo = "FIRMA"
+  tipo = "FIRMA",
+  options = {}
 ) {
+  const { documentoId = null, firmanteId = null } = options;
+
   const subject = `Recordatorio: ${
     tipo === "VISADO" ? "Visar" : "Firmar"
   } documento "${docTitle}"`;
@@ -609,11 +671,21 @@ async function sendReminder(
     </html>
   `;
 
-  return sendEmail({ to: email, subject, html });
+  return sendEmail({ 
+    to: email, 
+    subject, 
+    html,
+    documentoId,
+    firmanteId,
+  });
 }
 
 async function sendNotification(email, subject, html) {
-  return sendEmail({ to: email, subject, html });
+  return sendEmail({ 
+    to: email, 
+    subject, 
+    html,
+  });
 }
 
 async function sendDestinationNotification(
@@ -664,6 +736,7 @@ async function sendDestinationNotification(
               ? `
             <div class="info-box">
               <h4>🔐 Verificación del documento</h4>
+
               <p>
                 Puedes verificar el estado y autenticidad de este documento en cualquier 
                 momento usando el siguiente código:
