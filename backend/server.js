@@ -565,11 +565,11 @@ app.use((req, res) => {
   });
 });
 console.log("✓ Middleware 404 registrado");
-
 /* ================================
    INICIAR SERVIDOR
    ================================ */
 const PORT = process.env.PORT || 4000;
+const { initializeSocketIO } = require("./services/socketService");
 
 const server = app.listen(PORT, () => {
   console.log("=====================================");
@@ -595,6 +595,9 @@ const server = app.listen(PORT, () => {
   );
   console.log("=====================================");
 });
+
+// Inicializar Socket.IO
+initializeSocketIO(server);
 
 process.on("unhandledRejection", (reason, promise) => {
   console.error("❌ Unhandled Rejection at:", promise, "reason:", reason);

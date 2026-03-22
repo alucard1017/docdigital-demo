@@ -9,6 +9,7 @@ const {
   validateSendFlowParams,
 } = require("./flowValidation");
 const { triggerWebhook } = require("../../services/webhookService");
+const { emitToCompany } = require("../../services/socketService");
 
 /* ================================
    Crear flujo (BORRADOR, sin enviar correos)
@@ -290,15 +291,22 @@ async function sendFlow(req, res) {
 
     await db.query("COMMIT");
 
-    // ========= DISPARAR WEBHOOK =========
-    if (documento.company_id) {
-      triggerWebhook(documento.company_id, "document.sent", {
-        documentoId: documento.id,
-        titulo: documento.titulo,
-        estado: nuevoEstado,
-        firmantes: firmantes.length,
-      }).catch((err) => console.error("Error en webhook:", err));
-    }
+// ========= DISPARAR WEBHOOK =========
+if (documento.company_id) {
+  triggerWebhook(documento.company_id, "document.sent", {
+    documentoId: documento.id,
+    titulo: documento.titulo,
+    estado: nuevoEstado,
+    firmantes: firmantes.length,
+  }).catch((err) => console.error("Error en webhook:", err));
+
+  // ========= NOTIFICACIÓN WEBSOCKET =========
+  emitToCompany(documento.company_id, "document:sent", {
+    documentoId: documento.id,
+    titulo: documento.titulo,
+    estado: nuevoEstado,
+  });
+}
 
     const metadata = buildDocumentAuditMetadata({
       documentId: documento.id,
@@ -466,15 +474,20 @@ async function signFlow(req, res) {
         `🛑 Recordatorios cancelados para documento ${firmante.documento_id}`
       );
 
-      // ========= DISPARAR WEBHOOK =========
-      if (firmante.company_id) {
-        triggerWebhook(firmante.company_id, "document.signed", {
-          documentoId: firmante.documento_id,
-          titulo: firmante.titulo,
-          firmantes_totales: totalNum,
-        }).catch((err) => console.error("Error en webhook:", err));
-      }
+// ========= DISPARAR WEBHOOK =========
+if (firmante.company_id) {
+  triggerWebhook(firmante.company_id, "document.signed", {
+    documentoId: firmante.documento_id,
+    titulo: firmante.titulo,
+    firmantes_totales: totalNum,
+  }).catch((err) => console.error("Error en webhook:", err));
 
+  // ========= NOTIFICACIÓN WEBSOCKET =========
+  emitToCompany(firmante.company_id, "document:signed", {
+    documentoId: firmante.documento_id,
+    titulo: firmante.titulo,
+  });
+}
       await db.query(
         `INSERT INTO eventos_firma (
            documento_id,

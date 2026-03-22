@@ -19,6 +19,7 @@ import { AuthLogsView } from "./views/AuthLogsView";
 import { getSubdomain } from "./utils/subdomain";
 import RemindersConfigView from "./views/RemindersConfigView";
 import EmailMetricsView from "./views/EmailMetricsView";
+import { useSocket } from "./hooks/useSocket";
 import api from "./api/client";
 
 /* ========= Helpers de rol ========= */
@@ -128,6 +129,35 @@ function App() {
 
   // API raíz ya normalizada desde constants.js (termina en /api, sin /api/api)
   const apiRoot = API_BASE_URL;
+// API raíz ya normalizada desde constants.js (termina en /api, sin /api/api)
+const apiRoot = API_BASE_URL;
+
+// WebSocket para notificaciones en tiempo real
+const socket = useSocket(token);
+
+useEffect(() => {
+  if (!token) return;
+
+  socket.on("document:sent", (data) => {
+    console.log("📡 Documento enviado:", data);
+    alert(`✅ Documento enviado: ${data.titulo}`);
+    cargarDocs();
+  });
+
+  socket.on("document:signed", (data) => {
+    console.log("📡 Documento firmado:", data);
+    alert(`✅ Documento firmado: ${data.titulo}`);
+    cargarDocs();
+  });
+
+  return () => {
+    socket.off("document:sent");
+    socket.off("document:signed");
+  };
+}, [token, socket, cargarDocs]);
+
+// Cargar URL de PDF para la vista de detalle (usa /preview, no /download)
+useEffect(() => {
 
   // Cargar URL de PDF para la vista de detalle (usa /preview, no /download)
   useEffect(() => {
@@ -145,6 +175,7 @@ function App() {
       setPdfUrl(null);
     }
   }, [selectedDoc?.id]);
+
 
   /* =============================== */
   /* FIRMA / VISADO PÚBLICO          */
