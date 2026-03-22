@@ -18,6 +18,7 @@ import { AuditLogsView } from "./views/AuditLogsView";
 import { AuthLogsView } from "./views/AuthLogsView";
 import { getSubdomain } from "./utils/subdomain";
 import RemindersConfigView from "./views/RemindersConfigView";
+import EmailMetricsView from "./views/EmailMetricsView";
 import api from "./api/client";
 
 /* ========= Helpers de rol ========= */
@@ -842,6 +843,10 @@ function App() {
 
 	{view === "reminders-config" && anyAdmin && (
 	  <RemindersConfigView />
+	)}
+
+	{view === "email-metrics" && anyAdmin && (
+	  <EmailMetricsView />
 	)}
 
         {import.meta.env.MODE !== "production" && (

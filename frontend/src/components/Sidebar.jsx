@@ -185,26 +185,26 @@ export function Sidebar({
             Administración
           </h3>
 
-          <div
-            className={`nav-item ${view === "users" ? "active" : ""}`}
-            onClick={() => handleChangeView("users")}
-          >
-            <span>👥</span> Usuarios
-          </div>
+	<div
+	  className={`nav-item ${view === "reminders-config" ? "active" : ""}`}
+	  onClick={() => handleChangeView("reminders-config")}
+	>
+	  <span>🔔</span> Recordatorios
+	</div>
 
-          <div
-            className={`nav-item ${view === "reminders-config" ? "active" : ""}`}
-            onClick={() => handleChangeView("reminders-config")}
-          >
-            <span>🔔</span> Recordatorios
-          </div>
+	<div
+	  className={`nav-item ${view === "email-metrics" ? "active" : ""}`}
+	  onClick={() => handleChangeView("email-metrics")}
+	>
+	  <span>📊</span> Métricas Email
+	</div>
 
-          {isAdminGlobalOrOwner && (
-            <>
-              <div
-                className={`nav-item ${
-                  view === "companies" ? "active" : ""
-                }`}
+	{isAdminGlobalOrOwner && (
+	  <>
+	    <div
+	      className={`nav-item ${
+	        view === "companies" ? "active" : ""
+	      }`}
                 onClick={() => handleChangeView("companies")}
               >
                 <span>🏢</span> Empresas
