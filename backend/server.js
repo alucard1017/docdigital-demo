@@ -70,7 +70,8 @@ const remindersRoutes = require("./routes/reminders");
 const analyticsRoutes = require("./routes/analytics");
 const notificationsRoutes = require("./routes/notifications");
 const adminRoutes = require("./routes/admin");
-
+const onboardingRoutes = require("./routes/onboarding");
+const billingRoutes = require("./routes/billing");
 
 /* ================================
    LOG DE INICIO
@@ -391,6 +392,10 @@ console.log("✓ Rutas /api/notifications registradas");
 // Admin
 app.use("/api/admin", adminRoutes);
 console.log("✓ Rutas /api/admin registradas");
+
+// Onboarding
+app.use("/api/onboarding", onboardingRoutes);
+console.log("✓ Rutas /api/onboarding registradas");
 
 /* ================================
    RUTA STORAGE / URLs FIRMADAS

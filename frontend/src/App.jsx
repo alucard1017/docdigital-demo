@@ -26,6 +26,8 @@ import TemplatesView from "./views/TemplatesView";
 import ForgotPasswordView from "./views/ForgotPasswordView";
 import ResetPasswordView from "./views/ResetPasswordView";
 import CompanyAnalyticsView from "./views/CompanyAnalyticsView";
+import OnboardingWizard from "./components/Onboarding/OnboardingWizard";
+import ProductTour from "./components/Onboarding/ProductTour";
 import api from "./api/client";
 
 /* ========= Helpers de rol ========= */
@@ -105,6 +107,12 @@ function App() {
       return null;
     }
   });
+
+  // === Onboarding ===
+  const [checkingOnboarding, setCheckingOnboarding] = useState(false);
+  const [showOnboarding, setShowOnboarding] = useState(false);
+
+  const [runProductTour, setRunProductTour] = useState(false);
 
   const [loadingDocs, setLoadingDocs] = useState(false);
   const [errorDocs, setErrorDocs] = useState("");
@@ -353,6 +361,7 @@ function App() {
       localStorage.setItem("user", JSON.stringify(data.user));
       setMessage("Acceso concedido");
       setView("list");
+      checkOnboarding();
     } catch (err) {
       console.error("[LOGIN ERROR]", err);
       const msg =
@@ -446,6 +455,48 @@ function App() {
     throw new Error("Frontend test error");
   };
 
+
+  // === Onboarding: consulta estado ===
+  const checkOnboarding = useCallback(async () => {
+    if (!token) return;
+    try {
+      setCheckingOnboarding(true);
+      const res = await fetch("/api/onboarding/status", {
+        credentials: "include",
+      });
+      const data = await res.json();
+      // Ajusta a la forma real de tu respuesta backend
+      // Ej: { needsOnboarding: boolean, currentStep, completed, skipped }
+      if (data?.needsOnboarding) {
+        setShowOnboarding(true);
+      } else {
+        setShowOnboarding(false);
+      }
+    } catch (err) {
+      console.error("Error checking onboarding status", err);
+      setShowOnboarding(false);
+    } finally {
+      setCheckingOnboarding(false);
+    }
+  }, [token]);
+
+  const handleOnboardingCompleted = () => {
+    setShowOnboarding(false);
+    // Al terminar onboarding, corremos el tour del dashboard
+    setRunProductTour(true);
+  };
+
+  const handleOnboardingSkipped = () => {
+    setShowOnboarding(false);
+    // Si se salta onboarding, opcional: puedes igual mostrar tour o no
+    setRunProductTour(false);
+  };
+
+  useEffect(() => {
+    if (token) {
+      checkOnboarding();
+    }
+  }, [token, checkOnboarding]);
   /* =============================== */
   /* MODO DE VISTA (RUTAS)           */
   /* =============================== */
@@ -616,292 +667,309 @@ function App() {
       user.id === 7);
 
   return (
-    <div className="dashboard-layout">
-      <Sidebar
-        user={user}
-        docs={docs}
-        pendientes={pendientes}
-        view={view}
-        setView={setView}
-        statusFilter={statusFilter}
-        setStatusFilter={setStatusFilter}
-        logout={logout}
-        isAnyAdmin={anyAdmin}
-      />
+    <div className="dashboard-root">
+      {/* Overlay de onboarding solo cuando haga falta */}
+      {showOnboarding && (
+        <OnboardingWizard
+          onCompleted={handleOnboardingCompleted}
+          onSkipped={handleOnboardingSkipped}
+        />
+      )}
 
-      <div className="content-body">
-        {view === "list" && (
-          <ListHeader
-            sort={sort}
-            setSort={(value) => {
-              setSort(value);
-              setPage(1);
-              cargarDocs(value);
-            }}
-            statusFilter={statusFilter}
-            setStatusFilter={setStatusFilter}
-            search={search}
-            setSearch={setSearch}
-            totalFiltrado={totalFiltrado}
-            pendientes={pendientes}
-            visados={visados}
-            firmados={firmados}
-            rechazados={rechazados}
-            onSync={cargarDocs}
+      <div className="dashboard-layout">
+        <Sidebar
+          user={user}
+          docs={docs}
+          pendientes={pendientes}
+          view={view}
+          setView={setView}
+          statusFilter={statusFilter}
+          setStatusFilter={setStatusFilter}
+          logout={logout}
+          isAnyAdmin={anyAdmin}
+        />
+
+        <div className="content-body">
+          {/* Tour global del dashboard */}
+          <ProductTour
+            tourId="dashboard_principal"
+            run={runProductTour}
+            onFinish={() => setRunProductTour(false)}
           />
-        )}
 
-        {view === "list" && (
-          <>
-            <div className="hero-dashboard">
-              <div className="hero-dashboard-inner">
-                <h1 className="hero-dashboard-title">
-                  Gestiona todas tus firmas digitales en un solo lugar
-                </h1>
-                <p className="hero-dashboard-text">
-                  Envía contratos, actas y documentos legales para firma
-                  electrónica avanzada en minutos. Sigue el estado en tiempo
-                  real y mantén un historial completo de cada trámite.
-                </p>
-                <div className="hero-dashboard-actions">
-                  <button
-                    type="button"
-                    className="btn-main btn-primary"
-                    onClick={() => setView("upload")}
-                    style={{ paddingInline: 22 }}
-                  >
-                    + Nuevo documento para firma
-                  </button>
-                  <button
-                    type="button"
-                    className="btn-main"
-                    onClick={cargarDocs}
-                    style={{
-                      backgroundColor: "#020617",
-                      color: "#e5e7eb",
-                      border: "1px solid #1e293b",
-                      paddingInline: 22,
-                    }}
-                  >
-                    Ver documentos enviados
-                  </button>
-                </div>
-              </div>
-            </div>
+          {view === "list" && (
+            <ListHeader
+              sort={sort}
+              setSort={(value) => {
+                setSort(value);
+                setPage(1);
+                cargarDocs(value);
+              }}
+              statusFilter={statusFilter}
+              setStatusFilter={setStatusFilter}
+              search={search}
+              setSearch={setSearch}
+              totalFiltrado={totalFiltrado}
+              pendientes={pendientes}
+              visados={visados}
+              firmados={firmados}
+              rechazados={rechazados}
+              onSync={cargarDocs}
+            />
+          )}
 
-            {loadingDocs ? (
-              <div
-                style={{
-                  padding: 40,
-                  textAlign: "center",
-                  color: "#64748b",
-                }}
-              >
-                <div style={{ marginBottom: 12, fontWeight: 600 }}>
-                  Cargando tu bandeja de documentos…
-                </div>
-                <p
-                  style={{
-                    fontSize: "0.9rem",
-                    color: "#9ca3af",
-                    marginTop: 4,
-                  }}
-                >
-                  Esto puede tardar unos segundos.
-                </p>
-                <div className="spinner" />
-              </div>
-            ) : errorDocs ? (
-              <div
-                style={{
-                  padding: 40,
-                  textAlign: "center",
-                  color: "#b91c1c",
-                }}
-              >
-                <p style={{ marginBottom: 8, fontWeight: 700 }}>
-                  Ocurrió un problema al cargar la bandeja.
-                </p>
-                <p
-                  style={{
-                    marginBottom: 16,
-                    fontSize: "0.9rem",
-                    color: "#b91c1c",
-                  }}
-                >
-                  {errorDocs ||
-                    "Por favor, revisa tu conexión e inténtalo nuevamente."}
-                </p>
-                <button className="btn-main btn-primary" onClick={cargarDocs}>
-                  Reintentar carga
-                </button>
-              </div>
-            ) : docsPaginados.length === 0 ? (
-              <div
-                style={{
-                  padding: 40,
-                  textAlign: "center",
-                  color: "#64748b",
-                }}
-              >
-                <h3 style={{ marginBottom: 8 }}>
-                  No encontramos documentos para mostrar.
-                </h3>
-                <p
-                  style={{
-                    marginBottom: 4,
-                    fontSize: "0.9rem",
-                    color: "#94a3b8",
-                  }}
-                >
-                  Puede que no existan documentos con los filtros actuales.
-                </p>
-                <p
-                  style={{
-                    marginBottom: 16,
-                    fontSize: "0.9rem",
-                    color: "#94a3b8",
-                  }}
-                >
-                  Ajusta los filtros o crea un nuevo flujo de firma digital.
-                </p>
-                <button
-                  className="btn-main"
-                  onClick={() => setView("upload")}
-                  style={{
-                    background: "#e2e8f0",
-                    color: "#1e293b",
-                  }}
-                >
-                  Crear nuevo trámite
-                </button>
-              </div>
-            ) : (
-              <>
-                <div className="table-wrapper">
-                  <table className="doc-table">
-                    <thead>
-                      <tr>
-                        <th>N° de contrato</th>
-                        <th>Título del documento</th>
-                        <th>Tipo de trámite</th>
-                        <th style={{ textAlign: "center" }}>Estado actual</th>
-                        <th>Firmante final</th>
-                        <th style={{ textAlign: "center" }}>Acciones</th>
-                      </tr>
-                    </thead>
-                    <tbody>
-                      {docsPaginados.map((d) => (
-                        <DocumentRow
-                          key={d.id}
-                          doc={d}
-                          onOpenDetail={(doc) => {
-                            setSelectedDoc(doc);
-                            setView("detail");
-                          }}
-                        />
-                      ))}
-                    </tbody>
-                  </table>
-                </div>
-
-                <div
-                  style={{
-                    display: "flex",
-                    justifyContent: "space-between",
-                    alignItems: "center",
-                    marginTop: 16,
-                    fontSize: "0.85rem",
-                  }}
-                >
-                  <span>
-                    Página {page} de {totalPaginas || 1}
-                  </span>
-                  <div style={{ display: "flex", gap: 8 }}>
+          {view === "list" && (
+            <>
+              <div className="hero-dashboard">
+                <div className="hero-dashboard-inner">
+                  <h1 className="hero-dashboard-title">
+                    Gestiona todas tus firmas digitales en un solo lugar
+                  </h1>
+                  <p className="hero-dashboard-text">
+                    Envía contratos, actas y documentos legales para firma
+                    electrónica avanzada en minutos. Sigue el estado en tiempo
+                    real y mantén un historial completo de cada trámite.
+                  </p>
+                  <div className="hero-dashboard-actions">
                     <button
                       type="button"
-                      className="btn-main"
-                      disabled={page === 1}
-                      onClick={() => setPage((p) => Math.max(1, p - 1))}
+                      className="btn-main btn-primary"
+                      onClick={() => setView("upload")}
+                      style={{ paddingInline: 22 }}
                     >
-                      Anterior
+                      + Nuevo documento para firma
                     </button>
                     <button
                       type="button"
                       className="btn-main"
-                      disabled={page === totalPaginas || totalPaginas === 0}
-                      onClick={() =>
-                        setPage((p) => Math.min(totalPaginas, p + 1))
-                      }
+                      onClick={cargarDocs}
+                      style={{
+                        backgroundColor: "#020617",
+                        color: "#e5e7eb",
+                        border: "1px solid #1e293b",
+                        paddingInline: 22,
+                      }}
                     >
-                      Siguiente
+                      Ver documentos enviados
                     </button>
                   </div>
                 </div>
-              </>
-            )}
-          </>
-        )}
+              </div>
 
-        {view === "upload" && (
-          <NewDocumentForm
-            tipoTramite={tipoTramite}
-            setTipoTramite={setTipoTramite}
-            formErrors={formErrors}
-            setFormErrors={setFormErrors}
-            showVisador={showVisador}
-            setShowVisador={setShowVisador}
-            extraSigners={extraSigners}
-            setExtraSigners={setExtraSigners}
-            firmanteRunValue={firmanteRunValue}
-            setFirmanteRunValue={setFirmanteRunValue}
-            empresaRutValue={empresaRutValue}
-            setEmpresaRutValue={setEmpresaRutValue}
-            formatRunDoc={formatRunDoc}
-            setView={setView}
-            cargarDocs={cargarDocs}
-          />
-        )}
+              {loadingDocs ? (
+                <div
+                  style={{
+                    padding: 40,
+                    textAlign: "center",
+                    color: "#64748b",
+                  }}
+                >
+                  <div style={{ marginBottom: 12, fontWeight: 600 }}>
+                    Cargando tu bandeja de documentos…
+                  </div>
+                  <p
+                    style={{
+                      fontSize: "0.9rem",
+                      color: "#9ca3af",
+                      marginTop: 4,
+                    }}
+                  >
+                    Esto puede tardar unos segundos.
+                  </p>
+                  <div className="spinner" />
+                </div>
+              ) : errorDocs ? (
+                <div
+                  style={{
+                    padding: 40,
+                    textAlign: "center",
+                    color: "#b91c1c",
+                  }}
+                >
+                  <p style={{ marginBottom: 8, fontWeight: 700 }}>
+                    Ocurrió un problema al cargar la bandeja.
+                  </p>
+                  <p
+                    style={{
+                      marginBottom: 16,
+                      fontSize: "0.9rem",
+                      color: "#b91c1c",
+                    }}
+                  >
+                    {errorDocs ||
+                      "Por favor, revisa tu conexión e inténtalo nuevamente."}
+                  </p>
+                  <button className="btn-main btn-primary" onClick={cargarDocs}>
+                    Reintentar carga
+                  </button>
+                </div>
+              ) : docsPaginados.length === 0 ? (
+                <div
+                  style={{
+                    padding: 40,
+                    textAlign: "center",
+                    color: "#64748b",
+                  }}
+                >
+                  <h3 style={{ marginBottom: 8 }}>
+                    No encontramos documentos para mostrar.
+                  </h3>
+                  <p
+                    style={{
+                      marginBottom: 4,
+                      fontSize: "0.9rem",
+                      color: "#94a3b8",
+                    }}
+                  >
+                    Puede que no existan documentos con los filtros actuales.
+                  </p>
+                  <p
+                    style={{
+                      marginBottom: 16,
+                      fontSize: "0.9rem",
+                      color: "#94a3b8",
+                    }}
+                  >
+                    Ajusta los filtros o crea un nuevo flujo de firma digital.
+                  </p>
+                  <button
+                    className="btn-main"
+                    onClick={() => setView("upload")}
+                    style={{
+                      background: "#e2e8f0",
+                      color: "#1e293b",
+                    }}
+                  >
+                    Crear nuevo trámite
+                  </button>
+                </div>
+              ) : (
+                <>
+                  <div className="table-wrapper">
+                    <table className="doc-table">
+                      <thead>
+                        <tr>
+                          <th>N° de contrato</th>
+                          <th>Título del documento</th>
+                          <th>Tipo de trámite</th>
+                          <th style={{ textAlign: "center" }}>Estado actual</th>
+                          <th>Firmante final</th>
+                          <th style={{ textAlign: "center" }}>Acciones</th>
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {docsPaginados.map((d) => (
+                          <DocumentRow
+                            key={d.id}
+                            doc={d}
+                            onOpenDetail={(doc) => {
+                              setSelectedDoc(doc);
+                              setView("detail");
+                            }}
+                          />
+                        ))}
+                      </tbody>
+                    </table>
+                  </div>
 
-        {view === "users" && anyAdmin && <UsersAdminView />}
+                  <div
+                    style={{
+                      display: "flex",
+                      justifyContent: "space-between",
+                      alignItems: "center",
+                      marginTop: 16,
+                      fontSize: "0.85rem",
+                    }}
+                  >
+                    <span>
+                      Página {page} de {totalPaginas || 1}
+                    </span>
+                    <div style={{ display: "flex", gap: 8 }}>
+                      <button
+                        type="button"
+                        className="btn-main"
+                        disabled={page === 1}
+                        onClick={() => setPage((p) => Math.max(1, p - 1))}
+                      >
+                        Anterior
+                      </button>
+                      <button
+                        type="button"
+                        className="btn-main"
+                        disabled={
+                          page === totalPaginas || totalPaginas === 0
+                        }
+                        onClick={() =>
+                          setPage((p) => Math.min(totalPaginas, p + 1))
+                        }
+                      >
+                        Siguiente
+                      </button>
+                    </div>
+                  </div>
+                </>
+              )}
+            </>
+          )}
 
-        {view === "dashboard" && anyAdmin && <DashboardView user={user} />}
+          {view === "upload" && (
+            <NewDocumentForm
+              tipoTramite={tipoTramite}
+              setTipoTramite={setTipoTramite}
+              formErrors={formErrors}
+              setFormErrors={setFormErrors}
+              showVisador={showVisador}
+              setShowVisador={setShowVisador}
+              extraSigners={extraSigners}
+              setExtraSigners={setExtraSigners}
+              firmanteRunValue={firmanteRunValue}
+              setFirmanteRunValue={setFirmanteRunValue}
+              empresaRutValue={empresaRutValue}
+              setEmpresaRutValue={setEmpresaRutValue}
+              formatRunDoc={formatRunDoc}
+              setView={setView}
+              cargarDocs={cargarDocs}
+            />
+          )}
 
-        {view === "companies" && anyAdmin && (
-          <CompaniesAdminView API_URL={apiRoot} />
-        )}
+          {view === "users" && anyAdmin && <UsersAdminView />}
 
-        {view === "status" && anyAdmin && (
-          <StatusAdminView API_URL={apiRoot} />
-        )}
+          {view === "dashboard" && anyAdmin && <DashboardView user={user} />}
 
-        {view === "audit-logs" && isGlobalAdminOrOwner && (
-          <AuditLogsView API_URL={apiRoot} />
-        )}
+          {view === "companies" && anyAdmin && (
+            <CompaniesAdminView API_URL={apiRoot} />
+          )}
 
-        {view === "auth-logs" && isGlobalAdminOrOwner && (
-          <AuthLogsView API_URL={apiRoot} />
-        )}
+          {view === "status" && anyAdmin && (
+            <StatusAdminView API_URL={apiRoot} />
+          )}
 
-	{view === "reminders-config" && anyAdmin && (
-	  <RemindersConfigView />
-	)}
+          {view === "audit-logs" && isGlobalAdminOrOwner && (
+            <AuditLogsView API_URL={apiRoot} />
+          )}
 
-	{view === "email-metrics" && anyAdmin && (
-	  <EmailMetricsView />
-	)}
-	
-	{view === "pricing" && <PricingView />}
+          {view === "auth-logs" && isGlobalAdminOrOwner && (
+            <AuthLogsView API_URL={apiRoot} />
+          )}
 
-	{view === "profile" && <ProfileView />}
+          {view === "reminders-config" && anyAdmin && <RemindersConfigView />}
 
-	{view === "templates" && anyAdmin && <TemplatesView />}
+          {view === "email-metrics" && anyAdmin && <EmailMetricsView />}
 
-	{view === "company-analytics" && anyAdmin && <CompanyAnalyticsView />}
+          {view === "pricing" && <PricingView />}
 
-        {import.meta.env.MODE !== "production" && (
-          <button onClick={handleTestError}>Probar error Sentry</button>
-        )}
+          {view === "profile" && <ProfileView />}
+
+          {view === "templates" && anyAdmin && <TemplatesView />}
+
+          {view === "company-analytics" && anyAdmin && (
+            <CompanyAnalyticsView />
+          )}
+
+          {import.meta.env.MODE !== "production" && (
+            <button onClick={handleTestError}>Probar error Sentry</button>
+          )}
+        </div>
       </div>
     </div>
   );

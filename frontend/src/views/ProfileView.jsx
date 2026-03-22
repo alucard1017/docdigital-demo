@@ -113,7 +113,7 @@ export default function ProfileView() {
         <div className="bg-gray-50 p-6 rounded mb-6">
           <div className="grid grid-cols-2 gap-4 mb-4">
             <div>
-              abel className="text-sm font-semibold text-gray-600">Nombre</label>
+              <abel className="text-sm font-semibold text-gray-600">Nombre</label>
               <p className="text-lg font-bold text-gray-800">{profile.name}</p>
             </div>
             <div>

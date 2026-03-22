@@ -4,12 +4,24 @@ import React from "react";
 interface ElectronicSignatureNoticeProps {
   checked: boolean;
   onChange: (checked: boolean) => void;
+  mode?: "firma" | "visado"; // por defecto "firma"
 }
 
 export const ElectronicSignatureNotice: React.FC<ElectronicSignatureNoticeProps> = ({
   checked,
   onChange,
+  mode = "firma",
 }) => {
+  const isVisado = mode === "visado";
+
+  const mainText = isVisado
+    ? "Antes de visar, declaro que he leído y revisado el contenido del documento, y que mi visado deja constancia de que su contenido ha sido validado para continuar el flujo de firma. Entiendo que este visado se realiza mediante firma electrónica simple y quedará registrado para fines de trazabilidad y responsabilidad."
+    : "Antes de firmar, declaro que he leído y acepto los términos de uso de la firma electrónica simple y del documento que firmaré. Entiendo que la firma electrónica tiene la misma validez y efectos legales que mi firma manuscrita, conforme a la Ley N° 19.799 sobre documentos electrónicos y firma electrónica, y que soy responsable del uso de mis credenciales y del contenido del documento que apruebo."; [web:565][web:567]
+
+  const checkboxText = isVisado
+    ? "Acepto realizar el visado de este documento utilizando firma electrónica simple y declaro que soy responsable del uso de mis datos y credenciales."
+    : "Acepto firmar este documento utilizando firma electrónica simple y declaro que soy responsable del uso de mis datos y credenciales."; [web:565][web:618]
+
   return (
     <div
       style={{
@@ -22,12 +34,7 @@ export const ElectronicSignatureNotice: React.FC<ElectronicSignatureNoticeProps>
       }}
     >
       <p style={{ fontSize: 14, color: "#374151", marginBottom: 12 }}>
-        Antes de firmar, declaro que he leído y acepto los términos de uso de la
-        firma electrónica simple y del documento que firmaré. Entiendo que la
-        firma electrónica tiene la misma validez y efectos legales que mi firma
-        manuscrita, conforme a la Ley N° 19.799 sobre documentos electrónicos y
-        firma electrónica, y que soy responsable del uso de mis credenciales y
-        del contenido del documento que apruebo.
+        {mainText}
       </p>
 
       <p style={{ fontSize: 12, color: "#6b7280", marginBottom: 12 }}>
@@ -60,10 +67,7 @@ export const ElectronicSignatureNotice: React.FC<ElectronicSignatureNoticeProps>
           onChange={(e) => onChange(e.target.checked)}
           style={{ marginTop: 2 }}
         />
-        <span>
-          Acepto el uso de firma electrónica simple en este acto y declaro que
-          soy responsable del uso de mis datos y credenciales.
-        </span>
+        <span>{checkboxText}</span>
       </label>
     </div>
   );

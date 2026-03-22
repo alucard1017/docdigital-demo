@@ -30,6 +30,7 @@ export function NewDocumentForm({
   cargarDocs,
 }) {
   const [tipoDocumento, setTipoDocumento] = useState("");
+  const [tipoFlujo, setTipoFlujo] = useState("SECUENCIAL");
   const [fileName, setFileName] = useState("");
   const [submitting, setSubmitting] = useState(false);
 
@@ -54,6 +55,7 @@ export function NewDocumentForm({
     if (tipoTramite === "notaria") {
       formData.append("requiere_firma_notarial", "true");
     }
+    formData.append("tipo_flujo", tipoFlujo);
 
     const firmanteRunClean = firmanteRunValue.replace(/[^0-9kK]/g, "");
     const empresaRutClean = empresaRutValue.replace(/[^0-9kK]/g, "");
