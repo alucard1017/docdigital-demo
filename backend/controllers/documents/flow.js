@@ -10,6 +10,7 @@ const {
 } = require("./flowValidation");
 const { triggerWebhook } = require("../../services/webhookService");
 const { emitToCompany } = require("../../services/socketService");
+const { getGeoFromIP } = require("../../utils/geoLocation");
 
 /* ================================
    Crear flujo (BORRADOR, sin enviar correos)
@@ -413,17 +414,26 @@ if (tipoFlujo === "SECUENCIAL") {
   }
 }
 
-    await db.query(
-      `UPDATE firmantes
-       SET estado = 'FIRMADO',
-           fecha_firma = NOW(),
-           tipo_firma = 'SIMPLE',
-           ip_firma = $2,
-           user_agent_firma = $3,
-           updated_at = NOW()
-       WHERE id = $1`,
-      [firmanteId, req.ip || null, req.headers["user-agent"] || null]
-    );
+// Obtener geolocalización
+const geoData = await getGeoFromIP(req.ip);
+
+await db.query(
+  `UPDATE firmantes
+   SET estado = 'FIRMADO',
+       fecha_firma = NOW(),
+       tipo_firma = 'SIMPLE',
+       ip_firma = $2,
+       user_agent_firma = $3,
+       geo_location = $4,
+       updated_at = NOW()
+   WHERE id = $1`,
+  [
+    firmanteId, 
+    req.ip || null, 
+    req.headers["user-agent"] || null,
+    JSON.stringify(geoData),
+  ]
+);
 
     await db.query(
       `INSERT INTO eventos_firma (
