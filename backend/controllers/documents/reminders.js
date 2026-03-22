@@ -1,13 +1,15 @@
 // backend/controllers/documents/reminders.js
-const { db, sendSigningInvitation, sendVisadoInvitation } = require("./common");
+const {
+  db,
+  sendSigningInvitation,
+  sendVisadoInvitation,
+  isActiveDocumentStatus,
+} = require("./common");
 const { logAudit } = require("../../utils/auditLog");
 
 const FRONT_BASE_URL =
   process.env.FRONTEND_URL || "https://docdigital-demo.onrender.com";
 
-/* ================================
-   Helpers internos
-   ================================ */
 function buildPublicSignUrl(token) {
   return `${FRONT_BASE_URL}/firma-publica?token=${token}`;
 }
@@ -17,7 +19,7 @@ function buildVisadoUrl(token) {
 }
 
 /* ================================
-   POST: Reenviar recordatorio
+   POST: Reenviar recordatorio manual
    ================================ */
 async function resendReminder(req, res) {
   try {
@@ -31,13 +33,22 @@ async function resendReminder(req, res) {
     }
 
     const docRes = await db.query(
-      `SELECT * FROM documents WHERE id = $1 AND owner_id = $2`,
+      `SELECT *
+       FROM documents
+       WHERE id = $1 AND owner_id = $2`,
       [id, req.user.id]
     );
     if (docRes.rowCount === 0) {
       return res.status(404).json({ message: "Documento no encontrado" });
     }
     const doc = docRes.rows[0];
+
+    if (!isActiveDocumentStatus(doc.status)) {
+      return res.status(400).json({
+        message:
+          "Solo se pueden enviar recordatorios para documentos en proceso (ENVIADO/EN_REVISION/EN_FIRMA)",
+      });
+    }
 
     if (tipo === "VISADO") {
       if (!doc.requires_visado || !doc.visador_email) {
@@ -94,13 +105,21 @@ async function resendReminder(req, res) {
       }
 
       const signerRes = await db.query(
-        `SELECT * FROM document_signers WHERE id = $1 AND document_id = $2`,
+        `SELECT *
+         FROM document_signers
+         WHERE id = $1 AND document_id = $2`,
         [signerId, id]
       );
       if (signerRes.rowCount === 0) {
         return res.status(404).json({ message: "Firmante no encontrado" });
       }
       const signer = signerRes.rows[0];
+
+      if (["FIRMADO", "RECHAZADO"].includes(signer.status)) {
+        return res.status(400).json({
+          message: "No se pueden enviar recordatorios a firmantes ya cerrados",
+        });
+      }
 
       const url = buildPublicSignUrl(signer.sign_token);
 
@@ -151,14 +170,20 @@ async function resendReminder(req, res) {
 }
 
 /* ================================
-   POST: Enviar recordatorios automáticos (7 días)
+   POST: Enviar recordatorios automáticos
+   (ej. job diario; intervalos configurables a futuro)
    ================================ */
 async function sendAutomaticReminders(req, res) {
   try {
     const userId = req.user.id;
 
     const docsRes = await db.query(
-      `SELECT d.id, d.title, d.status, d.requires_visado, d.visador_email, d.signature_token
+      `SELECT d.id,
+              d.title,
+              d.status,
+              d.requires_visado,
+              d.visador_email,
+              d.signature_token
        FROM documents d
        WHERE d.owner_id = $1
          AND d.status IN ('PENDIENTE_VISADO', 'PENDIENTE_FIRMA')
@@ -175,7 +200,6 @@ async function sendAutomaticReminders(req, res) {
 
     for (const doc of docs) {
       try {
-        // Recordatorio a visador
         if (doc.requires_visado && doc.status === "PENDIENTE_VISADO") {
           if (doc.visador_email) {
             const urlVisado = buildVisadoUrl(doc.signature_token);
@@ -198,11 +222,12 @@ async function sendAutomaticReminders(req, res) {
           }
         }
 
-        // Recordatorio a firmantes
         if (doc.status === "PENDIENTE_FIRMA") {
           const signersRes = await db.query(
-            `SELECT * FROM document_signers
-             WHERE document_id = $1 AND status NOT IN ('FIRMADO', 'RECHAZADO')`,
+            `SELECT *
+             FROM document_signers
+             WHERE document_id = $1
+               AND status NOT IN ('FIRMADO', 'RECHAZADO')`,
             [doc.id]
           );
 

@@ -21,10 +21,39 @@ const Sentry = require("@sentry/node");
 
 const requestMeta = require("./middlewares/requestMeta");
 const db = require("./db");
-const { swaggerUi, specs } = require("./swagger");
+const { setupSwagger } = require("./swagger");
 const { requireAuth, requireRole } = require("./routes/auth");
 
-// Rutas
+/* ================================
+   INICIALIZAR WORKER DE BULLMQ (BACKGROUND JOBS)
+   ================================ */
+try {
+  // require("./queues/remindersWorker");
+  console.log("✓ Worker de recordatorios inicializado");
+} catch (err) {
+  console.warn(
+    "⚠️ No se pudo iniciar worker de recordatorios:",
+    err.message
+  );
+}
+
+/* ================================
+   INICIALIZAR REMINDER SCHEDULER (CRON)
+   ================================ */
+try {
+  const { iniciarReminderScheduler } = require("./jobs/reminderScheduler");
+  iniciarReminderScheduler();
+  console.log("✓ Scheduler de recordatorios iniciado");
+} catch (err) {
+  console.warn(
+    "⚠️ No se pudo iniciar reminderScheduler:",
+    err.message
+  );
+}
+
+/* ================================
+   RUTAS
+   ================================ */
 const authRoutes = require("./routes/auth");
 const docRoutes = require("./routes/documents");
 const publicRoutes = require("./routes/public");
@@ -117,7 +146,7 @@ if (missingVars.length > 0) {
 console.log("✓ Variables de entorno validadas");
 
 /* ================================
-   RATE LIMITING
+   RATE LIMITING GLOBAL
    ================================ */
 const generalLimiter = rateLimit({
   windowMs: 15 * 60 * 1000,
@@ -205,7 +234,7 @@ console.log("✓ Ruta pública /public/verificar registrada");
 /* ================================
    SWAGGER / DOCUMENTACIÓN API
    ================================ */
-app.use("/api-docs", swaggerUi.serve, swaggerUi.setup(specs));
+setupSwagger(app);
 console.log("✓ Swagger UI disponible en /api-docs");
 
 /* ================================
@@ -389,7 +418,7 @@ app.get("/api/test-auth", (req, res) => {
 console.log("✓ Ruta GET /api/test-auth registrada");
 
 /* ================================
-   RECORDATORIOS
+   RECORDATORIOS LEGACY
    ================================ */
 app.post(
   "/api/recordatorios/pendientes",
@@ -525,13 +554,6 @@ app.use((req, res) => {
   });
 });
 console.log("✓ Middleware 404 registrado");
-
-/* ================================
-   INICIAR SCHEDULED TASKS
-   ================================ */
-const { iniciarReminderScheduler } = require("./jobs/reminderScheduler");
-iniciarReminderScheduler();
-console.log("✓ Scheduled tasks iniciados");
 
 /* ================================
    INICIAR SERVIDOR

@@ -22,6 +22,27 @@ const {
 } = require("../../utils/numeroContratoInterno");
 
 /**
+ * Estados estándar de documentos.
+ *
+ * BORRADOR       → creado, sin envío.
+ * ENVIADO        → enviado a visado/firma, con al menos una invitación emitida.
+ * EN_REVISION    → pendiente de visado.
+ * EN_FIRMA       → pendiente de firmas.
+ * FIRMADO        → todas las firmas completadas.
+ * RECHAZADO      → rechazado por propietario o firmante.
+ * EXPIRADO       → venció por fecha de expiración.
+ */
+const DOCUMENT_STATES = {
+  DRAFT: "BORRADOR",
+  SENT: "ENVIADO",
+  UNDER_REVIEW: "EN_REVISION",
+  SIGNING: "EN_FIRMA",
+  SIGNED: "FIRMADO",
+  REJECTED: "RECHAZADO",
+  EXPIRED: "EXPIRADO",
+};
+
+/**
  * Genera un código alfanumérico para verificación pública de documentos.
  */
 function generarCodigoVerificacion() {
@@ -35,6 +56,8 @@ function generarCodigoVerificacion() {
 
 /**
  * Aplica marca de agua VERIFIRMA a un PDF local.
+ * Nota: la idea a futuro es retirar esta marca del PDF final firmado
+ * y dejar solo sello/QR/branding “confiable”.
  */
 async function aplicarMarcaAguaLocal(filePath) {
   try {
@@ -93,6 +116,18 @@ function computeHash(buffer) {
   return crypto.createHash("sha256").update(buffer).digest("hex");
 }
 
+/**
+ * Helper para saber si un documento está en un estado “activo”
+ * sobre el que tenga sentido enviar recordatorios.
+ */
+function isActiveDocumentStatus(status) {
+  return [
+    DOCUMENT_STATES.SENT,
+    DOCUMENT_STATES.UNDER_REVIEW,
+    DOCUMENT_STATES.SIGNING,
+  ].includes(status);
+}
+
 module.exports = {
   // dependencias base
   path,
@@ -121,4 +156,7 @@ module.exports = {
   generarCodigoVerificacion,
   aplicarMarcaAguaLocal,
   computeHash,
+  // estados
+  DOCUMENT_STATES,
+  isActiveDocumentStatus,
 };

@@ -1,5 +1,5 @@
 // backend/controllers/documents/flow.js
-const { db, crypto, Sentry } = require("./common");
+const { db, crypto, DOCUMENT_STATES } = require("./common");
 const {
   logAudit,
   buildDocumentAuditMetadata,
@@ -23,7 +23,13 @@ async function createFlow(req, res) {
     });
   }
 
-  const { tipo, titulo, categoriaFirma, firmantes } = req.body;
+  const {
+    tipo,
+    titulo,
+    categoriaFirma,
+    firmantes,
+    fechaExpiracion, // opcional
+  } = req.body;
 
   try {
     await db.query("BEGIN");
@@ -40,31 +46,25 @@ async function createFlow(req, res) {
          categoria_firma,
          creado_por,
          company_id,
+         fecha_expiracion,
          created_at,
          updated_at
        )
-       VALUES ($1, $2, 'BORRADOR', NULL, $3, $4, $5, $6, NOW(), NOW())
+       VALUES ($1, $2, $3, NULL, $4, $5, $6, $7, $8, NOW(), NOW())
        RETURNING *`,
       [
         tipo,
         titulo,
+        DOCUMENT_STATES.DRAFT,
         codigoVerificacion,
         categoriaFirma,
         req.user.id,
         req.user.company_id,
+        fechaExpiracion || null,
       ]
     );
 
     const documento = docResult.rows[0];
-
-    Sentry.setContext("document", {
-      id: documento.id,
-      title: documento.titulo,
-      status: documento.estado,
-      owner_id: documento.creado_por,
-      verification_code: documento.codigo_verificacion,
-      company_id: documento.company_id,
-    });
 
     for (const [index, f] of firmantes.entries()) {
       await db.query(
@@ -101,7 +101,11 @@ async function createFlow(req, res) {
        VALUES ($1, 'CREADO', $2, NOW())`,
       [
         documento.id,
-        JSON.stringify({ fuente: "API", creado_por: req.user.id }),
+        JSON.stringify({
+          fuente: "API",
+          creado_por: req.user.id,
+          estado_inicial: DOCUMENT_STATES.DRAFT,
+        }),
       ]
     );
 
@@ -115,6 +119,7 @@ async function createFlow(req, res) {
       extra: {
         categoria_firma: documento.categoria_firma,
         firmantes: firmantes.length,
+        fecha_expiracion: documento.fecha_expiracion,
       },
     });
 
@@ -130,6 +135,7 @@ async function createFlow(req, res) {
     return res.status(201).json({
       documentoId: documento.id,
       codigoVerificacion,
+      estado: documento.estado,
       message: "Flujo de documento creado exitosamente (BORRADOR)",
     });
   } catch (error) {
@@ -141,6 +147,7 @@ async function createFlow(req, res) {
 
 /* ================================
    Enviar flujo (BORRADOR -> EN_REVISION / EN_FIRMA)
+   + Crear recordatorios automáticos
    ================================ */
 async function sendFlow(req, res) {
   const { valid, id, error } = validateSendFlowParams(req.params);
@@ -165,7 +172,7 @@ async function sendFlow(req, res) {
 
     const documento = docRes.rows[0];
 
-    if (documento.estado !== "BORRADOR") {
+    if (documento.estado !== DOCUMENT_STATES.DRAFT) {
       await db.query("ROLLBACK");
       return res.status(400).json({
         error: "Solo puedes enviar documentos en estado BORRADOR",
@@ -190,11 +197,14 @@ async function sendFlow(req, res) {
     const firmantes = firmantesRes.rows;
     const tieneVisador = firmantes.some((f) => f.rol === "VISADOR");
 
-    const nuevoEstado = tieneVisador ? "EN_REVISION" : "EN_FIRMA";
+    const nuevoEstado = tieneVisador
+      ? DOCUMENT_STATES.UNDER_REVIEW
+      : DOCUMENT_STATES.SIGNING;
 
     await db.query(
       `UPDATE documentos
        SET estado = $1,
+           enviado_en = NOW(),
            updated_at = NOW()
        WHERE id = $2`,
       [nuevoEstado, id]
@@ -218,6 +228,32 @@ async function sendFlow(req, res) {
       ]
     );
 
+    /* ========= CREAR RECORDATORIOS AUTOMÁTICOS ========= */
+    const ahora = new Date();
+    const proximoRecordatorio = new Date(ahora.getTime() + 3 * 24 * 60 * 60 * 1000); // 3 días después
+
+    for (const firmante of firmantes) {
+      await db.query(
+        `INSERT INTO recordatorios (
+           documento_id,
+           firmante_id,
+           email,
+           tipo,
+           status,
+           scheduled_at,
+           max_attempts,
+           created_at,
+           updated_at
+         )
+         VALUES ($1, $2, $3, 'AUTO', 'PENDING', $4, 3, NOW(), NOW())`,
+        [id, firmante.id, firmante.email, proximoRecordatorio]
+      );
+    }
+
+    console.log(
+      `✅ Creados ${firmantes.length} recordatorios automáticos para documento ${id}`
+    );
+
     await db.query("COMMIT");
 
     const metadata = buildDocumentAuditMetadata({
@@ -228,6 +264,7 @@ async function sendFlow(req, res) {
       extra: {
         firmantes: firmantes.length,
         tieneVisador,
+        recordatorios_creados: firmantes.length,
       },
     });
 
@@ -243,6 +280,7 @@ async function sendFlow(req, res) {
     return res.json({
       documentoId: documento.id,
       estado: nuevoEstado,
+      recordatoriosCreados: firmantes.length,
       message: "Documento enviado a firma correctamente",
     });
   } catch (error) {
@@ -253,7 +291,7 @@ async function sendFlow(req, res) {
 }
 
 /* ================================
-   Firmar flujo (público por firmanteId)
+   Firmar flujo por firmante (público, por firmanteId)
    ================================ */
 async function signFlow(req, res) {
   const { firmanteId } = req.params;
@@ -280,20 +318,6 @@ async function signFlow(req, res) {
     }
 
     const firmante = firmanteRes.rows[0];
-
-    Sentry.setContext("document", {
-      id: firmante.documento_id,
-      title: firmante.titulo,
-      status: firmante.documento_estado,
-    });
-    Sentry.setContext("firmante", {
-      id: firmante.id,
-      nombre: firmante.nombre,
-      email: firmante.email,
-      estado: firmante.estado,
-      orden_firma: firmante.orden_firma,
-      rol: firmante.rol,
-    });
 
     if (firmante.estado === "FIRMADO") {
       await db.query("ROLLBACK");
@@ -374,13 +398,28 @@ async function signFlow(req, res) {
     let nuevoEstadoDocumento = firmante.documento_estado;
 
     if (allSigned) {
-      nuevoEstadoDocumento = "FIRMADO";
+      nuevoEstadoDocumento = DOCUMENT_STATES.SIGNED;
       await db.query(
         `UPDATE documentos
-         SET estado = 'FIRMADO',
+         SET estado = $1,
+             firmado_en = NOW(),
              updated_at = NOW()
-         WHERE id = $1`,
+         WHERE id = $2`,
+        [DOCUMENT_STATES.SIGNED, firmante.documento_id]
+      );
+
+      // ========= CANCELAR RECORDATORIOS =========
+      await db.query(
+        `UPDATE recordatorios
+         SET status = 'CANCELLED',
+             updated_at = NOW()
+         WHERE documento_id = $1
+           AND status IN ('PENDING', 'SENT')`,
         [firmante.documento_id]
+      );
+
+      console.log(
+        `🛑 Recordatorios cancelados para documento ${firmante.documento_id}`
       );
 
       await db.query(
@@ -401,13 +440,13 @@ async function signFlow(req, res) {
         ]
       );
     } else if (firmante.rol === "VISADOR") {
-      nuevoEstadoDocumento = "EN_FIRMA";
+      nuevoEstadoDocumento = DOCUMENT_STATES.SIGNING;
       await db.query(
         `UPDATE documentos
-         SET estado = 'EN_FIRMA',
+         SET estado = $1,
              updated_at = NOW()
-         WHERE id = $1`,
-        [firmante.documento_id]
+         WHERE id = $2`,
+        [DOCUMENT_STATES.SIGNING, firmante.documento_id]
       );
     }
 

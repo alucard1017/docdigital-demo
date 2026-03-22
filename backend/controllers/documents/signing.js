@@ -1,5 +1,5 @@
 // backend/controllers/documents/signing.js
-const { db, sellarPdfConQr } = require("./common");
+const { db, sellarPdfConQr, DOCUMENT_STATES } = require("./common");
 const { logAudit } = require("../../utils/auditLog");
 
 /* ================================
@@ -22,11 +22,11 @@ async function signDocument(req, res) {
 
     const docActual = current.rows[0];
 
-    if (docActual.status === "FIRMADO") {
+    if (docActual.status === DOCUMENT_STATES.SIGNED) {
       return res.status(400).json({ message: "Ya firmado" });
     }
 
-    if (docActual.status === "RECHAZADO") {
+    if (docActual.status === DOCUMENT_STATES.REJECTED) {
       return res.status(400).json({ message: "Documento rechazado" });
     }
 
@@ -39,17 +39,16 @@ async function signDocument(req, res) {
       });
     }
 
-    // 1) Actualizar estado a FIRMADO
     const result = await db.query(
       `UPDATE documents 
-       SET status = $1, updated_at = NOW()
+       SET status = $1,
+           updated_at = NOW()
        WHERE id = $2 AND owner_id = $3
        RETURNING *`,
-      ["FIRMADO", id, req.user.id]
+      [DOCUMENT_STATES.SIGNED, id, req.user.id]
     );
     const doc = result.rows[0];
 
-    // 2) Registrar evento (incluye aceptación de aviso legal de firma electrónica)
     await db.query(
       `INSERT INTO document_events (
          document_id, actor, action, details, from_status, to_status
@@ -61,7 +60,7 @@ async function signDocument(req, res) {
         "FIRMADO",
         "Firmado por propietario (aceptó aviso legal de uso de firma electrónica simple, con equivalencia a firma manuscrita conforme a la Ley N° 19.799).",
         docActual.status,
-        "FIRMADO",
+        DOCUMENT_STATES.SIGNED,
       ]
     );
 
@@ -72,12 +71,12 @@ async function signDocument(req, res) {
       entityId: doc.id,
       metadata: {
         from_status: docActual.status,
-        to_status: "FIRMADO",
+        to_status: DOCUMENT_STATES.SIGNED,
       },
       req,
     });
 
-    // 3) Sellar PDF con QR / código y guardar ruta firmada en pdf_final_url
+    // Sellar PDF con QR / código y guardar ruta firmada en pdf_final_url
     try {
       if (doc.nuevo_documento_id) {
         const docNuevoRes = await db.query(
@@ -143,12 +142,14 @@ async function viserDocumentInternalUpdate(id, userId) {
 
   const docActual = current.rows[0];
 
-  if (docActual.status === "FIRMADO") {
+  if (docActual.status === DOCUMENT_STATES.SIGNED) {
     return { error: { status: 400, body: { message: "Ya firmado" } } };
   }
 
-  if (docActual.status === "RECHAZADO") {
-    return { error: { status: 400, body: { message: "Documento rechazado" } } };
+  if (docActual.status === DOCUMENT_STATES.REJECTED) {
+    return {
+      error: { status: 400, body: { message: "Documento rechazado" } },
+    };
   }
 
   if (docActual.requires_visado !== true) {
@@ -254,13 +255,13 @@ async function rejectDocument(req, res) {
 
     const docActual = current.rows[0];
 
-    if (docActual.status === "FIRMADO") {
+    if (docActual.status === DOCUMENT_STATES.SIGNED) {
       return res.status(400).json({
         message: "Ya firmado, no se puede rechazar",
       });
     }
 
-    if (docActual.status === "RECHAZADO") {
+    if (docActual.status === DOCUMENT_STATES.REJECTED) {
       return res.status(400).json({ message: "Ya rechazado" });
     }
 
@@ -269,7 +270,7 @@ async function rejectDocument(req, res) {
        SET status = $1, reject_reason = $2, updated_at = NOW()
        WHERE id = $3 AND owner_id = $4 
        RETURNING *`,
-      ["RECHAZADO", motivo || "Sin especificar", id, req.user.id]
+      [DOCUMENT_STATES.REJECTED, motivo || "Sin especificar", id, req.user.id]
     );
 
     const doc = result.rows[0];
@@ -285,7 +286,7 @@ async function rejectDocument(req, res) {
         "RECHAZADO",
         `Documento rechazado: ${motivo || "Sin especificar"}`,
         docActual.status,
-        "RECHAZADO",
+        DOCUMENT_STATES.REJECTED,
       ]
     );
 
@@ -313,4 +314,5 @@ module.exports = {
   signDocument,
   visarDocument,
   rejectDocument,
+  viserDocumentInternalUpdate,
 };
