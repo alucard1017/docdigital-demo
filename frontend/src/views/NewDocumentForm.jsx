@@ -267,6 +267,33 @@ export function NewDocumentForm({
         </div>
       </div>
 
+{/* Tipo de flujo */}
+      <div style={{ marginBottom: 24 }}>
+        abel
+          style={{
+            fontWeight: 700,
+            fontSize: "0.9rem",
+            display: "block",
+            marginBottom: 8,
+          }}
+        >
+          Tipo de flujo de firma
+        </label>
+        <select
+          className="input-field"
+          value={tipoFlujo}
+          onChange={(e) => setTipoFlujo(e.target.value)}
+        >
+          <option value="SECUENCIAL">Secuencial (uno tras otro, en orden)</option>
+          <option value="PARALELO">Paralelo (todos a la vez, sin orden)</option>
+        </select>
+        <p style={{ fontSize: 12, color: "#6b7280", marginTop: 4 }}>
+          {tipoFlujo === "SECUENCIAL" 
+            ? "Los firmantes deben firmar en el orden establecido."
+            : "Todos los firmantes pueden firmar simultáneamente, sin esperar turno."}
+        </p>
+      </div>
+
       <form onSubmit={handleSubmit}>
         {/* === TÍTULO DEL CONTRATO + BOTÓN PDF === */}
         <div

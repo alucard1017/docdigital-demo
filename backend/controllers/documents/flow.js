@@ -25,13 +25,14 @@ async function createFlow(req, res) {
     });
   }
 
-  const {
-    tipo,
-    titulo,
-    categoriaFirma,
-    firmantes,
-    fechaExpiracion, // opcional
-  } = req.body;
+const {
+  tipo,
+  titulo,
+  categoriaFirma,
+  firmantes,
+  fechaExpiracion, // opcional
+  tipoFlujo = "SECUENCIAL", // nuevo
+} = req.body;
 
   try {
     await db.query("BEGIN");
@@ -46,6 +47,7 @@ async function createFlow(req, res) {
          hash_pdf,
          codigo_verificacion,
          categoria_firma,
+	 tipo_flujo,
          creado_por,
          company_id,
          fecha_expiracion,
@@ -383,23 +385,33 @@ async function signFlow(req, res) {
         .json({ error: "Este firmante rechazó el documento" });
     }
 
-    const pendingBeforeRes = await db.query(
-      `SELECT COUNT(*) AS pendientes
-       FROM firmantes
-       WHERE documento_id = $1
-         AND orden_firma < $2
-         AND estado <> 'FIRMADO'`,
-      [firmante.documento_id, firmante.orden_firma]
-    );
-    const pendientesAntes = Number(pendingBeforeRes.rows[0].pendientes);
+// Validar orden SOLO si el flujo es SECUENCIAL
+const docTipoRes = await db.query(
+  `SELECT tipo_flujo FROM documentos WHERE id = $1`,
+  [firmante.documento_id]
+);
 
-    if (pendientesAntes > 0) {
-      await db.query("ROLLBACK");
-      return res.status(400).json({
-        error:
-          "Aún hay firmantes anteriores en la secuencia que no han firmado",
-      });
-    }
+const tipoFlujo = docTipoRes.rows[0]?.tipo_flujo || "SECUENCIAL";
+
+if (tipoFlujo === "SECUENCIAL") {
+  const pendingBeforeRes = await db.query(
+    `SELECT COUNT(*) AS pendientes
+     FROM firmantes
+     WHERE documento_id = $1
+       AND orden_firma < $2
+       AND estado <> 'FIRMADO'`,
+    [firmante.documento_id, firmante.orden_firma]
+  );
+  const pendientesAntes = Number(pendingBeforeRes.rows[0].pendientes);
+
+  if (pendientesAntes > 0) {
+    await db.query("ROLLBACK");
+    return res.status(400).json({
+      error:
+        "Aún hay firmantes anteriores en la secuencia que no han firmado",
+    });
+  }
+}
 
     await db.query(
       `UPDATE firmantes
