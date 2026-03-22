@@ -151,6 +151,13 @@ export function Sidebar({
         <span>📊</span> Analytics
       </div>
 
+     <div
+       className={`nav-item ${view === "pricing" ? "active" : ""}`} 
+       onClick={() => handleChangeView("pricing")}
+     >
+       <span>💳</span> Planes y Precios
+     </div>
+
       {isAnyAdmin && (
         <div
           className={`nav-item ${view === "dashboard" ? "active" : ""}`}
@@ -231,6 +238,7 @@ export function Sidebar({
           )}
         </>
       )}
+
 
       {/* Mini resumen */}
       <div

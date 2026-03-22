@@ -20,6 +20,7 @@ import { getSubdomain } from "./utils/subdomain";
 import RemindersConfigView from "./views/RemindersConfigView";
 import EmailMetricsView from "./views/EmailMetricsView";
 import { useSocket } from "./hooks/useSocket";
+import PricingView from "./views/PricingView";
 import api from "./api/client";
 
 /* ========= Helpers de rol ========= */
@@ -156,10 +157,20 @@ useEffect(() => {
 
 // Cargar URL de PDF para la vista de detalle (usa /preview, no /download)
 useEffect(() => {
+  if (!selectedDoc?.id) {
+    setPdfUrl(null);
+    return;
+  }
 
-  // Cargar URL de PDF para la vista de detalle (usa /preview, no /download)
-  useEffect(() => {
-    if (!selectedDoc?.id) {
+  try {
+    const baseUrl = api.defaults.baseURL || API_BASE_URL;
+    const url = `${baseUrl}/documents/${selectedDoc.id}/preview`;
+    setPdfUrl(url);
+  } catch (err) {
+    console.error("Error preparando URL de PDF:", err);
+    setPdfUrl(null);
+  }
+}, [selectedDoc?.id]);
       setPdfUrl(null);
       return;
     }
@@ -877,6 +888,8 @@ useEffect(() => {
 	{view === "email-metrics" && anyAdmin && (
 	  <EmailMetricsView />
 	)}
+	
+	{view === "pricing" && <PricingView />}
 
         {import.meta.env.MODE !== "production" && (
           <button onClick={handleTestError}>Probar error Sentry</button>

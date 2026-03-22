@@ -336,6 +336,14 @@ router.get("/me", requireAuth, (req, res) => {
   });
 });
 
+const {
+  sendVerificationEmail,
+  verifyEmail,
+} = require("../controllers/auth/emailVerification");
+
+router.post("/send-verification", sendVerificationEmail);
+router.post("/verify-email", verifyEmail);
+
 module.exports = router;
 module.exports.requireAuth = requireAuth;
 module.exports.requireRole = requireRole;

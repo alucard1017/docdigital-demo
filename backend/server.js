@@ -23,6 +23,7 @@ const requestMeta = require("./middlewares/requestMeta");
 const db = require("./db");
 const { setupSwagger } = require("./swagger");
 const { requireAuth, requireRole } = require("./routes/auth");
+const plansRoutes = require("./routes/plans");
 
 
 /* ================================
@@ -65,6 +66,7 @@ const statusRoutes = require("./routes/status");
 const logsRoutes = require("./routes/logs");
 const remindersRoutes = require("./routes/reminders");
 const analyticsRoutes = require("./routes/analytics");
+
 
 /* ================================
    LOG DE INICIO
@@ -369,6 +371,10 @@ console.log("✓ Rutas /api/reminders registradas");
 // Analytics
 app.use("/api/analytics", analyticsRoutes);
 console.log("✓ Rutas /api/analytics registradas");
+
+// Planes
+app.use("/api/plans", plansRoutes);
+console.log("✓ Rutas /api/plans registradas");
 
 /* ================================
    RUTA STORAGE / URLs FIRMADAS
