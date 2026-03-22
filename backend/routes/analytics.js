@@ -4,7 +4,7 @@ const router = express.Router();
 
 // Ajusta la ruta del middleware según lo tengas definido.
 // Si tu middleware está en backend/middleware/auth.js:
-const { requireAuth } = require("../middleware/auth");
+const { requireAuth } = require("./auth");
 
 const {
   getEmailMetrics,

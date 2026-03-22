@@ -1,19 +1,27 @@
-const express = require('express');
+// backend/routes/onboarding.js
+const express = require("express");
 const router = express.Router();
-const onboardingController = require('../controllers/onboardingController');
-const { authenticateToken } = require('../middleware/auth');
 
-// Todas las rutas requieren autenticación
-router.use(authenticateToken);
+const {
+  getOnboardingStatus,
+  updateOnboardingStep,
+  completeOnboarding,
+  skipOnboarding,
+  getTourProgress,
+  updateTourProgress,
+} = require("../controllers/onboardingController");
 
-// Onboarding routes
-router.get('/status', onboardingController.getOnboardingStatus);
-router.put('/step', onboardingController.updateOnboardingStep);
-router.post('/complete', onboardingController.completeOnboarding);
-router.post('/skip', onboardingController.skipOnboarding);
+// Reutiliza el middleware de auth central
+const { requireAuth } = require("./auth");
 
-// Product tour routes
-router.get('/tour/:tourId', onboardingController.getTourProgress);
-router.put('/tour/:tourId', onboardingController.updateTourProgress);
+// Onboarding routes (todas protegidas)
+router.get("/status", requireAuth, getOnboardingStatus);
+router.put("/step", requireAuth, updateOnboardingStep);
+router.post("/complete", requireAuth, completeOnboarding);
+router.post("/skip", requireAuth, skipOnboarding);
+
+// Product tour routes (también protegidas)
+router.get("/tour/:tourId", requireAuth, getTourProgress);
+router.put("/tour/:tourId", requireAuth, updateTourProgress);
 
 module.exports = router;
