@@ -397,6 +397,8 @@ console.log("✓ Rutas /api/admin registradas");
 app.use("/api/onboarding", onboardingRoutes);
 console.log("✓ Rutas /api/onboarding registradas");
 
+app.use("/api/billing", billingRoutes);
+
 /* ================================
    RUTA STORAGE / URLs FIRMADAS
    ================================ */

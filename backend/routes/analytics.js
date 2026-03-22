@@ -1,16 +1,34 @@
 // backend/routes/analytics.js
 const express = require("express");
-const { requireAuth } = require("./auth");
+const router = express.Router();
+
+// Ajusta la ruta del middleware según lo tengas definido.
+// Si tu middleware está en backend/middleware/auth.js:
+const { requireAuth } = require("../middleware/auth");
+
 const {
   getEmailMetrics,
   recordEmailEvent,
 } = require("../controllers/analytics/emailMetricsController");
 
-const { getCompanyAnalytics } = require("../controllers/analytics/companyAnalyticsController");
+const {
+  getCompanyAnalytics,
+} = require("../controllers/analytics/companyAnalyticsController");
 
+/**
+ * @openapi
+ * /api/analytics/company:
+ *   get:
+ *     summary: Obtener analytics agregados por empresa
+ *     tags:
+ *       - Analytics
+ *     security:
+ *       - bearerAuth: []
+ *     responses:
+ *       200:
+ *         description: Métricas de la empresa
+ */
 router.get("/company", requireAuth, getCompanyAnalytics);
-
-const router = express.Router();
 
 /**
  * @openapi

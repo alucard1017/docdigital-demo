@@ -18,7 +18,7 @@ if (!JWT_SECRET) {
 /* ========= Helpers ========= */
 
 // Normalizar RUN: quitar puntos y guiones
-const normalizeRun = (run) => (run || "").replace(/[.\\-]/g, "");
+const normalizeRun = (run) => (run || "").replace(/[.\-]/g, "");
 
 /* ========= Helpers de permisos sobre usuarios ========= */
 
@@ -112,13 +112,14 @@ function requireAuth(req, res, next) {
 /* ========= Middleware de autorización por rol ========= */
 
 function requireRole(requiredRole) {
-  return function (req, res, next) {
+  return (req, res, next) => {
     if (!req.user || !req.user.role) {
       return res.status(403).json({ message: "Acceso denegado" });
     }
 
     const role = req.user.role;
 
+    // SUPER_ADMIN siempre pasa
     if (role === "SUPER_ADMIN") {
       return next();
     }
@@ -336,6 +337,8 @@ router.get("/me", requireAuth, (req, res) => {
   });
 });
 
+/* ========= Verificación de email ========= */
+
 const {
   sendVerificationEmail,
   verifyEmail,
@@ -344,6 +347,8 @@ const {
 router.post("/send-verification", sendVerificationEmail);
 router.post("/verify-email", verifyEmail);
 
+/* ========= Reset de contraseña ========= */
+
 const {
   forgotPassword,
   resetPassword,
@@ -351,6 +356,8 @@ const {
 
 router.post("/forgot-password", forgotPassword);
 router.post("/reset-password", resetPassword);
+
+/* ========= Exports ========= */
 
 module.exports = router;
 module.exports.requireAuth = requireAuth;
