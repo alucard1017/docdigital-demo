@@ -69,6 +69,7 @@ const logsRoutes = require("./routes/logs");
 const remindersRoutes = require("./routes/reminders");
 const analyticsRoutes = require("./routes/analytics");
 const notificationsRoutes = require("./routes/notifications");
+const adminRoutes = require("./routes/admin");
 
 
 /* ================================
@@ -387,6 +388,9 @@ console.log("✓ Rutas /api/templates registradas");
 app.use("/api/notifications", notificationsRoutes);
 console.log("✓ Rutas /api/notifications registradas");
 
+// Admin
+app.use("/api/admin", adminRoutes);
+console.log("✓ Rutas /api/admin registradas");
 
 /* ================================
    RUTA STORAGE / URLs FIRMADAS

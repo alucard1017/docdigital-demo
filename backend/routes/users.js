@@ -210,11 +210,14 @@ router.get("/", requireAuth, requireRole("ADMIN"), async (req, res) => {
       FROM public.users
     `;
 
-    if (whereParts.length > 0) {
-      query += " WHERE " + whereParts.join(" AND ");
-    }
+if (whereParts.length > 0) {
+  query += " WHERE " + whereParts.join(" AND ");
+  query += " AND deleted_at IS NULL";
+} else {
+  query += " WHERE deleted_at IS NULL";
+}
 
-    query += " ORDER BY id ASC";
+query += " ORDER BY id ASC";
 
     const result = await db.query(query, params);
     return res.json(result.rows);
@@ -544,7 +547,11 @@ router.delete("/:id", requireAuth, requireRole("ADMIN"), async (req, res) => {
       }
     }
 
-    await db.query("DELETE FROM public.users WHERE id = $1", [id]);
+// Soft delete
+await db.query(
+  "UPDATE public.users SET deleted_at = NOW() WHERE id = $1",
+  [id]
+);
 
     await logAudit({
       user: requester,
