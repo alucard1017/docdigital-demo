@@ -129,8 +129,6 @@ function App() {
 
   // API raíz ya normalizada desde constants.js (termina en /api, sin /api/api)
   const apiRoot = API_BASE_URL;
-// API raíz ya normalizada desde constants.js (termina en /api, sin /api/api)
-const apiRoot = API_BASE_URL;
 
 // WebSocket para notificaciones en tiempo real
 const socket = useSocket(token);
