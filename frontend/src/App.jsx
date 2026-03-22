@@ -21,6 +21,7 @@ import RemindersConfigView from "./views/RemindersConfigView";
 import EmailMetricsView from "./views/EmailMetricsView";
 import { useSocket } from "./hooks/useSocket";
 import PricingView from "./views/PricingView";
+import ProfileView from "./views/ProfileView";
 import api from "./api/client";
 
 /* ========= Helpers de rol ========= */
@@ -890,6 +891,8 @@ useEffect(() => {
 	)}
 	
 	{view === "pricing" && <PricingView />}
+
+	{view === "profile" && <ProfileView />}
 
         {import.meta.env.MODE !== "production" && (
           <button onClick={handleTestError}>Probar error Sentry</button>

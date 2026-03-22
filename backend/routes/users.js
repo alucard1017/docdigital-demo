@@ -4,11 +4,16 @@ const bcrypt = require("bcryptjs");
 const db = require("../db");
 const { requireAuth, requireRole } = require("./auth");
 const { logAuth, logAudit } = require("../utils/auditLog");
+const {
+  getProfile,
+  updateProfile,
+  changePassword,
+} = require("../controllers/users/profileController");
 
 const router = express.Router();
 
 // Normalizar RUN: quitar puntos y guiones
-const normalizeRun = (run) => (run || "").replace(/[.\\-]/g, "");
+const normalizeRun = (run) => (run || "").replace(/[.\-]/g, "");
 
 // RUN del dueño que NUNCA se puede borrar ni tocar salvo él mismo
 const OWNER_RUN = normalizeRun(process.env.ADMIN_RUN || "1053806586");
@@ -19,10 +24,107 @@ function isAdminLike(role) {
   return role === "ADMIN" || role === "ADMIN_GLOBAL" || role === "SUPER_ADMIN";
 }
 
+/* ================================
+   RUTAS DE PERFIL (USUARIO ACTUAL)
+   ================================ */
+
 /**
- * POST /api/users/register
- * Registro público opcional
- * - Crea siempre USER sin privilegios.
+ * @openapi
+ * /api/users/profile:
+ *   get:
+ *     summary: Obtener perfil del usuario actual
+ *     tags:
+ *       - Usuarios
+ *     security:
+ *       - bearerAuth: []
+ *     responses:
+ *       200:
+ *         description: Datos del perfil
+ */
+router.get("/profile", requireAuth, getProfile);
+
+/**
+ * @openapi
+ * /api/users/profile:
+ *   put:
+ *     summary: Actualizar perfil del usuario actual
+ *     tags:
+ *       - Usuarios
+ *     security:
+ *       - bearerAuth: []
+ *     requestBody:
+ *       content:
+ *         application/json:
+ *           schema:
+ *             type: object
+ *             properties:
+ *               name:
+ *                 type: string
+ *               email:
+ *                 type: string
+ *     responses:
+ *       200:
+ *         description: Perfil actualizado
+ */
+router.put("/profile", requireAuth, updateProfile);
+
+/**
+ * @openapi
+ * /api/users/change-password:
+ *   post:
+ *     summary: Cambiar contraseña del usuario actual
+ *     tags:
+ *       - Usuarios
+ *     security:
+ *       - bearerAuth: []
+ *     requestBody:
+ *       required: true
+ *       content:
+ *         application/json:
+ *           schema:
+ *             type: object
+ *             properties:
+ *               currentPassword:
+ *                 type: string
+ *               newPassword:
+ *                 type: string
+ *     responses:
+ *       200:
+ *         description: Contraseña actualizada
+ */
+router.post("/change-password", requireAuth, changePassword);
+
+/* ================================
+   REGISTRO PÚBLICO
+   ================================ */
+
+/**
+ * @openapi
+ * /api/users/register:
+ *   post:
+ *     summary: Registro público de usuarios
+ *     tags:
+ *       - Usuarios
+ *     requestBody:
+ *       required: true
+ *       content:
+ *         application/json:
+ *           schema:
+ *             type: object
+ *             properties:
+ *               run:
+ *                 type: string
+ *               name:
+ *                 type: string
+ *               email:
+ *                 type: string
+ *               password:
+ *                 type: string
+ *               plan:
+ *                 type: string
+ *     responses:
+ *       201:
+ *         description: Usuario creado
  */
 router.post("/register", async (req, res, next) => {
   try {
@@ -49,31 +151,31 @@ router.post("/register", async (req, res, next) => {
 
     await logAudit({
       user: null,
-      action: "user_registered_public",
+      action: "USER_REGISTERED_PUBLIC",
       entityType: "user",
       entityId: created.id,
       metadata: {
         run: created.run,
         email: created.email,
-        company_id: created.company_id,
         plan: plan || "basic",
-        via: "public_register",
       },
       req,
     });
 
-    return res.status(201).json({ message: "Usuario creado" });
+    return res.status(201).json({ message: "Usuario creado exitosamente" });
   } catch (err) {
     console.error("❌ Error en POST /api/users/register:", err);
     return next(err);
   }
 });
 
+/* ================================
+   CRUD DE USUARIOS (ADMIN)
+   ================================ */
+
 /**
  * GET /api/users
- * Lista de usuarios:
- * - SUPER_ADMIN y ADMIN_GLOBAL: ven todos.
- * - ADMIN: solo usuarios de su company_id.
+ * Lista de usuarios según permisos
  */
 router.get("/", requireAuth, requireRole("ADMIN"), async (req, res) => {
   try {
@@ -104,7 +206,7 @@ router.get("/", requireAuth, requireRole("ADMIN"), async (req, res) => {
     }
 
     let query = `
-      SELECT id, run, "name", email, "plan", "role", active, company_id
+      SELECT id, run, "name", email, "plan", "role", active, company_id, email_verified, created_at
       FROM public.users
     `;
 
@@ -219,15 +321,14 @@ router.post("/", requireAuth, requireRole("ADMIN"), async (req, res) => {
 
     await logAudit({
       user: req.user,
-      action: "user_created",
+      action: "USER_CREATED",
       entityType: "user",
       entityId: created.id,
       metadata: {
-        created_run: created.run,
-        created_email: created.email,
-        created_role: created.role,
+        run: created.run,
+        email: created.email,
+        role: created.role,
         company_id: created.company_id,
-        via: "admin_panel",
       },
       req,
     });
@@ -347,30 +448,31 @@ router.put("/:id", requireAuth, requireRole("ADMIN"), async (req, res) => {
       return res.status(400).json({ message: "No hay campos para actualizar" });
     }
 
+    fields.push(`updated_at = NOW()`);
     values.push(id);
 
     const result = await db.query(
       `UPDATE public.users
        SET ${fields.join(", ")}
        WHERE id = $${idx}
-       RETURNING id, run, "name", email, "plan", "role", active, company_id`,
+       RETURNING id, run, "name", email, "plan", "role", active, company_id, email_verified`,
       values
     );
 
     const updated = result.rows[0];
 
-    await logAudit({
-      user: req.user,
-      action: "user_updated",
-      entityType: "user",
-      entityId: updated.id,
-      metadata: {
-        before_role: before.role,
-        new_role: updated.role,
-        company_id: updated.company_id,
-      },
-      req,
-    });
+await logAudit({
+  user: req.user,
+  action: "USER_UPDATED",
+  entityType: "user",
+  entityId: updated.id,
+  metadata: {
+    before_role: before.role,
+    new_role: updated.role,
+    company_id: updated.company_id,
+  },
+  req,
+});
 
     return res.json(updated);
   } catch (err) {
@@ -381,10 +483,7 @@ router.put("/:id", requireAuth, requireRole("ADMIN"), async (req, res) => {
 
 /**
  * DELETE /api/users/:id
- * Borrar usuario según reglas:
- * - SUPER_ADMIN / OWNER: pueden borrar cualquiera excepto OWNER.
- * - ADMIN_GLOBAL: puede borrar ADMIN / USER de cualquier empresa.
- * - ADMIN: puede borrar usuarios (USER/ADMIN) solo de su empresa.
+ * Borrar usuario según reglas de permisos
  */
 router.delete("/:id", requireAuth, requireRole("ADMIN"), async (req, res) => {
   try {
@@ -421,7 +520,7 @@ router.delete("/:id", requireAuth, requireRole("ADMIN"), async (req, res) => {
         if (!isOwner && !isSuper) {
           return res.status(403).json({
             message:
-              "Solo el dueño o el super admin pueden eliminar super_admin o admin_global",
+              "Solo el dueño o super admin pueden eliminar super_admin o admin_global",
           });
         }
       } else if (target.role === "ADMIN") {
@@ -439,7 +538,7 @@ router.delete("/:id", requireAuth, requireRole("ADMIN"), async (req, res) => {
           requester.company_id !== target.company_id
         ) {
           return res.status(403).json({
-            message: "Solo puedes eliminar usuarios que pertenezcan a tu empresa",
+            message: "Solo puedes eliminar usuarios de tu empresa",
           });
         }
       }
@@ -449,15 +548,13 @@ router.delete("/:id", requireAuth, requireRole("ADMIN"), async (req, res) => {
 
     await logAudit({
       user: requester,
-      action: "user_deleted",
+      action: "USER_DELETED",
       entityType: "user",
       entityId: target.id,
       metadata: {
         run: target.run,
         role: target.role,
         company_id: target.company_id,
-        deleted_by_id: requester.id,
-        deleted_by_role: requester.role,
       },
       req,
     });
@@ -471,7 +568,7 @@ router.delete("/:id", requireAuth, requireRole("ADMIN"), async (req, res) => {
 
 /**
  * POST /api/users/:id/reset-password
- * RESET PASSWORD (solo admins según reglas de rol)
+ * Reset password por admin
  */
 router.post(
   "/:id/reset-password",
@@ -511,7 +608,7 @@ router.post(
       if (isTargetAdminLike && !isOwner && !isSuper) {
         return res.status(403).json({
           message:
-            "Solo el dueño o el super admin pueden resetear contraseñas de administradores",
+            "Solo el dueño o super admin pueden resetear contraseñas de administradores",
         });
       }
 
@@ -550,38 +647,23 @@ router.post(
         console.error("⚠️ Error enviando email de reset:", mailErr.message);
       }
 
-      await logAuth({
-        userId: target.id,
-        run: target.run,
-        action: "password_change",
-        metadata: {
-          by_admin_id: requester.id,
-          by_admin_run: requester.run,
-          by_admin_role: requester.role,
-          via: "admin_reset",
-        },
-        req,
-      });
-
       await logAudit({
         user: requester,
-        action: "password_reset_by_admin",
+        action: "PASSWORD_RESET_BY_ADMIN",
         entityType: "user",
         entityId: target.id,
         metadata: {
           target_run: target.run,
           target_role: target.role,
-          company_id: target.company_id,
         },
         req,
       });
 
       return res.json({
-        message:
-          "Contraseña temporal generada y enviado correo al usuario (si tiene correo configurado).",
+        message: "Contraseña temporal generada y enviada por email",
       });
     } catch (err) {
-      console.error("❌ Error en POST /api/users/:id/reset-password:", err);
+      console.error("❌ Error en reset password:", err);
       return res
         .status(500)
         .json({ message: "Error interno al resetear la contraseña" });
