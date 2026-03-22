@@ -24,6 +24,7 @@ const db = require("./db");
 const { setupSwagger } = require("./swagger");
 const { requireAuth, requireRole } = require("./routes/auth");
 const plansRoutes = require("./routes/plans");
+const templatesRoutes = require("./routes/templates");
 
 
 /* ================================
@@ -375,6 +376,11 @@ console.log("✓ Rutas /api/analytics registradas");
 // Planes
 app.use("/api/plans", plansRoutes);
 console.log("✓ Rutas /api/plans registradas");
+
+// Templates
+app.use("/api/templates", templatesRoutes);
+console.log("✓ Rutas /api/templates registradas");
+
 
 /* ================================
    RUTA STORAGE / URLs FIRMADAS

@@ -176,6 +176,13 @@ export function Sidebar({
         </div>
       )}
 
+	<div
+	  className={`nav-item ${view === "templates" ? "active" : ""}`}
+	  onClick={() => handleChangeView("templates")}
+	>
+	  <span>📋</span> Plantillas
+	</div>
+
       {/* Sección Administración */}
       {showAdminSection && (
         <>

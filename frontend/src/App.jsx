@@ -22,6 +22,7 @@ import EmailMetricsView from "./views/EmailMetricsView";
 import { useSocket } from "./hooks/useSocket";
 import PricingView from "./views/PricingView";
 import ProfileView from "./views/ProfileView";
+import TemplatesView from "./views/TemplatesView";
 import api from "./api/client";
 
 /* ========= Helpers de rol ========= */
@@ -893,6 +894,8 @@ useEffect(() => {
 	{view === "pricing" && <PricingView />}
 
 	{view === "profile" && <ProfileView />}
+
+	{view === "templates" && anyAdmin && <TemplatesView />}
 
         {import.meta.env.MODE !== "production" && (
           <button onClick={handleTestError}>Probar error Sentry</button>
