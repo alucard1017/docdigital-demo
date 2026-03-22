@@ -173,9 +173,6 @@ useEffect(() => {
     setPdfUrl(null);
   }
 }, [selectedDoc?.id]);
-      setPdfUrl(null);
-      return;
-    }
 
     try {
       const baseUrl = api.defaults.baseURL || API_BASE_URL;
