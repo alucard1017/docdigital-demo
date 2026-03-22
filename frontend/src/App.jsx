@@ -25,6 +25,7 @@ import ProfileView from "./views/ProfileView";
 import TemplatesView from "./views/TemplatesView";
 import ForgotPasswordView from "./views/ForgotPasswordView";
 import ResetPasswordView from "./views/ResetPasswordView";
+import CompanyAnalyticsView from "./views/CompanyAnalyticsView";
 import api from "./api/client";
 
 /* ========= Helpers de rol ========= */
@@ -132,49 +133,38 @@ function App() {
   const [firmanteRunValue, setFirmanteRunValue] = useState("");
   const [empresaRutValue, setEmpresaRutValue] = useState("");
 
-  // API raíz ya normalizada desde constants.js (termina en /api, sin /api/api)
   const apiRoot = API_BASE_URL;
 
-// WebSocket para notificaciones en tiempo real
-const socket = useSocket(token);
+  // WebSocket para notificaciones en tiempo real
+  const socket = useSocket(token);
 
-useEffect(() => {
-  if (!token) return;
+  useEffect(() => {
+    if (!token) return;
 
-  socket.on("document:sent", (data) => {
-    console.log("📡 Documento enviado:", data);
-    alert(`✅ Documento enviado: ${data.titulo}`);
-    cargarDocs();
-  });
+    socket.on("document:sent", (data) => {
+      console.log("📡 Documento enviado:", data);
+      alert(`✅ Documento enviado: ${data.titulo}`);
+      cargarDocs();
+    });
 
-  socket.on("document:signed", (data) => {
-    console.log("📡 Documento firmado:", data);
-    alert(`✅ Documento firmado: ${data.titulo}`);
-    cargarDocs();
-  });
+    socket.on("document:signed", (data) => {
+      console.log("📡 Documento firmado:", data);
+      alert(`✅ Documento firmado: ${data.titulo}`);
+      cargarDocs();
+    });
 
-  return () => {
-    socket.off("document:sent");
-    socket.off("document:signed");
-  };
-}, [token, socket, cargarDocs]);
+    return () => {
+      socket.off("document:sent");
+      socket.off("document:signed");
+    };
+  }, [token, socket, cargarDocs]);
 
-// Cargar URL de PDF para la vista de detalle (usa /preview, no /download)
-useEffect(() => {
-  if (!selectedDoc?.id) {
-    setPdfUrl(null);
-    return;
-  }
-
-  try {
-    const baseUrl = api.defaults.baseURL || API_BASE_URL;
-    const url = `${baseUrl}/documents/${selectedDoc.id}/preview`;
-    setPdfUrl(url);
-  } catch (err) {
-    console.error("Error preparando URL de PDF:", err);
-    setPdfUrl(null);
-  }
-}, [selectedDoc?.id]);
+  // Cargar URL de PDF para la vista de detalle
+  useEffect(() => {
+    if (!selectedDoc?.id) {
+      setPdfUrl(null);
+      return;
+    }
 
     try {
       const baseUrl = api.defaults.baseURL || API_BASE_URL;
@@ -185,7 +175,6 @@ useEffect(() => {
       setPdfUrl(null);
     }
   }, [selectedDoc?.id]);
-
 
   /* =============================== */
   /* FIRMA / VISADO PÚBLICO          */
@@ -907,6 +896,8 @@ useEffect(() => {
 	{view === "profile" && <ProfileView />}
 
 	{view === "templates" && anyAdmin && <TemplatesView />}
+
+	{view === "company-analytics" && anyAdmin && <CompanyAnalyticsView />}
 
         {import.meta.env.MODE !== "production" && (
           <button onClick={handleTestError}>Probar error Sentry</button>

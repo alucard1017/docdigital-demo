@@ -6,6 +6,10 @@ const {
   recordEmailEvent,
 } = require("../controllers/analytics/emailMetricsController");
 
+const { getCompanyAnalytics } = require("../controllers/analytics/companyAnalyticsController");
+
+router.get("/company", requireAuth, getCompanyAnalytics);
+
 const router = express.Router();
 
 /**
