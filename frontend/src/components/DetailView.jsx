@@ -44,8 +44,10 @@ export function DetailView({
   const [reenviarSignerId, setReenviarSignerId] = useState(null);
   const [recordatorioLoading, setRecordatorioLoading] = useState(false);
 
-  const [acceptedLegal, setAcceptedLegal] = useState(false);
+  const [acceptedLegalSign, setAcceptedLegalSign] = useState(false);
+  const [acceptedLegalVisado, setAcceptedLegalVisado] = useState(false);
   const [signError, setSignError] = useState("");
+  const [visadoError, setVisadoError] = useState("");
 
   const rawName = currentUser?.name || currentUser?.fullName || "Usuario";
   const isJean =
@@ -209,10 +211,10 @@ export function DetailView({
   const isSigned = selectedDoc.status === DOC_STATUS.FIRMADO;
   const isRejected = selectedDoc.status === DOC_STATUS.RECHAZADO;
 
-  // Wrapper para insertar el aviso legal antes de firmar
+  // Wrapper para insertar los avisos legales antes de firmar/visar
   const manejarAccionDocumentoConLegal = async (id, accion, extraData = {}) => {
     if (accion === "firmar") {
-      if (!acceptedLegal) {
+      if (!acceptedLegalSign) {
         setSignError(
           "Debes aceptar el aviso legal de firma electrónica antes de firmar."
         );
@@ -223,6 +225,20 @@ export function DetailView({
       }
       setSignError("");
     }
+
+    if (accion === "visar") {
+      if (!acceptedLegalVisado) {
+        setVisadoError(
+          "Debes aceptar el aviso legal de visado antes de aprobar el documento."
+        );
+        alert(
+          "Debes aceptar el aviso legal de visado antes de aprobar el documento."
+        );
+        return;
+      }
+      setVisadoError("");
+    }
+
     await manejarAccionDocumento(id, accion, extraData);
   };
 
@@ -369,14 +385,14 @@ export function DetailView({
               )}
             </div>
 
-            {/* Aviso legal interno sólo si se puede firmar y aún no está firmado/rechazado */}
+            {/* Aviso legal interno: firmante propietario */}
             {puedeFirmar && !isSigned && !isRejected && (
               <ElectronicSignatureNotice
-                checked={acceptedLegal}
-                onChange={setAcceptedLegal}
+                mode="firma"
+                checked={acceptedLegalSign}
+                onChange={setAcceptedLegalSign}
               />
             )}
-
             {signError && (
               <p
                 style={{
@@ -387,6 +403,27 @@ export function DetailView({
                 }}
               >
                 {signError}
+              </p>
+            )}
+
+            {/* Aviso legal interno: visador */}
+            {puedeVisar && !isSigned && !isRejected && (
+              <ElectronicSignatureNotice
+                mode="visado"
+                checked={acceptedLegalVisado}
+                onChange={setAcceptedLegalVisado}
+              />
+            )}
+            {visadoError && (
+              <p
+                style={{
+                  color: "#b91c1c",
+                  fontSize: 13,
+                  marginBottom: 12,
+                  marginTop: -4,
+                }}
+              >
+                {visadoError}
               </p>
             )}
 
@@ -414,18 +451,42 @@ export function DetailView({
                         </div>
                       </div>
 
-                      {s.status !== "FIRMADO" && (
-                        <button
-                          type="button"
-                          className="btn-main detail-btn-reminder-signer"
-                          onClick={() => handleReenviarFirma(s.id)}
-                          disabled={reenviarSignerId === s.id}
-                        >
-                          {reenviarSignerId === s.id
-                            ? "Reenviando..."
-                            : "Reenviar correo"}
-                        </button>
-                      )}
+		{s.status !== "FIRMADO" && s.status !== "RECHAZADO" && (
+		  <button
+		    type="button"
+		    className="btn-main"
+		    style={{
+		      padding: "8px 16px",
+		      fontSize: "0.85rem",
+		      backgroundColor: "#3b82f6",
+		      color: "#fff",
+		      border: "none",
+		      borderRadius: 6,
+		      fontWeight: 600,
+		      cursor: reenviarSignerId === s.id ? "not-allowed" : "pointer",
+		      opacity: reenviarSignerId === s.id ? 0.6 : 1,
+    		}}
+    		onClick={() => handleReenviarFirma(s.id)}
+   		 disabled={reenviarSignerId === s.id}
+ 		 >
+		    {reenviarSignerId === s.id
+		      ? "⏳ Enviando..."
+		      : "📧 Enviar recordatorio"}
+		  </button>
+		)}
+
+{s.status === "FIRMADO" && (
+  <span style={{ 
+    padding: "6px 12px", 
+    fontSize: "0.8rem", 
+    background: "#dcfce7", 
+    color: "#16a34a", 
+    borderRadius: 6,
+    fontWeight: 600,
+  }}>
+    ✓ Firmado
+  </span>
+)}
                     </li>
                   ))}
                 </ul>
