@@ -275,11 +275,14 @@ router.get("/", requireAuth, documentsController.getUserDocuments);
    RUTAS POST - SIN PARÁMETROS
    ================================ */
 
+const { validatePdf } = require("../middlewares/pdfValidator");
+
 router.post(
   "/",
   requireAuth,
   upload.single("file"),
   handleMulterError,
+  validatePdf,
   withDocumentAudit("DOCUMENT_CREATED"),
   documentsController.createDocument
 );
