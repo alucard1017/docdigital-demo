@@ -192,6 +192,13 @@ export function Sidebar({
             <span>👥</span> Usuarios
           </div>
 
+          <div
+            className={`nav-item ${view === "reminders-config" ? "active" : ""}`}
+            onClick={() => handleChangeView("reminders-config")}
+          >
+            <span>🔔</span> Recordatorios
+          </div>
+
           {isAdminGlobalOrOwner && (
             <>
               <div

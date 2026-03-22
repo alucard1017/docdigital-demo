@@ -17,6 +17,7 @@ import { StatusAdminView } from "./views/StatusAdminView";
 import { AuditLogsView } from "./views/AuditLogsView";
 import { AuthLogsView } from "./views/AuthLogsView";
 import { getSubdomain } from "./utils/subdomain";
+import RemindersConfigView from "./views/RemindersConfigView";
 import api from "./api/client";
 
 /* ========= Helpers de rol ========= */
@@ -838,6 +839,10 @@ function App() {
         {view === "auth-logs" && isGlobalAdminOrOwner && (
           <AuthLogsView API_URL={apiRoot} />
         )}
+
+	{view === "reminders-config" && anyAdmin && (
+	  <RemindersConfigView />
+	)}
 
         {import.meta.env.MODE !== "production" && (
           <button onClick={handleTestError}>Probar error Sentry</button>
