@@ -73,7 +73,9 @@ export default function TemplatesView() {
     }
   };
 
-  if (loading) return <div className="p-4">Cargando plantillas...</div>;
+  if (loading) {
+    return <div className="p-4">Cargando plantillas...</div>;
+  }
 
   return (
     <div className="p-6 bg-white rounded-lg shadow">
@@ -97,24 +99,28 @@ export default function TemplatesView() {
         <form onSubmit={handleSubmit} className="bg-gray-50 p-6 rounded mb-6">
           <div className="grid grid-cols-2 gap-4 mb-4">
             <div>
-              abel className="block text-sm font-semibold text-gray-700 mb-2">
+              <label className="block text-sm font-semibold text-gray-700 mb-2">
                 Nombre de la plantilla *
               </label>
               <input
                 type="text"
                 value={formData.name}
-                onChange={(e) => setFormData({ ...formData, name: e.target.value })}
+                onChange={(e) =>
+                  setFormData((prev) => ({ ...prev, name: e.target.value }))
+                }
                 className="w-full px-3 py-2 border border-gray-300 rounded"
                 required
               />
             </div>
             <div>
-              abel className="block text-sm font-semibold text-gray-700 mb-2">
+              <label className="block text-sm font-semibold text-gray-700 mb-2">
                 Tipo
               </label>
               <select
                 value={formData.tipo}
-                onChange={(e) => setFormData({ ...formData, tipo: e.target.value })}
+                onChange={(e) =>
+                  setFormData((prev) => ({ ...prev, tipo: e.target.value }))
+                }
                 className="w-full px-3 py-2 border border-gray-300 rounded"
               >
                 <option value="CONTRATO">Contrato</option>
@@ -126,13 +132,16 @@ export default function TemplatesView() {
           </div>
 
           <div className="mb-4">
-            abel className="block text-sm font-semibold text-gray-700 mb-2">
+            <label className="block text-sm font-semibold text-gray-700 mb-2">
               Descripción
             </label>
             <textarea
               value={formData.description}
               onChange={(e) =>
-                setFormData({ ...formData, description: e.target.value })
+                setFormData((prev) => ({
+                  ...prev,
+                  description: e.target.value,
+                }))
               }
               className="w-full px-3 py-2 border border-gray-300 rounded"
               rows="3"
@@ -141,13 +150,16 @@ export default function TemplatesView() {
 
           <div className="grid grid-cols-3 gap-4 mb-4">
             <div>
-              abel className="block text-sm font-semibold text-gray-700 mb-2">
+              <label className="block text-sm font-semibold text-gray-700 mb-2">
                 Categoría Firma
               </label>
               <select
                 value={formData.categoria_firma}
                 onChange={(e) =>
-                  setFormData({ ...formData, categoria_firma: e.target.value })
+                  setFormData((prev) => ({
+                    ...prev,
+                    categoria_firma: e.target.value,
+                  }))
                 }
                 className="w-full px-3 py-2 border border-gray-300 rounded"
               >
@@ -155,14 +167,18 @@ export default function TemplatesView() {
                 <option value="AVANZADA">Avanzada</option>
               </select>
             </div>
+
             <div>
-              abel className="block text-sm font-semibold text-gray-700 mb-2">
+              <label className="block text-sm font-semibold text-gray-700 mb-2">
                 Tipo de Flujo
               </label>
               <select
                 value={formData.tipo_flujo}
                 onChange={(e) =>
-                  setFormData({ ...formData, tipo_flujo: e.target.value })
+                  setFormData((prev) => ({
+                    ...prev,
+                    tipo_flujo: e.target.value,
+                  }))
                 }
                 className="w-full px-3 py-2 border border-gray-300 rounded"
               >
@@ -170,13 +186,17 @@ export default function TemplatesView() {
                 <option value="PARALELO">Paralelo</option>
               </select>
             </div>
+
             <div className="flex items-center">
-              abel className="flex items-center cursor-pointer">
+              <label className="flex items-center cursor-pointer">
                 <input
                   type="checkbox"
                   checked={formData.requires_visado}
                   onChange={(e) =>
-                    setFormData({ ...formData, requires_visado: e.target.checked })
+                    setFormData((prev) => ({
+                      ...prev,
+                      requires_visado: e.target.checked,
+                    }))
                   }
                   className="w-4 h-4 text-blue-600 mr-2"
                 />
@@ -211,7 +231,9 @@ export default function TemplatesView() {
                 ✕ Eliminar
               </button>
             </div>
-            <p className="text-sm text-gray-600 mb-3">{template.description}</p>
+            <p className="text-sm text-gray-600 mb-3">
+              {template.description}
+            </p>
             <div className="flex gap-2 flex-wrap text-xs">
               <span className="bg-blue-100 text-blue-800 px-2 py-1 rounded">
                 {template.tipo}
@@ -241,7 +263,9 @@ export default function TemplatesView() {
       {templates.length === 0 && !creating && (
         <div className="text-center py-12 text-gray-500">
           <p className="text-lg mb-2">No hay plantillas creadas</p>
-          <p className="text-sm">Crea tu primera plantilla para agilizar la creación de documentos</p>
+          <p className="text-sm">
+            Crea tu primera plantilla para agilizar la creación de documentos
+          </p>
         </div>
       )}
     </div>
