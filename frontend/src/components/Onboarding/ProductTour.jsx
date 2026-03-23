@@ -2,8 +2,9 @@
 import React, { useEffect, useState, useCallback } from "react";
 import * as JoyrideNS from "react-joyride";
 
-const { STATUS, EVENTS, ACTIONS } = JoyrideNS;
+
 const Joyride = JoyrideNS.default || JoyrideNS;
+const { STATUS, EVENTS, ACTIONS } = JoyrideNS;
 
 /**
  * ProductTour
