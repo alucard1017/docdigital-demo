@@ -584,7 +584,7 @@ export function PublicSignView({
                   padding: 20,
                   borderRadius: 12,
                   backgroundColor: "#fef2f2",
-                  border: "2px solid "#fecaca",
+                  border: "2px solid #fecaca",
                 }}
               >
                 <h2
