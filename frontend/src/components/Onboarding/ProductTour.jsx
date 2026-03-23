@@ -1,6 +1,9 @@
 // frontend/src/components/Onboarding/ProductTour.jsx
 import React, { useEffect, useState, useCallback } from "react";
-import Joyride, { STATUS, EVENTS, ACTIONS } from "react-joyride";
+import * as JoyrideNS from "react-joyride";
+
+const { STATUS, EVENTS, ACTIONS } = JoyrideNS;
+const Joyride = JoyrideNS.default || JoyrideNS;
 
 /**
  * ProductTour
@@ -16,7 +19,6 @@ const ProductTour = ({ tourId = "dashboard_principal", run, onFinish }) => {
   const [stepIndex, setStepIndex] = useState(0);
   const [isRunning, setIsRunning] = useState(false);
 
-  // 1) Cargar configuración de pasos desde el frontend (hardcoded por ahora)
   const buildSteps = useCallback(() => {
     const baseSteps = [
       {
@@ -41,7 +43,7 @@ const ProductTour = ({ tourId = "dashboard_principal", run, onFinish }) => {
         placement: "top",
       },
       {
-        target: ".sidebar-root", // asegúrate de tener esta clase en tu Sidebar
+        target: ".sidebar-root",
         content:
           "Desde este menú puedes navegar a configuraciones, equipo, analytics y más.",
         title: "Navegación",
@@ -53,21 +55,17 @@ const ProductTour = ({ tourId = "dashboard_principal", run, onFinish }) => {
     setIsReady(true);
   }, []);
 
-  // 2) Cargar progreso guardado del tour desde tu backend
   const loadTourProgress = useCallback(async () => {
     try {
       const res = await fetch(`/api/onboarding/tour/${tourId}`, {
         credentials: "include",
       });
       if (!res.ok) {
-        // si no existe aún registro, comenzamos desde 0
         setStepIndex(0);
         return;
       }
       const data = await res.json();
-      // Asumimos algo como { completed: false, currentStep: 0 }
       if (data.completed) {
-        // si ya lo completó, no correr
         setStepIndex(0);
         setIsRunning(false);
       } else if (typeof data.currentStep === "number") {
@@ -79,7 +77,6 @@ const ProductTour = ({ tourId = "dashboard_principal", run, onFinish }) => {
     }
   }, [tourId]);
 
-  // 3) Guardar progreso en backend
   const saveTourProgress = useCallback(
     async ({ completed, currentStep }) => {
       try {
@@ -96,13 +93,11 @@ const ProductTour = ({ tourId = "dashboard_principal", run, onFinish }) => {
     [tourId]
   );
 
-  // 4) Preparar pasos y progreso al montar
   useEffect(() => {
     buildSteps();
     loadTourProgress();
   }, [buildSteps, loadTourProgress]);
 
-  // 5) Arrancar el tour cuando run=true y ya está listo
   useEffect(() => {
     if (run && isReady && steps.length > 0) {
       setIsRunning(true);
@@ -116,26 +111,19 @@ const ProductTour = ({ tourId = "dashboard_principal", run, onFinish }) => {
 
     const finishedStatuses = [STATUS.FINISHED, STATUS.SKIPPED];
 
-    // Cuando termina o se salta
     if (finishedStatuses.includes(status)) {
       setIsRunning(false);
       setStepIndex(0);
-
-      // Guardamos como completado
       await saveTourProgress({ completed: true, currentStep: 0 });
-
       if (onFinish) onFinish();
       return;
     }
 
-    // Avance de pasos
     if (type === EVENTS.STEP_AFTER || type === EVENTS.TARGET_NOT_FOUND) {
       const newIndex =
         action === ACTIONS.PREV ? Math.max(index - 1, 0) : index + 1;
 
       setStepIndex(newIndex);
-
-      // Guardamos progreso parcial
       await saveTourProgress({ completed: false, currentStep: newIndex });
     }
   };
