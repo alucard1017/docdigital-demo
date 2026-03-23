@@ -204,19 +204,30 @@ async function createDocument(req, res) {
     let watermarkedKey = null;
     let pdfHash = null;
 
-    // Subida a S3 + marca de agua
+    // Subida a S3 + marca de agua usando buffer (multer.memoryStorage)
     try {
-      const fileBuffer = fs.readFileSync(file.path);
+      const fileBuffer = file.buffer;
+      if (!fileBuffer) {
+        console.error("❌ createDocument: req.file sin buffer:", file);
+        return res
+          .status(400)
+          .json({ message: "No se recibió el archivo PDF correctamente" });
+      }
+
+      // hash del PDF
       pdfHash = computeHash(fileBuffer);
 
+      // clave S3 original
       originalKey = `documentos/${req.user.id}/original-${Date.now()}-${file.originalname}`;
-      await uploadPdfToS3(file.path, originalKey);
+      await uploadPdfToS3(fileBuffer, originalKey);
       console.log(`✅ Archivo ORIGINAL subido a S3: ${originalKey}`);
 
-      await aplicarMarcaAguaLocal(file.path);
+      // aplicar marca de agua en memoria
+      const watermarkedBuffer = await aplicarMarcaAguaLocal(fileBuffer);
 
+      // clave S3 con marca
       watermarkedKey = `documentos/${req.user.id}/watermark-${Date.now()}-${file.originalname}`;
-      await uploadPdfToS3(file.path, watermarkedKey);
+      await uploadPdfToS3(watermarkedBuffer, watermarkedKey);
       console.log(`✅ Archivo CON MARCA subido a S3: ${watermarkedKey}`);
     } catch (s3Error) {
       console.error(
@@ -226,14 +237,6 @@ async function createDocument(req, res) {
       return res
         .status(500)
         .json({ message: "No se pudo procesar/subir el archivo PDF" });
-    } finally {
-      if (file && fs.existsSync(file.path)) {
-        fs.unlink(file.path, (err) => {
-          if (err) {
-            console.error("⚠️ Error eliminando archivo temporal:", err);
-          }
-        });
-      }
     }
 
     const signatureToken = crypto.randomUUID();

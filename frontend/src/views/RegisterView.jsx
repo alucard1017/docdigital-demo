@@ -48,39 +48,34 @@ const RegisterView = () => {
 
   const inputStyle = {
     width: "100%",
-    borderRadius: 10,
-    border: "1px solid #d1d5db",
-    padding: "9px 11px",
+    borderRadius: 999,
+    border: "1px solid rgba(148,163,184,0.7)",
+    padding: "9px 14px",
     fontSize: "0.9rem",
     outline: "none",
-    transition: "border-color 0.15s, box-shadow 0.15s",
+    background:
+      "linear-gradient(145deg,#020617,#020617 40%,#020617 100%)",
+    color: "#e5e7eb",
+    transition:
+      "border-color 0.16s ease, box-shadow 0.16s ease, transform 0.08s ease",
+  };
+
+  const handleFocus = (e) => {
+    e.target.style.borderColor = "#4f46e5";
+    e.target.style.boxShadow =
+      "0 0 0 1px rgba(79,70,229,0.7),0 10px 25px rgba(15,23,42,0.85)";
+  };
+
+  const handleBlur = (e) => {
+    e.target.style.borderColor = "rgba(148,163,184,0.7)";
+    e.target.style.boxShadow = "none";
   };
 
   return (
-    <div
-      style={{
-        minHeight: "100vh",
-        display: "flex",
-        alignItems: "center",
-        justifyContent: "center",
-        background:
-          "radial-gradient(circle at top left, #e0f2fe 0, transparent 40%), radial-gradient(circle at bottom right, #e5e7eb 0, transparent 40%), #f8fafc",
-        padding: "24px",
-      }}
-    >
-      <div
-        style={{
-          width: "100%",
-          maxWidth: 480,
-          backgroundColor: "#ffffff",
-          borderRadius: 24,
-          padding: "32px 28px",
-          boxShadow:
-            "0 24px 80px rgba(15, 23, 42, 0.18), 0 0 0 1px rgba(148, 163, 184, 0.25)",
-          border: "1px solid rgba(148, 163, 184, 0.3)",
-        }}
-      >
-        <div style={{ marginBottom: 24 }}>
+    <div className="auth-bg">
+      <div className="auth-card">
+        {/* Marca */}
+        <div style={{ marginBottom: 22 }}>
           <div
             style={{
               display: "flex",
@@ -92,28 +87,29 @@ const RegisterView = () => {
           >
             <div
               style={{
-                width: 32,
-                height: 32,
+                width: 34,
+                height: 34,
                 borderRadius: "999px",
                 background:
-                  "linear-gradient(135deg, #4f46e5 0%, #0ea5e9 50%, #22c55e 100%)",
+                  "linear-gradient(135deg, #4f46e5 0%, #0ea5e9 45%, #22c55e 100%)",
                 display: "flex",
                 alignItems: "center",
                 justifyContent: "center",
                 color: "white",
                 fontWeight: 800,
-                fontSize: 16,
+                fontSize: 17,
+                boxShadow: "0 10px 25px rgba(37,99,235,0.6)",
               }}
             >
               V
             </div>
             <span
               style={{
-                fontSize: "1.1rem",
+                fontSize: "1.05rem",
                 fontWeight: 800,
-                letterSpacing: "0.06em",
+                letterSpacing: "0.08em",
                 textTransform: "uppercase",
-                color: "#1f2933",
+                color: "#e5e7eb",
               }}
             >
               VeriFirma
@@ -122,9 +118,9 @@ const RegisterView = () => {
 
           <h1
             style={{
-              fontSize: "1.6rem",
+              fontSize: "1.5rem",
               fontWeight: 800,
-              color: "#0f172a",
+              color: "#f9fafb",
               textAlign: "center",
               marginBottom: 6,
             }}
@@ -134,7 +130,7 @@ const RegisterView = () => {
           <p
             style={{
               fontSize: "0.9rem",
-              color: "#6b7280",
+              color: "#9ca3af",
               textAlign: "center",
               lineHeight: 1.5,
             }}
@@ -150,9 +146,9 @@ const RegisterView = () => {
               marginBottom: 12,
               padding: "8px 10px",
               borderRadius: 10,
-              border: "1px solid rgba(239,68,68,0.35)",
-              background: "rgba(254,242,242,0.9)",
-              color: "#b91c1c",
+              border: "1px solid rgba(248,113,113,0.7)",
+              background: "rgba(127,29,29,0.4)",
+              color: "#fecaca",
               fontSize: "0.85rem",
             }}
           >
@@ -166,9 +162,9 @@ const RegisterView = () => {
               marginBottom: 12,
               padding: "8px 10px",
               borderRadius: 10,
-              border: "1px solid rgba(16,185,129,0.35)",
-              background: "rgba(240,253,250,0.9)",
-              color: "#047857",
+              border: "1px solid rgba(52,211,153,0.7)",
+              background: "rgba(6,95,70,0.35)",
+              color: "#bbf7d0",
               fontSize: "0.85rem",
             }}
           >
@@ -184,7 +180,7 @@ const RegisterView = () => {
                 fontSize: "0.8rem",
                 fontWeight: 600,
                 marginBottom: 6,
-                color: "#4b5563",
+                color: "#e5e7eb",
               }}
             >
               Nombre completo
@@ -196,6 +192,8 @@ const RegisterView = () => {
               onChange={(e) => setName(e.target.value)}
               placeholder="Nombre y apellido"
               style={inputStyle}
+              onFocus={handleFocus}
+              onBlur={handleBlur}
             />
           </div>
 
@@ -206,7 +204,7 @@ const RegisterView = () => {
                 fontSize: "0.8rem",
                 fontWeight: 600,
                 marginBottom: 6,
-                color: "#4b5563",
+                color: "#e5e7eb",
               }}
             >
               Email
@@ -218,6 +216,8 @@ const RegisterView = () => {
               onChange={(e) => setEmail(e.target.value)}
               placeholder="tu@email.com"
               style={inputStyle}
+              onFocus={handleFocus}
+              onBlur={handleBlur}
             />
           </div>
 
@@ -228,7 +228,7 @@ const RegisterView = () => {
                 fontSize: "0.8rem",
                 fontWeight: 600,
                 marginBottom: 6,
-                color: "#4b5563",
+                color: "#e5e7eb",
               }}
             >
               RUT / RUN
@@ -240,6 +240,8 @@ const RegisterView = () => {
               onChange={(e) => setRut(e.target.value)}
               placeholder="11.111.111-1"
               style={inputStyle}
+              onFocus={handleFocus}
+              onBlur={handleBlur}
             />
           </div>
 
@@ -257,7 +259,7 @@ const RegisterView = () => {
                   fontSize: "0.8rem",
                   fontWeight: 600,
                   marginBottom: 6,
-                  color: "#4b5563",
+                  color: "#e5e7eb",
                 }}
               >
                 Contraseña
@@ -269,6 +271,8 @@ const RegisterView = () => {
                 value={password}
                 onChange={(e) => setPassword(e.target.value)}
                 style={inputStyle}
+                onFocus={handleFocus}
+                onBlur={handleBlur}
               />
             </div>
             <div>
@@ -278,7 +282,7 @@ const RegisterView = () => {
                   fontSize: "0.8rem",
                   fontWeight: 600,
                   marginBottom: 6,
-                  color: "#4b5563",
+                  color: "#e5e7eb",
                 }}
               >
                 Confirmar contraseña
@@ -290,6 +294,8 @@ const RegisterView = () => {
                 value={confirmPassword}
                 onChange={(e) => setConfirmPassword(e.target.value)}
                 style={inputStyle}
+                onFocus={handleFocus}
+                onBlur={handleBlur}
               />
             </div>
           </div>
@@ -297,6 +303,7 @@ const RegisterView = () => {
           <button
             type="submit"
             disabled={loading}
+            className="btn-main btn-primary"
             style={{
               marginTop: 6,
               width: "100%",
@@ -308,20 +315,9 @@ const RegisterView = () => {
               color: "white",
               background:
                 "linear-gradient(135deg,#4f46e5 0%,#6366f1 40%,#0ea5e9 100%)",
-              boxShadow: "0 14px 35px rgba(37,99,235,0.28)",
+              boxShadow: "0 14px 35px rgba(37,99,235,0.7)",
               cursor: loading ? "default" : "pointer",
               opacity: loading ? 0.7 : 1,
-              transition: "transform 0.1s, box-shadow 0.1s, opacity 0.1s",
-            }}
-            onMouseDown={(e) => {
-              e.currentTarget.style.transform = "translateY(1px)";
-              e.currentTarget.style.boxShadow =
-                "0 6px 18px rgba(37,99,235,0.35)";
-            }}
-            onMouseUp={(e) => {
-              e.currentTarget.style.transform = "translateY(0)";
-              e.currentTarget.style.boxShadow =
-                "0 14px 35px rgba(37,99,235,0.28)";
             }}
           >
             {loading ? "Creando cuenta..." : "Crear cuenta"}
@@ -339,12 +335,12 @@ const RegisterView = () => {
             href="/"
             style={{
               fontSize: "0.8rem",
-              color: "#4f46e5",
+              color: "#a5b4fc",
               fontWeight: 600,
               textDecoration: "none",
             }}
           >
-            Volver al inicio de sesión
+            ¿Ya tienes cuenta? Inicia sesión
           </a>
         </div>
       </div>
