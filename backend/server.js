@@ -576,34 +576,6 @@ if (fs.existsSync(frontendDir)) {
 }
 
 /* ================================
-   SERVIR FRONTEND (REACT)
-   ================================ */
-const frontendDir = path.join(__dirname, "..", "frontend", "dist");
-
-if (fs.existsSync(frontendDir)) {
-  app.use(express.static(frontendDir));
-
-  app.get("/", (req, res) => {
-    res.sendFile(path.join(frontendDir, "index.html"));
-  });
-
-  app.get("*", (req, res, next) => {
-    if (
-      req.path.startsWith("/api") ||
-      req.path.startsWith("/uploads") ||
-      req.path.startsWith("/public")
-    ) {
-      return next();
-    }
-    res.sendFile(path.join(frontendDir, "index.html"));
-  });
-
-  console.log("✓ Frontend estático servido desde", frontendDir);
-} else {
-  console.warn("⚠️  Frontend no encontrado en", frontendDir);
-}
-
-/* ================================
    MIDDLEWARE GLOBAL DE ERRORES
    ================================ */
 Sentry.setupExpressErrorHandler(app);
