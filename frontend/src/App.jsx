@@ -147,24 +147,59 @@ function App() {
   // WebSocket para notificaciones en tiempo real
   const socket = useSocket(token);
 
+  /* =============================== */
+  /* CARGA DE DOCUMENTOS             */
+  /* =============================== */
+
+  const cargarDocs = useCallback(
+    async (sortParam = sort) => {
+      if (!token) return;
+      setLoadingDocs(true);
+      setErrorDocs("");
+
+      try {
+        const res = await api.get("/docs", {
+          params: { sort: sortParam },
+        });
+
+        const data = res.data;
+        setDocs(Array.isArray(data) ? data : []);
+      } catch (err) {
+        console.error("Fallo al cargar documentos:", err);
+        const msg =
+          err.response?.data?.message ||
+          err.message ||
+          "No se pudieron cargar los documentos. Intenta nuevamente.";
+        setErrorDocs(msg);
+      } finally {
+        setLoadingDocs(false);
+      }
+    },
+    [sort, token]
+  );
+
+  // WebSocket listeners
   useEffect(() => {
     if (!token) return;
 
-    socket.on("document:sent", (data) => {
+    const handleSent = (data) => {
       console.log("📡 Documento enviado:", data);
       alert(`✅ Documento enviado: ${data.titulo}`);
       cargarDocs();
-    });
+    };
 
-    socket.on("document:signed", (data) => {
+    const handleSigned = (data) => {
       console.log("📡 Documento firmado:", data);
       alert(`✅ Documento firmado: ${data.titulo}`);
       cargarDocs();
-    });
+    };
+
+    socket.on("document:sent", handleSent);
+    socket.on("document:signed", handleSigned);
 
     return () => {
-      socket.off("document:sent");
-      socket.off("document:signed");
+      socket.off("document:sent", handleSent);
+      socket.off("document:signed", handleSigned);
     };
   }, [token, socket, cargarDocs]);
 
@@ -274,37 +309,7 @@ function App() {
     return () => window.removeEventListener("popstate", syncViewWithLocation);
   }, [isVerificationPortal, isSigningPortal, cargarFirmaPublica]);
 
-  /* =============================== */
-  /* CARGA DE DOCUMENTOS             */
-  /* =============================== */
-
-  const cargarDocs = useCallback(
-    async (sortParam = sort) => {
-      if (!token) return;
-      setLoadingDocs(true);
-      setErrorDocs("");
-
-      try {
-        const res = await api.get("/docs", {
-          params: { sort: sortParam },
-        });
-
-        const data = res.data;
-        setDocs(Array.isArray(data) ? data : []);
-      } catch (err) {
-        console.error("Fallo al cargar documentos:", err);
-        const msg =
-          err.response?.data?.message ||
-          err.message ||
-          "No se pudieron cargar los documentos. Intenta nuevamente.";
-        setErrorDocs(msg);
-      } finally {
-        setLoadingDocs(false);
-      }
-    },
-    [sort, token]
-  );
-
+  // Carga inicial de documentos cuando estás en la vista de lista
   useEffect(() => {
     if (!token) return;
     if (view !== "list") return;
@@ -444,7 +449,6 @@ function App() {
     throw new Error("Frontend test error");
   };
 
-
   // === Onboarding: consulta estado ===
   const checkOnboarding = useCallback(async () => {
     if (!token) return;
@@ -454,8 +458,6 @@ function App() {
         credentials: "include",
       });
       const data = await res.json();
-      // Ajusta a la forma real de tu respuesta backend
-      // Ej: { needsOnboarding: boolean, currentStep, completed, skipped }
       if (data?.needsOnboarding) {
         setShowOnboarding(true);
       } else {
@@ -471,13 +473,11 @@ function App() {
 
   const handleOnboardingCompleted = () => {
     setShowOnboarding(false);
-    // Al terminar onboarding, corremos el tour del dashboard
     setRunProductTour(true);
   };
 
   const handleOnboardingSkipped = () => {
     setShowOnboarding(false);
-    // Si se salta onboarding, opcional: puedes igual mostrar tour o no
     setRunProductTour(false);
   };
 
@@ -486,6 +486,7 @@ function App() {
       checkOnboarding();
     }
   }, [token, checkOnboarding]);
+
   /* =============================== */
   /* MODO DE VISTA (RUTAS)           */
   /* =============================== */
@@ -494,7 +495,6 @@ function App() {
 
   let mode = "app";
 
-  // Rutas públicas simples (sin token aún)
   if (!token && pathname === "/forgot-password") {
     return <ForgotPasswordView />;
   }
@@ -552,12 +552,10 @@ function App() {
         ? identifier
         : formatRun(identifier);
 
-    // Si la URL es /register, mostramos la vista de registro público
     if (pathname === "/register") {
       return <RegisterView />;
     }
 
-    // Vista por defecto: login
     return (
       <LoginView
         identifier={displayIdentifier}
@@ -583,7 +581,6 @@ function App() {
       />
     );
   }
-
 
   /* =============================== */
   /* VISTA DETALLE DOCUMENTO         */
@@ -677,7 +674,6 @@ function App() {
 
   return (
     <div className="dashboard-root">
-      {/* Overlay de onboarding solo cuando haga falta */}
       {showOnboarding && (
         <OnboardingWizard
           onCompleted={handleOnboardingCompleted}
@@ -699,7 +695,6 @@ function App() {
         />
 
         <div className="content-body">
-          {/* Tour global del dashboard */}
           <ProductTour
             tourId="dashboard_principal"
             run={runProductTour}

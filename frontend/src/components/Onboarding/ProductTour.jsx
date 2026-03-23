@@ -1,10 +1,8 @@
 // frontend/src/components/Onboarding/ProductTour.jsx
-// Componente de tour de producto (stub compatible con React 19).
-// Mantiene toda la lógica de pasos y guardado en backend, pero
-// por ahora no monta react-joyride para evitar errores en producción.
+// Tour de producto con react-joyride (stack estable React 18).
 
 import React, { useEffect, useState, useCallback } from "react";
-import Joyride, { STATUS, EVENTS, ACTIONS } from "react-joyride-react-19";
+import Joyride, { STATUS, EVENTS, ACTIONS } from "react-joyride";
 
 const ProductTour = ({ tourId = "dashboard_principal", run, onFinish }) => {
   const [steps, setSteps] = useState([]);
@@ -102,7 +100,7 @@ const ProductTour = ({ tourId = "dashboard_principal", run, onFinish }) => {
   const handleJoyrideCallback = async (data) => {
     const { status, type, index, action } = data;
 
-    const finishedStatuses = ["finished", "skipped"];
+    const finishedStatuses = [STATUS.FINISHED, STATUS.SKIPPED];
 
     if (finishedStatuses.includes(status)) {
       setIsRunning(false);
@@ -112,19 +110,44 @@ const ProductTour = ({ tourId = "dashboard_principal", run, onFinish }) => {
       return;
     }
 
-    if (type === "step:after" || type === "target:notFound") {
-      const newIndex = action === "prev" ? Math.max(index - 1, 0) : index + 1;
+    if (type === EVENTS.STEP_AFTER || type === EVENTS.TARGET_NOT_FOUND) {
+      const newIndex =
+        action === ACTIONS.PREV ? Math.max(index - 1, 0) : index + 1;
       setStepIndex(newIndex);
       await saveTourProgress({ completed: false, currentStep: newIndex });
     }
   };
 
-  // Por ahora no renderizamos el tour para evitar conflictos con react-joyride.
-  if (!isReady || !steps.length || !isRunning) {
+  if (!isReady || !steps.length) {
     return null;
   }
 
-  return null;
+  return (
+    <Joyride
+      steps={steps}
+      run={isRunning}
+      stepIndex={stepIndex}
+      continuous
+      showSkipButton
+      showProgress
+      scrollToFirstStep
+      disableScrolling
+      callback={handleJoyrideCallback}
+      styles={{
+        options: {
+          primaryColor: "#4f46e5",
+          zIndex: 10000,
+        },
+      }}
+      locale={{
+        back: "Atrás",
+        close: "Cerrar",
+        last: "Finalizar",
+        next: "Siguiente",
+        skip: "Saltar tour",
+      }}
+    />
+  );
 };
 
 export default ProductTour;
