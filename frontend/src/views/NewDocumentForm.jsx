@@ -43,13 +43,11 @@ export function NewDocumentForm({
     const formData = new FormData(form);
     const newErrors = {};
 
-    // Validar tipoDocumento
     if (!tipoDocumento) {
       newErrors.tipo_documento =
         "Selecciona si es Poderes y autorizaciones o Solo contratos.";
     }
 
-    // tipo de trámite / documento
     formData.append("tipo_tramite", tipoTramite);
     formData.append("tipo_documento", tipoDocumento);
     if (tipoTramite === "notaria") {
@@ -63,25 +61,20 @@ export function NewDocumentForm({
     const title = form.title.value.trim();
     const firmanteEmail = form.firmante_email.value.trim();
 
-    // Campos firmante
     const firmanteNombre1 = form.firmante_nombre1.value.trim();
     const firmanteNombre2 = (form.firmante_nombre2?.value || "").trim();
     const firmanteApellido1 = form.firmante_apellido1.value.trim();
     const firmanteApellido2 = (form.firmante_apellido2?.value || "").trim();
     const firmanteMovil = form.firmante_movil.value.trim();
 
-    // Destinatario / empresa
-    const destinatarioNombre =
-      form.destinatario_nombre?.value.trim() || "";
+    const destinatarioNombre = form.destinatario_nombre?.value.trim() || "";
     const destinatarioEmail = form.destinatario_email.value.trim();
 
     const file = form.file?.files?.[0];
 
-    // Validaciones básicas
     if (!title) newErrors.title = "Este campo es obligatorio.";
     if (!file) newErrors.file = "Adjunta un archivo PDF.";
 
-    // Validaciones firmante
     if (!firmanteNombre1)
       newErrors.firmante_nombre1 = "Este campo es obligatorio.";
     if (!firmanteApellido1)
@@ -96,7 +89,6 @@ export function NewDocumentForm({
     if (!firmanteMovil)
       newErrors.firmante_movil = "El teléfono es obligatorio.";
 
-    // Validaciones destinatario / empresa
     if (!destinatarioNombre)
       newErrors.destinatario_nombre = "Este campo es obligatorio.";
     if (!destinatarioEmail)
@@ -128,15 +120,11 @@ export function NewDocumentForm({
     formData.append("empresa_rut", empresaRutValue);
     formData.append("requiresVisado", showVisador ? "true" : "false");
 
-    // Firmante adicional (solo el primero por ahora)
     if (extraSigners.length > 0) {
       const idx = 0;
-      const nombreExtra =
-        form[`extra_nombre_${idx}`]?.value.trim() || "";
-      const emailExtra =
-        form[`extra_email_${idx}`]?.value.trim() || "";
-      const movilExtra =
-        form[`extra_movil_${idx}`]?.value.trim() || "";
+      const nombreExtra = form[`extra_nombre_${idx}`]?.value.trim() || "";
+      const emailExtra = form[`extra_email_${idx}`]?.value.trim() || "";
+      const movilExtra = form[`extra_movil_${idx}`]?.value.trim() || "";
 
       if (emailExtra) {
         formData.append(
@@ -152,9 +140,7 @@ export function NewDocumentForm({
       const res = await api.post("/docs", formData);
 
       if (!res || !res.data) {
-        throw new Error(
-          "No se pudo crear el documento en el servidor."
-        );
+        throw new Error("No se pudo crear el documento en el servidor.");
       }
 
       alert("✅ ¡Documento procesado correctamente!");
@@ -170,9 +156,7 @@ export function NewDocumentForm({
     } catch (err) {
       console.error("Error creando documento:", err);
       const msg =
-        err.response?.data?.message ||
-        err.message ||
-        "Fallo en la subida";
+        err.response?.data?.message || err.message || "Fallo en la subida";
       alert(msg);
     } finally {
       setSubmitting(false);
@@ -269,9 +253,9 @@ export function NewDocumentForm({
         </div>
       </div>
 
-{/* Tipo de flujo */}
+      {/* Tipo de flujo */}
       <div style={{ marginBottom: 24 }}>
-        abel
+        <label
           style={{
             fontWeight: 700,
             fontSize: "0.9rem",
@@ -286,18 +270,22 @@ export function NewDocumentForm({
           value={tipoFlujo}
           onChange={(e) => setTipoFlujo(e.target.value)}
         >
-          <option value="SECUENCIAL">Secuencial (uno tras otro, en orden)</option>
-          <option value="PARALELO">Paralelo (todos a la vez, sin orden)</option>
+          <option value="SECUENCIAL">
+            Secuencial (uno tras otro, en orden)
+          </option>
+          <option value="PARALELO">
+            Paralelo (todos a la vez, sin orden)
+          </option>
         </select>
         <p style={{ fontSize: 12, color: "#6b7280", marginTop: 4 }}>
-          {tipoFlujo === "SECUENCIAL" 
+          {tipoFlujo === "SECUENCIAL"
             ? "Los firmantes deben firmar en el orden establecido."
             : "Todos los firmantes pueden firmar simultáneamente, sin esperar turno."}
         </p>
       </div>
 
       <form onSubmit={handleSubmit}>
-        {/* === TÍTULO DEL CONTRATO + BOTÓN PDF === */}
+        {/* Título + PDF */}
         <div
           style={{
             marginBottom: 20,
@@ -335,7 +323,6 @@ export function NewDocumentForm({
             )}
           </div>
 
-          {/* input file oculto */}
           <input
             type="file"
             name="file"
@@ -348,7 +335,6 @@ export function NewDocumentForm({
             }}
           />
 
-          {/* botón visible al lado del título */}
           <div>
             <label
               style={{
@@ -402,7 +388,7 @@ export function NewDocumentForm({
           </div>
         </div>
 
-        {/* === DESCRIPCIÓN Y OBSERVACIONES === */}
+        {/* Descripción */}
         <div style={{ marginBottom: 30 }}>
           <label
             style={{
@@ -422,7 +408,7 @@ export function NewDocumentForm({
           />
         </div>
 
-        {/* === VISADOR === */}
+        {/* Visador */}
         <div
           style={{
             background: "#f1f5f9",
@@ -486,7 +472,7 @@ export function NewDocumentForm({
           )}
         </div>
 
-        {/* === FIRMANTE Y DESTINATARIO === */}
+        {/* Firmante + empresa */}
         <div
           style={{
             display: "grid",
@@ -494,7 +480,7 @@ export function NewDocumentForm({
             gap: 24,
           }}
         >
-          {/* FIRMANTE FINAL */}
+          {/* Firmante final */}
           <div className="card-mini" style={{ marginTop: 0 }}>
             <h4>✍️ Firmante Final (Responsable)</h4>
             <div className="card-content">
@@ -607,7 +593,7 @@ export function NewDocumentForm({
             </div>
           </div>
 
-          {/* DESTINATARIO / EMPRESA */}
+          {/* Destinatario / empresa */}
           <div className="card-mini" style={{ marginTop: 0 }}>
             <h4>🏢 Destinatario / Empresa</h4>
             <div className="card-content">
@@ -673,7 +659,7 @@ export function NewDocumentForm({
           </div>
         </div>
 
-        {/* FIRMANTES ADICIONALES */}
+        {/* Firmantes adicionales */}
         {extraSigners.map((signer, index) => (
           <div key={signer.id} className="card-mini">
             <h4>
@@ -727,7 +713,7 @@ export function NewDocumentForm({
           </div>
         ))}
 
-        {/* BOTONES FINALES */}
+        {/* Botones finales */}
         <div
           style={{
             marginTop: 32,
