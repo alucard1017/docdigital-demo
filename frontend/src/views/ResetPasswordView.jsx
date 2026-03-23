@@ -1,22 +1,30 @@
 // frontend/src/views/ResetPasswordView.jsx
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import axios from "axios";
-import { useSearchParams } from "react-router-dom";
 
 export default function ResetPasswordView() {
-  const [searchParams] = useSearchParams();
-  const token = searchParams.get("token") || "";
-
+  const [token, setToken] = useState("");
   const [password, setPassword] = useState("");
   const [confirmPassword, setConfirmPassword] = useState("");
   const [loading, setLoading] = useState(false);
   const [message, setMessage] = useState("");
   const [error, setError] = useState("");
 
+  useEffect(() => {
+    const params = new URLSearchParams(window.location.search);
+    const t = params.get("token") || "";
+    setToken(t);
+  }, []);
+
   const handleSubmit = async (e) => {
     e.preventDefault();
     setError("");
     setMessage("");
+
+    if (!token) {
+      setError("Token inválido o expirado");
+      return;
+    }
 
     if (password !== confirmPassword) {
       setError("Las contraseñas no coinciden");
@@ -35,7 +43,9 @@ export default function ResetPasswordView() {
         token,
         password,
       });
-      setMessage("Tu contraseña fue actualizada correctamente. Ya puedes iniciar sesión.");
+      setMessage(
+        "Tu contraseña fue actualizada correctamente. Ya puedes iniciar sesión."
+      );
     } catch (err) {
       setError(
         err.response?.data?.message || "Error al restablecer la contraseña"
