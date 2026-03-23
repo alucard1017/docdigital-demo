@@ -16,11 +16,11 @@ export const ElectronicSignatureNotice: React.FC<ElectronicSignatureNoticeProps>
 
   const mainText = isVisado
     ? "Antes de visar, declaro que he leído y revisado el contenido del documento, y que mi visado deja constancia de que su contenido ha sido validado para continuar el flujo de firma. Entiendo que este visado se realiza mediante firma electrónica simple y quedará registrado para fines de trazabilidad y responsabilidad."
-    : "Antes de firmar, declaro que he leído y acepto los términos de uso de la firma electrónica simple y del documento que firmaré. Entiendo que la firma electrónica tiene la misma validez y efectos legales que mi firma manuscrita, conforme a la Ley N° 19.799 sobre documentos electrónicos y firma electrónica, y que soy responsable del uso de mis credenciales y del contenido del documento que apruebo."; [web:565][web:567]
+    : "Antes de firmar, declaro que he leído y acepto los términos de uso de la firma electrónica simple y del documento que firmaré. Entiendo que la firma electrónica tiene la misma validez y efectos legales que mi firma manuscrita, conforme a la Ley N° 19.799 sobre documentos electrónicos y firma electrónica, y que soy responsable del uso de mis credenciales y del contenido del documento que apruebo.";
 
   const checkboxText = isVisado
     ? "Acepto realizar el visado de este documento utilizando firma electrónica simple y declaro que soy responsable del uso de mis datos y credenciales."
-    : "Acepto firmar este documento utilizando firma electrónica simple y declaro que soy responsable del uso de mis datos y credenciales."; [web:565][web:618]
+    : "Acepto firmar este documento utilizando firma electrónica simple y declaro que soy responsable del uso de mis datos y credenciales.";
 
   return (
     <div
