@@ -165,8 +165,10 @@ export function Sidebar({
       <h3 className="sidebar-section-label">Reportes</h3>
 
       <div
-        className={`nav-item ${view === "analytics" ? "active" : ""}`}
-        onClick={() => handleChangeView("analytics")}
+        className={`nav-item ${
+          view === "email-metrics" ? "active" : ""
+        }`}
+        onClick={() => handleChangeView("email-metrics")}
       >
         <span>📊</span> Analytics
       </div>

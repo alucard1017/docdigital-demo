@@ -28,6 +28,7 @@ import ResetPasswordView from "./views/ResetPasswordView";
 import CompanyAnalyticsView from "./views/CompanyAnalyticsView";
 import OnboardingWizard from "./components/Onboarding/OnboardingWizard";
 import ProductTour from "./components/Onboarding/ProductTour";
+import RegisterView from "./views/RegisterView";
 import api from "./api/client";
 
 /* ========= Helpers de rol ========= */
@@ -550,6 +551,12 @@ function App() {
         ? identifier
         : formatRun(identifier);
 
+    // Si la URL es /register, mostramos la vista de registro público
+    if (pathname === "/register") {
+      return <RegisterView />;
+    }
+
+    // Vista por defecto: login
     return (
       <LoginView
         identifier={displayIdentifier}
@@ -575,6 +582,7 @@ function App() {
       />
     );
   }
+
 
   /* =============================== */
   /* VISTA DETALLE DOCUMENTO         */
