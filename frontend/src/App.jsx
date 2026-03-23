@@ -263,18 +263,6 @@ function App() {
         return;
       }
 
-	const pathname = window.location.pathname;
-	
-	if (pathname === "/forgot-password") {
-	  return <ForgotPasswordView />;
-	}
-
-	if (pathname === "/reset-password") {
-	  return <ResetPasswordView />;
-	}
-
-	let mode = "app";
-
       if (isVerificationPublic) {
         setView("verification");
         return;
@@ -505,6 +493,19 @@ function App() {
   const pathname = window.location.pathname;
 
   let mode = "app";
+
+  // Rutas públicas simples (sin token aún)
+  if (!token && pathname === "/forgot-password") {
+    return <ForgotPasswordView />;
+  }
+
+  if (!token && pathname === "/reset-password") {
+    return <ResetPasswordView />;
+  }
+
+  if (!token && pathname === "/register") {
+    return <RegisterView />;
+  }
 
   if (isVerificationPortal) {
     mode = "verification-portal";
