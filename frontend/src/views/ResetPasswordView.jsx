@@ -1,34 +1,29 @@
 // frontend/src/views/ResetPasswordView.jsx
-import { useState, useEffect } from "react";
+import { useState } from "react";
 import axios from "axios";
+import { useSearchParams } from "react-router-dom";
 
 export default function ResetPasswordView() {
-  const [token, setToken] = useState("");
-  const [newPassword, setNewPassword] = useState("");
+  const [searchParams] = useSearchParams();
+  const token = searchParams.get("token") || "";
+
+  const [password, setPassword] = useState("");
   const [confirmPassword, setConfirmPassword] = useState("");
+  const [loading, setLoading] = useState(false);
   const [message, setMessage] = useState("");
   const [error, setError] = useState("");
-  const [loading, setLoading] = useState(false);
-
-  useEffect(() => {
-    const params = new URLSearchParams(window.location.search);
-    const tokenParam = params.get("token");
-    if (tokenParam) {
-      setToken(tokenParam);
-    }
-  }, []);
 
   const handleSubmit = async (e) => {
     e.preventDefault();
-    setMessage("");
     setError("");
+    setMessage("");
 
-    if (newPassword !== confirmPassword) {
+    if (password !== confirmPassword) {
       setError("Las contraseñas no coinciden");
       return;
     }
 
-    if (newPassword.length < 6) {
+    if (password.length < 6) {
       setError("La contraseña debe tener al menos 6 caracteres");
       return;
     }
@@ -36,83 +31,85 @@ export default function ResetPasswordView() {
     setLoading(true);
 
     try {
-      const res = await axios.post("/api/auth/reset-password", {
+      await axios.post("/api/auth/reset-password", {
         token,
-        newPassword,
+        password,
       });
-      setMessage(res.data.message);
-      setTimeout(() => {
-        window.location.href = "/";
-      }, 2000);
+      setMessage("Tu contraseña fue actualizada correctamente. Ya puedes iniciar sesión.");
     } catch (err) {
-      setError(err.response?.data?.message || "Error restableciendo contraseña");
+      setError(
+        err.response?.data?.message || "Error al restablecer la contraseña"
+      );
     } finally {
       setLoading(false);
     }
   };
 
   return (
-    <div className="login-bg" style={{ minHeight: "100vh", padding: "20px 16px" }}>
-      <div className="login-card" style={{ maxWidth: 480 }}>
+    <div className="min-h-screen flex items-center justify-center bg-gray-50 px-4">
+      <div className="max-w-md w-full bg-white rounded-lg shadow p-6">
         <h1 className="text-2xl font-bold mb-4 text-center">
-          Restablecer Contraseña
+          Restablecer contraseña
         </h1>
-        <p className="text-gray-600 text-center mb-6">
-          Ingresa tu nueva contraseña
+        <p className="text-sm text-gray-600 mb-6 text-center">
+          Ingresa tu nueva contraseña para tu cuenta.
         </p>
 
-        {message && (
-          <div className="bg-green-100 border border-green-400 text-green-700 px-4 py-3 rounded mb-4">
-            {message}
-            <p className="text-sm mt-2">Redirigiendo al login...</p>
-          </div>
-        )}
-
         {error && (
-          <div className="bg-red-100 border border-red-400 text-red-700 px-4 py-3 rounded mb-4">
+          <div className="mb-4 bg-red-100 border border-red-400 text-red-700 px-4 py-3 rounded">
             {error}
           </div>
         )}
 
-        {!message && (
-          <form onSubmit={handleSubmit}>
-            <div className="mb-4">
-              abel className="block text-sm font-semibold text-gray-700 mb-2">
-                Nueva Contraseña
-              </label>
-              <input
-                type="password"
-                value={newPassword}
-                onChange={(e) => setNewPassword(e.target.value)}
-                className="w-full px-3 py-2 border border-gray-300 rounded"
-                required
-                minLength={6}
-              />
-            </div>
-
-            <div className="mb-4">
-              abel className="block text-sm font-semibold text-gray-700 mb-2">
-                Confirmar Contraseña
-              </label>
-              <input
-                type="password"
-                value={confirmPassword}
-                onChange={(e) => setConfirmPassword(e.target.value)}
-                className="w-full px-3 py-2 border border-gray-300 rounded"
-                required
-                minLength={6}
-              />
-            </div>
-
-            <button
-              type="submit"
-              disabled={loading}
-              className="w-full bg-blue-600 text-white py-3 rounded font-semibold hover:bg-blue-700 disabled:opacity-50"
-            >
-              {loading ? "Restableciendo..." : "Restablecer Contraseña"}
-            </button>
-          </form>
+        {message && (
+          <div className="mb-4 bg-green-100 border border-green-400 text-green-700 px-4 py-3 rounded">
+            {message}
+          </div>
         )}
+
+        <form onSubmit={handleSubmit}>
+          <div className="mb-4">
+            <label className="block text-sm font-semibold text-gray-700 mb-2">
+              Nueva Contraseña
+            </label>
+            <input
+              type="password"
+              value={password}
+              onChange={(e) => setPassword(e.target.value)}
+              className="w-full px-3 py-2 border border-gray-300 rounded"
+              minLength={6}
+              required
+            />
+          </div>
+
+          <div className="mb-4">
+            <label className="block text-sm font-semibold text-gray-700 mb-2">
+              Confirmar Contraseña
+            </label>
+            <input
+              type="password"
+              value={confirmPassword}
+              onChange={(e) => setConfirmPassword(e.target.value)}
+              className="w-full px-3 py-2 border border-gray-300 rounded"
+              minLength={6}
+              required
+            />
+          </div>
+
+          <button
+            type="submit"
+            disabled={loading}
+            className="w-full bg-blue-600 text-white px-4 py-2 rounded hover:bg-blue-700 disabled:opacity-60"
+          >
+            {loading ? "Actualizando..." : "Actualizar contraseña"}
+          </button>
+        </form>
+
+        <div className="mt-4 text-center">
+          <a href="/login" className="text-sm text-blue-600 hover:underline">
+            Volver al inicio de sesión
+          </a>
+        </div>
       </div>
     </div>
   );
