@@ -350,21 +350,29 @@ body {
     box-shadow 0.15s ease;
 }
 
-/* chip para el ID interno */
-.doc-cell-id {
-  color: #94a3b8;
-  font-weight: 600;
+/* Primera columna: centrar todo */
+.doc-table td:nth-child(1) {
+  width: 80px;
+  min-width: 80px;
+  text-align: center;
 }
 
+/* Asegurar que el texto dentro también centre */
+.doc-cell-id {
+  display: flex;
+  justify-content: center;
+}
+
+/* El pill en sí */
 .doc-id-pill {
   display: inline-flex;
   align-items: center;
   justify-content: center;
   padding: 4px 12px;
   border-radius: 999px;
-  background: rgba(15, 23, 42, 0.9);   /* fondo oscuro */
+  background: rgba(15, 23, 42, 0.9);
   border: 1px solid rgba(148, 163, 184, 0.7);
-  color: #e5e7eb;                       /* texto claro */
+  color: #e5e7eb;
   font-size: 0.75rem;
   font-weight: 600;
 }
@@ -379,10 +387,16 @@ body {
 }
 
 .doc-chip-tipo {
-  padding: 2px 10px;
-  border-radius: 999px;
   display: inline-flex;
   align-items: center;
+  justify-content: center;
+  padding: 4px 14px;              /* algo más alta y con aire lateral */
+  border-radius: 999px;
+  background: rgba(15, 23, 42, 0.95);   /* fondo */
+  border: 1px solid rgba(148, 163, 184, 0.8);
+  color: #e5e7eb;
+  font-size: 0.75rem;
+  font-weight: 600;
 }
 
 .doc-status-pill {

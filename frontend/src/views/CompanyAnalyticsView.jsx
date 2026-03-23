@@ -1,6 +1,5 @@
 // frontend/src/views/CompanyAnalyticsView.jsx
 import { useState, useEffect } from "react";
-import axios from "axios";
 import {
   Chart as ChartJS,
   CategoryScale,
@@ -12,6 +11,7 @@ import {
   ArcElement,
 } from "chart.js";
 import { Bar, Pie } from "react-chartjs-2";
+import axios from "axios";
 
 ChartJS.register(
   CategoryScale,
@@ -22,6 +22,8 @@ ChartJS.register(
   Legend,
   ArcElement
 );
+
+const API_BASE_URL = import.meta.env.VITE_API_BASE_URL;
 
 export default function CompanyAnalyticsView() {
   const [analytics, setAnalytics] = useState(null);
@@ -35,12 +37,16 @@ export default function CompanyAnalyticsView() {
   const fetchAnalytics = async () => {
     try {
       const token = localStorage.getItem("token");
-      const res = await axios.get("/api/analytics/company", {
-        headers: { Authorization: `Bearer ${token}` },
-      });
+      const res = await axios.get(
+        `${API_BASE_URL}/api/analytics/company`,
+        {
+          headers: { Authorization: `Bearer ${token}` },
+        }
+      );
       setAnalytics(res.data);
       setError(null);
     } catch (err) {
+      console.error("Error cargando analytics:", err);
       setError(err.response?.data?.message || "Error cargando analytics");
     } finally {
       setLoading(false);
@@ -59,16 +65,20 @@ export default function CompanyAnalyticsView() {
     );
   }
 
+  const summary = analytics?.summary || {};
+  const monthlyStats = analytics?.monthly_stats || [];
+  const topUsers = analytics?.top_users || [];
+
   const statusData = {
     labels: ["Firmados", "En Firma", "En Revisión", "Rechazados", "Borradores"],
     datasets: [
       {
         data: [
-          analytics.summary.firmados,
-          analytics.summary.en_firma,
-          analytics.summary.en_revision,
-          analytics.summary.rechazados,
-          analytics.summary.borradores,
+          summary.firmados || 0,
+          summary.en_firma || 0,
+          summary.en_revision || 0,
+          summary.rechazados || 0,
+          summary.borradores || 0,
         ],
         backgroundColor: [
           "#10b981",
@@ -82,11 +92,11 @@ export default function CompanyAnalyticsView() {
   };
 
   const monthlyData = {
-    labels: analytics.monthly_stats.map((m) => m.mes),
+    labels: monthlyStats.map((m) => m.mes),
     datasets: [
       {
         label: "Documentos Creados",
-        data: analytics.monthly_stats.map((m) => m.total),
+        data: monthlyStats.map((m) => m.total),
         backgroundColor: "#3b82f6",
       },
     ],
@@ -101,25 +111,25 @@ export default function CompanyAnalyticsView() {
         <div className="bg-blue-50 p-4 rounded">
           <div className="text-sm text-gray-600">Total Documentos</div>
           <div className="text-3xl font-bold text-blue-600">
-            {analytics.summary.total_documentos}
+            {summary.total_documentos ?? 0}
           </div>
         </div>
         <div className="bg-green-50 p-4 rounded">
           <div className="text-sm text-gray-600">Firmados</div>
           <div className="text-3xl font-bold text-green-600">
-            {analytics.summary.firmados}
+            {summary.firmados ?? 0}
           </div>
         </div>
         <div className="bg-purple-50 p-4 rounded">
           <div className="text-sm text-gray-600">Tiempo Promedio</div>
           <div className="text-3xl font-bold text-purple-600">
-            {analytics.summary.tiempo_promedio_firma_horas}h
+            {(summary.tiempo_promedio_firma_horas ?? 0) + "h"}
           </div>
         </div>
         <div className="bg-red-50 p-4 rounded">
           <div className="text-sm text-gray-600">Tasa de Rechazo</div>
           <div className="text-3xl font-bold text-red-600">
-            {analytics.summary.tasa_rechazo}
+            {summary.tasa_rechazo ?? 0}
           </div>
         </div>
       </div>
@@ -131,7 +141,9 @@ export default function CompanyAnalyticsView() {
           <Pie data={statusData} />
         </div>
         <div className="bg-gray-50 p-4 rounded">
-          <h3 className="font-bold mb-4">Documentos por Mes (Últimos 6 meses)</h3>
+          <h3 className="font-bold mb-4">
+            Documentos por Mes (Últimos 6 meses)
+          </h3>
           <Bar data={monthlyData} />
         </div>
       </div>
@@ -139,24 +151,32 @@ export default function CompanyAnalyticsView() {
       {/* Top usuarios */}
       <div className="bg-gray-50 p-4 rounded">
         <h3 className="font-bold mb-4">Top Usuarios Más Activos</h3>
-        <table className="w-full text-sm">
-          <thead className="bg-gray-200">
-            <tr>
-              <th className="px-4 py-2 text-left">Usuario</th>
-              <th className="px-4 py-2 text-left">Email</th>
-              <th className="px-4 py-2 text-right">Documentos Creados</th>
-            </tr>
-          </thead>
-          <tbody>
-            {analytics.top_users.map((u, idx) => (
-              <tr key={idx} className="border-b">
-                <td className="px-4 py-2">{u.name}</td>
-                <td className="px-4 py-2">{u.email}</td>
-                <td className="px-4 py-2 text-right font-bold">{u.documentos_creados}</td>
+        {topUsers.length === 0 ? (
+          <div className="text-sm text-gray-500">
+            Aún no hay datos de usuarios activos.
+          </div>
+        ) : (
+          <table className="w-full text-sm">
+            <thead className="bg-gray-200">
+              <tr>
+                <th className="px-4 py-2 text-left">Usuario</th>
+                <th className="px-4 py-2 text-left">Email</th>
+                <th className="px-4 py-2 text-right">Documentos Creados</th>
               </tr>
-            ))}
-          </tbody>
-        </table>
+            </thead>
+            <tbody>
+              {topUsers.map((u, idx) => (
+                <tr key={idx} className="border-b">
+                  <td className="px-4 py-2">{u.name}</td>
+                  <td className="px-4 py-2">{u.email}</td>
+                  <td className="px-4 py-2 text-right font-bold">
+                    {u.documentos_creados}
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        )}
       </div>
     </div>
   );
