@@ -14,9 +14,9 @@ export function LoginView({
   isLoggingIn,
   handleLogin,
 }) {
-  const goToRegister = () => {
-    window.history.pushState(null, "", "/register");
-    window.dispatchEvent(new PopStateEvent("popstate"));
+  const handleGoToRegister = () => {
+    // Navegación explícita a /register para que App.jsx monte RegisterView
+    window.location.href = "/register";
   };
 
   return (
@@ -122,7 +122,7 @@ export function LoginView({
           <div style={{ textAlign: "center", marginTop: 12 }}>
             <button
               type="button"
-              onClick={goToRegister}
+              onClick={handleGoToRegister}
               style={{
                 fontSize: 13,
                 color: "#2563eb",

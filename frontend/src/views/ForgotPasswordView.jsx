@@ -1,86 +1,93 @@
-// frontend/src/views/ForgotPasswordView.jsx
-import { useState } from "react";
-import axios from "axios";
+// src/views/ForgotPasswordView.jsx
+import React, { useState } from "react";
+import api from "../api/client";
 
-export default function ForgotPasswordView() {
+const ForgotPasswordView = () => {
   const [email, setEmail] = useState("");
-  const [loading, setLoading] = useState(false);
+  const [submitting, setSubmitting] = useState(false);
   const [message, setMessage] = useState("");
   const [error, setError] = useState("");
 
   const handleSubmit = async (e) => {
     e.preventDefault();
-    setLoading(true);
+    setSubmitting(true);
     setMessage("");
     setError("");
 
     try {
-      await axios.post("/api/auth/forgot-password", { email });
+      await api.post("/auth/forgot-password", { email });
       setMessage(
-        "Si el correo está registrado, hemos enviado un enlace para restablecer tu contraseña."
+        "Si el correo existe en nuestro sistema, te enviaremos un enlace para restablecer tu contraseña."
       );
     } catch (err) {
-      setError(
-        err.response?.data?.message || "Error al solicitar recuperación de contraseña"
-      );
+      const msg =
+        err.response?.data?.message ||
+        err.message ||
+        "No pudimos procesar tu solicitud. Intenta nuevamente.";
+      setError(msg);
     } finally {
-      setLoading(false);
+      setSubmitting(false);
     }
   };
 
   return (
-    <div className="min-h-screen flex items-center justify-center bg-gray-50 px-4">
-      <div className="max-w-md w-full bg-white rounded-lg shadow p-6">
-        <h1 className="text-2xl font-bold mb-4 text-center">
+    <div className="min-h-screen flex items-center justify-center bg-slate-50 px-4">
+      <div className="w-full max-w-md bg-white shadow-lg rounded-xl p-8 border border-slate-100">
+        <h1 className="text-2xl font-bold text-slate-900 mb-2 text-center">
           Recuperar contraseña
         </h1>
-        <p className="text-sm text-gray-600 mb-6 text-center">
+        <p className="text-sm text-slate-600 mb-6 text-center">
           Ingresa tu correo electrónico y te enviaremos instrucciones para
           restablecer tu contraseña.
         </p>
 
         {error && (
-          <div className="mb-4 bg-red-100 border border-red-400 text-red-700 px-4 py-3 rounded">
+          <div className="mb-4 rounded-md border border-red-200 bg-red-50 px-3 py-2 text-sm text-red-700">
             {error}
           </div>
         )}
 
         {message && (
-          <div className="mb-4 bg-green-100 border border-green-400 text-green-700 px-4 py-3 rounded">
+          <div className="mb-4 rounded-md border border-emerald-200 bg-emerald-50 px-3 py-2 text-sm text-emerald-700">
             {message}
           </div>
         )}
 
-        <form onSubmit={handleSubmit}>
-          <div className="mb-4">
-            <label className="block text-sm font-semibold text-gray-700 mb-2">
+        <form onSubmit={handleSubmit} className="space-y-4">
+          <div>
+            <label className="block text-sm font-medium text-slate-700 mb-1">
               Email
             </label>
             <input
               type="email"
+              required
               value={email}
               onChange={(e) => setEmail(e.target.value)}
-              className="w-full px-3 py-2 border border-gray-300 rounded"
+              className="w-full rounded-md border border-slate-300 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500"
               placeholder="tu@email.com"
-              required
             />
           </div>
 
           <button
             type="submit"
-            disabled={loading}
-            className="w-full bg-blue-600 text-white px-4 py-2 rounded hover:bg-blue-700 disabled:opacity-60"
+            disabled={submitting}
+            className="w-full rounded-md bg-indigo-600 px-4 py-2 text-sm font-medium text-white hover:bg-indigo-700 disabled:opacity-60"
           >
-            {loading ? "Enviando..." : "Enviar enlace de recuperación"}
+            {submitting ? "Enviando..." : "Enviar enlace de recuperación"}
           </button>
         </form>
 
         <div className="mt-4 text-center">
-          <a href="/login" className="text-sm text-blue-600 hover:underline">
+          <a
+            href="/"
+            className="text-xs text-indigo-600 hover:underline font-medium"
+          >
             Volver al inicio de sesión
           </a>
         </div>
       </div>
     </div>
   );
-}
+};
+
+export default ForgotPasswordView;

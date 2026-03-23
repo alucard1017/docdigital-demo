@@ -1,39 +1,45 @@
 // src/views/RegisterView.jsx
 import React, { useState } from "react";
-import axios from "axios";
+import api from "../api/client";
 
-const API_BASE = import.meta.env.VITE_API_URL || "https://verifirma-api.onrender.com";
-
-export default function RegisterView() {
-  const [form, setForm] = useState({
-    run: "",
-    name: "",
-    email: "",
-    password: "",
-    plan: "basic",
-  });
+const RegisterView = () => {
+  const [name, setName] = useState("");
+  const [email, setEmail] = useState("");
+  const [rut, setRut] = useState("");
+  const [password, setPassword] = useState("");
+  const [confirmPassword, setConfirmPassword] = useState("");
   const [loading, setLoading] = useState(false);
+  const [message, setMessage] = useState("");
   const [error, setError] = useState("");
-  const [success, setSuccess] = useState("");
-
-  const handleChange = (e) => {
-    setForm((f) => ({ ...f, [e.target.name]: e.target.value }));
-  };
 
   const handleSubmit = async (e) => {
     e.preventDefault();
-    setLoading(true);
+    setMessage("");
     setError("");
-    setSuccess("");
 
+    if (password !== confirmPassword) {
+      setError("Las contraseñas no coinciden.");
+      return;
+    }
+
+    setLoading(true);
     try {
-      await axios.post(`${API_BASE}/api/users/register`, form);
-      setSuccess("Usuario creado exitosamente. Ya puedes iniciar sesión.");
+      const res = await api.post("/public/register", {
+        name,
+        email,
+        rut,
+        password,
+      });
+
+      setMessage(
+        res.data?.message ||
+          "Tu cuenta fue creada correctamente. Revisa tu correo para activar el acceso."
+      );
     } catch (err) {
       const msg =
         err.response?.data?.message ||
-        err.response?.data?.error ||
-        "Error al registrar usuario";
+        err.message ||
+        "No pudimos crear tu cuenta. Intenta nuevamente.";
       setError(msg);
     } finally {
       setLoading(false);
@@ -41,75 +47,118 @@ export default function RegisterView() {
   };
 
   return (
-    <div className="min-h-screen flex items-center justify-center bg-slate-50">
-      <div className="bg-white shadow-md rounded px-8 py-6 w-full max-w-md">
-        <h1 className="text-2xl font-bold mb-4">Crear cuenta</h1>
+    <div className="min-h-screen flex items-center justify-center bg-slate-50 px-4">
+      <div className="w-full max-w-md bg-white shadow-lg rounded-xl p-8 border border-slate-100">
+        <h1 className="text-2xl font-bold text-slate-900 mb-2 text-center">
+          Crear cuenta en VeriFirma
+        </h1>
+        <p className="text-sm text-slate-600 mb-6 text-center">
+          Regístrate para comenzar a enviar y firmar documentos electrónicos.
+        </p>
 
-        {error && <p className="text-red-600 mb-2 text-sm">{error}</p>}
-        {success && (
-          <p className="text-green-600 mb-2 text-sm">{success}</p>
+        {error && (
+          <div className="mb-4 rounded-md border border-red-200 bg-red-50 px-3 py-2 text-sm text-red-700">
+            {error}
+          </div>
         )}
 
-        <form onSubmit={handleSubmit} className="space-y-3">
+        {message && (
+          <div className="mb-4 rounded-md border border-emerald-200 bg-emerald-50 px-3 py-2 text-sm text-emerald-700">
+            {message}
+          </div>
+        )}
+
+        <form onSubmit={handleSubmit} className="space-y-4">
           <div>
-            <label className="block text-sm font-medium mb-1">RUN</label>
+            <label className="block text-sm font-medium text-slate-700 mb-1">
+              Nombre completo
+            </label>
             <input
               type="text"
-              name="run"
-              value={form.run}
-              onChange={handleChange}
-              className="w-full border rounded px-3 py-2 text-sm"
               required
+              value={name}
+              onChange={(e) => setName(e.target.value)}
+              className="w-full rounded-md border border-slate-300 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500"
+              placeholder="Nombre y apellido"
             />
           </div>
 
           <div>
-            <label className="block text-sm font-medium mb-1">Nombre</label>
-            <input
-              type="text"
-              name="name"
-              value={form.name}
-              onChange={handleChange}
-              className="w-full border rounded px-3 py-2 text-sm"
-              required
-            />
-          </div>
-
-          <div>
-            <label className="block text-sm font-medium mb-1">Correo</label>
+            <label className="block text-sm font-medium text-slate-700 mb-1">
+              Email
+            </label>
             <input
               type="email"
-              name="email"
-              value={form.email}
-              onChange={handleChange}
-              className="w-full border rounded px-3 py-2 text-sm"
               required
+              value={email}
+              onChange={(e) => setEmail(e.target.value)}
+              className="w-full rounded-md border border-slate-300 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500"
+              placeholder="tu@email.com"
             />
           </div>
 
           <div>
-            <label className="block text-sm font-medium mb-1">
+            <label className="block text-sm font-medium text-slate-700 mb-1">
+              RUT / RUN
+            </label>
+            <input
+              type="text"
+              required
+              value={rut}
+              onChange={(e) => setRut(e.target.value)}
+              className="w-full rounded-md border border-slate-300 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500"
+              placeholder="11.111.111-1"
+            />
+          </div>
+
+          <div>
+            <label className="block text-sm font-medium text-slate-700 mb-1">
               Contraseña
             </label>
             <input
               type="password"
-              name="password"
-              value={form.password}
-              onChange={handleChange}
-              className="w-full border rounded px-3 py-2 text-sm"
               required
+              minLength={6}
+              value={password}
+              onChange={(e) => setPassword(e.target.value)}
+              className="w-full rounded-md border border-slate-300 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500"
+            />
+          </div>
+
+          <div>
+            <label className="block text-sm font-medium text-slate-700 mb-1">
+              Confirmar contraseña
+            </label>
+            <input
+              type="password"
+              required
+              minLength={6}
+              value={confirmPassword}
+              onChange={(e) => setConfirmPassword(e.target.value)}
+              className="w-full rounded-md border border-slate-300 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500"
             />
           </div>
 
           <button
             type="submit"
             disabled={loading}
-            className="w-full bg-blue-600 hover:bg-blue-700 text-white font-medium py-2 rounded mt-2"
+            className="w-full rounded-md bg-indigo-600 px-4 py-2 text-sm font-medium text-white hover:bg-indigo-700 disabled:opacity-60"
           >
-            {loading ? "Creando..." : "Crear cuenta"}
+            {loading ? "Creando cuenta..." : "Crear cuenta"}
           </button>
         </form>
+
+        <div className="mt-4 text-center">
+          <a
+            href="/"
+            className="text-xs text-indigo-600 hover:underline font-medium"
+          >
+            Volver al inicio de sesión
+          </a>
+        </div>
       </div>
     </div>
   );
-}
+};
+
+export default RegisterView;
