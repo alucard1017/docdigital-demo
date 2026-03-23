@@ -23,7 +23,9 @@ export default function RemindersConfigView() {
       setFormData(res.data);
       setError(null);
     } catch (err) {
-      setError(err.response?.data?.message || "Error cargando configuración");
+      setError(
+        err.response?.data?.message || "Error cargando configuración"
+      );
       console.error("Error:", err);
     } finally {
       setLoading(false);
@@ -32,10 +34,10 @@ export default function RemindersConfigView() {
 
   const handleChange = (e) => {
     const { name, value, type, checked } = e.target;
-    setFormData({
-      ...formData,
+    setFormData((prev) => ({
+      ...prev,
       [name]: type === "checkbox" ? checked : parseInt(value) || value,
-    });
+    }));
   };
 
   const handleSubmit = async (e) => {
@@ -49,15 +51,21 @@ export default function RemindersConfigView() {
       setEditing(false);
       alert("Configuración actualizada exitosamente");
     } catch (err) {
-      setError(err.response?.data?.message || "Error actualizando configuración");
+      setError(
+        err.response?.data?.message || "Error actualizando configuración"
+      );
     }
   };
 
-  if (loading) return <div className="p-4">Cargando configuración...</div>;
+  if (loading) {
+    return <div className="p-4">Cargando configuración...</div>;
+  }
 
   return (
     <div className="p-6 bg-white rounded-lg shadow">
-      <h1 className="text-2xl font-bold mb-6">Configuración de Recordatorios</h1>
+      <h1 className="text-2xl font-bold mb-6">
+        Configuración de Recordatorios
+      </h1>
 
       {error && (
         <div className="bg-red-100 border border-red-400 text-red-700 px-4 py-3 rounded mb-4">
@@ -69,15 +77,16 @@ export default function RemindersConfigView() {
         <div className="bg-gray-50 p-4 rounded mb-6">
           <div className="grid grid-cols-2 gap-4 mb-4">
             <div>
-              abel className="text-sm font-semibold text-gray-600">
+              <label className="text-sm font-semibold text-gray-600">
                 Intervalo entre recordatorios (días)
               </label>
               <p className="text-lg font-bold text-gray-800">
                 {config.interval_days} días
               </p>
             </div>
+
             <div>
-              abel className="text-sm font-semibold text-gray-600">
+              <label className="text-sm font-semibold text-gray-600">
                 Máximo de intentos
               </label>
               <p className="text-lg font-bold text-gray-800">
@@ -85,8 +94,9 @@ export default function RemindersConfigView() {
               </p>
             </div>
           </div>
+
           <div>
-            abel className="text-sm font-semibold text-gray-600">
+            <label className="text-sm font-semibold text-gray-600">
               Estado
             </label>
             <p className="text-lg font-bold">
@@ -97,6 +107,7 @@ export default function RemindersConfigView() {
               )}
             </p>
           </div>
+
           <button
             onClick={() => setEditing(true)}
             className="mt-4 bg-blue-600 text-white px-4 py-2 rounded hover:bg-blue-700"
@@ -109,7 +120,7 @@ export default function RemindersConfigView() {
       {editing && (
         <form onSubmit={handleSubmit} className="bg-gray-50 p-4 rounded">
           <div className="mb-4">
-            abel className="block text-sm font-semibold text-gray-700 mb-2">
+            <label className="block text-sm font-semibold text-gray-700 mb-2">
               Intervalo entre recordatorios (días)
             </label>
             <input
@@ -124,7 +135,7 @@ export default function RemindersConfigView() {
           </div>
 
           <div className="mb-4">
-            abel className="block text-sm font-semibold text-gray-700 mb-2">
+            <label className="block text-sm font-semibold text-gray-700 mb-2">
               Máximo de intentos
             </label>
             <input
@@ -139,7 +150,7 @@ export default function RemindersConfigView() {
           </div>
 
           <div className="mb-6">
-            abel className="flex items-center">
+            <label className="flex items-center">
               <input
                 type="checkbox"
                 name="enabled"

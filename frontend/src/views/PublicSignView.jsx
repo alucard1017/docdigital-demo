@@ -62,6 +62,7 @@ export function PublicSignView({
         );
         return;
       }
+
       setLegalError("");
       setSigning(true);
 
@@ -145,13 +146,16 @@ export function PublicSignView({
   }
 
   return (
-    <div className="login-bg" style={{ minHeight: "100vh", padding: "20px 16px" }}>
-      <div 
-        className="login-card" 
-        style={{ 
-          maxWidth: 640, 
+    <div
+      className="login-bg"
+      style={{ minHeight: "100vh", padding: "20px 16px" }}
+    >
+      <div
+        className="login-card"
+        style={{
+          maxWidth: 640,
           margin: "0 auto",
-          boxShadow: "0 10px 40px rgba(0,0,0,0.1)"
+          boxShadow: "0 10px 40px rgba(0,0,0,0.1)",
         }}
       >
         <PublicHeader />
@@ -209,7 +213,13 @@ export function PublicSignView({
             }}
           >
             <div className="spinner" style={{ margin: "0 auto 16px" }} />
-            <div style={{ marginBottom: 8, fontWeight: 600, fontSize: "1rem" }}>
+            <div
+              style={{
+                marginBottom: 8,
+                fontWeight: 600,
+                fontSize: "1rem",
+              }}
+            >
               Cargando información del documento…
             </div>
             <div style={{ fontSize: "0.85rem", color: "#9ca3af" }}>
@@ -231,10 +241,23 @@ export function PublicSignView({
               color: "#b91c1c",
             }}
           >
-            <div style={{ fontWeight: 700, marginBottom: 8, fontSize: "1rem" }}>
+            <div
+              style={{
+                fontWeight: 700,
+                marginBottom: 8,
+                fontSize: "1rem",
+              }}
+            >
               ❌ No se pudo cargar el documento
             </div>
-            <div style={{ marginBottom: 12, fontSize: "0.9rem" }}>{publicSignError}</div>
+            <div
+              style={{
+                marginBottom: 12,
+                fontSize: "0.9rem",
+              }}
+            >
+              {publicSignError}
+            </div>
             <button
               type="button"
               className="btn-main"
@@ -258,44 +281,100 @@ export function PublicSignView({
         {document && !publicSignLoading && !publicSignError && (
           <>
             {/* Info del documento */}
-            <div style={{ 
-              background: "#f9fafb", 
-              padding: 20, 
-              borderRadius: 12,
-              marginBottom: 24,
-              border: "1px solid #e5e7eb"
-            }}>
+            <div
+              style={{
+                background: "#f9fafb",
+                padding: 20,
+                borderRadius: 12,
+                marginBottom: 24,
+                border: "1px solid #e5e7eb",
+              }}
+            >
               <div style={{ marginBottom: 12 }}>
-                abel style={{ fontSize: "0.75rem", color: "#6b7280", display: "block", marginBottom: 4 }}>
+                <label
+                  style={{
+                    fontSize: "0.75rem",
+                    color: "#6b7280",
+                    display: "block",
+                    marginBottom: 4,
+                  }}
+                >
                   DOCUMENTO
                 </label>
-                <div style={{ fontWeight: 700, fontSize: "1.1rem", color: "#111827" }}>
+                <div
+                  style={{
+                    fontWeight: 700,
+                    fontSize: "1.1rem",
+                    color: "#111827",
+                  }}
+                >
                   {document.title}
                 </div>
               </div>
 
-              <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 12, fontSize: "0.9rem" }}>
+              <div
+                style={{
+                  display: "grid",
+                  gridTemplateColumns: "1fr 1fr",
+                  gap: 12,
+                  fontSize: "0.9rem",
+                }}
+              >
                 <div>
-                  abel style={{ fontSize: "0.75rem", color: "#6b7280", display: "block", marginBottom: 4 }}>
+                  <label
+                    style={{
+                      fontSize: "0.75rem",
+                      color: "#6b7280",
+                      display: "block",
+                      marginBottom: 4,
+                    }}
+                  >
                     EMPRESA
                   </label>
-                  <div style={{ fontWeight: 600, color: "#374151" }}>
+                  <div
+                    style={{
+                      fontWeight: 600,
+                      color: "#374151",
+                    }}
+                  >
                     {document.destinatario_nombre}
                   </div>
-                  <div style={{ fontSize: "0.8rem", color: "#9ca3af" }}>
+                  <div
+                    style={{
+                      fontSize: "0.8rem",
+                      color: "#9ca3af",
+                    }}
+                  >
                     RUT: {document.empresa_rut}
                   </div>
                 </div>
 
                 {!isVisado && signer && (
                   <div>
-                    abel style={{ fontSize: "0.75rem", color: "#6b7280", display: "block", marginBottom: 4 }}>
+                    <label
+                      style={{
+                        fontSize: "0.75rem",
+                        color: "#6b7280",
+                        display: "block",
+                        marginBottom: 4,
+                      }}
+                    >
                       FIRMANDO COMO
                     </label>
-                    <div style={{ fontWeight: 600, color: "#374151" }}>
+                    <div
+                      style={{
+                        fontWeight: 600,
+                        color: "#374151",
+                      }}
+                    >
                       {signer.name}
                     </div>
-                    <div style={{ fontSize: "0.8rem", color: "#9ca3af" }}>
+                    <div
+                      style={{
+                        fontSize: "0.8rem",
+                        color: "#9ca3af",
+                      }}
+                    >
                       {signer.email}
                     </div>
                   </div>
@@ -310,7 +389,7 @@ export function PublicSignView({
                 target="_blank"
                 rel="noopener noreferrer"
                 className="btn-main"
-                style={{ 
+                style={{
                   textDecoration: "none",
                   display: "inline-block",
                   width: "100%",
@@ -355,51 +434,87 @@ export function PublicSignView({
 
             {/* Mensajes de estado */}
             {docRejected && (
-              <div style={{
-                textAlign: "center",
-                padding: 16,
-                background: "#fef2f2",
-                borderRadius: 8,
-                border: "2px solid #fecaca",
-                marginTop: 16,
-              }}>
-                <p style={{ color: "#b91c1c", fontWeight: 700, margin: 0 }}>
+              <div
+                style={{
+                  textAlign: "center",
+                  padding: 16,
+                  background: "#fef2f2",
+                  borderRadius: 8,
+                  border: "2px solid #fecaca",
+                  marginTop: 16,
+                }}
+              >
+                <p
+                  style={{
+                    color: "#b91c1c",
+                    fontWeight: 700,
+                    margin: 0,
+                  }}
+                >
                   ❌ Este documento fue rechazado
                 </p>
-                <p style={{ color: "#7f1d1d", fontSize: "0.9rem", margin: "8px 0 0" }}>
+                <p
+                  style={{
+                    color: "#7f1d1d",
+                    fontSize: "0.9rem",
+                    margin: "8px 0 0",
+                  }}
+                >
                   No es posible firmarlo ni modificar su estado.
                 </p>
               </div>
             )}
 
             {docFullySigned && !docRejected && (
-              <div style={{
-                textAlign: "center",
-                padding: 16,
-                background: "#f0fdf4",
-                borderRadius: 8,
-                border: "2px solid #86efac",
-                marginTop: 16,
-              }}>
-                <p style={{ color: "#16a34a", fontWeight: 700, margin: 0 }}>
+              <div
+                style={{
+                  textAlign: "center",
+                  padding: 16,
+                  background: "#f0fdf4",
+                  borderRadius: 8,
+                  border: "2px solid #86efac",
+                  marginTop: 16,
+                }}
+              >
+                <p
+                  style={{
+                    color: "#16a34a",
+                    fontWeight: 700,
+                    margin: 0,
+                  }}
+                >
                   ✅ Documento firmado completamente
                 </p>
-                <p style={{ color: "#15803d", fontSize: "0.9rem", margin: "8px 0 0" }}>
+                <p
+                  style={{
+                    color: "#15803d",
+                    fontSize: "0.9rem",
+                    margin: "8px 0 0",
+                  }}
+                >
                   Todos los firmantes han completado el proceso.
                 </p>
               </div>
             )}
 
             {alreadySignedByThisSigner && !docRejected && !docFullySigned && (
-              <div style={{
-                textAlign: "center",
-                padding: 16,
-                background: "#f0fdf4",
-                borderRadius: 8,
-                border: "2px solid #86efac",
-                marginTop: 16,
-              }}>
-                <p style={{ color: "#16a34a", fontWeight: 700, margin: 0 }}>
+              <div
+                style={{
+                  textAlign: "center",
+                  padding: 16,
+                  background: "#f0fdf4",
+                  borderRadius: 8,
+                  border: "2px solid #86efac",
+                  marginTop: 16,
+                }}
+              >
+                <p
+                  style={{
+                    color: "#16a34a",
+                    fontWeight: 700,
+                    margin: 0,
+                  }}
+                >
                   ✅ Ya has firmado este documento
                 </p>
               </div>
@@ -417,24 +532,24 @@ export function PublicSignView({
               >
                 <button
                   className="btn-main btn-primary"
-                  style={{ 
+                  style={{
                     width: "100%",
                     padding: "16px 24px",
                     fontSize: "1rem",
                     fontWeight: 700,
                     borderRadius: 8,
                     opacity: signing || !acceptedLegal ? 0.6 : 1,
-                    cursor: signing || !acceptedLegal ? "not-allowed" : "pointer",
+                    cursor:
+                      signing || !acceptedLegal ? "not-allowed" : "pointer",
                   }}
                   onClick={handleConfirm}
                   disabled={signing || !acceptedLegal}
                 >
-                  {signing 
+                  {signing
                     ? "⏳ Procesando..."
-                    : isVisado 
-                    ? "✓ VISAR DOCUMENTO" 
-                    : "✍️ FIRMAR DOCUMENTO"
-                  }
+                    : isVisado
+                    ? "✓ VISAR DOCUMENTO"
+                    : "✍️ FIRMAR DOCUMENTO"}
                 </button>
 
                 {!isVisado && (
@@ -469,7 +584,7 @@ export function PublicSignView({
                   padding: 20,
                   borderRadius: 12,
                   backgroundColor: "#fef2f2",
-                  border: "2px solid #fecaca",
+                  border: "2px solid "#fecaca",
                 }}
               >
                 <h2
@@ -483,7 +598,14 @@ export function PublicSignView({
                 >
                   ❌ Rechazar documento
                 </h2>
-                <p style={{ marginBottom: 12, color: "#7f1d1d", fontSize: "0.9rem", lineHeight: 1.6 }}>
+                <p
+                  style={{
+                    marginBottom: 12,
+                    color: "#7f1d1d",
+                    fontSize: "0.9rem",
+                    lineHeight: 1.6,
+                  }}
+                >
                   Indica brevemente el motivo por el cual rechazas este
                   documento. Esta información será enviada al emisor y quedará
                   registrada en el historial.
@@ -582,4 +704,3 @@ export function PublicSignView({
     </div>
   );
 }
-
