@@ -12,6 +12,74 @@ const { triggerWebhook } = require("../../services/webhookService");
 const { emitToCompany } = require("../../services/socketService");
 const { getGeoFromIP } = require("../../utils/geoLocation");
 
+// Sincroniza document_participants a partir de los datos del flujo (visadores + firmantes)
+async function syncParticipantsFromFlow({
+  documentId,
+  signers = [],
+  visadores = [],
+}) {
+  // Borramos participantes existentes de este documento (full replace)
+  await db.query(
+    `DELETE FROM document_participants WHERE document_id = $1`,
+    [documentId]
+  );
+
+  const values = [];
+  const inserts = [];
+  let idx = 1;
+
+  // VISADORES primero (flow_order 1..n)
+  visadores.forEach((v, i) => {
+    inserts.push(
+      `($${idx++}, 'VISADOR', 'PENDIENTE', NULL, NULL, NOW(), NOW(), $${idx++}, $${idx++}, 'VISADOR', $${idx++}, $${idx++})`
+    );
+    values.push(
+      documentId,
+      i + 1, // step_order
+      i + 1, // flow_order
+      v.name,
+      v.email
+    );
+  });
+
+  // FIRMANTES después (flow_order continuo)
+  const offset = visadores.length;
+  signers.forEach((s, i) => {
+    inserts.push(
+      `($${idx++}, 'FIRMANTE', 'PENDIENTE', NULL, NULL, NOW(), NOW(), $${idx++}, $${idx++}, 'FIRMANTE', $${idx++}, $${idx++})`
+    );
+    values.push(
+      documentId,
+      offset + i + 1,
+      offset + i + 1,
+      s.name,
+      s.email
+    );
+  });
+
+  if (inserts.length === 0) return;
+
+  const sql = `
+    INSERT INTO document_participants (
+      document_id,
+      role_in_doc,
+      status,
+      signed_at,
+      comments,
+      created_at,
+      updated_at,
+      step_order,
+      flow_order,
+      "role",
+      "name",
+      email
+    )
+    VALUES ${inserts.join(", ")}
+  `;
+
+  await db.query(sql, values);
+}
+
 /* ================================
    Crear flujo (BORRADOR, sin enviar correos)
    ================================ */
@@ -26,14 +94,14 @@ async function createFlow(req, res) {
     });
   }
 
-const {
-  tipo,
-  titulo,
-  categoriaFirma,
-  firmantes,
-  fechaExpiracion, // opcional
-  tipoFlujo = "SECUENCIAL", // nuevo
-} = req.body;
+  const {
+    tipo,
+    titulo,
+    categoriaFirma,
+    firmantes,
+    fechaExpiracion, // opcional
+    tipoFlujo = "SECUENCIAL", // nuevo
+  } = req.body;
 
   try {
     await db.query("BEGIN");
@@ -48,26 +116,28 @@ const {
          hash_pdf,
          codigo_verificacion,
          categoria_firma,
-	 tipo_flujo,
+         tipo_flujo,
          creado_por,
          company_id,
          fecha_expiracion,
          created_at,
          updated_at
        )
-       VALUES ($1, $2, $3, NULL, $4, $5, $6, $7, $8, NOW(), NOW())
+       VALUES ($1, $2, $3, NULL, $4, $5, $6, $7, $8, $9, NOW(), NOW())
        RETURNING *`,
       [
-        tipo,
-        titulo,
-        DOCUMENT_STATES.DRAFT,
-        codigoVerificacion,
-        categoriaFirma,
-        req.user.id,
-        req.user.company_id,
-        fechaExpiracion || null,
+        tipo,                       // $1
+        titulo,                     // $2
+        DOCUMENT_STATES.DRAFT,      // $3
+        codigoVerificacion,         // $4
+        categoriaFirma,             // $5
+        tipoFlujo,                  // $6
+        req.user.id,                // $7
+        req.user.company_id,        // $8
+        fechaExpiracion || null,    // $9
       ]
     );
+
 
     const documento = docResult.rows[0];
 
@@ -113,6 +183,22 @@ const {
         }),
       ]
     );
+
+    // Construir arrays para document_participants
+    const signersArray = firmantes
+      .filter((f) => f.rol !== "VISADOR")
+      .map((f) => ({ name: f.nombre, email: f.email }));
+
+    const visadoresArray = firmantes
+      .filter((f) => f.rol === "VISADOR")
+      .map((f) => ({ name: f.nombre, email: f.email }));
+
+    // NUEVO: sincronizar document_participants
+    await syncParticipantsFromFlow({
+      documentId: documento.id,
+      signers: signersArray,
+      visadores: visadoresArray,
+    });
 
     await db.query("COMMIT");
 
@@ -465,6 +551,24 @@ await db.query(
   ]
 );
 
+    // NUEVO: marcar también en document_participants como FIRMADO
+    await db.query(
+      `
+      UPDATE document_participants
+      SET status = 'FIRMADO',
+          signed_at = NOW(),
+          updated_at = NOW()
+      WHERE document_id = $1
+        AND email = $2
+        AND role_in_doc = COALESCE($3, role_in_doc)
+      `,
+      [
+        firmante.documento_id,
+        firmante.email,
+        firmante.rol || null,
+      ]
+    );
+
     await db.query(
       `INSERT INTO eventos_firma (
          documento_id,
@@ -485,7 +589,7 @@ await db.query(
       ]
     );
 
-    const countRes = await db.query(
+     const countRes = await db.query(
       `SELECT
          COUNT(*) FILTER (WHERE estado = 'FIRMADO') AS firmados,
          COUNT(*) AS total
@@ -498,6 +602,27 @@ await db.query(
     const firmadosNum = Number(firmados);
     const totalNum = Number(total);
     const allSigned = firmadosNum >= totalNum;
+
+    // NUEVO: recuento también con document_participants (por ahora solo para debug/futuro)
+    const dpCountRes = await db.query(
+      `
+      SELECT
+        COUNT(*) FILTER (WHERE status = 'FIRMADO') AS firmados_dp,
+        COUNT(*) AS total_dp
+      FROM document_participants
+      WHERE document_id = $1
+      `,
+      [firmante.documento_id]
+    );
+
+    const { firmados_dp, total_dp } = dpCountRes.rows[0];
+    const firmadosDpNum = Number(firmados_dp);
+    const totalDpNum = Number(total_dp);
+    const allSignedDp = firmadosDpNum >= totalDpNum;
+
+    console.log(
+      `DEBUG firmas legacy: ${firmadosNum}/${totalNum}, participants: ${firmadosDpNum}/${totalDpNum}`
+    );
 
     let nuevoEstadoDocumento = firmante.documento_estado;
 

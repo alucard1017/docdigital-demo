@@ -134,6 +134,26 @@ async function getTimeline(req, res) {
 
     const doc = docRes.rows[0];
 
+    // NUEVO: participantes del flujo (document_participants)
+    const participantsRes = await db.query(
+      `
+      SELECT
+        id,
+        role_in_doc,
+        status,
+        flow_order,
+        step_order,
+        "name",
+        email,
+        signed_at
+      FROM document_participants
+      WHERE document_id = $1
+      ORDER BY flow_order ASC
+      `,
+      [doc.id]
+    );
+    const participants = participantsRes.rows || [];
+
     // Eventos de negocio
     const eventsRes = await db.query(
       `SELECT 
@@ -256,6 +276,7 @@ async function getTimeline(req, res) {
         tipo_tramite: doc.tipo_tramite,
         tipo_documento: doc.tipo_documento,
       },
+      participants, // NUEVO: flujo multiparte listo para el frontend
       timeline: {
         currentStep,
         nextStep,
@@ -265,6 +286,78 @@ async function getTimeline(req, res) {
     });
   } catch (err) {
     console.error("❌ Error obteniendo timeline:", err);
+    return res.status(500).json({ message: "Error interno del servidor" });
+  }
+}
+
+/* ================================
+   GET: Timeline legal (document_events solo)
+   ================================ */
+async function getLegalTimeline(req, res) {
+  try {
+    const docId = Number(req.params.id);
+
+    if (Number.isNaN(docId)) {
+      return res.status(400).json({ message: "ID de documento inválido" });
+    }
+
+    // Confirmar que el documento existe (para dar 404 bonito)
+    const docRes = await db.query(
+      `SELECT id, title, status, company_id
+       FROM documents
+       WHERE id = $1`,
+      [docId]
+    );
+
+    if (docRes.rowCount === 0) {
+      return res.status(404).json({ message: "Documento no encontrado" });
+    }
+
+    const doc = docRes.rows[0];
+
+    // Leer eventos de la tabla nueva document_events
+    const eventsRes = await db.query(
+      `
+      SELECT
+        id,
+        document_id,
+        participant_id,
+        event_type,
+        ip_address,
+        user_agent,
+        hash_document,
+        metadata,
+        created_at
+      FROM document_events
+      WHERE document_id = $1
+      ORDER BY created_at ASC
+      `,
+      [docId]
+    );
+
+    const events = (eventsRes.rows || []).map((evt) => ({
+      id: evt.id,
+      document_id: evt.document_id,
+      participant_id: evt.participant_id,
+      event_type: evt.event_type,
+      timestamp: evt.created_at,
+      ip_address: evt.ip_address,
+      user_agent: evt.user_agent,
+      hash_document: evt.hash_document,
+      metadata: evt.metadata,
+    }));
+
+    return res.json({
+      document: {
+        id: doc.id,
+        title: doc.title,
+        status: doc.status,
+        company_id: doc.company_id,
+      },
+      events,
+    });
+  } catch (err) {
+    console.error("❌ Error obteniendo timeline legal:", err);
     return res.status(500).json({ message: "Error interno del servidor" });
   }
 }
@@ -313,5 +406,6 @@ async function getSigners(req, res) {
 module.exports = {
   getDocumentPdf,
   getTimeline,
+  getLegalTimeline,
   getSigners,
 };

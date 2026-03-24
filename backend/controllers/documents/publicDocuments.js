@@ -142,6 +142,37 @@ async function getPublicDocByDocumentToken(req, res) {
 
     const pdfUrl = await getSignedUrl(doc.file_path, 3600);
 
+    // Registrar evento de apertura de enlace público en document_events (nuevo timeline)
+    try {
+      await db.query(
+        `
+        INSERT INTO document_events (
+          document_id,
+          participant_id,
+          event_type,
+          ip_address,
+          user_agent,
+          metadata
+        )
+        VALUES ($1, NULL, 'INVITATION_OPENED', $2, $3, $4)
+        `,
+        [
+          row.id, // document_id
+          req.ip,
+          req.headers["user-agent"] || null,
+          JSON.stringify({
+            source: "public_signer_link",
+            signer_email: row.signer_email,
+          }),
+        ]
+      );
+    } catch (eventErr) {
+      console.error(
+        "⚠️ Error registrando evento INVITATION_OPENED (document_events):",
+        eventErr
+      );
+    }
+
     return res.json({
       document: doc,
       pdfUrl,
@@ -215,6 +246,26 @@ async function publicSignDocument(req, res) {
       [row.signer_id]
     );
 
+    // NUEVO: sincronizar también document_participants
+    try {
+      await db.query(
+        `
+        UPDATE document_participants
+        SET status = 'FIRMADO',
+            signed_at = NOW(),
+            updated_at = NOW()
+        WHERE document_id = $1
+          AND email = $2
+        `,
+        [row.id, row.signer_email]
+      );
+    } catch (errDp) {
+      console.error(
+        "⚠️ Error actualizando document_participants (publicSignDocument):",
+        errDp
+      );
+    }
+
     const countRes = await db.query(
       `SELECT 
          COUNT(*) FILTER (WHERE status = 'FIRMADO') AS signed_count,
@@ -226,6 +277,29 @@ async function publicSignDocument(req, res) {
 
     const { signed_count, total_signers } = countRes.rows[0];
     const allSigned = Number(signed_count) >= Number(total_signers);
+
+    // DEBUG: recuento paralelo en document_participants
+    try {
+      const dpCountRes = await db.query(
+        `
+        SELECT
+          COUNT(*) FILTER (WHERE status = 'FIRMADO') AS signed_dp,
+          COUNT(*) AS total_dp
+        FROM document_participants
+        WHERE document_id = $1
+        `,
+        [row.id]
+      );
+      const { signed_dp, total_dp } = dpCountRes.rows[0];
+      console.log(
+        `DEBUG publicSignDocument -> signers: ${signed_count}/${total_signers}, participants: ${signed_dp}/${total_dp}`
+      );
+    } catch (errCountDp) {
+      console.error(
+        "⚠️ Error contando en document_participants (publicSignDocument):",
+        errCountDp
+      );
+    }
 
     let newDocStatus = row.status;
     let newSignatureStatus = row.signature_status;
@@ -293,6 +367,62 @@ async function publicSignDocument(req, res) {
         newDocStatus,
       ]
     );
+
+    // Nueva capa de evidencia en document_events (timeline legal)
+    try {
+      await db.query(
+        `
+        INSERT INTO document_events (
+          document_id,
+          participant_id,
+          event_type,
+          ip_address,
+          user_agent,
+          hash_document,
+          metadata
+        )
+        VALUES ($1, NULL, 'SIGNED', $2, $3, $4, $5)
+        `,
+        [
+          doc.id,
+          req.ip,
+          req.headers["user-agent"] || null,
+          null, // TODO: hash_document si ya lo calculas
+          JSON.stringify({
+            signer_email: row.signer_email,
+            signer_name: row.signer_name,
+            source: "public_link",
+          }),
+        ]
+      );
+
+      if (allSigned) {
+        await db.query(
+          `
+          INSERT INTO document_events (
+            document_id,
+            participant_id,
+            event_type,
+            metadata
+          )
+          VALUES ($1, NULL, 'STATUS_CHANGED', $2)
+          `,
+          [
+            doc.id,
+            JSON.stringify({
+              from_status: row.status,
+              to_status: newDocStatus,
+              reason: "all_signers_completed_public",
+            }),
+          ]
+        );
+      }
+    } catch (eventErr) {
+      console.error(
+        "⚠️ Error registrando eventos de firma en document_events:",
+        eventErr
+      );
+    }
 
     await logAudit({
       user: null,
@@ -438,6 +568,25 @@ async function publicRejectDocument(req, res) {
       [row.signer_id, motivo]
     );
 
+    // NUEVO: sincronizar también document_participants en rechazo
+    try {
+      await db.query(
+        `
+        UPDATE document_participants
+        SET status = 'RECHAZADO',
+            updated_at = NOW()
+        WHERE document_id = $1
+          AND email = $2
+        `,
+        [row.id, row.signer_email]
+      );
+    } catch (errDp) {
+      console.error(
+        "⚠️ Error actualizando document_participants (publicRejectDocument):",
+        errDp
+      );
+    }
+
     const docUpdateRes = await db.query(
       `UPDATE documents
        SET status = 'RECHAZADO',
@@ -490,6 +639,59 @@ async function publicRejectDocument(req, res) {
         "RECHAZADO",
       ]
     );
+
+    // Nueva capa de evidencia en document_events (timeline legal)
+    try {
+      await db.query(
+        `
+        INSERT INTO document_events (
+          document_id,
+          participant_id,
+          event_type,
+          ip_address,
+          user_agent,
+          metadata
+        )
+        VALUES ($1, NULL, 'REJECTED', $2, $3, $4)
+        `,
+        [
+          doc.id,
+          req.ip,
+          req.headers["user-agent"] || null,
+          JSON.stringify({
+            signer_email: row.signer_email,
+            signer_name: row.signer_name,
+            reason: motivo,
+            source: "public_link",
+          }),
+        ]
+      );
+
+      await db.query(
+        `
+        INSERT INTO document_events (
+          document_id,
+          participant_id,
+          event_type,
+          metadata
+        )
+        VALUES ($1, NULL, 'STATUS_CHANGED', $2)
+        `,
+        [
+          doc.id,
+          JSON.stringify({
+            from_status: row.status,
+            to_status: "RECHAZADO",
+            reason: "public_reject",
+          }),
+        ]
+      );
+    } catch (eventErr) {
+      console.error(
+        "⚠️ Error registrando eventos de rechazo en document_events:",
+        eventErr
+      );
+    }
 
     await logAudit({
       user: null,
@@ -592,6 +794,57 @@ async function publicVisarDocument(req, res) {
         "PENDIENTE_FIRMA",
       ]
     );
+
+    // Nueva capa de evidencia para visado público (document_events)
+    try {
+      await db.query(
+        `
+        INSERT INTO document_events (
+          document_id,
+          participant_id,
+          event_type,
+          ip_address,
+          user_agent,
+          metadata
+        )
+        VALUES ($1, NULL, 'VISADO', $2, $3, $4)
+        `,
+        [
+          doc.id,
+          req.ip,
+          req.headers["user-agent"] || null,
+          JSON.stringify({
+            visador_nombre: doc.visador_nombre || "Visador externo",
+            source: "public_link",
+          }),
+        ]
+      );
+
+      await db.query(
+        `
+        INSERT INTO document_events (
+          document_id,
+          participant_id,
+          event_type,
+          metadata
+        )
+        VALUES ($1, NULL, 'STATUS_CHANGED', $2)
+        `,
+        [
+          doc.id,
+          JSON.stringify({
+            from_status: docActual.status,
+            to_status: "PENDIENTE_FIRMA",
+            reason: "public_visado",
+          }),
+        ]
+      );
+    } catch (eventErr) {
+      console.error(
+        "⚠️ Error registrando eventos de visado en document_events:",
+        eventErr
+      );
+    }
 
     await logAudit({
       user: null,

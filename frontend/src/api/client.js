@@ -1,4 +1,3 @@
-// frontend/src/api/client.js
 import axios from "axios";
 
 const getApiBaseUrl = () => {
@@ -96,5 +95,15 @@ api.interceptors.response.use(
     return Promise.reject(error);
   }
 );
+
+/**
+ * Pide el timeline de un documento, incluyendo participants.
+ * @param {number} id
+ * @returns {Promise<{ document: any, participants: any[], timeline: any }>}
+ */
+export async function getDocumentTimeline(id) {
+  const res = await api.get(`/documents/${id}/timeline`);
+  return res.data;
+}
 
 export default api;

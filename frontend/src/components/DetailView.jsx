@@ -1,10 +1,9 @@
-// src/components/DetailView.js
 import React, { useState, useEffect } from "react";
 import { Timeline } from "./Timeline";
 import { EventList } from "./EventList";
 import { DetailActions } from "./DetailActions";
 import { DOC_STATUS } from "../constants";
-import api from "../api/client";
+import api, { getDocumentTimeline } from "../api/client";
 import { ElectronicSignatureNotice } from "./Legal/ElectronicSignatureNotice";
 
 /* ========= Helpers de labels ========= */
@@ -37,6 +36,9 @@ export function DetailView({
   const [timeline, setTimeline] = useState(null);
   const [loadingTimeline, setLoadingTimeline] = useState(false);
 
+  const [participants, setParticipants] = useState([]);
+  const [loadingParticipants, setLoadingParticipants] = useState(false);
+
   const [signers, setSigners] = useState([]);
   const [loadingSigners, setLoadingSigners] = useState(false);
 
@@ -57,7 +59,7 @@ export function DetailView({
   const displayName = isJean ? "Alucard" : rawName;
 
   /* ===============================
-     Carga de timeline + firmantes
+     Carga de timeline + participantes + firmantes
      =============================== */
 
   useEffect(() => {
@@ -66,30 +68,34 @@ export function DetailView({
     const docId = selectedDoc.id;
     const controller = new AbortController();
 
-    const fetchTimeline = async () => {
+    const fetchTimelineAndParticipants = async () => {
       try {
         setLoadingTimeline(true);
-        const res = await api.get(`/documents/${docId}/timeline`, {
-          signal: controller.signal,
-        });
-        const data = res.data;
+        setLoadingParticipants(true);
+        const data = await getDocumentTimeline(docId);
         setTimeline(data?.timeline || null);
+        setParticipants(Array.isArray(data?.participants) ? data.participants : []);
       } catch (err) {
         if (err.name === "CanceledError" || err.name === "AbortError") return;
-        console.error("Error fetching timeline:", err);
+        console.error("Error fetching timeline/participants:", err);
         setTimeline(null);
+        setParticipants([]);
       } finally {
         setLoadingTimeline(false);
+        setLoadingParticipants(false);
       }
     };
 
     const fetchSigners = async () => {
       try {
         setLoadingSigners(true);
-        const res = await api.get(`/documents/${docId}/signers`);
+        const res = await api.get(`/documents/${docId}/signers`, {
+          signal: controller.signal,
+        });
         const data = res.data;
         setSigners(Array.isArray(data) ? data : []);
       } catch (err) {
+        if (err.name === "CanceledError" || err.name === "AbortError") return;
         console.error("Error fetching signers:", err);
         setSigners([]);
       } finally {
@@ -97,10 +103,10 @@ export function DetailView({
       }
     };
 
-    fetchTimeline();
+    fetchTimelineAndParticipants();
     fetchSigners();
 
-    const interval = setInterval(fetchTimeline, 5000);
+    const interval = setInterval(fetchTimelineAndParticipants, 5000);
     return () => {
       controller.abort();
       clearInterval(interval);
@@ -451,42 +457,81 @@ export function DetailView({
                         </div>
                       </div>
 
-		{s.status !== "FIRMADO" && s.status !== "RECHAZADO" && (
-		  <button
-		    type="button"
-		    className="btn-main"
-		    style={{
-		      padding: "8px 16px",
-		      fontSize: "0.85rem",
-		      backgroundColor: "#3b82f6",
-		      color: "#fff",
-		      border: "none",
-		      borderRadius: 6,
-		      fontWeight: 600,
-		      cursor: reenviarSignerId === s.id ? "not-allowed" : "pointer",
-		      opacity: reenviarSignerId === s.id ? 0.6 : 1,
-    		}}
-    		onClick={() => handleReenviarFirma(s.id)}
-   		 disabled={reenviarSignerId === s.id}
- 		 >
-		    {reenviarSignerId === s.id
-		      ? "⏳ Enviando..."
-		      : "📧 Enviar recordatorio"}
-		  </button>
-		)}
+                      {s.status !== "FIRMADO" && s.status !== "RECHAZADO" && (
+                        <button
+                          type="button"
+                          className="btn-main"
+                          style={{
+                            padding: "8px 16px",
+                            fontSize: "0.85rem",
+                            backgroundColor: "#3b82f6",
+                            color: "#fff",
+                            border: "none",
+                            borderRadius: 6,
+                            fontWeight: 600,
+                            cursor:
+                              reenviarSignerId === s.id
+                                ? "not-allowed"
+                                : "pointer",
+                            opacity: reenviarSignerId === s.id ? 0.6 : 1,
+                          }}
+                          onClick={() => handleReenviarFirma(s.id)}
+                          disabled={reenviarSignerId === s.id}
+                        >
+                          {reenviarSignerId === s.id
+                            ? "⏳ Enviando..."
+                            : "📧 Enviar recordatorio"}
+                        </button>
+                      )}
 
-{s.status === "FIRMADO" && (
-  <span style={{ 
-    padding: "6px 12px", 
-    fontSize: "0.8rem", 
-    background: "#dcfce7", 
-    color: "#16a34a", 
-    borderRadius: 6,
-    fontWeight: 600,
-  }}>
-    ✓ Firmado
-  </span>
-)}
+                      {s.status === "FIRMADO" && (
+                        <span
+                          style={{
+                            padding: "6px 12px",
+                            fontSize: "0.8rem",
+                            background: "#dcfce7",
+                            color: "#16a34a",
+                            borderRadius: 6,
+                            fontWeight: 600,
+                          }}
+                        >
+                          ✓ Firmado
+                        </span>
+                      )}
+                    </li>
+                  ))}
+                </ul>
+              )}
+            </div>
+
+            {/* NUEVO: flujo multiparte desde document_participants */}
+            <div className="detail-signers" style={{ marginTop: 24 }}>
+              <h3 className="detail-signers-title">Flujo de participantes</h3>
+
+              {loadingParticipants ? (
+                <p className="detail-signers-loading">
+                  Cargando flujo de participantes...
+                </p>
+              ) : participants.length === 0 ? (
+                <p className="detail-signers-empty">
+                  No hay participantes registrados para este documento.
+                </p>
+              ) : (
+                <ul className="detail-signers-list">
+                  {participants.map((p) => (
+                    <li key={p.id} className="detail-signers-item">
+                      <div>
+                        <div className="detail-signer-main">
+                          #{p.flow_order} · {p.role_in_doc} · {p.name}
+                        </div>
+                        <div className="detail-signer-sub">
+                          {p.email} · Estado: {p.status}
+                          {p.signed_at &&
+                            ` · firmado el ${new Date(
+                              p.signed_at
+                            ).toLocaleString()}`}
+                        </div>
+                      </div>
                     </li>
                   ))}
                 </ul>

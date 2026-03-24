@@ -340,7 +340,7 @@ router.post(
   documentsController.sendFlow
 );
 
-// Firma pública por firmante (no requiere auth)
+// Firma pública legado (por firmanteId). Nuevo flujo público usa /api/public/docs/:token/firmar
 router.post("/firmar-flujo/:firmanteId", documentsController.signFlow);
 
 /* ================================
@@ -350,21 +350,19 @@ router.post("/firmar-flujo/:firmanteId", documentsController.signFlow);
 router.get("/:id/pdf", documentsController.getDocumentPdf);
 router.get("/:id/timeline", documentsController.getTimeline);
 
+// NUEVO: timeline legal (document_events)
+router.get(
+  "/:id/timeline-legal",
+  requireAuth,
+  checkDocumentCompanyScope,
+  documentsController.getLegalTimeline
+);
+
 router.get(
   "/:id/signers",
   requireAuth,
   checkDocumentCompanyScope,
   documentsController.getSigners
-);
-
-router.get("/:id/preview", previewDocument);
-router.get("/:id/download", downloadDocument);
-
-router.get(
-  "/:id/reporte",
-  requireAuth,
-  checkDocumentCompanyScope,
-  downloadReportPdf
 );
 
 /* ================================
