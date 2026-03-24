@@ -1,6 +1,6 @@
 // frontend/src/views/EmailMetricsView.jsx
 import { useState, useEffect } from "react";
-import axios from "axios";
+import api from "../api/client";
 
 export default function EmailMetricsView() {
   const [metrics, setMetrics] = useState(null);
@@ -15,19 +15,20 @@ export default function EmailMetricsView() {
   const fetchMetrics = async () => {
     try {
       setLoading(true);
-      const token = localStorage.getItem("token");
-      const params = documentoId ? { documentoId } : {};
-      
-      const res = await axios.get("/api/analytics/email-metrics", {
-        headers: { Authorization: `Bearer ${token}` },
-        params,
-      });
-      
-      setMetrics(res.data);
       setError(null);
+
+      const params = documentoId ? { documentoId } : {};
+
+      const res = await api.get("/analytics/email-metrics", { params });
+      setMetrics(res.data);
     } catch (err) {
-      setError(err.response?.data?.message || "Error cargando métricas");
-      console.error("Error:", err);
+      console.error("Error cargando métricas:", err);
+      const msg =
+        err.response?.data?.message ||
+        err.message ||
+        "Error cargando métricas";
+      setError(msg);
+      setMetrics(null);
     } finally {
       setLoading(false);
     }
@@ -76,25 +77,25 @@ export default function EmailMetricsView() {
             <div className="bg-blue-50 p-4 rounded">
               <div className="text-sm text-gray-600">Emails Enviados</div>
               <div className="text-2xl font-bold text-blue-600">
-                {metrics.summary.emails_enviados}
+                {metrics.summary?.emails_enviados ?? 0}
               </div>
             </div>
             <div className="bg-green-50 p-4 rounded">
               <div className="text-sm text-gray-600">Tasa de Apertura</div>
               <div className="text-2xl font-bold text-green-600">
-                {metrics.summary.tasa_apertura}
+                {metrics.summary?.tasa_apertura ?? 0}
               </div>
             </div>
             <div className="bg-purple-50 p-4 rounded">
               <div className="text-sm text-gray-600">Tasa de Click</div>
               <div className="text-2xl font-bold text-purple-600">
-                {metrics.summary.tasa_click}
+                {metrics.summary?.tasa_click ?? 0}
               </div>
             </div>
             <div className="bg-red-50 p-4 rounded">
               <div className="text-sm text-gray-600">Tasa de Rebote</div>
               <div className="text-2xl font-bold text-red-600">
-                {metrics.summary.tasa_rebote}
+                {metrics.summary?.tasa_rebote ?? 0}
               </div>
             </div>
           </div>
@@ -103,19 +104,19 @@ export default function EmailMetricsView() {
             <div className="bg-gray-50 p-4 rounded">
               <div className="text-sm text-gray-600">Entregados</div>
               <div className="text-xl font-bold">
-                {metrics.summary.emails_entregados}
+                {metrics.summary?.emails_entregados ?? 0}
               </div>
             </div>
             <div className="bg-gray-50 p-4 rounded">
               <div className="text-sm text-gray-600">Abiertos</div>
               <div className="text-xl font-bold">
-                {metrics.summary.emails_abiertos}
+                {metrics.summary?.emails_abiertos ?? 0}
               </div>
             </div>
             <div className="bg-gray-50 p-4 rounded">
               <div className="text-sm text-gray-600">Clicados</div>
               <div className="text-xl font-bold">
-                {metrics.summary.emails_clicados}
+                {metrics.summary?.emails_clicados ?? 0}
               </div>
             </div>
           </div>
@@ -132,7 +133,7 @@ export default function EmailMetricsView() {
                 </tr>
               </thead>
               <tbody>
-                {metrics.recent_events.map((event) => (
+                {(metrics.recent_events || []).map((event) => (
                   <tr key={event.id} className="border-b">
                     <td className="px-4 py-2">
                       {new Date(event.created_at).toLocaleString("es-CL")}

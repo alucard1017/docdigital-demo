@@ -11,7 +11,7 @@ import {
   ArcElement,
 } from "chart.js";
 import { Bar, Pie } from "react-chartjs-2";
-import axios from "axios";
+import api from "../api/client";
 
 ChartJS.register(
   CategoryScale,
@@ -22,8 +22,6 @@ ChartJS.register(
   Legend,
   ArcElement
 );
-
-const API_BASE_URL = import.meta.env.VITE_API_BASE_URL;
 
 export default function CompanyAnalyticsView() {
   const [analytics, setAnalytics] = useState(null);
@@ -36,18 +34,19 @@ export default function CompanyAnalyticsView() {
 
   const fetchAnalytics = async () => {
     try {
-      const token = localStorage.getItem("token");
-      const res = await axios.get(
-        `${API_BASE_URL}/api/analytics/company`,
-        {
-          headers: { Authorization: `Bearer ${token}` },
-        }
-      );
-      setAnalytics(res.data);
+      setLoading(true);
       setError(null);
+
+      const res = await api.get("/analytics/company");
+      setAnalytics(res.data);
     } catch (err) {
       console.error("Error cargando analytics:", err);
-      setError(err.response?.data?.message || "Error cargando analytics");
+      const msg =
+        err.response?.data?.message ||
+        err.message ||
+        "Error cargando analytics";
+      setError(msg);
+      setAnalytics(null);
     } finally {
       setLoading(false);
     }
@@ -58,16 +57,26 @@ export default function CompanyAnalyticsView() {
   if (error) {
     return (
       <div className="p-4">
-        <div className="bg-red-100 border border-red-400 text-red-700 px-4 py-3 rounded">
+        <div className="bg-red-100 border border-red-400 text-red-700 px-4 py-3 rounded mb-4">
           {error}
         </div>
+        <button
+          onClick={fetchAnalytics}
+          className="bg-blue-600 text-white px-4 py-2 rounded hover:bg-blue-700 text-sm"
+        >
+          Reintentar
+        </button>
       </div>
     );
   }
 
   const summary = analytics?.summary || {};
-  const monthlyStats = analytics?.monthly_stats || [];
-  const topUsers = analytics?.top_users || [];
+  const monthlyStats = Array.isArray(analytics?.monthly_stats)
+    ? analytics.monthly_stats
+    : [];
+  const topUsers = Array.isArray(analytics?.top_users)
+    ? analytics.top_users
+    : [];
 
   const statusData = {
     labels: ["Firmados", "En Firma", "En Revisión", "Rechazados", "Borradores"],
