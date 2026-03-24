@@ -1,5 +1,5 @@
 // backend/controllers/analytics/emailMetricsController.js
-const { db } = require("../../db");
+const { query } = require("../../db");
 
 /**
  * GET /api/analytics/email-metrics
@@ -9,8 +9,8 @@ async function getEmailMetrics(req, res) {
   try {
     const { documentoId, startDate, endDate } = req.query;
 
-    let whereConditions = [];
-    let params = [];
+    const whereConditions = [];
+    const params = [];
     let paramIndex = 1;
 
     if (documentoId) {
@@ -31,12 +31,13 @@ async function getEmailMetrics(req, res) {
       paramIndex++;
     }
 
-    const whereSql = whereConditions.length > 0 
-      ? `WHERE ${whereConditions.join(' AND ')}`
-      : '';
+    const whereSql =
+      whereConditions.length > 0
+        ? `WHERE ${whereConditions.join(" AND ")}`
+        : "";
 
     // Métricas generales
-    const metricsRes = await db.query(
+    const metricsRes = await query(
       `SELECT 
          COUNT(*) FILTER (WHERE event_type = 'sent') as emails_enviados,
          COUNT(*) FILTER (WHERE event_type = 'delivered') as emails_entregados,
@@ -50,16 +51,26 @@ async function getEmailMetrics(req, res) {
       params
     );
 
-    const metrics = metricsRes.rows[0];
+    const metrics = metricsRes.rows[0] || {};
 
-    // Calcular tasas
-    const enviados = Number(metrics.emails_enviados) || 1;
-    const tasaApertura = ((Number(metrics.emails_abiertos) / enviados) * 100).toFixed(2);
-    const tasaClick = ((Number(metrics.emails_clicados) / enviados) * 100).toFixed(2);
-    const tasaRebote = ((Number(metrics.emails_rebotados) / enviados) * 100).toFixed(2);
+    const enviados = Number(metrics.emails_enviados || 0);
+    const divisor = enviados > 0 ? enviados : 1;
+
+    const tasaApertura = (
+      (Number(metrics.emails_abiertos || 0) / divisor) *
+      100
+    ).toFixed(2);
+    const tasaClick = (
+      (Number(metrics.emails_clicados || 0) / divisor) *
+      100
+    ).toFixed(2);
+    const tasaRebote = (
+      (Number(metrics.emails_rebotados || 0) / divisor) *
+      100
+    ).toFixed(2);
 
     // Eventos recientes
-    const recentEvents = await db.query(
+    const recentEventsRes = await query(
       `SELECT 
          et.id,
          et.documento_id,
@@ -77,23 +88,23 @@ async function getEmailMetrics(req, res) {
 
     return res.json({
       summary: {
-        emails_enviados: Number(metrics.emails_enviados),
-        emails_entregados: Number(metrics.emails_entregados),
-        emails_abiertos: Number(metrics.emails_abiertos),
-        emails_clicados: Number(metrics.emails_clicados),
-        emails_rebotados: Number(metrics.emails_rebotados),
-        documentos_unicos: Number(metrics.documentos_unicos),
-        destinatarios_unicos: Number(metrics.destinatarios_unicos),
-        tasa_apertura: tasaApertura + '%',
-        tasa_click: tasaClick + '%',
-        tasa_rebote: tasaRebote + '%',
+        emails_enviados: Number(metrics.emails_enviados || 0),
+        emails_entregados: Number(metrics.emails_entregados || 0),
+        emails_abiertos: Number(metrics.emails_abiertos || 0),
+        emails_clicados: Number(metrics.emails_clicados || 0),
+        emails_rebotados: Number(metrics.emails_rebotados || 0),
+        documentos_unicos: Number(metrics.documentos_unicos || 0),
+        destinatarios_unicos: Number(metrics.destinatarios_unicos || 0),
+        tasa_apertura: tasaApertura + "%",
+        tasa_click: tasaClick + "%",
+        tasa_rebote: tasaRebote + "%",
       },
-      recent_events: recentEvents.rows,
+      recent_events: recentEventsRes.rows,
     });
   } catch (err) {
     console.error("❌ Error obteniendo métricas de email:", err);
     return res.status(500).json({
-      message: "Error obteniendo métricas",
+      message: "Error obteniendo métricas de email",
     });
   }
 }
@@ -112,7 +123,7 @@ async function recordEmailEvent(req, res) {
       });
     }
 
-    await db.query(
+    await query(
       `INSERT INTO email_tracking (
          documento_id,
          email,
@@ -137,7 +148,7 @@ async function recordEmailEvent(req, res) {
   } catch (err) {
     console.error("❌ Error registrando evento de email:", err);
     return res.status(500).json({
-      message: "Error registrando evento",
+      message: "Error registrando evento de email",
     });
   }
 }
@@ -146,4 +157,3 @@ module.exports = {
   getEmailMetrics,
   recordEmailEvent,
 };
-

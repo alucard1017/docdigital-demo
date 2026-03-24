@@ -1,5 +1,5 @@
 // backend/controllers/analytics/companyAnalyticsController.js
-const db = require("../../db");
+const { query } = require("../../db");
 
 /**
  * GET /api/analytics/company
@@ -27,7 +27,7 @@ async function getCompanyAnalytics(req, res) {
     }
 
     // Documentos por estado
-    const docsRes = await db.query(
+    const docsRes = await query(
       `SELECT 
          COUNT(*) FILTER (WHERE estado = 'BORRADOR') as borradores,
          COUNT(*) FILTER (WHERE estado = 'ENVIADO') as enviados,
@@ -42,10 +42,10 @@ async function getCompanyAnalytics(req, res) {
       params
     );
 
-    const docStats = docsRes.rows[0];
+    const docStats = docsRes.rows[0] || {};
 
     // Tiempo promedio de firma
-    const avgTimeRes = await db.query(
+    const avgTimeRes = await query(
       `SELECT 
          AVG(EXTRACT(EPOCH FROM (firmado_en - enviado_en))) / 3600 as avg_hours
        FROM documentos
@@ -60,14 +60,13 @@ async function getCompanyAnalytics(req, res) {
     const avgHours = Number(avgTimeRes.rows[0]?.avg_hours || 0).toFixed(1);
 
     // Tasa de rechazo
-    const totalDocs = Number(docStats.total);
-    const rechazados = Number(docStats.rechazados);
-    const tasaRechazo = totalDocs > 0 
-      ? ((rechazados / totalDocs) * 100).toFixed(1)
-      : "0.0";
+    const totalDocs = Number(docStats.total || 0);
+    const rechazados = Number(docStats.rechazados || 0);
+    const tasaRechazo =
+      totalDocs > 0 ? ((rechazados / totalDocs) * 100).toFixed(1) : "0.0";
 
     // Documentos por mes (últimos 6 meses)
-    const monthlyRes = await db.query(
+    const monthlyRes = await query(
       `SELECT 
          TO_CHAR(created_at, 'YYYY-MM') as mes,
          COUNT(*) as total
@@ -81,7 +80,7 @@ async function getCompanyAnalytics(req, res) {
     );
 
     // Top usuarios más activos
-    const topUsersRes = await db.query(
+    const topUsersRes = await query(
       `SELECT 
          u.name,
          u.email,
@@ -97,14 +96,14 @@ async function getCompanyAnalytics(req, res) {
 
     return res.json({
       summary: {
-        total_documentos: Number(docStats.total),
-        borradores: Number(docStats.borradores),
-        enviados: Number(docStats.enviados),
-        en_revision: Number(docStats.en_revision),
-        en_firma: Number(docStats.en_firma),
-        firmados: Number(docStats.firmados),
-        rechazados: Number(docStats.rechazados),
-        expirados: Number(docStats.expirados),
+        total_documentos: Number(docStats.total || 0),
+        borradores: Number(docStats.borradores || 0),
+        enviados: Number(docStats.enviados || 0),
+        en_revision: Number(docStats.en_revision || 0),
+        en_firma: Number(docStats.en_firma || 0),
+        firmados: Number(docStats.firmados || 0),
+        rechazados: Number(docStats.rechazados || 0),
+        expirados: Number(docStats.expirados || 0),
         tiempo_promedio_firma_horas: avgHours,
         tasa_rechazo: tasaRechazo + "%",
       },
