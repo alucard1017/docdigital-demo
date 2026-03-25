@@ -28,11 +28,9 @@ function PricingView() {
   const [error, setError] = useState("");
   const [message, setMessage] = useState("");
 
-  // Historial de facturación
   const [invoices, setInvoices] = useState([]);
   const [loadingInvoices, setLoadingInvoices] = useState(false);
 
-  // Métodos de pago
   const [paymentMethods, setPaymentMethods] = useState([]);
   const [loadingPaymentMethods, setLoadingPaymentMethods] = useState(false);
   const [updatingPaymentMethod, setUpdatingPaymentMethod] = useState(false);
@@ -49,7 +47,7 @@ function PricingView() {
         api.get("/billing/plans"),
         api.get("/billing/subscription"),
         api.get("/billing/invoices"),
-        api.get("/billing/payment-methods"), // ajusta si tu endpoint es otro
+        api.get("/billing/payment-methods"),
       ]);
 
       setPlans(plansRes.data || []);
@@ -136,7 +134,6 @@ function PricingView() {
       setError("");
       setMessage("");
 
-      // Aquí puedes redirigir a Stripe Checkout / portal de facturación
       const res = await api.post("/billing/payment-methods/update");
       const data = res.data;
 
@@ -146,7 +143,8 @@ function PricingView() {
       }
 
       setMessage(
-        data.message || "Se ha iniciado el proceso para actualizar tu método de pago."
+        data.message ||
+          "Se ha iniciado el proceso para actualizar tu método de pago."
       );
     } catch (err) {
       console.error("Error actualizando método de pago:", err);
@@ -162,19 +160,37 @@ function PricingView() {
 
   if (loading) {
     return (
-      <div style={{ padding: 32 }}>
-        <h2>Planes y facturación</h2>
-        <p>Cargando información de planes...</p>
+      <div
+        style={{
+          padding: 32,
+          minHeight: "100%",
+          background: "#020617",
+          color: "#e5e7eb",
+        }}
+      >
+        <h2 style={{ marginBottom: 8 }}>Planes y facturación</h2>
+        <p style={{ color: "#94a3b8" }}>Cargando información de planes...</p>
       </div>
     );
   }
 
   if (error) {
     return (
-      <div style={{ padding: 32 }}>
-        <h2>Planes y facturación</h2>
-        <p style={{ color: "#b91c1c", marginBottom: 12 }}>{error}</p>
-        <button className="btn-main btn-primary" onClick={loadData}>
+      <div
+        style={{
+          padding: 32,
+          minHeight: "100%",
+          background: "#020617",
+          color: "#e5e7eb",
+        }}
+      >
+        <h2 style={{ marginBottom: 8 }}>Planes y facturación</h2>
+        <p style={{ color: "#fecaca", marginBottom: 12 }}>{error}</p>
+        <button
+          className="btn-main btn-primary"
+          onClick={loadData}
+          style={{ minWidth: 140 }}
+        >
           Reintentar
         </button>
       </div>
@@ -184,390 +200,542 @@ function PricingView() {
   const currentPlanId = subscription?.currentPlanId;
 
   return (
-    <div style={{ padding: 32 }}>
-      <h2 style={{ marginBottom: 8 }}>Planes y facturación</h2>
-      <p style={{ marginBottom: 20, color: "#64748b", fontSize: "0.95rem" }}>
-        Gestiona el plan de tu empresa, tus métodos de pago y revisa el historial de facturación.
-      </p>
-
-      {/* Resumen de suscripción */}
-      {subscription && (
-        <div
-          style={{
-            marginBottom: 20,
-            padding: 12,
-            borderRadius: 8,
-            background: "#eff6ff",
-            border: "1px solid #dbeafe",
-            fontSize: "0.9rem",
-          }}
-        >
-          <div>
-            Plan actual: <strong>{subscription.currentPlanId}</strong>
-          </div>
-          <div>
-            Ciclo de facturación:{" "}
-            <strong>
-              {subscription.billingPeriod === "yearly" ? "Anual" : "Mensual"}
-            </strong>
-          </div>
-          {subscription.renewalDate && (
-            <div>
-              Próxima renovación:{" "}
-              <strong>
-                {new Date(
-                  subscription.renewalDate
-                ).toLocaleDateString("es-CL")}
-              </strong>
-            </div>
-          )}
-          {subscription.status && (
-            <div>
-              Estado:{" "}
-              <strong>
-                {subscription.status === "active"
-                  ? "Activa"
-                  : subscription.status === "trialing"
-                  ? "En período de prueba"
-                  : subscription.status === "canceled"
-                  ? "Cancelada"
-                  : subscription.status}
-              </strong>
-            </div>
-          )}
-        </div>
-      )}
-
-      {/* Selector de ciclo de facturación */}
-      <div style={{ marginBottom: 24 }}>
-        <span style={{ marginRight: 8, fontSize: "0.9rem" }}>
-          Ciclo de facturación:
-        </span>
-        <button
-          type="button"
-          className="btn-main"
-          style={{
-            marginRight: 8,
-            backgroundColor:
-              billingPeriod === "monthly" ? "#0f172a" : "#e2e8f0",
-            color: billingPeriod === "monthly" ? "#f9fafb" : "#0f172a",
-          }}
-          onClick={() => handlePeriodChange("monthly")}
-        >
-          Mensual
-        </button>
-        <button
-          type="button"
-          className="btn-main"
-          style={{
-            backgroundColor:
-              billingPeriod === "yearly" ? "#0f172a" : "#e2e8f0",
-            color: billingPeriod === "yearly" ? "#f9fafb" : "#0f172a",
-          }}
-          onClick={() => handlePeriodChange("yearly")}
-        >
-          Anual (ahorra)
-        </button>
-      </div>
-
-      {message && (
-        <div
-          style={{
-            marginBottom: 16,
-            padding: 10,
-            borderRadius: 8,
-            background: "#ecfdf3",
-            border: "1px solid #bbf7d0",
-            color: "#166534",
-            fontSize: "0.9rem",
-          }}
-        >
-          {message}
-        </div>
-      )}
-
-      {/* Grid de planes */}
+    <div
+      style={{
+        padding: 32,
+        minHeight: "100%",
+        background:
+          "radial-gradient(circle at top, #020617 0, #020617 45%, #0b1120 100%)",
+        color: "#e5e7eb",
+      }}
+    >
       <div
         style={{
-          display: "grid",
-          gridTemplateColumns: "repeat(auto-fit, minmax(240px, 1fr))",
-          gap: 16,
-          marginBottom: 32,
+          maxWidth: 1100,
+          margin: "0 auto",
         }}
       >
-        {plans.map((plan) => {
-          const isCurrent = plan.id === currentPlanId;
-          const isChanging = changingPlanId === plan.id;
-
-          const price =
-            billingPeriod === "monthly"
-              ? plan.priceMonthly
-              : plan.priceYearly;
-
-          return (
-            <div
-              key={plan.id}
-              style={{
-                borderRadius: 12,
-                border: isCurrent
-                  ? "2px solid #4f46e5"
-                  : "1px solid #e2e8f0",
-                padding: 16,
-                background: "#ffffff",
-                boxShadow: "0 10px 30px rgba(15,23,42,0.04)",
-              }}
-            >
-              <div
-                style={{
-                  display: "flex",
-                  justifyContent: "space-between",
-                  alignItems: "center",
-                  marginBottom: 8,
-                }}
-              >
-                <h3 style={{ margin: 0 }}>{plan.name}</h3>
-                {isCurrent && (
-                  <span
-                    style={{
-                      fontSize: "0.75rem",
-                      padding: "2px 8px",
-                      borderRadius: 999,
-                      background: "#eef2ff",
-                      color: "#4f46e5",
-                    }}
-                  >
-                    Plan actual
-                  </span>
-                )}
-              </div>
-
-              <div style={{ marginBottom: 8 }}>
-                <span style={{ fontSize: "1.25rem", fontWeight: 600 }}>
-                  {formatPrice(price)}
-                </span>
-                <span style={{ fontSize: "0.85rem", color: "#6b7280" }}>
-                  {" "}
-                  / {billingPeriod === "monthly" ? "mes" : "año"}
-                </span>
-              </div>
-
-              <div style={{ fontSize: "0.85rem", marginBottom: 8 }}>
-                Hasta {plan.maxUsers} usuarios,{" "}
-                {plan.maxDocumentsPerMonth} documentos/mes.
-              </div>
-
-              <ul
-                style={{
-                  fontSize: "0.85rem",
-                  color: "#4b5563",
-                  paddingLeft: 18,
-                  marginBottom: 12,
-                }}
-              >
-                {plan.features?.map((f, i) => (
-                  <li key={i}>{f}</li>
-                ))}
-              </ul>
-
-              <button
-                type="button"
-                className="btn-main btn-primary"
-                disabled={isCurrent || isChanging}
-                onClick={() => handleChangePlan(plan.id)}
-                style={{ width: "100%" }}
-              >
-                {isCurrent
-                  ? "Plan seleccionado"
-                  : isChanging
-                  ? "Aplicando cambio..."
-                  : "Cambiar a este plan"}
-              </button>
-            </div>
-          );
-        })}
-      </div>
-
-      {/* Gestión de métodos de pago */}
-      <div style={{ marginBottom: 32 }}>
-        <h3 style={{ marginBottom: 8 }}>Métodos de pago</h3>
-        <p
+        <header
           style={{
-            marginBottom: 12,
-            color: "#6b7280",
-            fontSize: "0.9rem",
+            marginBottom: 20,
+            display: "flex",
+            justifyContent: "space-between",
+            gap: 16,
+            alignItems: "flex-start",
+            flexWrap: "wrap",
           }}
         >
-          Administra la tarjeta asociada a tu suscripción y actualiza tus datos de facturación.
-        </p>
+          <div>
+            <h2
+              style={{
+                marginBottom: 4,
+                fontSize: "1.35rem",
+                letterSpacing: "0.02em",
+              }}
+            >
+              Planes y facturación
+            </h2>
+            <p
+              style={{
+                margin: 0,
+                color: "#94a3b8",
+                fontSize: "0.95rem",
+              }}
+            >
+              Gestiona el plan de tu empresa, tus métodos de pago y revisa el
+              historial de facturación en un solo lugar.
+            </p>
+          </div>
 
-        {loadingPaymentMethods ? (
-          <p>Cargando métodos de pago...</p>
-        ) : paymentMethods.length === 0 ? (
-          <p style={{ fontSize: "0.9rem", color: "#9ca3af" }}>
-            Aún no hay métodos de pago registrados. Agrega uno para activar tu suscripción.
-          </p>
-        ) : (
-          <div
+          {subscription && (
+            <div
+              style={{
+                padding: 10,
+                borderRadius: 12,
+                border: "1px solid #1d4ed8",
+                background:
+                  "linear-gradient(135deg, rgba(37,99,235,0.25), rgba(15,23,42,0.9))",
+                fontSize: "0.85rem",
+                minWidth: 220,
+              }}
+            >
+              <div>
+                Plan actual:{" "}
+                <span style={{ fontWeight: 600 }}>
+                  {subscription.currentPlanId}
+                </span>
+              </div>
+              <div>
+                Ciclo de facturación:{" "}
+                <span style={{ fontWeight: 600 }}>
+                  {subscription.billingPeriod === "yearly"
+                    ? "Anual"
+                    : "Mensual"}
+                </span>
+              </div>
+              {subscription.renewalDate && (
+                <div>
+                  Próxima renovación:{" "}
+                  <span style={{ fontWeight: 600 }}>
+                    {new Date(
+                      subscription.renewalDate
+                    ).toLocaleDateString("es-CL")}
+                  </span>
+                </div>
+              )}
+              {subscription.status && (
+                <div>
+                  Estado:{" "}
+                  <span style={{ fontWeight: 600 }}>
+                    {subscription.status === "active"
+                      ? "Activa"
+                      : subscription.status === "trialing"
+                      ? "En período de prueba"
+                      : subscription.status === "canceled"
+                      ? "Cancelada"
+                      : subscription.status}
+                  </span>
+                </div>
+              )}
+            </div>
+          )}
+        </header>
+
+        <div style={{ marginBottom: 24 }}>
+          <span
             style={{
-              borderRadius: 8,
-              border: "1px solid #e5e7eb",
-              padding: 12,
-              maxWidth: 420,
+              marginRight: 10,
+              fontSize: "0.9rem",
+              color: "#cbd5f5",
             }}
           >
-            {paymentMethods.map((pm) => (
-              <div
-                key={pm.id}
-                style={{
-                  display: "flex",
-                  justifyContent: "space-between",
-                  alignItems: "center",
-                  fontSize: "0.9rem",
-                  marginBottom: 8,
-                }}
-              >
-                <div>
-                  <div>
-                    {pm.brand?.toUpperCase() || "Tarjeta"} •••• {pm.last4}
-                  </div>
-                  <div style={{ fontSize: "0.8rem", color: "#6b7280" }}>
-                    Vence {pm.expMonth}/{pm.expYear}
-                  </div>
-                </div>
-                {pm.isDefault && (
-                  <span
-                    style={{
-                      fontSize: "0.75rem",
-                      padding: "2px 6px",
-                      borderRadius: 999,
-                      background: "#ecfdf3",
-                      color: "#166534",
-                    }}
-                  >
-                    Principal
-                  </span>
-                )}
-              </div>
-            ))}
+            Ciclo de facturación:
+          </span>
+          <button
+            type="button"
+            className="btn-main"
+            style={{
+              marginRight: 8,
+              borderRadius: 999,
+              paddingInline: 14,
+              backgroundColor:
+                billingPeriod === "monthly" ? "#0f172a" : "#e2e8f0",
+              color: billingPeriod === "monthly" ? "#f9fafb" : "#0f172a",
+              fontSize: "0.85rem",
+            }}
+            onClick={() => handlePeriodChange("monthly")}
+          >
+            Mensual
+          </button>
+          <button
+            type="button"
+            className="btn-main"
+            style={{
+              borderRadius: 999,
+              paddingInline: 14,
+              backgroundColor:
+                billingPeriod === "yearly" ? "#0f172a" : "#e2e8f0",
+              color: billingPeriod === "yearly" ? "#f9fafb" : "#0f172a",
+              fontSize: "0.85rem",
+            }}
+            onClick={() => handlePeriodChange("yearly")}
+          >
+            Anual (ahorra)
+          </button>
+        </div>
+
+        {message && (
+          <div
+            style={{
+              marginBottom: 16,
+              padding: 10,
+              borderRadius: 8,
+              background: "#ecfdf3",
+              border: "1px solid #bbf7d0",
+              color: "#166534",
+              fontSize: "0.9rem",
+            }}
+          >
+            {message}
           </div>
         )}
 
-        <div style={{ marginTop: 12 }}>
-          <button
-            type="button"
-            className="btn-main btn-primary"
-            onClick={handleUpdatePaymentMethod}
-            disabled={updatingPaymentMethod}
+        {/* Grid de planes */}
+        <section style={{ marginBottom: 32 }}>
+          <div
+            style={{
+              display: "grid",
+              gridTemplateColumns: "repeat(auto-fit, minmax(240px, 1fr))",
+              gap: 18,
+            }}
           >
-            {updatingPaymentMethod
-              ? "Redirigiendo a portal seguro..."
-              : paymentMethods.length > 0
-              ? "Actualizar método de pago"
-              : "Agregar método de pago"}
-          </button>
-        </div>
-      </div>
+            {plans.map((plan) => {
+              const isCurrent = plan.id === currentPlanId;
+              const isChanging = changingPlanId === plan.id;
 
-      {/* Historial de facturación */}
-      <div>
-        <h3 style={{ marginBottom: 8 }}>Historial de facturación</h3>
-        <p
-          style={{
-            marginBottom: 12,
-            color: "#6b7280",
-            fontSize: "0.9rem",
-          }}
-        >
-          Revisa tus facturas anteriores y descarga los comprobantes en PDF.
-        </p>
+              const price =
+                billingPeriod === "monthly"
+                  ? plan.priceMonthly
+                  : plan.priceYearly;
 
-        {loadingInvoices ? (
-          <p>Cargando facturas...</p>
-        ) : invoices.length === 0 ? (
-          <p style={{ fontSize: "0.9rem", color: "#9ca3af" }}>
-            Aún no tienes facturas generadas.
-          </p>
-        ) : (
-          <div className="table-wrapper">
-            <table
-              style={{
-                width: "100%",
-                borderCollapse: "collapse",
-                fontSize: "0.85rem",
-              }}
-            >
-              <thead>
-                <tr
+              const borderColor = isCurrent ? "#4f46e5" : "#1f2937";
+
+              return (
+                <article
+                  key={plan.id}
                   style={{
-                    textAlign: "left",
-                    borderBottom: "1px solid #e5e7eb",
+                    borderRadius: 16,
+                    border: `1px solid ${borderColor}`,
+                    padding: 18,
+                    background:
+                      "linear-gradient(135deg, rgba(15,23,42,0.98), rgba(30,64,175,0.45))",
+                    boxShadow: isCurrent
+                      ? "0 24px 70px rgba(79,70,229,0.55)"
+                      : "0 18px 50px rgba(15,23,42,0.7)",
                   }}
                 >
-                  <th style={{ padding: "8px 4px" }}>Número</th>
-                  <th style={{ padding: "8px 4px" }}>Fecha</th>
-                  <th style={{ padding: "8px 4px" }}>Monto</th>
-                  <th style={{ padding: "8px 4px" }}>Estado</th>
-                  <th style={{ padding: "8px 4px", textAlign: "right" }}>
-                    PDF
-                  </th>
-                </tr>
-              </thead>
-              <tbody>
-                {invoices.map((inv) => (
-                  <tr
-                    key={inv.id}
-                    style={{ borderBottom: "1px solid #f3f4f6" }}
+                  <div
+                    style={{
+                      display: "flex",
+                      justifyContent: "space-between",
+                      alignItems: "center",
+                      marginBottom: 8,
+                    }}
                   >
-                    <td style={{ padding: "8px 4px" }}>{inv.number}</td>
-                    <td style={{ padding: "8px 4px" }}>
-                      {new Date(inv.date).toLocaleDateString("es-CL")}
-                    </td>
-                    <td style={{ padding: "8px 4px" }}>
-                      {formatCurrency(inv.amount, inv.currency || "CLP")}
-                    </td>
-                    <td style={{ padding: "8px 4px" }}>
-                      {inv.status === "paid"
-                        ? "Pagada"
-                        : inv.status === "open"
-                        ? "Pendiente"
-                        : inv.status}
-                    </td>
-                    <td
+                    <h3
                       style={{
-                        padding: "8px 4px",
-                        textAlign: "right",
+                        margin: 0,
+                        fontSize: "1rem",
                       }}
                     >
-                      {inv.downloadUrl ? (
-                        <a
-                          href={inv.downloadUrl}
-                          target="_blank"
-                          rel="noopener noreferrer"
-                          className="btn-main"
-                          style={{
-                            fontSize: "0.8rem",
-                            padding: "4px 10px",
-                          }}
-                        >
-                          Descargar PDF
-                        </a>
-                      ) : (
-                        <span
+                      {plan.name}
+                    </h3>
+                    {isCurrent && (
+                      <span
+                        style={{
+                          fontSize: "0.75rem",
+                          padding: "2px 10px",
+                          borderRadius: 999,
+                          background: "#eef2ff",
+                          color: "#4f46e5",
+                        }}
+                      >
+                        Plan actual
+                      </span>
+                    )}
+                  </div>
+
+                  <div style={{ marginBottom: 8 }}>
+                    <span
+                      style={{
+                        fontSize: "1.4rem",
+                        fontWeight: 600,
+                      }}
+                    >
+                      {formatPrice(price)}
+                    </span>
+                    <span
+                      style={{
+                        fontSize: "0.85rem",
+                        color: "#9ca3af",
+                      }}
+                    >
+                      {" "}
+                      / {billingPeriod === "monthly" ? "mes" : "año"}
+                    </span>
+                  </div>
+
+                  <div
+                    style={{
+                      fontSize: "0.85rem",
+                      marginBottom: 8,
+                      color: "#cbd5f5",
+                    }}
+                  >
+                    Hasta {plan.maxUsers} usuarios,{" "}
+                    {plan.maxDocumentsPerMonth} documentos/mes.
+                  </div>
+
+                  <ul
+                    style={{
+                      fontSize: "0.85rem",
+                      color: "#e5e7eb",
+                      paddingLeft: 18,
+                      marginBottom: 12,
+                    }}
+                  >
+                    {plan.features?.map((f, i) => (
+                      <li key={i}>{f}</li>
+                    ))}
+                  </ul>
+
+                  <button
+                    type="button"
+                    className="btn-main btn-primary"
+                    disabled={isCurrent || isChanging}
+                    onClick={() => handleChangePlan(plan.id)}
+                    style={{
+                      width: "100%",
+                      borderRadius: 999,
+                    }}
+                  >
+                    {isCurrent
+                      ? "Plan seleccionado"
+                      : isChanging
+                      ? "Aplicando cambio..."
+                      : "Cambiar a este plan"}
+                  </button>
+                </article>
+              );
+            })}
+          </div>
+        </section>
+
+        {/* Métodos de pago + Historial en 2 columnas */}
+        <section
+          style={{
+            display: "grid",
+            gridTemplateColumns: "minmax(0, 360px) minmax(0, 1fr)",
+            gap: 24,
+            alignItems: "flex-start",
+          }}
+        >
+          {/* Métodos de pago */}
+          <div>
+            <h3 style={{ marginBottom: 8 }}>Métodos de pago</h3>
+            <p
+              style={{
+                marginBottom: 12,
+                color: "#9ca3af",
+                fontSize: "0.9rem",
+              }}
+            >
+              Administra la tarjeta asociada a tu suscripción y actualiza tus
+              datos de facturación.
+            </p>
+
+            <div
+              style={{
+                borderRadius: 12,
+                border: "1px solid #1f2937",
+                padding: 14,
+                background:
+                  "linear-gradient(145deg, rgba(15,23,42,0.98), rgba(15,23,42,0.9))",
+              }}
+            >
+              {loadingPaymentMethods ? (
+                <p style={{ fontSize: "0.9rem", color: "#94a3b8" }}>
+                  Cargando métodos de pago...
+                </p>
+              ) : paymentMethods.length === 0 ? (
+                <p style={{ fontSize: "0.9rem", color: "#9ca3af" }}>
+                  Aún no hay métodos de pago registrados. Agrega uno para
+                  activar tu suscripción.
+                </p>
+              ) : (
+                <div>
+                  {paymentMethods.map((pm) => (
+                    <div
+                      key={pm.id}
+                      style={{
+                        display: "flex",
+                        justifyContent: "space-between",
+                        alignItems: "center",
+                        fontSize: "0.9rem",
+                        marginBottom: 8,
+                      }}
+                    >
+                      <div>
+                        <div>
+                          {pm.brand?.toUpperCase() || "Tarjeta"} •••• {pm.last4}
+                        </div>
+                        <div
                           style={{
                             fontSize: "0.8rem",
                             color: "#9ca3af",
                           }}
                         >
-                          No disponible
+                          Vence {pm.expMonth}/{pm.expYear}
+                        </div>
+                      </div>
+                      {pm.isDefault && (
+                        <span
+                          style={{
+                            fontSize: "0.75rem",
+                            padding: "2px 6px",
+                            borderRadius: 999,
+                            background: "#ecfdf3",
+                            color: "#166534",
+                          }}
+                        >
+                          Principal
                         </span>
                       )}
-                    </td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
+                    </div>
+                  ))}
+                </div>
+              )}
+
+              <div style={{ marginTop: 10 }}>
+                <button
+                  type="button"
+                  className="btn-main btn-primary"
+                  onClick={handleUpdatePaymentMethod}
+                  disabled={updatingPaymentMethod}
+                  style={{ width: "100%", borderRadius: 999 }}
+                >
+                  {updatingPaymentMethod
+                    ? "Redirigiendo a portal seguro..."
+                    : paymentMethods.length > 0
+                    ? "Actualizar método de pago"
+                    : "Agregar método de pago"}
+                </button>
+              </div>
+            </div>
           </div>
-        )}
+
+          {/* Historial de facturación */}
+          <div>
+            <h3 style={{ marginBottom: 8 }}>Historial de facturación</h3>
+            <p
+              style={{
+                marginBottom: 12,
+                color: "#9ca3af",
+                fontSize: "0.9rem",
+              }}
+            >
+              Revisa tus facturas anteriores y descarga los comprobantes en PDF.
+            </p>
+
+            <div
+              className="table-wrapper"
+              style={{
+                borderRadius: 12,
+                border: "1px solid #1f2937",
+                background:
+                  "linear-gradient(180deg, rgba(15,23,42,0.98), rgba(15,23,42,0.98))",
+                maxHeight: 320,
+                overflow: "auto",
+              }}
+            >
+              {loadingInvoices ? (
+                <p
+                  style={{
+                    padding: 12,
+                    fontSize: "0.9rem",
+                    color: "#94a3b8",
+                  }}
+                >
+                  Cargando facturas...
+                </p>
+              ) : invoices.length === 0 ? (
+                <p
+                  style={{
+                    padding: 12,
+                    fontSize: "0.9rem",
+                    color: "#9ca3af",
+                  }}
+                >
+                  Aún no tienes facturas generadas.
+                </p>
+              ) : (
+                <table
+                  style={{
+                    width: "100%",
+                    borderCollapse: "collapse",
+                    fontSize: "0.85rem",
+                  }}
+                >
+                  <thead>
+                    <tr
+                      style={{
+                        textAlign: "left",
+                        borderBottom: "1px solid #1f2937",
+                        background:
+                          "linear-gradient(90deg, rgba(15,23,42,1), rgba(30,64,175,0.3))",
+                      }}
+                    >
+                      <th style={{ padding: "8px 8px" }}>Número</th>
+                      <th style={{ padding: "8px 8px" }}>Fecha</th>
+                      <th style={{ padding: "8px 8px" }}>Monto</th>
+                      <th style={{ padding: "8px 8px" }}>Estado</th>
+                      <th
+                        style={{
+                          padding: "8px 8px",
+                          textAlign: "right",
+                        }}
+                      >
+                        PDF
+                      </th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {invoices.map((inv, idx) => (
+                      <tr
+                        key={inv.id}
+                        style={{
+                          borderBottom: "1px solid #020617",
+                          background:
+                            idx % 2 === 0
+                              ? "rgba(15,23,42,1)"
+                              : "rgba(15,23,42,0.96)",
+                        }}
+                      >
+                        <td style={{ padding: "8px 8px" }}>{inv.number}</td>
+                        <td style={{ padding: "8px 8px" }}>
+                          {new Date(inv.date).toLocaleDateString("es-CL")}
+                        </td>
+                        <td style={{ padding: "8px 8px" }}>
+                          {formatCurrency(inv.amount, inv.currency || "CLP")}
+                        </td>
+                        <td style={{ padding: "8px 8px" }}>
+                          {inv.status === "paid"
+                            ? "Pagada"
+                            : inv.status === "open"
+                            ? "Pendiente"
+                            : inv.status}
+                        </td>
+                        <td
+                          style={{
+                            padding: "8px 8px",
+                            textAlign: "right",
+                          }}
+                        >
+                          {inv.downloadUrl ? (
+                            <a
+                              href={inv.downloadUrl}
+                              target="_blank"
+                              rel="noopener noreferrer"
+                              className="btn-main"
+                              style={{
+                                fontSize: "0.8rem",
+                                padding: "4px 10px",
+                                borderRadius: 999,
+                                background: "#1d4ed8",
+                                color: "#f9fafb",
+                              }}
+                            >
+                              Descargar PDF
+                            </a>
+                          ) : (
+                            <span
+                              style={{
+                                fontSize: "0.8rem",
+                                color: "#9ca3af",
+                              }}
+                            >
+                              No disponible
+                            </span>
+                          )}
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              )}
+            </div>
+          </div>
+        </section>
       </div>
     </div>
   );

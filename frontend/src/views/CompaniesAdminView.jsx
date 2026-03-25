@@ -16,7 +16,7 @@ function formatDate(value) {
 function getPlanLabel(plan) {
   if (!plan) return "BASIC";
   const v = String(plan).toUpperCase();
-  if (v === "PRO" || v === "BASIC") return v;
+  if (v === "PRO" || v === "BASIC" || v === "ENTERPRISE") return v;
   return v;
 }
 
@@ -129,8 +129,15 @@ export function CompaniesAdminView() {
 
   if (loading) {
     return (
-      <div style={{ padding: 24 }}>
-        <p style={{ fontSize: "0.9rem", color: "#64748b" }}>
+      <div
+        style={{
+          padding: 24,
+          minHeight: "100%",
+          background: "#020617",
+          color: "#e5e7eb",
+        }}
+      >
+        <p style={{ fontSize: "0.9rem", color: "#94a3b8" }}>
           Cargando empresas...
         </p>
       </div>
@@ -139,22 +146,39 @@ export function CompaniesAdminView() {
 
   if (error) {
     return (
-      <div style={{ padding: 24 }}>
+      <div
+        style={{
+          padding: 24,
+          minHeight: "100%",
+          background: "#020617",
+          color: "#e5e7eb",
+        }}
+      >
         <h2
           style={{
             marginTop: 0,
             marginBottom: 8,
             fontSize: "1.1rem",
             fontWeight: 700,
-            color: "#b91c1c",
+            color: "#fecaca",
           }}
         >
           Error al cargar empresas
         </h2>
-        <p style={{ marginBottom: 16, fontSize: "0.9rem", color: "#7f1d1d" }}>
+        <p
+          style={{
+            marginBottom: 16,
+            fontSize: "0.9rem",
+            color: "#fecaca",
+          }}
+        >
           {error}
         </p>
-        <button className="btn-main btn-primary" onClick={cargarCompanies}>
+        <button
+          className="btn-main btn-primary"
+          onClick={cargarCompanies}
+          style={{ minWidth: 140 }}
+        >
           Reintentar
         </button>
       </div>
@@ -169,185 +193,387 @@ export function CompaniesAdminView() {
   const muestraDomain = companies.some((c) => c.domain);
 
   return (
-    <div className="card-premium">
+    <div
+      style={{
+        minHeight: "100%",
+        padding: 24,
+        background: "#020617",
+        color: "#e5e7eb",
+      }}
+    >
       <div
+        className="card-premium"
         style={{
-          marginBottom: 16,
-          display: "flex",
-          alignItems: "flex-start",
-          justifyContent: "space-between",
-          gap: 16,
-          flexWrap: "wrap",
+          maxWidth: 1040,
+          margin: "0 auto",
+          borderRadius: 18,
+          padding: 20,
+          border: "1px solid #1f2937",
+          background:
+            "radial-gradient(circle at top left, rgba(56,189,248,0.16), rgba(15,23,42,0.98))",
+          boxShadow: "0 24px 70px rgba(15,23,42,0.8)",
         }}
       >
-        <div>
-          <h2
-            style={{
-              marginTop: 0,
-              marginBottom: 4,
-              fontSize: "1.1rem",
-              fontWeight: 700,
-              color: "#0f172a",
-            }}
-          >
-            Empresas
-          </h2>
-          <p style={{ margin: 0, fontSize: "0.85rem", color: "#64748b" }}>
-            Administra las empresas que pueden usar la plataforma.
-          </p>
-        </div>
-
-        <form
-          onSubmit={handleCreate}
+        <div
           style={{
+            marginBottom: 16,
             display: "flex",
-            gap: 8,
-            alignItems: "center",
+            alignItems: "flex-start",
+            justifyContent: "space-between",
+            gap: 16,
             flexWrap: "wrap",
           }}
         >
-          <input
-            type="text"
-            className="form-input"
-            placeholder="Nombre de la nueva empresa"
-            value={name}
-            onChange={(e) => setName(e.target.value)}
-            style={{ minWidth: 220 }}
-          />
-          <button
-            type="submit"
-            className="btn-main btn-primary"
-            disabled={saving || !name.trim()}
-          >
-            {saving ? "Creando..." : "Crear empresa"}
-          </button>
-        </form>
-      </div>
+          <div>
+            <h2
+              style={{
+                marginTop: 0,
+                marginBottom: 4,
+                fontSize: "1.15rem",
+                fontWeight: 700,
+                color: "#f9fafb",
+              }}
+            >
+              Empresas
+            </h2>
+            <p
+              style={{
+                margin: 0,
+                fontSize: "0.85rem",
+                color: "#9ca3af",
+              }}
+            >
+              Administra las empresas que pueden usar la plataforma y asigna
+              usuarios y planes.
+            </p>
+          </div>
 
-      {companies.length === 0 ? (
-        <div
-          style={{
-            padding: 24,
-            borderRadius: 8,
-            border: "1px dashed #cbd5f5",
-            backgroundColor: "#f9fafb",
-          }}
-        >
-          <p
+          <form
+            onSubmit={handleCreate}
             style={{
-              marginTop: 0,
-              marginBottom: 4,
-              fontSize: "0.95rem",
-              fontWeight: 500,
-              color: "#0f172a",
+              display: "flex",
+              gap: 8,
+              alignItems: "center",
+              flexWrap: "wrap",
             }}
           >
-            Todavía no hay empresas registradas.
-          </p>
-          <p style={{ margin: 0, fontSize: "0.85rem", color: "#64748b" }}>
-            Crea tu primera empresa para asignar usuarios y comenzar a gestionar
-            documentos.
-          </p>
+            <input
+              type="text"
+              className="form-input"
+              placeholder="Nombre de la nueva empresa"
+              value={name}
+              onChange={(e) => setName(e.target.value)}
+              style={{
+                minWidth: 220,
+                padding: "8px 10px",
+                borderRadius: 999,
+                border: "1px solid #1f2937",
+                background: "#020617",
+                color: "#e5e7eb",
+                fontSize: "0.85rem",
+              }}
+            />
+            <button
+              type="submit"
+              className="btn-main btn-primary"
+              disabled={saving || !name.trim()}
+              style={{
+                paddingInline: 16,
+                borderRadius: 999,
+                fontSize: "0.85rem",
+              }}
+            >
+              {saving ? "Creando..." : "Crear empresa"}
+            </button>
+          </form>
         </div>
-      ) : (
-        <div className="table-wrapper">
-          <table className="doc-table">
-            <thead>
-              <tr>
-                <th style={{ width: 70 }}>ID</th>
-                <th>Nombre</th>
-                {muestraUsers && (
-                  <th style={{ textAlign: "center", width: 120 }}>Usuarios</th>
-                )}
-                {muestraPlan && (
-                  <th
-                    className="col-plan"
-                    style={{ textAlign: "center", width: 120 }}
-                  >
-                    Plan
-                  </th>
-                )}
-                {muestraFecha && (
-                  <th style={{ textAlign: "center", width: 140 }}>Creada</th>
-                )}
-                <th style={{ textAlign: "right", width: 160 }}>Acciones</th>
-              </tr>
-            </thead>
-            <tbody>
-              {companies.map((c) => {
-                const planLabel = getPlanLabel(c.plan);
-                const planClass = getPlanClassName(c.plan);
-                const usersCount =
-                  typeof c.users_count === "number" ? c.users_count : 0;
 
-                return (
-                  <tr key={c.id}>
-                    <td>{c.id}</td>
-                    <td>
-                      <div
+        {companies.length === 0 ? (
+          <div
+            style={{
+              padding: 24,
+              borderRadius: 12,
+              border: "1px dashed #334155",
+              background:
+                "linear-gradient(135deg, rgba(15,23,42,0.8), rgba(30,64,175,0.4))",
+            }}
+          >
+            <p
+              style={{
+                marginTop: 0,
+                marginBottom: 4,
+                fontSize: "0.95rem",
+                fontWeight: 500,
+                color: "#e5e7eb",
+              }}
+            >
+              Todavía no hay empresas registradas.
+            </p>
+            <p
+              style={{
+                margin: 0,
+                fontSize: "0.85rem",
+                color: "#9ca3af",
+              }}
+            >
+              Crea tu primera empresa para asignar usuarios y comenzar a
+              gestionar documentos.
+            </p>
+          </div>
+        ) : (
+          <div className="table-wrapper" style={{ marginTop: 4 }}>
+            <div
+              style={{
+                maxHeight: "60vh",
+                overflow: "auto",
+                borderRadius: 12,
+                border: "1px solid #1f2937",
+                background:
+                  "linear-gradient(180deg, rgba(15,23,42,0.96), rgba(15,23,42,0.96))",
+              }}
+            >
+              <table
+                className="doc-table"
+                style={{
+                  width: "100%",
+                  borderCollapse: "collapse",
+                  fontSize: "0.86rem",
+                }}
+              >
+                <thead>
+                  <tr
+                    style={{
+                      background:
+                        "linear-gradient(90deg, rgba(15,23,42,1), rgba(30,64,175,0.2))",
+                    }}
+                  >
+                    <th
+                      style={{
+                        width: 70,
+                        padding: "10px 10px",
+                        textAlign: "left",
+                        fontWeight: 500,
+                        fontSize: "0.75rem",
+                        letterSpacing: "0.08em",
+                        textTransform: "uppercase",
+                        color: "#9ca3af",
+                        borderBottom: "1px solid #1f2937",
+                      }}
+                    >
+                      ID
+                    </th>
+                    <th
+                      style={{
+                        padding: "10px 10px",
+                        textAlign: "left",
+                        fontWeight: 500,
+                        fontSize: "0.75rem",
+                        letterSpacing: "0.08em",
+                        textTransform: "uppercase",
+                        color: "#9ca3af",
+                        borderBottom: "1px solid #1f2937",
+                      }}
+                    >
+                      Nombre
+                    </th>
+                    {muestraUsers && (
+                      <th
                         style={{
-                          display: "flex",
-                          flexDirection: "column",
-                          gap: 2,
+                          textAlign: "center",
+                          width: 120,
+                          padding: "10px 10px",
+                          fontWeight: 500,
+                          fontSize: "0.75rem",
+                          letterSpacing: "0.08em",
+                          textTransform: "uppercase",
+                          color: "#9ca3af",
+                          borderBottom: "1px solid #1f2937",
                         }}
                       >
-                        <span
-                          style={{
-                            fontWeight: 500,
-                            color: "#0f172a",
-                          }}
-                        >
-                          {c.name}
-                        </span>
-                        {muestraDomain && c.domain && (
-                          <span
-                            style={{
-                              fontSize: "0.78rem",
-                              color: "#64748b",
-                            }}
-                          >
-                            {c.domain}
-                          </span>
-                        )}
-                      </div>
-                    </td>
-                    {muestraUsers && (
-                      <td style={{ textAlign: "center" }}>{usersCount}</td>
+                        Usuarios
+                      </th>
                     )}
                     {muestraPlan && (
-                      <td style={{ textAlign: "center" }}>
-                        <span className={planClass}>{planLabel}</span>
-                      </td>
+                      <th
+                        className="col-plan"
+                        style={{
+                          textAlign: "center",
+                          width: 120,
+                          padding: "10px 10px",
+                          fontWeight: 500,
+                          fontSize: "0.75rem",
+                          letterSpacing: "0.08em",
+                          textTransform: "uppercase",
+                          color: "#9ca3af",
+                          borderBottom: "1px solid #1f2937",
+                        }}
+                      >
+                        Plan
+                      </th>
                     )}
                     {muestraFecha && (
-                      <td style={{ textAlign: "center" }}>
-                        {formatDate(c.created_at)}
-                      </td>
+                      <th
+                        style={{
+                          textAlign: "center",
+                          width: 140,
+                          padding: "10px 10px",
+                          fontWeight: 500,
+                          fontSize: "0.75rem",
+                          letterSpacing: "0.08em",
+                          textTransform: "uppercase",
+                          color: "#9ca3af",
+                          borderBottom: "1px solid #1f2937",
+                        }}
+                      >
+                        Creada
+                      </th>
                     )}
-                    <td style={{ textAlign: "right" }}>
-                      <button
-                        type="button"
-                        className="btn-link"
-                        onClick={() => handleRename(c.id, c.name)}
-                        style={{ marginRight: 8 }}
-                      >
-                        Renombrar
-                      </button>
-                      <button
-                        type="button"
-                        className="btn-link"
-                        onClick={() => handleDelete(c.id, c.name)}
-                      >
-                        Eliminar
-                      </button>
-                    </td>
+                    <th
+                      style={{
+                        textAlign: "right",
+                        width: 160,
+                        padding: "10px 10px",
+                        fontWeight: 500,
+                        fontSize: "0.75rem",
+                        letterSpacing: "0.08em",
+                        textTransform: "uppercase",
+                        color: "#9ca3af",
+                        borderBottom: "1px solid #1f2937",
+                      }}
+                    >
+                      Acciones
+                    </th>
                   </tr>
-                );
-              })}
-            </tbody>
-          </table>
-        </div>
-      )}
+                </thead>
+                <tbody>
+                  {companies.map((c, idx) => {
+                    const planLabel = getPlanLabel(c.plan);
+                    const planClass = getPlanClassName(c.plan);
+                    const usersCount =
+                      typeof c.users_count === "number" ? c.users_count : 0;
+
+                    const rowBg =
+                      idx % 2 === 0 ? "rgba(15,23,42,1)" : "rgba(15,23,42,0.96)";
+
+                    return (
+                      <tr
+                        key={c.id}
+                        style={{
+                          background: rowBg,
+                          borderBottom: "1px solid #020617",
+                        }}
+                      >
+                        <td
+                          style={{
+                            padding: "10px 10px",
+                            color: "#cbd5f5",
+                          }}
+                        >
+                          {c.id}
+                        </td>
+                        <td
+                          style={{
+                            padding: "10px 10px",
+                          }}
+                        >
+                          <div
+                            style={{
+                              display: "flex",
+                              flexDirection: "column",
+                              gap: 2,
+                            }}
+                          >
+                            <span
+                              style={{
+                                fontWeight: 500,
+                                color: "#e5e7eb",
+                              }}
+                            >
+                              {c.name}
+                            </span>
+                            {muestraDomain && c.domain && (
+                              <span
+                                style={{
+                                  fontSize: "0.78rem",
+                                  color: "#9ca3af",
+                                }}
+                              >
+                                {c.domain}
+                              </span>
+                            )}
+                          </div>
+                        </td>
+                        {muestraUsers && (
+                          <td
+                            style={{
+                              textAlign: "center",
+                              padding: "10px 10px",
+                              color: "#e5e7eb",
+                            }}
+                          >
+                            {usersCount}
+                          </td>
+                        )}
+                        {muestraPlan && (
+                          <td
+                            style={{
+                              textAlign: "center",
+                              padding: "10px 10px",
+                            }}
+                          >
+                            <span className={planClass}>{planLabel}</span>
+                          </td>
+                        )}
+                        {muestraFecha && (
+                          <td
+                            style={{
+                              textAlign: "center",
+                              padding: "10px 10px",
+                              color: "#cbd5f5",
+                            }}
+                          >
+                            {formatDate(c.created_at)}
+                          </td>
+                        )}
+                        <td
+                          style={{
+                            textAlign: "right",
+                            padding: "10px 10px",
+                          }}
+                        >
+                          <button
+                            type="button"
+                            className="btn-link"
+                            onClick={() => handleRename(c.id, c.name)}
+                            style={{
+                              marginRight: 8,
+                              fontSize: "0.8rem",
+                              color: "#93c5fd",
+                            }}
+                          >
+                            Renombrar
+                          </button>
+                          <button
+                            type="button"
+                            className="btn-link"
+                            onClick={() => handleDelete(c.id, c.name)}
+                            style={{
+                              fontSize: "0.8rem",
+                              color: "#fecaca",
+                            }}
+                          >
+                            Eliminar
+                          </button>
+                        </td>
+                      </tr>
+                    );
+                  })}
+                </tbody>
+              </table>
+            </div>
+          </div>
+        )}
+      </div>
     </div>
   );
 }
