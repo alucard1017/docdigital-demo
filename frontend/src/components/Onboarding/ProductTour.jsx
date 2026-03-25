@@ -1,8 +1,7 @@
 // frontend/src/components/Onboarding/ProductTour.jsx
-// Tour de producto con react-joyride (stack estable React 18).
-
 import React, { useEffect, useState, useCallback } from "react";
 import Joyride, { STATUS, EVENTS, ACTIONS } from "react-joyride";
+import api from "../../api/client";
 
 const ProductTour = ({ tourId = "dashboard_principal", run, onFinish }) => {
   const [steps, setSteps] = useState([]);
@@ -48,14 +47,8 @@ const ProductTour = ({ tourId = "dashboard_principal", run, onFinish }) => {
 
   const loadTourProgress = useCallback(async () => {
     try {
-      const res = await fetch(`/api/onboarding/tour/${tourId}`, {
-        credentials: "include",
-      });
-      if (!res.ok) {
-        setStepIndex(0);
-        return;
-      }
-      const data = await res.json();
+      const res = await api.get(`/onboarding/tour/${tourId}`);
+      const data = res.data;
       if (data.completed) {
         setStepIndex(0);
         setIsRunning(false);
@@ -71,11 +64,9 @@ const ProductTour = ({ tourId = "dashboard_principal", run, onFinish }) => {
   const saveTourProgress = useCallback(
     async ({ completed, currentStep }) => {
       try {
-        await fetch(`/api/onboarding/tour/${tourId}`, {
-          method: "PUT",
-          headers: { "Content-Type": "application/json" },
-          credentials: "include",
-          body: JSON.stringify({ completed, currentStep }),
+        await api.put(`/onboarding/tour/${tourId}`, {
+          completed,
+          currentStep,
         });
       } catch (err) {
         console.error("Error guardando progreso de tour:", err);
