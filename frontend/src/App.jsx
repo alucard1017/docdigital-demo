@@ -450,26 +450,25 @@ function App() {
   };
 
   // === Onboarding: consulta estado ===
-  const checkOnboarding = useCallback(async () => {
-    if (!token) return;
-    try {
-      setCheckingOnboarding(true);
-      const res = await fetch("/api/onboarding/status", {
-        credentials: "include",
-      });
-      const data = await res.json();
-      if (data?.needsOnboarding) {
-        setShowOnboarding(true);
-      } else {
-        setShowOnboarding(false);
-      }
-    } catch (err) {
-      console.error("Error checking onboarding status", err);
+const checkOnboarding = useCallback(async () => {
+  if (!token) return;
+  try {
+    setCheckingOnboarding(true);
+    const res = await api.get("/onboarding/status");
+    const data = res.data;
+    if (data?.needsOnboarding) {
+      setShowOnboarding(true);
+    } else {
       setShowOnboarding(false);
-    } finally {
-      setCheckingOnboarding(false);
     }
-  }, [token]);
+  } catch (err) {
+    console.error("[ONBOARDING CHECK] Error:", err.message);
+    // Fallback: no mostrar onboarding si falla
+    setShowOnboarding(false);
+  } finally {
+    setCheckingOnboarding(false);
+  }
+}, [token]);
 
   const handleOnboardingCompleted = () => {
     setShowOnboarding(false);
