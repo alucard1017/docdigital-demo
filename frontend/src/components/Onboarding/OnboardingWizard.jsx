@@ -1,7 +1,7 @@
 // frontend/src/components/Onboarding/OnboardingWizard.jsx
 import React, { useEffect, useState } from "react";
 import "./OnboardingWizard.css";
-import api, { API_BASE_URL } from "../../api/client";
+import api from "../../api/client";
 
 const STEPS = [
   { id: 1, key: "welcome", label: "Bienvenido" },
@@ -247,6 +247,7 @@ const OnboardingWizard = ({ onCompleted, onSkipped }) => {
             className="onboarding-skip"
             onClick={handleSkip}
             disabled={saving}
+            title="Saltar el onboarding"
           >
             Saltar
           </button>
@@ -275,6 +276,7 @@ const OnboardingWizard = ({ onCompleted, onSkipped }) => {
             className="onboarding-button secondary"
             onClick={handleBack}
             disabled={currentStep === 1 || saving}
+            title="Ir al paso anterior"
           >
             Atrás
           </button>
@@ -284,6 +286,7 @@ const OnboardingWizard = ({ onCompleted, onSkipped }) => {
               className="onboarding-button primary"
               onClick={handleNext}
               disabled={saving}
+              title="Continuar al siguiente paso"
             >
               {saving ? "Guardando..." : "Continuar"}
             </button>
@@ -294,6 +297,7 @@ const OnboardingWizard = ({ onCompleted, onSkipped }) => {
               className="onboarding-button primary"
               onClick={handleComplete}
               disabled={saving}
+              title="Finalizar onboarding e ir al dashboard"
             >
               {saving ? "Guardando..." : "Ir al Dashboard"}
             </button>
