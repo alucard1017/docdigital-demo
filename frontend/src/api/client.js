@@ -4,22 +4,22 @@ const getApiBaseUrl = () => {
   const raw = import.meta.env.VITE_API_URL;
 
   if (raw && raw.trim()) {
-    // quita barras finales
+    // Quita barras finales
     return raw.replace(/\/+$/, "");
   }
 
-  // fallback local
+  // Fallback local
   return "http://localhost:4000/api";
 };
 
-const API_BASE_URL = getApiBaseUrl();
+export const API_BASE_URL = getApiBaseUrl();
 
 if (import.meta.env.DEV) {
   console.log("[API] Base URL:", API_BASE_URL);
 }
 
 const api = axios.create({
-  baseURL: API_BASE_URL, // ej: http://localhost:4000/api o https://firma-express-1.onrender.com/api
+  baseURL: API_BASE_URL, // ej: http://localhost:4000/api o https://verifirma-api.onrender.com/api
   timeout: 30000,
   withCredentials: false,
 });
@@ -98,10 +98,8 @@ api.interceptors.response.use(
 
 /**
  * Pide el timeline de un documento, incluyendo participants.
- * @param {number} id
- * @returns {Promise<{ document: any, participants: any[], timeline: any }>}
  */
-export async function getDocumentTimeline(id) {
+export async function getDocumentTimeline(id: number) {
   const res = await api.get(`/documents/${id}/timeline`);
   return res.data;
 }
