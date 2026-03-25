@@ -1,7 +1,7 @@
 // frontend/src/components/Onboarding/OnboardingWizard.jsx
 import React, { useEffect, useState } from "react";
 import "./OnboardingWizard.css";
-import api from "../../api/client";
+import api, { API_BASE_URL } from "../../api/client";
 
 const STEPS = [
   { id: 1, key: "welcome", label: "Bienvenido" },
@@ -21,7 +21,17 @@ const OnboardingWizard = ({ onCompleted, onSkipped }) => {
   const fetchStatus = async () => {
     try {
       setLoading(true);
+      console.log("[ONBOARDING] Iniciando fetchStatus");
+      console.log("[ONBOARDING] API_BASE_URL:", API_BASE_URL);
+
       const res = await api.get("/onboarding/status");
+
+      console.log("[ONBOARDING] ✅ Respuesta recibida:", {
+        status: res.status,
+        data: res.data,
+        dataType: typeof res.data,
+      });
+
       const data = res.data;
       setStatus(data);
       if (data?.currentStep) {
@@ -29,7 +39,19 @@ const OnboardingWizard = ({ onCompleted, onSkipped }) => {
       }
       setError("");
     } catch (err) {
-      console.error("Error cargando estado de onboarding:", err);
+      console.error("[ONBOARDING] ❌ Error completo:", {
+        message: err.message,
+        code: err.code,
+        status: err.response?.status,
+        statusText: err.response?.statusText,
+        url: err.config?.url,
+        baseURL: err.config?.baseURL,
+        fullUrl: err.config?.baseURL + err.config?.url,
+        responseType: typeof err.response?.data,
+        responseSize: String(err.response?.data).length,
+        responsePreview: String(err.response?.data).substring(0, 200),
+        isHTML: String(err.response?.data).includes("<!doctype"),
+      });
       setError("No se pudo cargar el estado de onboarding.");
     } finally {
       setLoading(false);
@@ -44,10 +66,11 @@ const OnboardingWizard = ({ onCompleted, onSkipped }) => {
     try {
       setSaving(true);
       setError("");
+      console.log("[ONBOARDING] Actualizando paso a:", step);
       await api.put("/onboarding/step", { step });
       setCurrentStep(step);
     } catch (err) {
-      console.error("Error actualizando paso de onboarding:", err);
+      console.error("[ONBOARDING] Error actualizando paso:", err.message);
       setError("Error al guardar el progreso.");
     } finally {
       setSaving(false);
@@ -68,10 +91,11 @@ const OnboardingWizard = ({ onCompleted, onSkipped }) => {
     try {
       setSaving(true);
       setError("");
+      console.log("[ONBOARDING] Completando onboarding");
       await api.post("/onboarding/complete");
       if (onCompleted) onCompleted();
     } catch (err) {
-      console.error("Error completando onboarding:", err);
+      console.error("[ONBOARDING] Error completando:", err.message);
       setError("No se pudo completar el onboarding.");
     } finally {
       setSaving(false);
@@ -82,10 +106,11 @@ const OnboardingWizard = ({ onCompleted, onSkipped }) => {
     try {
       setSaving(true);
       setError("");
+      console.log("[ONBOARDING] Saltando onboarding");
       await api.post("/onboarding/skip");
       if (onSkipped) onSkipped();
     } catch (err) {
-      console.error("Error saltando onboarding:", err);
+      console.error("[ONBOARDING] Error saltando:", err.message);
       setError("No se pudo saltar el onboarding.");
     } finally {
       setSaving(false);
@@ -103,9 +128,9 @@ const OnboardingWizard = ({ onCompleted, onSkipped }) => {
               documento a firma en menos de 2 minutos.
             </p>
             <ul>
-              <li>Conocerás el panel principal.</li>
-              <li>Crearás tu primer documento.</li>
-              <li>Invitarás a tu equipo.</li>
+              >Conocerás el panel principal.</li>
+              >Crearás tu primer documento.</li>
+              >Invitarás a tu equipo.</li>
             </ul>
           </div>
         );
@@ -137,7 +162,7 @@ const OnboardingWizard = ({ onCompleted, onSkipped }) => {
             <p className="onboarding-hint">
               Desde el dashboard, haz clic en{" "}
               <strong className="onboarding-highlight">
-                “Nuevo documento”
+                "Nuevo documento"
               </strong>{" "}
               y añade los firmantes.
             </p>
