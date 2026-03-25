@@ -20,6 +20,7 @@ const OnboardingWizard = ({ onCompleted, onSkipped }) => {
 
   // Fetch initial onboarding status
   const fetchStatus = async () => {
+  console.log("[ONBOARDING DEBUG] Intentando llamar a:", api.defaults.baseURL + "/onboarding/status");
     try {
       setLoading(true);
       setError("");
