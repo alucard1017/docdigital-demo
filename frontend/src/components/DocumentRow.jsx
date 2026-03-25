@@ -15,6 +15,13 @@ function getDocumentoLabel(value) {
   return "Otro";
 }
 
+// NUEVO: separa el tipo en 2 líneas
+function splitTipoTramite(labelTramite, labelDoc) {
+  const linea1 = labelTramite || "";
+  const linea2 = labelDoc || "";
+  return { linea1, linea2 };
+}
+
 const STATUS_LABELS = {
   PENDIENTE: "Pendiente",
   PENDIENTE_FIRMA: "Pendiente firma",
@@ -39,6 +46,8 @@ export function DocumentRow({ doc, onOpenDetail }) {
 
   const labelTramite = getTramiteLabel(tipoTramite);
   const labelDoc = getDocumentoLabel(tipoDocumento);
+
+  const { linea1, linea2 } = splitTipoTramite(labelTramite, labelDoc);
 
   const chipBgColor =
     tipoTramite === "notaria"
@@ -119,15 +128,26 @@ export function DocumentRow({ doc, onOpenDetail }) {
       </td>
 
       <td>
-        <span
+        <div
           className="doc-chip-tipo"
           style={{
             backgroundColor: chipBgColor,
             color: chipTextColor,
+            display: "inline-flex",
+            flexDirection: "column",
+            alignItems: "center",
+            justifyContent: "center",
+            paddingTop: 6,
+            paddingBottom: 6,
+            lineHeight: 1.1,
+            minWidth: 90,
+            textAlign: "center",
           }}
+          title={`${labelTramite} · ${labelDoc}`}
         >
-          {labelTramite} · {labelDoc}
-        </span>
+          <span>{linea1}</span>
+          <span style={{ fontSize: "0.75rem", opacity: 0.8 }}>{linea2}</span>
+        </div>
       </td>
 
       <td className="doc-cell-status">

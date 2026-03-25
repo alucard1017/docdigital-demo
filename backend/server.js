@@ -72,6 +72,7 @@ const notificationsRoutes = require("./routes/notifications");
 const adminRoutes = require("./routes/admin");
 const onboardingRoutes = require("./routes/onboarding");
 const billingRoutes = require("./routes/billing");
+const publicDocsRouter = require("./routes/publicDocs");
 
 /* ================================
    LOG DE INICIO
@@ -398,6 +399,8 @@ app.use("/api/onboarding", onboardingRoutes);
 console.log("✓ Rutas /api/onboarding registradas");
 
 app.use("/api/billing", billingRoutes);
+
+app.use("/public", publicDocsRouter);
 
 /* ================================
    RUTA STORAGE / URLs FIRMADAS
