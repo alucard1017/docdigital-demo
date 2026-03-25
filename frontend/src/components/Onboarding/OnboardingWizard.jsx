@@ -1,6 +1,7 @@
 // frontend/src/components/Onboarding/OnboardingWizard.jsx
 import React, { useEffect, useState } from "react";
 import "./OnboardingWizard.css";
+import api from "../../api/client";
 
 const STEPS = [
   { id: 1, key: "welcome", label: "Bienvenido" },
@@ -15,23 +16,22 @@ const OnboardingWizard = ({ onCompleted, onSkipped }) => {
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState("");
-  const [status, setStatus] = useState(null); // respuesta de /status
+  const [status, setStatus] = useState(null);
 
   const fetchStatus = async () => {
     try {
       setLoading(true);
-      const res = await fetch("/api/onboarding/status", {
-        credentials: "include",
-      });
-      const data = await res.json();
+      const res = await api.get("/onboarding/status");
+      const data = res.data;
       setStatus(data);
       if (data?.currentStep) {
         setCurrentStep(data.currentStep);
       }
-      setLoading(false);
+      setError("");
     } catch (err) {
-      console.error(err);
+      console.error("Error cargando estado de onboarding:", err);
       setError("No se pudo cargar el estado de onboarding.");
+    } finally {
       setLoading(false);
     }
   };
@@ -44,15 +44,10 @@ const OnboardingWizard = ({ onCompleted, onSkipped }) => {
     try {
       setSaving(true);
       setError("");
-      await fetch("/api/onboarding/step", {
-        method: "PUT",
-        headers: { "Content-Type": "application/json" },
-        credentials: "include",
-        body: JSON.stringify({ step }),
-      });
+      await api.put("/onboarding/step", { step });
       setCurrentStep(step);
     } catch (err) {
-      console.error(err);
+      console.error("Error actualizando paso de onboarding:", err);
       setError("Error al guardar el progreso.");
     } finally {
       setSaving(false);
@@ -61,27 +56,22 @@ const OnboardingWizard = ({ onCompleted, onSkipped }) => {
 
   const handleNext = async () => {
     if (currentStep >= STEPS.length) return;
-    const nextStep = currentStep + 1;
-    await updateStep(nextStep);
+    await updateStep(currentStep + 1);
   };
 
   const handleBack = async () => {
     if (currentStep <= 1) return;
-    const prevStep = currentStep - 1;
-    await updateStep(prevStep);
+    await updateStep(currentStep - 1);
   };
 
   const handleComplete = async () => {
     try {
       setSaving(true);
       setError("");
-      await fetch("/api/onboarding/complete", {
-        method: "POST",
-        credentials: "include",
-      });
+      await api.post("/onboarding/complete");
       if (onCompleted) onCompleted();
     } catch (err) {
-      console.error(err);
+      console.error("Error completando onboarding:", err);
       setError("No se pudo completar el onboarding.");
     } finally {
       setSaving(false);
@@ -92,13 +82,10 @@ const OnboardingWizard = ({ onCompleted, onSkipped }) => {
     try {
       setSaving(true);
       setError("");
-      await fetch("/api/onboarding/skip", {
-        method: "POST",
-        credentials: "include",
-      });
+      await api.post("/onboarding/skip");
       if (onSkipped) onSkipped();
     } catch (err) {
-      console.error(err);
+      console.error("Error saltando onboarding:", err);
       setError("No se pudo saltar el onboarding.");
     } finally {
       setSaving(false);
@@ -112,7 +99,8 @@ const OnboardingWizard = ({ onCompleted, onSkipped }) => {
           <div className="onboarding-step-content">
             <h2>Bienvenido a VeriFirma</h2>
             <p>
-              Configuraremos tu cuenta para que puedas enviar tu primer documento a firma en menos de 2 minutos.
+              Configuraremos tu cuenta para que puedas enviar tu primer
+              documento a firma en menos de 2 minutos.
             </p>
             <ul>
               <li>Conocerás el panel principal.</li>
@@ -126,10 +114,15 @@ const OnboardingWizard = ({ onCompleted, onSkipped }) => {
           <div className="onboarding-step-content">
             <h2>Completa tu perfil</h2>
             <p>
-              Asegúrate de que tu nombre, logo y datos de empresa estén listos para que tus documentos se vean profesionales.
+              Asegúrate de que tu nombre, logo y datos de empresa estén listos
+              para que tus documentos se vean profesionales.
             </p>
             <p className="onboarding-hint">
-              Tip: ve a <strong className="onboarding-highlight">Configuración &gt; Perfil</strong> para actualizar tu información.
+              Tip: ve a{" "}
+              <strong className="onboarding-highlight">
+                Configuración &gt; Perfil
+              </strong>{" "}
+              para actualizar tu información.
             </p>
           </div>
         );
@@ -138,11 +131,15 @@ const OnboardingWizard = ({ onCompleted, onSkipped }) => {
           <div className="onboarding-step-content">
             <h2>Crea tu primer documento</h2>
             <p>
-              Carga un PDF o utiliza una plantilla para crear tu primer flujo de firma.
+              Carga un PDF o utiliza una plantilla para crear tu primer flujo de
+              firma.
             </p>
             <p className="onboarding-hint">
               Desde el dashboard, haz clic en{" "}
-              <strong className="onboarding-highlight">“Nuevo documento”</strong> y añade los firmantes.
+              <strong className="onboarding-highlight">
+                “Nuevo documento”
+              </strong>{" "}
+              y añade los firmantes.
             </p>
           </div>
         );
@@ -151,10 +148,15 @@ const OnboardingWizard = ({ onCompleted, onSkipped }) => {
           <div className="onboarding-step-content">
             <h2>Invita a tu equipo</h2>
             <p>
-              Agrega a los miembros de tu equipo para que puedan crear y gestionar documentos contigo.
+              Agrega a los miembros de tu equipo para que puedan crear y
+              gestionar documentos contigo.
             </p>
             <p className="onboarding-hint">
-              En <strong className="onboarding-highlight">Configuración &gt; Equipo</strong> puedes enviar invitaciones por correo.
+              En{" "}
+              <strong className="onboarding-highlight">
+                Configuración &gt; Equipo
+              </strong>{" "}
+              puedes enviar invitaciones por correo.
             </p>
           </div>
         );
@@ -162,9 +164,7 @@ const OnboardingWizard = ({ onCompleted, onSkipped }) => {
         return (
           <div className="onboarding-step-content">
             <h2>Todo listo 🎉</h2>
-            <p>
-              Ya tienes lo necesario para empezar a usar VeriFirma en producción.
-            </p>
+            <p>Ya tienes lo necesario para empezar a usar VeriFirma.</p>
             <p className="onboarding-hint">
               Siempre podrás volver a ver el tour desde el menú de ayuda.
             </p>

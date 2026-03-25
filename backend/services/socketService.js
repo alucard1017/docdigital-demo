@@ -6,80 +6,116 @@ let io = null;
 
 /**
  * Inicializar Socket.IO en el servidor HTTP
+ * @param {import("http").Server} server
  */
 function initializeSocketIO(server) {
+  if (!server) {
+    throw new Error("Servidor HTTP no proporcionado para Socket.IO");
+  }
+
+  const allowedOrigins = [
+    process.env.FRONTEND_URL,
+    "https://app.verifirma.cl",
+    "https://docdigital.vercel.app",
+    "http://localhost:5173",
+    "http://localhost:5174",
+    "http://localhost:3000",
+  ].filter(Boolean);
+
   io = new Server(server, {
     cors: {
-      origin: [
-        process.env.FRONTEND_URL,
-        "https://app.verifirma.cl",
-        "https://docdigital.vercel.app",
-        "http://localhost:5173",
-        "http://localhost:5174",
-        "http://localhost:3000",
-      ].filter(Boolean),
+      origin: allowedOrigins,
       credentials: true,
     },
   });
 
+  console.log("✅ Socket.IO inicializado con CORS:", allowedOrigins);
+
   // Middleware de autenticación
   io.use((socket, next) => {
-    const token = socket.handshake.auth.token;
-
-    if (!token) {
-      return next(new Error("No autorizado"));
-    }
-
     try {
+      const token = socket.handshake.auth?.token;
+
+      if (!token) {
+        console.warn("⚠️ Conexión WS sin token");
+        return next(new Error("No autorizado"));
+      }
+
+      if (!process.env.JWT_SECRET) {
+        console.error("❌ JWT_SECRET no definido en variables de entorno");
+        return next(new Error("Error de configuración"));
+      }
+
       const payload = jwt.verify(token, process.env.JWT_SECRET);
+
       socket.user = {
         id: payload.id,
         email: payload.email,
         role: payload.role,
         company_id: payload.company_id,
       };
-      next();
+
+      return next();
     } catch (err) {
+      console.error("❌ Error en autenticación WS:", err.message);
       return next(new Error("Token inválido"));
     }
   });
 
   io.on("connection", (socket) => {
-    console.log(`✅ Cliente WebSocket conectado: ${socket.user.email}`);
+    const userEmail = socket.user?.email || "desconocido";
+    const companyId = socket.user?.company_id;
+
+    console.log(`✅ Cliente WebSocket conectado: ${userEmail}`);
 
     // Unirse a room de su empresa
-    if (socket.user.company_id) {
-      socket.join(`company:${socket.user.company_id}`);
+    if (companyId) {
+      const room = `company:${companyId}`;
+      socket.join(room);
+      console.log(`👥 ${userEmail} unido a room ${room}`);
+    } else {
+      console.warn(`⚠️ Usuario sin company_id en WS: ${userEmail}`);
     }
 
-    socket.on("disconnect", () => {
-      console.log(`❌ Cliente WebSocket desconectado: ${socket.user.email}`);
+    socket.on("disconnect", (reason) => {
+      console.log(`❌ Cliente WebSocket desconectado (${reason}): ${userEmail}`);
     });
   });
 
-  console.log("✅ Socket.IO inicializado");
   return io;
 }
 
 /**
  * Emitir notificación a usuarios de una empresa
+ * @param {number|string} companyId
+ * @param {string} event
+ * @param {any} data
  */
 function emitToCompany(companyId, event, data) {
   if (!io) {
-    console.warn("⚠️ Socket.IO no inicializado");
+    console.warn("⚠️ Socket.IO no inicializado (emitToCompany)");
     return;
   }
 
-  io.to(`company:${companyId}`).emit(event, data);
-  console.log(`📡 Evento emitido a company ${companyId}: ${event}`);
+  if (!companyId) {
+    console.warn("⚠️ emitToCompany llamado sin companyId");
+    return;
+  }
+
+  const room = `company:${companyId}`;
+  io.to(room).emit(event, data);
+
+  console.log(`📡 Evento emitido a ${room}: ${event}`);
 }
 
 /**
- * Emitir notificación global (solo para admins)
+ * Emitir notificación global
+ * @param {string} event
+ * @param {any} data
  */
 function emitGlobal(event, data) {
   if (!io) {
-    console.warn("⚠️ Socket.IO no inicializado");
+    console.warn("⚠️ Socket.IO no inicializado (emitGlobal)");
     return;
   }
 

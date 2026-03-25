@@ -2,7 +2,10 @@
 import { useEffect, useRef, useCallback } from "react";
 import { io } from "socket.io-client";
 
-const SOCKET_URL = import.meta.env.VITE_API_URL || "http://localhost:4000";
+const SOCKET_URL =
+  import.meta.env.VITE_SOCKET_URL ||
+  import.meta.env.VITE_API_URL ||
+  "http://localhost:4000";
 
 export function useSocket(token) {
   const socketRef = useRef(null);
@@ -11,17 +14,19 @@ export function useSocket(token) {
   useEffect(() => {
     if (!token) return;
 
+    console.log("[WS] Conectando a:", SOCKET_URL);
+
     const socket = io(SOCKET_URL, {
       auth: { token },
       transports: ["websocket", "polling"],
     });
 
     socket.on("connect", () => {
-      console.log("✅ WebSocket conectado");
+      console.log("✅ WebSocket conectado. id:", socket.id);
     });
 
-    socket.on("disconnect", () => {
-      console.log("❌ WebSocket desconectado");
+    socket.on("disconnect", (reason) => {
+      console.log("❌ WebSocket desconectado:", reason);
     });
 
     socket.on("connect_error", (err) => {
@@ -31,15 +36,29 @@ export function useSocket(token) {
     socketRef.current = socket;
 
     return () => {
-      socket.disconnect();
+      console.log("[WS] Cleanup: desconectando socket");
+      // Limpia todos los listeners registrados manualmente
+      if (socketRef.current) {
+        Object.entries(listenersRef.current).forEach(([event, callbacks]) => {
+          callbacks.forEach((cb) => {
+            socketRef.current.off(event, cb);
+          });
+        });
+        listenersRef.current = {};
+        socketRef.current.disconnect();
+        socketRef.current = null;
+      } else {
+        socket.disconnect();
+      }
     };
   }, [token]);
 
   const on = useCallback((event, callback) => {
-    if (!socketRef.current) return;
+    const socket = socketRef.current;
+    if (!socket) return;
 
-    socketRef.current.on(event, callback);
-    
+    socket.on(event, callback);
+
     if (!listenersRef.current[event]) {
       listenersRef.current[event] = [];
     }
@@ -47,8 +66,19 @@ export function useSocket(token) {
   }, []);
 
   const off = useCallback((event, callback) => {
-    if (!socketRef.current) return;
-    socketRef.current.off(event, callback);
+    const socket = socketRef.current;
+    if (!socket) return;
+
+    socket.off(event, callback);
+
+    if (listenersRef.current[event]) {
+      listenersRef.current[event] = listenersRef.current[event].filter(
+        (cb) => cb !== callback
+      );
+      if (listenersRef.current[event].length === 0) {
+        delete listenersRef.current[event];
+      }
+    }
   }, []);
 
   return { on, off };
