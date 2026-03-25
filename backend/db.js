@@ -1,4 +1,4 @@
-// backend/db.js - conexión a PostgreSQL “pro”
+// backend/db.js - conexión a PostgreSQL (local y producción)
 const { Pool } = require("pg");
 
 const NODE_ENV = process.env.NODE_ENV || "development";
@@ -12,15 +12,17 @@ if (!connectionString) {
   throw new Error("DATABASE_URL no definido");
 }
 
-// SSL según DB_SSL (útil para Render / servicios gestionados)
+// SSL: en Render normalmente necesitas SSL; en local puedes desactivarlo
+// DB_SSL=true -> { rejectUnauthorized: false } (Render / servicios gestionados)
+// DB_SSL=false o no definido -> sin SSL (local)
 const sslEnabled =
   process.env.DB_SSL === "true"
     ? { rejectUnauthorized: false }
-    : false;
+    : undefined;
 
 console.log("🔌 Configuración PostgreSQL:", {
   NODE_ENV,
-  hasConnectionString: !!connectionString,
+  connectionStringHost: connectionString.replace(/:\/\/.*@(.+?)\//, "://***@ $1/"),
   ssl: sslEnabled ? "enabled" : "disabled",
 });
 
@@ -36,11 +38,14 @@ pool.on("error", (err) => {
   console.error("❌ Error inesperado en el pool de PostgreSQL:", err);
 });
 
-// Test inicial de conexión (no bloqueante)
+// Test inicial de conexión (no bloqueante) + info de DB real
 pool
-  .query("SELECT 1")
-  .then(() => {
-    console.log("✅ Conexión a PostgreSQL OK");
+  .query("SELECT current_database(), inet_server_addr()::text AS host, inet_server_port() AS port")
+  .then((r) => {
+    const info = r.rows[0];
+    console.log(
+      `✅ Conexión a PostgreSQL OK → db=${info.current_database}, host=${info.host}, port=${info.port}`
+    );
   })
   .catch((err) => {
     console.error("❌ No se pudo conectar a PostgreSQL:", err.message);
