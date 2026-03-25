@@ -1,6 +1,7 @@
+// frontend/src/api/client.js
 import axios from "axios";
 
-const getApiBaseUrl = () => {
+export const getApiBaseUrl = () => {
   const raw = import.meta.env.VITE_API_URL;
 
   if (raw && raw.trim()) {
@@ -19,7 +20,8 @@ if (import.meta.env.DEV) {
 }
 
 const api = axios.create({
-  baseURL: API_BASE_URL, // ej: http://localhost:4000/api o https://verifirma-api.onrender.com/api
+  // ej: http://localhost:4000/api o https://verifirma-api.onrender.com/api
+  baseURL: API_BASE_URL,
   timeout: 30000,
   withCredentials: false,
 });

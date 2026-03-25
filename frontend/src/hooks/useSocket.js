@@ -30,14 +30,19 @@ export function useSocket(token) {
     });
 
     socket.on("connect_error", (err) => {
-      console.error("❌ Error de WebSocket:", err.message);
+      console.error(
+        "❌ Error de WebSocket:",
+        err.message,
+        err?.data,
+        "URL:",
+        SOCKET_URL
+      );
     });
 
     socketRef.current = socket;
 
     return () => {
       console.log("[WS] Cleanup: desconectando socket");
-      // Limpia todos los listeners registrados manualmente
       if (socketRef.current) {
         Object.entries(listenersRef.current).forEach(([event, callbacks]) => {
           callbacks.forEach((cb) => {
