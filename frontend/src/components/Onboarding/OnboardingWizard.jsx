@@ -151,9 +151,9 @@ const OnboardingWizard = ({ onCompleted, onSkipped }) => {
               documento a firma en menos de 2 minutos.
             </p>
             <ul>
-              >Conocerás el panel principal.</li>
-              >Crearás tu primer documento.</li>
-              >Invitarás a tu equipo.</li>
+              <li>Conocerás el panel principal.</li>
+              <li>Crearás tu primer documento.</li>
+              <li>Invitarás a tu equipo.</li>
             </ul>
           </div>
         );
