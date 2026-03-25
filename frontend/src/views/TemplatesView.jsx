@@ -1,6 +1,6 @@
 // frontend/src/views/TemplatesView.jsx
 import { useState, useEffect } from "react";
-import axios from "axios";
+import api from "../api/client";
 
 export default function TemplatesView() {
   const [templates, setTemplates] = useState([]);
@@ -20,16 +20,27 @@ export default function TemplatesView() {
     fetchTemplates();
   }, []);
 
+  const normalizeTemplates = (data) => {
+    if (Array.isArray(data)) return data;
+    if (Array.isArray(data?.templates)) return data.templates;
+    if (Array.isArray(data?.data)) return data.data;
+    return [];
+  };
+
   const fetchTemplates = async () => {
+    setLoading(true);
     try {
-      const token = localStorage.getItem("token");
-      const res = await axios.get("/api/templates", {
-        headers: { Authorization: `Bearer ${token}` },
-      });
-      setTemplates(res.data);
+      const res = await api.get("/templates");
+      const list = normalizeTemplates(res.data);
+      setTemplates(list);
       setError(null);
     } catch (err) {
-      setError(err.response?.data?.message || "Error cargando plantillas");
+      console.error("Error cargando plantillas:", err);
+      setError(
+        err?.response?.data?.message ||
+          err?.message ||
+          "Error cargando plantillas"
+      );
     } finally {
       setLoading(false);
     }
@@ -38,10 +49,7 @@ export default function TemplatesView() {
   const handleSubmit = async (e) => {
     e.preventDefault();
     try {
-      const token = localStorage.getItem("token");
-      await axios.post("/api/templates", formData, {
-        headers: { Authorization: `Bearer ${token}` },
-      });
+      await api.post("/templates", formData);
       alert("✅ Plantilla creada exitosamente");
       setCreating(false);
       setFormData({
@@ -54,22 +62,29 @@ export default function TemplatesView() {
       });
       fetchTemplates();
     } catch (err) {
-      setError(err.response?.data?.message || "Error creando plantilla");
+      console.error("Error creando plantilla:", err);
+      setError(
+        err?.response?.data?.message ||
+          err?.message ||
+          "Error creando plantilla"
+      );
     }
   };
 
   const handleDelete = async (id) => {
-    if (!confirm("¿Eliminar esta plantilla?")) return;
+    if (!window.confirm("¿Eliminar esta plantilla?")) return;
 
     try {
-      const token = localStorage.getItem("token");
-      await axios.delete(`/api/templates/${id}`, {
-        headers: { Authorization: `Bearer ${token}` },
-      });
+      await api.delete(`/templates/${id}`);
       alert("✅ Plantilla eliminada");
       fetchTemplates();
     } catch (err) {
-      alert(err.response?.data?.message || "Error eliminando plantilla");
+      console.error("Error eliminando plantilla:", err);
+      alert(
+        err?.response?.data?.message ||
+          err?.message ||
+          "Error eliminando plantilla"
+      );
     }
   };
 
@@ -260,7 +275,7 @@ export default function TemplatesView() {
         ))}
       </div>
 
-      {templates.length === 0 && !creating && (
+      {templates.length === 0 && !creating && !loading && !error && (
         <div className="text-center py-12 text-gray-500">
           <p className="text-lg mb-2">No hay plantillas creadas</p>
           <p className="text-sm">
