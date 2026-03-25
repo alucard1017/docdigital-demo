@@ -113,6 +113,7 @@ export function Sidebar({
       <div
         className={`nav-item ${view === "list" ? "active" : ""}`}
         onClick={() => handleChangeView("list")}
+        title="Ver todos los trámites"
       >
         <span>📄</span> Mis trámites
       </div>
@@ -120,6 +121,7 @@ export function Sidebar({
       <div
         className={`nav-item ${view === "upload" ? "active" : ""}`}
         onClick={() => handleChangeView("upload")}
+        title="Crear nuevo trámite de firma"
       >
         <span>📤</span> Crear nuevo trámite
       </div>
@@ -132,6 +134,7 @@ export function Sidebar({
           statusFilter === "PENDIENTES" ? "active" : ""
         }`}
         onClick={() => handleStatusFilter("PENDIENTES")}
+        title="Mostrar solo documentos pendientes"
       >
         <span>⏳</span> Solo pendientes
       </div>
@@ -141,6 +144,7 @@ export function Sidebar({
           statusFilter === "FIRMADOS" ? "active" : ""
         }`}
         onClick={() => handleStatusFilter("FIRMADOS")}
+        title="Mostrar solo documentos firmados"
       >
         <span>✅</span> Solo firmados
       </div>
@@ -150,6 +154,7 @@ export function Sidebar({
           statusFilter === "RECHAZADOS" ? "active" : ""
         }`}
         onClick={() => handleStatusFilter("RECHAZADOS")}
+        title="Mostrar solo documentos rechazados"
       >
         <span>❌</span> Solo rechazados
       </div>
@@ -157,6 +162,7 @@ export function Sidebar({
       <div
         className={`nav-item ${view === "verification" ? "active" : ""}`}
         onClick={() => handleChangeView("verification")}
+        title="Verificar estado público de documentos"
       >
         <span>🔍</span> Verificar documento
       </div>
@@ -169,6 +175,7 @@ export function Sidebar({
           view === "email-metrics" ? "active" : ""
         }`}
         onClick={() => handleChangeView("email-metrics")}
+        title="Ver métricas de email"
       >
         <span>📊</span> Analytics
       </div>
@@ -178,6 +185,7 @@ export function Sidebar({
           view === "company-analytics" ? "active" : ""
         }`}
         onClick={() => handleChangeView("company-analytics")}
+        title="Analytics de la empresa"
       >
         <span>📈</span> Analytics Empresa
       </div>
@@ -185,6 +193,7 @@ export function Sidebar({
       <div
         className={`nav-item ${view === "pricing" ? "active" : ""}`}
         onClick={() => handleChangeView("pricing")}
+        title="Ver planes y facturación"
       >
         <span>💳</span> Planes y facturación
       </div>
@@ -192,8 +201,17 @@ export function Sidebar({
       <div
         className={`nav-item ${view === "templates" ? "active" : ""}`}
         onClick={() => handleChangeView("templates")}
+        title="Gestionar plantillas de documentos"
       >
         <span>📋</span> Plantillas
+      </div>
+
+      <div
+        className={`nav-item ${view === "profile" ? "active" : ""}`}
+        onClick={() => handleChangeView("profile")}
+        title="Editar tu perfil"
+      >
+        <span>👤</span> Mi perfil
       </div>
 
       {/* Administración */}
@@ -202,21 +220,31 @@ export function Sidebar({
           <h3 className="sidebar-section-label">Administración</h3>
 
           <div
+            className={`nav-item ${view === "users" ? "active" : ""}`}
+            onClick={() => handleChangeView("users")}
+            title="Gestionar usuarios de la empresa"
+          >
+            <span>👥</span> Usuarios
+          </div>
+
+          <div
             className={`nav-item ${
               view === "reminders-config" ? "active" : ""
             }`}
             onClick={() => handleChangeView("reminders-config")}
+            title="Configurar recordatorios automáticos"
           >
             <span>🔔</span> Recordatorios
           </div>
 
           <div
             className={`nav-item ${
-              view === "email-metrics" ? "active" : ""
+              view === "dashboard" ? "active" : ""
             }`}
-            onClick={() => handleChangeView("email-metrics")}
+            onClick={() => handleChangeView("dashboard")}
+            title="Dashboard administrativo"
           >
-            <span>📊</span> Métricas Email
+            <span>📊</span> Dashboard
           </div>
 
           {isAdminGlobalOrOwner && (
@@ -226,8 +254,19 @@ export function Sidebar({
                   view === "companies" ? "active" : ""
                 }`}
                 onClick={() => handleChangeView("companies")}
+                title="Gestionar empresas"
               >
                 <span>🏢</span> Empresas
+              </div>
+
+              <div
+                className={`nav-item ${
+                  view === "status" ? "active" : ""
+                }`}
+                onClick={() => handleChangeView("status")}
+                title="Estado del sistema"
+              >
+                <span>⚙️</span> Estado Sistema
               </div>
 
               <div
@@ -235,6 +274,7 @@ export function Sidebar({
                   view === "audit-logs" ? "active" : ""
                 }`}
                 onClick={() => handleChangeView("audit-logs")}
+                title="Auditoría de negocio"
               >
                 <span>📜</span> Auditoría (negocio)
               </div>
@@ -244,6 +284,7 @@ export function Sidebar({
                   view === "auth-logs" ? "active" : ""
                 }`}
                 onClick={() => handleChangeView("auth-logs")}
+                title="Logs de autenticación"
               >
                 <span>🔐</span> Auth logs
               </div>
@@ -272,7 +313,12 @@ export function Sidebar({
         </div>
       </div>
 
-      <div className="nav-item" onClick={logout} style={{ marginTop: 0 }}>
+      <div
+        className="nav-item"
+        onClick={logout}
+        style={{ marginTop: 0 }}
+        title="Cerrar sesión"
+      >
         <span>🚪</span> Cerrar sesión
       </div>
     </aside>
