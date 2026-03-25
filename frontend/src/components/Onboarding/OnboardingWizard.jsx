@@ -18,41 +18,45 @@ const OnboardingWizard = ({ onCompleted, onSkipped }) => {
   const [error, setError] = useState("");
   const [status, setStatus] = useState(null);
 
+  // Fetch initial onboarding status
   const fetchStatus = async () => {
     try {
       setLoading(true);
-      console.log("[ONBOARDING] Iniciando fetchStatus");
-      console.log("[ONBOARDING] API_BASE_URL:", API_BASE_URL);
+      setError("");
+
+      if (!api) {
+        throw new Error("API client no inicializado");
+      }
 
       const res = await api.get("/onboarding/status");
 
-      console.log("[ONBOARDING] ✅ Respuesta recibida:", {
-        status: res.status,
-        data: res.data,
-        dataType: typeof res.data,
-      });
+      if (!res || !res.data) {
+        throw new Error("Respuesta vacía del servidor");
+      }
 
       const data = res.data;
       setStatus(data);
-      if (data?.currentStep) {
-        setCurrentStep(data.currentStep);
+
+      // Set current step if available, otherwise keep default
+      if (data && typeof data.current_step === "number") {
+        setCurrentStep(data.current_step || 1);
       }
-      setError("");
     } catch (err) {
-      console.error("[ONBOARDING] ❌ Error completo:", {
-        message: err.message,
-        code: err.code,
-        status: err.response?.status,
-        statusText: err.response?.statusText,
-        url: err.config?.url,
-        baseURL: err.config?.baseURL,
-        fullUrl: err.config?.baseURL + err.config?.url,
-        responseType: typeof err.response?.data,
-        responseSize: String(err.response?.data).length,
-        responsePreview: String(err.response?.data).substring(0, 200),
-        isHTML: String(err.response?.data).includes("<!doctype"),
+      console.error("[ONBOARDING] Error fetching status:", {
+        message: err?.message,
+        status: err?.response?.status,
+        url: err?.config?.url,
       });
-      setError("No se pudo cargar el estado de onboarding.");
+
+      // Fallback: set default onboarding state
+      setStatus({
+        current_step: 1,
+        completed: false,
+        skipped: false,
+      });
+      setCurrentStep(1);
+      // No mostrar error al usuario en el primer load
+      setError("");
     } finally {
       setLoading(false);
     }
@@ -62,16 +66,21 @@ const OnboardingWizard = ({ onCompleted, onSkipped }) => {
     fetchStatus();
   }, []);
 
+  // Update step on backend
   const updateStep = async (step) => {
     try {
       setSaving(true);
       setError("");
-      console.log("[ONBOARDING] Actualizando paso a:", step);
+
+      if (!api) {
+        throw new Error("API client no inicializado");
+      }
+
       await api.put("/onboarding/step", { step });
       setCurrentStep(step);
     } catch (err) {
-      console.error("[ONBOARDING] Error actualizando paso:", err.message);
-      setError("Error al guardar el progreso.");
+      console.error("[ONBOARDING] Error updating step:", err?.message);
+      setError("Error al guardar el progreso. Intenta de nuevo.");
     } finally {
       setSaving(false);
     }
@@ -91,12 +100,19 @@ const OnboardingWizard = ({ onCompleted, onSkipped }) => {
     try {
       setSaving(true);
       setError("");
-      console.log("[ONBOARDING] Completando onboarding");
+
+      if (!api) {
+        throw new Error("API client no inicializado");
+      }
+
       await api.post("/onboarding/complete");
-      if (onCompleted) onCompleted();
+
+      if (onCompleted) {
+        onCompleted();
+      }
     } catch (err) {
-      console.error("[ONBOARDING] Error completando:", err.message);
-      setError("No se pudo completar el onboarding.");
+      console.error("[ONBOARDING] Error completing:", err?.message);
+      setError("No se pudo completar el onboarding. Intenta de nuevo.");
     } finally {
       setSaving(false);
     }
@@ -106,12 +122,19 @@ const OnboardingWizard = ({ onCompleted, onSkipped }) => {
     try {
       setSaving(true);
       setError("");
-      console.log("[ONBOARDING] Saltando onboarding");
+
+      if (!api) {
+        throw new Error("API client no inicializado");
+      }
+
       await api.post("/onboarding/skip");
-      if (onSkipped) onSkipped();
+
+      if (onSkipped) {
+        onSkipped();
+      }
     } catch (err) {
-      console.error("[ONBOARDING] Error saltando:", err.message);
-      setError("No se pudo saltar el onboarding.");
+      console.error("[ONBOARDING] Error skipping:", err?.message);
+      setError("No se pudo saltar el onboarding. Intenta de nuevo.");
     } finally {
       setSaving(false);
     }
