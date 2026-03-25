@@ -99,7 +99,7 @@ api.interceptors.response.use(
 /**
  * Pide el timeline de un documento, incluyendo participants.
  */
-export async function getDocumentTimeline(id: number) {
+export async function getDocumentTimeline(id) {
   const res = await api.get(`/documents/${id}/timeline`);
   return res.data;
 }
