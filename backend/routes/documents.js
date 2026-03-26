@@ -10,7 +10,7 @@ const { validatePdf } = require("../middlewares/pdfValidator");
 const documentsController = require("../controllers/documents");
 const { resendReminder } = require("../controllers/documents/reminders");
 const {
-  downloadDocument,
+  downloadDocument,      // ← se usará para /:id/download
   downloadReportPdf,
   getDocumentAnalytics,
   previewDocument,
@@ -30,7 +30,9 @@ const {
 const remindersQueue = require("../queues/remindersQueue");
 
 // Flujo multi‑party (tabla `documentos`)
-const { validateCreateDocumentBody } = require("../validators/createDocumentSchema");
+const {
+  validateCreateDocumentBody,
+} = require("../validators/createDocumentSchema");
 const { generateVerificationCode } = require("../utils/randomCode");
 const emailQueue = require("../queues/emailQueue");
 
@@ -531,6 +533,9 @@ router.get("/:id/pdf", documentsController.getDocumentPdf);
 
 // Preview para visor/miniatura (usa mismo PDF, pero endpoint separado)
 router.get("/:id/preview", documentsController.getDocumentPdf);
+
+// NUEVO: descarga para frontend (/api/documents/:id/download)
+router.get("/:id/download", downloadDocument);
 
 router.get("/:id/timeline", documentsController.getTimeline);
 

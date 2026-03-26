@@ -32,7 +32,7 @@ function buildSafeFilename(base, fallbackPrefix) {
    ================================ */
 async function downloadDocument(req, res) {
   try {
-    const id = req.params.id;
+    const { id } = req.params;
     if (!id) {
       return res.status(400).json({ message: "ID de documento requerido" });
     }
@@ -59,8 +59,8 @@ async function downloadDocument(req, res) {
     }
 
     const doc = result.rows[0];
-
     const storageKey = doc.pdf_final_url || doc.file_path;
+
     if (!storageKey) {
       return res
         .status(404)
@@ -68,11 +68,9 @@ async function downloadDocument(req, res) {
     }
 
     const signedUrl = await getSignedUrl(storageKey, 3600);
-
     const fileResponse = await axios.get(signedUrl, {
       responseType: "arraybuffer",
     });
-
     const buffer = Buffer.from(fileResponse.data);
 
     // Verificación de integridad (solo log + header de warning)
@@ -108,7 +106,6 @@ async function downloadDocument(req, res) {
       "Content-Disposition",
       `attachment; filename="${filename}"`
     );
-
     return res.send(buffer);
   } catch (err) {
     console.error("❌ Error en descarga de documento:", err);
@@ -121,7 +118,7 @@ async function downloadDocument(req, res) {
    ================================ */
 async function previewDocument(req, res) {
   try {
-    const id = req.params.id;
+    const { id } = req.params;
     if (!id) {
       return res.status(400).json({ message: "ID de documento requerido" });
     }
@@ -148,8 +145,8 @@ async function previewDocument(req, res) {
     }
 
     const doc = result.rows[0];
-
     const storageKey = doc.pdf_final_url || doc.file_path;
+
     if (!storageKey) {
       return res
         .status(404)
@@ -157,11 +154,9 @@ async function previewDocument(req, res) {
     }
 
     const signedUrl = await getSignedUrl(storageKey, 3600);
-
     const fileResponse = await axios.get(signedUrl, {
       responseType: "arraybuffer",
     });
-
     const buffer = Buffer.from(fileResponse.data);
 
     // Verificación de hash (solo log + header de warning)
@@ -189,7 +184,7 @@ async function previewDocument(req, res) {
     }
 
     res.setHeader("Content-Type", "application/pdf");
-    // Sin Content-Disposition para que el navegador lo muestre en iframe / visor
+    // Sin Content-Disposition para que el navegador lo muestre en visor/iframe
     return res.send(buffer);
   } catch (err) {
     console.error("❌ Error en vista previa de documento:", err);

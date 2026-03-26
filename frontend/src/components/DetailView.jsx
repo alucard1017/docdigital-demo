@@ -1,3 +1,4 @@
+// src/components/DetailView.jsx
 import React, { useState, useEffect } from "react";
 import { Timeline } from "./Timeline";
 import { EventList } from "./EventList";
@@ -22,7 +23,7 @@ function getDocumentoLabel(value) {
 
 export function DetailView({
   selectedDoc,
-  pdfUrl, // URL del PDF que viene desde App.jsx
+  pdfUrl, // URL interna (blob) que viene desde el padre usando /documents/:id/preview
   puedeFirmar,
   puedeVisar,
   puedeRechazar,
@@ -74,7 +75,9 @@ export function DetailView({
         setLoadingParticipants(true);
         const data = await getDocumentTimeline(docId);
         setTimeline(data?.timeline || null);
-        setParticipants(Array.isArray(data?.participants) ? data.participants : []);
+        setParticipants(
+          Array.isArray(data?.participants) ? data.participants : []
+        );
       } catch (err) {
         if (err.name === "CanceledError" || err.name === "AbortError") return;
         console.error("Error fetching timeline/participants:", err);
@@ -177,7 +180,7 @@ export function DetailView({
       setRecordatorioLoading(true);
       const res = await api.post(`/documents/${selectedDoc.id}/recordatorio`);
       const data = res.data;
-      alert(`✅ ${data?.message || "Recordatorio enviado"}`);
+      alert(`✅ ${data?.message || "Recordorio enviado"}`);
     } catch (err) {
       console.error("Error enviando recordatorio a todos:", err);
       const msg =
@@ -190,7 +193,7 @@ export function DetailView({
     }
   }
 
-  /* ========= URLs de descarga / visualización ========= */
+  /* ========= URLs de descarga ========= */
 
   const baseUrl = api.defaults.baseURL || "";
   const downloadUrl = selectedDoc

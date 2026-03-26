@@ -25,7 +25,7 @@ export function DocumentDetailPage() {
   const handleViewPdf = async () => {
     if (!documentId) return;
     try {
-      // endpoint interno que devuelve el PDF; ajusta si usas /docs
+      // Usa el endpoint interno de descarga (prioriza pdf_final_url)
       const res = await api.get(`/documents/${documentId}/download`, {
         responseType: "blob",
       });
@@ -45,6 +45,7 @@ export function DocumentDetailPage() {
 
   const handleSign = async () => {
     if (!documentId) return;
+
     if (!acceptedLegal) {
       alert("Debes aceptar el aviso legal antes de firmar.");
       return;
@@ -54,7 +55,6 @@ export function DocumentDetailPage() {
       setSigning(true);
       setActionError("");
 
-      // endpoint interno de firma del propietario
       await api.post(`/documents/${documentId}/firmar`);
 
       alert("✅ Documento firmado correctamente.");
