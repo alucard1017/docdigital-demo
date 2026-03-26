@@ -161,6 +161,16 @@ function App() {
     }
   });
 
+  const [token, setToken] = useState(() => {
+    try {
+      return typeof localStorage !== "undefined"
+        ? localStorage.getItem("accessToken") || ""
+        : "";
+    } catch {
+      return "";
+    }
+  });
+
   // Onboarding
   const [checkingOnboarding, setCheckingOnboarding] = useState(false);
   const [showOnboarding, setShowOnboarding] = useState(false);
@@ -196,7 +206,7 @@ function App() {
   const apiRoot = API_BASE_URL;
 
   // WebSocket para notificaciones en tiempo real
-  const socket = useSocket(!!token);
+  const socket = token ? useSocket(token) : null;
 
   /* =============================== */
   /* CARGA DE DOCUMENTOS             */
@@ -229,7 +239,7 @@ function App() {
 
   // WebSocket listeners
   useEffect(() => {
-    if (!token) return;
+    if (!token || !socket) return;
 
     const handleSent = (data) => {
       console.log("📡 Documento enviado:", data);
@@ -375,75 +385,6 @@ function App() {
     if (view !== "list") return;
     cargarDocs();
   }, [token, view, sort, cargarDocs]);
-
-  /* =============================== */
-  /* LOGIN                           */
-  /* =============================== */
-
-  async function handleLogin(e) {
-    e.preventDefault();
-    setIsLoggingIn(true);
-    setMessage("Conectando con el servidor seguro...");
-
-    const inputVal = identifier.trim();
-    const isEmail = inputVal.includes("@");
-
-    const cleanValue = isEmail
-      ? inputVal.toLowerCase()
-      : inputVal.replace(/[^0-9kK]/g, "").toUpperCase();
-
-    if (!isEmail && cleanValue.length < 2) {
-      setMessage("❌ El RUT ingresado no es válido");
-      setIsLoggingIn(false);
-      return;
-    }
-
-    if (import.meta.env.DEV) {
-      console.log("[LOGIN] payload:", { identifier: cleanValue, isEmail });
-    }
-
-    try {
-      const res = await api.post(
-        "/auth/login",
-        {
-          identifier: cleanValue,
-          password,
-        },
-        {
-          // por si tu cliente Axios no lo tiene ya
-          withCredentials: true,
-        }
-      );
-
-      const data = res.data;
-
-      // el backend devuelve solo { user: {...} }
-      if (!data || !data.user) {
-        setMessage("❌ Respuesta inesperada del servidor de autenticación");
-        return;
-      }
-
-      setUser(data.user);
-      // opcional: guarda user en localStorage para rehidratar UI
-      localStorage.setItem("user", JSON.stringify(data.user));
-
-      // ya NO usamos token de localStorage, el backend trabaja con cookies httpOnly
-      setToken("SESSION"); // marcador cualquiera para activar lógica dependiente de token
-
-      setMessage("Acceso concedido");
-      setView("list");
-      checkOnboarding();
-    } catch (err) {
-      console.error("[LOGIN ERROR]", err);
-      const msg =
-        err.response?.data?.message ||
-        err.message ||
-        "Error de conexión, intenta nuevamente.";
-      setMessage("❌ " + msg);
-    } finally {
-      setIsLoggingIn(false);
-    }
-  }
 
   /* =============================== */
   /* ACCIONES: FIRMAR / VISAR ...    */

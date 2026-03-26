@@ -9,31 +9,23 @@ export function VerificationView({ API_URL }) {
   const [result, setResult] = useState(null);
   const [error, setError] = useState("");
 
-  // Normaliza la API base: quita / al final, corrige /api/api y asegura /api
   const getApiBase = () => {
     const baseFromProp = API_URL || import.meta.env.VITE_API_URL || "";
-    let trimmed = baseFromProp.replace(/\/+$/, ""); // sin / al final
+    let trimmed = baseFromProp.replace(/\/+$/, "");
 
-    // si viene con /api/api al final, dejar solo /api
     trimmed = trimmed.replace(/\/api\/api$/, "/api");
 
-    // si ya viene con /api al final, lo usamos tal cual
     if (trimmed.endsWith("/api")) return trimmed;
-
-    // si viene sin /api, lo agregamos
     return `${trimmed}/api`;
   };
 
   const API_BASE = getApiBase();
 
-  // Prellenar el código si viene en la URL ?code=...
   useEffect(() => {
     try {
       const params = new URLSearchParams(window.location.search);
       const urlCode = params.get("code");
-      if (urlCode) {
-        setCode(urlCode);
-      }
+      if (urlCode) setCode(urlCode);
     } catch {
       // ignorar
     }
@@ -58,7 +50,6 @@ export function VerificationView({ API_URL }) {
     setResult(null);
 
     try {
-      // IMPORTANTE: aquí ya no agregamos otro /api, solo /public/...
       const url = `${API_BASE}/public/verificar/${encodeURIComponent(
         cleanCode
       )}`;
@@ -78,7 +69,7 @@ export function VerificationView({ API_URL }) {
           const data = await res.json();
           if (data && data.message) message = data.message;
         } catch {
-          // respuesta sin JSON, ignorar
+          // respuesta sin JSON
         }
 
         throw new Error(message);
@@ -119,7 +110,6 @@ export function VerificationView({ API_URL }) {
   const signers = Array.isArray(result?.signers) ? result.signers : [];
   const events = Array.isArray(result?.events) ? result.events : [];
 
-  // Último evento de rechazo público (si existe)
   let lastRejectEvent = null;
   if (events.length > 0) {
     const rejects = events.filter(
@@ -139,13 +129,19 @@ export function VerificationView({ API_URL }) {
         typeof lastRejectEvent.metadata === "string"
           ? JSON.parse(lastRejectEvent.metadata)
           : lastRejectEvent.metadata;
-      if (meta && meta.motivo) {
-        rejectReason = meta.motivo;
-      }
+      if (meta && meta.motivo) rejectReason = meta.motivo;
     } catch {
-      // metadata no JSON, ignorar
+      // metadata no JSON
     }
   }
+
+  // Paleta más oscura y con buen contraste
+  const bgOuter = "#020617"; // slate-950
+  const bgCard =
+    "radial-gradient(circle at top left, rgba(37,99,235,0.18), #020617 55%, #020617 100%)";
+  const borderCard = "#1f2937";
+  const textMain = "#e5e7eb";
+  const textSubtle = "#94a3b8";
 
   return (
     <div
@@ -155,30 +151,47 @@ export function VerificationView({ API_URL }) {
         display: "flex",
         justifyContent: "center",
         alignItems: "flex-start",
-        background: "#0f172a0d",
-        color: "#0f172a",
+        background: bgOuter,
+        color: textMain,
       }}
     >
       <div
         style={{
           width: "100%",
           maxWidth: 900,
-          background: "#ffffff",
-          borderRadius: 16,
+          borderRadius: 18,
           padding: 24,
+          border: `1px solid ${borderCard}`,
+          background: bgCard,
           boxShadow:
-            "0 18px 45px -24px rgba(15,23,42,0.45), 0 0 0 1px rgba(148,163,184,0.15)",
+            "0 24px 70px rgba(15,23,42,0.9), 0 0 0 1px rgba(15,23,42,0.9)",
         }}
       >
         <PublicHeader />
 
-        <h1 style={{ fontSize: "1.8rem", marginBottom: 8 }}>
-          Verificación pública de documento
-        </h1>
-        <p style={{ color: "#6b7280", marginBottom: 24 }}>
-          Ingresa el código de verificación que aparece en el PDF o en el
-          correo de invitación para comprobar el estado actual del documento.
-        </p>
+        <div style={{ marginTop: 8, marginBottom: 20 }}>
+          <h1
+            style={{
+              fontSize: "1.7rem",
+              margin: 0,
+              marginBottom: 6,
+              color: "#f9fafb",
+            }}
+          >
+            Verificación pública de documento
+          </h1>
+          <p
+            style={{
+              color: textSubtle,
+              margin: 0,
+              fontSize: "0.95rem",
+              maxWidth: 620,
+            }}
+          >
+            Ingresa el código de verificación que aparece en el PDF o en el
+            correo de invitación para comprobar el estado actual del documento.
+          </p>
+        </div>
 
         <form
           onSubmit={handleSubmit}
@@ -186,7 +199,7 @@ export function VerificationView({ API_URL }) {
             display: "flex",
             gap: 12,
             alignItems: "center",
-            marginBottom: 24,
+            marginBottom: 20,
             flexWrap: "wrap",
           }}
         >
@@ -199,9 +212,12 @@ export function VerificationView({ API_URL }) {
               flex: 1,
               minWidth: 220,
               padding: "10px 12px",
-              borderRadius: 10,
-              border: "1px solid #cbd5f5",
+              borderRadius: 999,
+              border: "1px solid #1f2937",
               fontSize: "0.95rem",
+              background: "#020617",
+              color: textMain,
+              boxShadow: "0 0 0 1px rgba(15,23,42,0.8)",
             }}
           />
           <button
@@ -209,13 +225,17 @@ export function VerificationView({ API_URL }) {
             disabled={loading}
             style={{
               padding: "10px 18px",
-              borderRadius: 10,
+              borderRadius: 999,
               border: "none",
-              background: "#2563eb",
-              color: "#fff",
+              background: loading
+                ? "rgba(37,99,235,0.6)"
+                : "linear-gradient(135deg,#2563eb,#4f46e5)",
+              color: "#f9fafb",
               fontWeight: 600,
               cursor: loading ? "not-allowed" : "pointer",
               minWidth: 190,
+              fontSize: "0.9rem",
+              boxShadow: "0 14px 30px rgba(37,99,235,0.45)",
             }}
           >
             {loading ? "Verificando..." : "Verificar documento"}
@@ -227,11 +247,12 @@ export function VerificationView({ API_URL }) {
             style={{
               marginBottom: 16,
               padding: 12,
-              borderRadius: 10,
-              background: "#fef2f2",
-              color: "#b91c1c",
+              borderRadius: 12,
+              background:
+                "linear-gradient(135deg,rgba(185,28,28,0.16),rgba15,23,42,0.95)",
+              color: "#fecaca",
               fontSize: "0.9rem",
-              border: "1px solid #fecaca",
+              border: "1px solid #7f1d1d",
             }}
           >
             {error}
@@ -241,11 +262,13 @@ export function VerificationView({ API_URL }) {
         {loading && !result && (
           <div
             style={{
-              padding: 24,
+              padding: 18,
               borderRadius: 12,
-              background: "#eff6ff",
-              color: "#1d4ed8",
+              background:
+                "linear-gradient(135deg,rgba37,99,235,0.14),rgba15,23,42,0.95)",
+              color: "#bfdbfe",
               fontSize: "0.9rem",
+              border: "1px solid #1d4ed8",
             }}
           >
             Verificando el código… Esto puede tardar unos segundos.
@@ -258,8 +281,9 @@ export function VerificationView({ API_URL }) {
               marginTop: 8,
               padding: 20,
               borderRadius: 16,
-              border: "1px solid #e5e7eb",
-              background: "#f9fafb",
+              border: "1px solid #1f2937",
+              background:
+                "radial-gradient(circle at top left,rgba15,23,42,1,rgba15,23,42,0.96))",
             }}
           >
             {doc.status === "RECHAZADO" && (
@@ -267,10 +291,11 @@ export function VerificationView({ API_URL }) {
                 style={{
                   marginBottom: 16,
                   padding: 12,
-                  borderRadius: 10,
-                  background: "#fef2f2",
+                  borderRadius: 12,
+                  background:
+                    "linear-gradient(135deg,rgba(248,113,113,0.2),rgba15,23,42,0.96)",
                   border: "1px solid #fecaca",
-                  color: "#7f1d1d",
+                  color: "#fecaca",
                   fontSize: "0.9rem",
                 }}
               >
@@ -298,29 +323,35 @@ export function VerificationView({ API_URL }) {
               </div>
             )}
 
-            <h2 style={{ fontSize: "1.2rem", marginBottom: 12 }}>
+            <h2
+              style={{
+                fontSize: "1.15rem",
+                marginBottom: 10,
+                color: "#e5e7eb",
+              }}
+            >
               Detalles del documento
             </h2>
 
             <div
               style={{
                 display: "grid",
-                gridTemplateColumns: "1fr 1fr",
+                gridTemplateColumns: "minmax(0,1fr) minmax(0,1fr)",
                 gap: 12,
                 fontSize: "0.9rem",
               }}
             >
               <div>
-                <div style={{ fontSize: "0.75rem", color: "#6b7280" }}>
+                <div style={{ fontSize: "0.75rem", color: textSubtle }}>
                   Título del documento
                 </div>
-                <div style={{ fontWeight: 600 }}>
+                <div style={{ fontWeight: 600, color: "#f9fafb" }}>
                   {doc.title || doc.nombre || "Sin título"}
                 </div>
               </div>
 
               <div>
-                <div style={{ fontSize: "0.75rem", color: "#6b7280" }}>
+                <div style={{ fontSize: "0.75rem", color: textSubtle }}>
                   Estado actual
                 </div>
                 <div
@@ -328,10 +359,10 @@ export function VerificationView({ API_URL }) {
                     fontWeight: 700,
                     color:
                       doc.status === "FIRMADO"
-                        ? "#16a34a"
+                        ? "#4ade80"
                         : doc.status === "RECHAZADO"
-                        ? "#b91c1c"
-                        : "#0369a1",
+                        ? "#f97373"
+                        : "#38bdf8",
                   }}
                 >
                   {statusLabel(doc.status)}
@@ -339,7 +370,7 @@ export function VerificationView({ API_URL }) {
               </div>
 
               <div>
-                <div style={{ fontSize: "0.75rem", color: "#6b7280" }}>
+                <div style={{ fontSize: "0.75rem", color: textSubtle }}>
                   Tipo de trámite
                 </div>
                 <div>
@@ -350,7 +381,7 @@ export function VerificationView({ API_URL }) {
               </div>
 
               <div>
-                <div style={{ fontSize: "0.75rem", color: "#6b7280" }}>
+                <div style={{ fontSize: "0.75rem", color: textSubtle }}>
                   Fecha de creación
                 </div>
                 <div>
@@ -361,7 +392,7 @@ export function VerificationView({ API_URL }) {
               </div>
 
               <div style={{ gridColumn: "1 / -1", marginTop: 8 }}>
-                <div style={{ fontSize: "0.75rem", color: "#6b7280" }}>
+                <div style={{ fontSize: "0.75rem", color: textSubtle }}>
                   Firmantes
                 </div>
                 {signers.length > 0 ? (
@@ -369,14 +400,14 @@ export function VerificationView({ API_URL }) {
                     style={{
                       marginTop: 6,
                       paddingLeft: 18,
-                      color: "#0f172a",
+                      color: "#e5e7eb",
                     }}
                   >
                     {signers.map((s) => (
                       <li key={s.id || s.email}>
                         {s.name || s.email}{" "}
                         {s.signed_at
-                          ? `✔️ firmó el ${new Date(
+                          ? `✔ firmó el ${new Date(
                               s.signed_at
                             ).toLocaleString("es-CL")}`
                           : "⏳ pendiente"}
@@ -384,7 +415,7 @@ export function VerificationView({ API_URL }) {
                     ))}
                   </ul>
                 ) : (
-                  <div style={{ color: "#6b7280" }}>
+                  <div style={{ color: textSubtle }}>
                     No hay firmantes registrados.
                   </div>
                 )}
@@ -392,21 +423,20 @@ export function VerificationView({ API_URL }) {
 
               {events.length > 0 && (
                 <div style={{ gridColumn: "1 / -1", marginTop: 8 }}>
-                  <div style={{ fontSize: "0.75rem", color: "#6b7280" }}>
+                  <div style={{ fontSize: "0.75rem", color: textSubtle }}>
                     Historial de eventos
                   </div>
                   <ul
                     style={{
                       marginTop: 6,
                       paddingLeft: 18,
-                      color: "#0f172a",
+                      color: "#e5e7eb",
                     }}
                   >
                     {events.map((ev, idx) => (
                       <li key={idx}>
-                        [
-                        {new Date(ev.created_at).toLocaleString("es-CL")}
-                        ] {ev.descripcion || ev.event_type}
+                        [{new Date(ev.created_at).toLocaleString("es-CL")}]{" "}
+                        {ev.descripcion || ev.event_type}
                       </li>
                     ))}
                   </ul>
@@ -426,10 +456,12 @@ export function VerificationView({ API_URL }) {
                     gap: 6,
                     padding: "8px 14px",
                     borderRadius: 999,
-                    background: "#0f172a",
-                    color: "#e5e7eb",
+                    background:
+                      "linear-gradient(135deg,#f97316,#ea580c,#b91c1c)",
+                    color: "#fef2f2",
                     fontSize: "0.9rem",
                     textDecoration: "none",
+                    boxShadow: "0 12px 28px rgba(248,113,113,0.45)",
                   }}
                 >
                   📄 Abrir PDF final firmado
@@ -439,7 +471,9 @@ export function VerificationView({ API_URL }) {
           </div>
         )}
 
-        <PublicFooter />
+        <div style={{ marginTop: 24 }}>
+          <PublicFooter />
+        </div>
       </div>
     </div>
   );
