@@ -152,9 +152,10 @@ async function getPublicDocByDocumentToken(req, res) {
           event_type,
           ip_address,
           user_agent,
-          metadata
+          metadata,
+          action
         )
-        VALUES ($1, NULL, 'INVITATION_OPENED', $2, $3, $4)
+        VALUES ($1, NULL, 'INVITATION_OPENED', $2, $3, $4, 'INVITATION_OPENED')
         `,
         [
           doc.id,
@@ -378,9 +379,10 @@ async function publicSignDocument(req, res) {
           ip_address,
           user_agent,
           hash_document,
-          metadata
+          metadata,
+          action
         )
-        VALUES ($1, NULL, 'SIGNED', $2, $3, $4, $5)
+        VALUES ($1, NULL, 'SIGNED', $2, $3, $4, $5, 'SIGNED')
         `,
         [
           doc.id,
@@ -402,9 +404,10 @@ async function publicSignDocument(req, res) {
             document_id,
             participant_id,
             event_type,
-            metadata
+            metadata,
+            action
           )
-          VALUES ($1, NULL, 'STATUS_CHANGED', $2)
+          VALUES ($1, NULL, 'STATUS_CHANGED', $2, 'STATUS_CHANGED')
           `,
           [
             doc.id,
@@ -460,8 +463,6 @@ async function publicSignDocument(req, res) {
             categoriaFirma: docNuevo.categoria_firma || "SIMPLE",
             numeroContratoInterno: doc.numero_contrato_interno,
           });
-
-          // No actualizar pdf_final_url aquí, ya lo hace pdfSeal.js.
         }
       } catch (sealError) {
         console.error(
@@ -645,9 +646,10 @@ async function publicRejectDocument(req, res) {
           event_type,
           ip_address,
           user_agent,
-          metadata
+          metadata,
+          action
         )
-        VALUES ($1, NULL, 'REJECTED', $2, $3, $4)
+        VALUES ($1, NULL, 'REJECTED', $2, $3, $4, $5, 'REJECTED')
         `,
         [
           doc.id,
@@ -668,9 +670,10 @@ async function publicRejectDocument(req, res) {
           document_id,
           participant_id,
           event_type,
-          metadata
+          metadata,
+          action
         )
-        VALUES ($1, NULL, 'STATUS_CHANGED', $2)
+        VALUES ($1, NULL, 'STATUS_CHANGED', $2, 'STATUS_CHANGED')
         `,
         [
           doc.id,
@@ -800,9 +803,10 @@ async function publicVisarDocument(req, res) {
           event_type,
           ip_address,
           user_agent,
-          metadata
+          metadata,
+          action
         )
-        VALUES ($1, NULL, 'VISADO', $2, $3, $4)
+        VALUES ($1, NULL, 'VISADO', $2, $3, $4, $5, 'VISADO')
         `,
         [
           doc.id,
@@ -821,9 +825,10 @@ async function publicVisarDocument(req, res) {
           document_id,
           participant_id,
           event_type,
-          metadata
+          metadata,
+          action
         )
-        VALUES ($1, NULL, 'STATUS_CHANGED', $2)
+        VALUES ($1, NULL, 'STATUS_CHANGED', $2, 'STATUS_CHANGED')
         `,
         [
           doc.id,

@@ -13,6 +13,7 @@ function buildPublicSignUrl(token) {
 /**
  * Procesa recordatorios pendientes:
  * - Busca recordatorios con scheduled_at <= NOW()
+ * - Usa el signer real (document_signers) para obtener el sign_token
  * - Intenta enviar email
  * - Actualiza status y attempt
  */
@@ -21,24 +22,31 @@ async function procesarRecordatoriosPendientes() {
     console.log("⏰ Iniciando procesamiento de recordatorios pendientes...");
 
     const recordatoriosRes = await db.query(
-      `SELECT 
-         r.id,
-         r.documento_id,
-         r.firmante_id,
-         r.email,
-         r.attempt,
-         r.max_attempts,
-         r.status,
-         d.titulo,
-         f.token_publico AS token_firmante
-       FROM recordatorios r
-       JOIN documentos d ON d.id = r.documento_id
-       LEFT JOIN firmantes f ON f.id = r.firmante_id
-       WHERE r.status = 'PENDING'
-         AND r.scheduled_at <= NOW()
-         AND r.attempt < r.max_attempts
-       ORDER BY r.scheduled_at ASC
-       LIMIT 100`
+      `
+      SELECT 
+        r.id,
+        r.documento_id,          -- referencia al documento original (tabla documentos)
+        r.firmante_id,           -- id del firmante en tabla firmantes (modelo viejo)
+        r.email,
+        r.attempt,
+        r.max_attempts,
+        r.status,
+        d.titulo,
+        ds.sign_token AS token_firmante
+      FROM recordatorios r
+      JOIN documentos d ON d.id = r.documento_id
+      LEFT JOIN firmantes f ON f.id = r.firmante_id
+      LEFT JOIN documents nd
+        ON nd.nuevo_documento_id = d.id
+      LEFT JOIN document_signers ds
+        ON ds.document_id = nd.id
+       AND ds.email = r.email
+      WHERE r.status = 'PENDING'
+        AND r.scheduled_at <= NOW()
+        AND r.attempt < r.max_attempts
+      ORDER BY r.scheduled_at ASC
+      LIMIT 100
+      `
     );
 
     const recordatorios = recordatoriosRes.rows;
@@ -51,6 +59,27 @@ async function procesarRecordatoriosPendientes() {
 
     for (const rec of recordatorios) {
       try {
+        // Preferir token del modelo nuevo; si no existe, no enviamos
+        if (!rec.token_firmante) {
+          console.warn(
+            `⚠️ Recordatorio ${rec.id} sin token_firmante (sign_token); se marca como FAILED`
+          );
+
+          await db.query(
+            `
+            UPDATE recordatorios
+            SET status = 'FAILED',
+                attempt = attempt + 1,
+                error_message = 'Token de firma no encontrado para este firmante',
+                updated_at = NOW()
+            WHERE id = $1
+            `,
+            [rec.id]
+          );
+          fallidos++;
+          continue;
+        }
+
         const url = buildPublicSignUrl(rec.token_firmante);
 
         await sendSigningInvitation(
@@ -61,12 +90,14 @@ async function procesarRecordatoriosPendientes() {
         );
 
         await db.query(
-          `UPDATE recordatorios
-           SET status = 'SENT',
-               sent_at = NOW(),
-               attempt = attempt + 1,
-               updated_at = NOW()
-           WHERE id = $1`,
+          `
+          UPDATE recordatorios
+          SET status = 'SENT',
+              sent_at = NOW(),
+              attempt = attempt + 1,
+              updated_at = NOW()
+          WHERE id = $1
+          `,
           [rec.id]
         );
 
@@ -82,12 +113,14 @@ async function procesarRecordatoriosPendientes() {
           nuevoIntento >= rec.max_attempts ? "FAILED" : "PENDING";
 
         await db.query(
-          `UPDATE recordatorios
-           SET status = $1,
-               attempt = attempt + 1,
-               error_message = $2,
-               updated_at = NOW()
-           WHERE id = $3`,
+          `
+          UPDATE recordatorios
+          SET status = $1,
+              attempt = attempt + 1,
+              error_message = $2,
+              updated_at = NOW()
+          WHERE id = $3
+          `,
           [status, emailErr.message, rec.id]
         );
 
@@ -108,19 +141,22 @@ async function procesarRecordatoriosPendientes() {
 
 /**
  * Cancela recordatorios de documentos firmados o rechazados
+ * (usa la tabla documentos porque recordatorios.documento_id apunta allí)
  */
 async function cancelarRecordatoriosFirmados() {
   try {
     const canceladosRes = await db.query(
-      `UPDATE recordatorios
-       SET status = 'CANCELLED',
-           updated_at = NOW()
-       WHERE status IN ('PENDING', 'SENT')
-         AND documento_id IN (
-           SELECT id FROM documentos
-           WHERE estado IN ('FIRMADO', 'RECHAZADO')
-         )
-       RETURNING id`
+      `
+      UPDATE recordatorios
+      SET status = 'CANCELLED',
+          updated_at = NOW()
+      WHERE status IN ('PENDING', 'SENT')
+        AND documento_id IN (
+          SELECT id FROM documentos
+          WHERE estado IN ('FIRMADO', 'RECHAZADO')
+        )
+      RETURNING id
+      `
     );
 
     if (canceladosRes.rowCount > 0) {
