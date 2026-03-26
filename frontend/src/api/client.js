@@ -5,11 +5,9 @@ export const getApiBaseUrl = () => {
   const raw = import.meta.env.VITE_API_URL;
 
   if (raw && raw.trim()) {
-    // Quita barras finales
     return raw.replace(/\/+$/, "");
   }
 
-  // Fallback local
   return "http://localhost:4000/api";
 };
 
@@ -20,16 +18,15 @@ if (import.meta.env.DEV) {
 }
 
 const api = axios.create({
-  // ej: http://localhost:4000/api o https://verifirma-api.onrender.com/api
   baseURL: API_BASE_URL,
   timeout: 30000,
-  withCredentials: false,
+  withCredentials: true, // usamos cookies httpOnly + header Authorization
 });
 
 // Token storage
 const getAccessToken = () => {
   try {
-    return localStorage.getItem("token") || null;
+    return localStorage.getItem("accessToken") || null;
   } catch {
     return null;
   }
@@ -37,7 +34,7 @@ const getAccessToken = () => {
 
 const clearSessionAndRedirect = () => {
   try {
-    localStorage.removeItem("token");
+    localStorage.removeItem("accessToken");
     localStorage.removeItem("user");
   } catch {}
   window.location.href = "/login";
@@ -47,6 +44,7 @@ const clearSessionAndRedirect = () => {
 api.interceptors.request.use(
   (config) => {
     const token = getAccessToken();
+
     if (token) {
       config.headers = config.headers || {};
       config.headers.Authorization = `Bearer ${token}`;
@@ -98,9 +96,6 @@ api.interceptors.response.use(
   }
 );
 
-/**
- * Pide el timeline de un documento, incluyendo participants.
- */
 export async function getDocumentTimeline(id) {
   const res = await api.get(`/documents/${id}/timeline`);
   return res.data;

@@ -370,7 +370,9 @@ router.post("/login", async (req, res) => {
 
     return res.json({
       user: tokenPayload,
+      accessToken,      // nuevo
     });
+
   } catch (err) {
     console.error("❌ Error inesperado en /api/auth/login:", err);
     Sentry.captureException(err);

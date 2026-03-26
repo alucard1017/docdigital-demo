@@ -7,18 +7,19 @@ const SOCKET_URL =
   import.meta.env.VITE_API_URL ||
   "http://localhost:4000";
 
-export function useSocket(token) {
+export function useSocket(accessToken) {
   const socketRef = useRef(null);
   const listenersRef = useRef({});
 
   useEffect(() => {
-    if (!token) return;
+    if (!accessToken) return;
 
     console.log("[WS] Conectando a:", SOCKET_URL);
 
     const socket = io(SOCKET_URL, {
-      auth: { token },
+      auth: { token: accessToken },
       transports: ["websocket", "polling"],
+      withCredentials: true,
     });
 
     socket.on("connect", () => {
@@ -56,7 +57,7 @@ export function useSocket(token) {
         socket.disconnect();
       }
     };
-  }, [token]);
+  }, [accessToken]);
 
   const on = useCallback((event, callback) => {
     const socket = socketRef.current;

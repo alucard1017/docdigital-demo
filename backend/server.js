@@ -26,8 +26,6 @@ const { requireAuth, requireRole } = require("./routes/auth");
 const plansRoutes = require("./routes/plans");
 const templatesRoutes = require("./routes/templates");
 
-
-
 /* ================================
    INICIALIZAR WORKER DE BULLMQ (BACKGROUND JOBS)
    ================================ */
@@ -49,10 +47,7 @@ try {
   iniciarReminderScheduler();
   console.log("✓ Scheduler de recordatorios iniciado");
 } catch (err) {
-  console.warn(
-    "⚠️ No se pudo iniciar reminderScheduler:",
-    err.message
-  );
+  console.warn("⚠️ No se pudo iniciar reminderScheduler:", err.message);
 }
 
 /* ================================
@@ -597,6 +592,7 @@ app.use((req, res) => {
   });
 });
 console.log("✓ Middleware 404 registrado");
+
 /* ================================
    INICIAR SERVIDOR
    ================================ */
@@ -641,5 +637,3 @@ process.on("uncaughtException", (error) => {
 });
 
 module.exports = app;
-
-

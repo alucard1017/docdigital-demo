@@ -89,9 +89,68 @@ function App() {
   const [formErrors, setFormErrors] = useState({});
   const [tipoTramite, setTipoTramite] = useState("propio");
 
-  const [token, setToken] = useState(() =>
-    typeof localStorage !== "undefined" ? localStorage.getItem("token") || "" : ""
-  );
+  async function handleLogin(e) {
+    e.preventDefault();
+    setIsLoggingIn(true);
+    setMessage("Conectando con el servidor seguro...");
+
+    const inputVal = identifier.trim();
+    const isEmail = inputVal.includes("@");
+
+    const cleanValue = isEmail
+      ? inputVal.toLowerCase()
+      : inputVal.replace(/[^0-9kK]/g, "").toUpperCase();
+
+    if (!isEmail && cleanValue.length < 2) {
+      setMessage("❌ El RUT ingresado no es válido");
+      setIsLoggingIn(false);
+      return;
+    }
+
+    if (import.meta.env.DEV) {
+      console.log("[LOGIN] payload:", { identifier: cleanValue, isEmail });
+    }
+
+    try {
+      const res = await api.post(
+        "/auth/login",
+        {
+          identifier: cleanValue,
+          password,
+        },
+        {
+          withCredentials: true, // mantiene cookies httpOnly
+        }
+      );
+
+      const data = res.data;
+
+      if (!data || !data.user || !data.accessToken) {
+        setMessage("❌ Respuesta inesperada del servidor de autenticación");
+        return;
+      }
+
+      setUser(data.user);
+      setToken(data.accessToken);
+
+      localStorage.setItem("user", JSON.stringify(data.user));
+      localStorage.setItem("accessToken", data.accessToken);
+
+      setMessage("Acceso concedido");
+      setView("list");
+      checkOnboarding();
+    } catch (err) {
+      console.error("[LOGIN ERROR]", err);
+      const msg =
+        err.response?.data?.message ||
+        err.message ||
+        "Error de conexión, intenta nuevamente.";
+      setMessage("❌ " + msg);
+    } finally {
+      setIsLoggingIn(false);
+    }
+  }
+
   const [user, setUser] = useState(() => {
     try {
       return typeof localStorage !== "undefined"
@@ -137,7 +196,7 @@ function App() {
   const apiRoot = API_BASE_URL;
 
   // WebSocket para notificaciones en tiempo real
-  const socket = useSocket(token);
+  const socket = useSocket(!!token);
 
   /* =============================== */
   /* CARGA DE DOCUMENTOS             */
@@ -344,16 +403,33 @@ function App() {
     }
 
     try {
-      const res = await api.post("/auth/login", {
-        identifier: cleanValue,
-        password,
-      });
+      const res = await api.post(
+        "/auth/login",
+        {
+          identifier: cleanValue,
+          password,
+        },
+        {
+          // por si tu cliente Axios no lo tiene ya
+          withCredentials: true,
+        }
+      );
 
       const data = res.data;
-      setToken(data.token);
+
+      // el backend devuelve solo { user: {...} }
+      if (!data || !data.user) {
+        setMessage("❌ Respuesta inesperada del servidor de autenticación");
+        return;
+      }
+
       setUser(data.user);
-      localStorage.setItem("token", data.token);
+      // opcional: guarda user en localStorage para rehidratar UI
       localStorage.setItem("user", JSON.stringify(data.user));
+
+      // ya NO usamos token de localStorage, el backend trabaja con cookies httpOnly
+      setToken("SESSION"); // marcador cualquiera para activar lógica dependiente de token
+
       setMessage("Acceso concedido");
       setView("list");
       checkOnboarding();
@@ -437,7 +513,8 @@ function App() {
   /* =============================== */
 
   const logout = () => {
-    localStorage.clear();
+    localStorage.removeItem("user");
+    localStorage.removeItem("accessToken");
     setToken("");
     setUser(null);
     window.location.reload();
