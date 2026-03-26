@@ -17,6 +17,7 @@ async function getPublicDocBySignerToken(req, res) {
          d.title,
          d.status,
          d.file_path,
+         d.pdf_final_url,
          d.destinatario_nombre,
          d.empresa_rut,
          d.requires_visado,
@@ -53,13 +54,14 @@ async function getPublicDocBySignerToken(req, res) {
       });
     }
 
-    if (!row.file_path) {
+    const basePath = row.pdf_final_url || row.file_path;
+    if (!basePath) {
       return res
         .status(404)
         .json({ message: "Documento sin archivo asociado" });
     }
 
-    const pdfUrl = await getSignedUrl(row.file_path, 3600);
+    const pdfUrl = await getSignedUrl(basePath, 3600);
 
     return res.json({
       document: {
@@ -102,6 +104,7 @@ async function getPublicDocByDocumentToken(req, res) {
          title,
          status,
          file_path,
+         pdf_final_url,
          destinatario_nombre,
          empresa_rut,
          requires_visado,
@@ -110,7 +113,6 @@ async function getPublicDocByDocumentToken(req, res) {
          firmante_nombre,
          firmante_run,
          numero_contrato_interno,
-         pdf_final_url,
          visador_nombre
        FROM documents
        WHERE signature_token = $1`,
@@ -134,15 +136,16 @@ async function getPublicDocByDocumentToken(req, res) {
       });
     }
 
-    if (!doc.file_path) {
+    const basePath = doc.pdf_final_url || doc.file_path;
+    if (!basePath) {
       return res
         .status(404)
         .json({ message: "Documento sin archivo asociado" });
     }
 
-    const pdfUrl = await getSignedUrl(doc.file_path, 3600);
+    const pdfUrl = await getSignedUrl(basePath, 3600);
 
-    // Registrar evento de apertura de enlace público en document_events (nuevo timeline)
+    // Registrar evento de apertura de enlace público en document_events
     try {
       await db.query(
         `

@@ -55,7 +55,7 @@ async function getUserDocuments(req, res) {
     const docs = result.rows.map((row) => ({
       ...row,
       requiresVisado: row.requires_visado === true,
-      file_url: row.file_path,
+      file_url: row.pdf_final_url || row.file_path,
     }));
 
     return res.json(docs);
@@ -587,7 +587,7 @@ async function createDocument(req, res) {
     return res.status(201).json({
       ...doc,
       requiresVisado: doc.requires_visado === true,
-      file_url: doc.file_path,
+      file_url: doc.pdf_final_url || doc.file_path,
       documentoId: documentoNuevo.id,
       codigoVerificacion: documentoNuevo.codigo_verificacion,
       categoriaFirma: documentoNuevo.categoria_firma,

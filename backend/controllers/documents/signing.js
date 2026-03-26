@@ -228,7 +228,7 @@ async function visarDocument(req, res) {
 
     return res.json({
       ...doc,
-      file_url: doc.file_path,
+      file_url: doc.pdf_final_url || doc.file_path,
       message: "Documento visado exitosamente",
     });
   } catch (err) {
@@ -338,7 +338,7 @@ async function rejectDocument(req, res) {
 
     return res.json({
       ...doc,
-      file_url: doc.file_path,
+      file_url: doc.pdf_final_url || doc.file_path,
       message: "Documento rechazado exitosamente",
     });
   } catch (err) {
