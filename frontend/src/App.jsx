@@ -203,22 +203,36 @@ function App() {
     };
   }, [token, socket, cargarDocs]);
 
-  // Cargar URL de PDF para la vista de detalle
-  useEffect(() => {
-    if (!selectedDoc?.id) {
-      setPdfUrl(null);
-      return;
-    }
+// Cargar URL de PDF para la vista de detalle
+useEffect(() => {
+  if (!selectedDoc?.id) {
+    setPdfUrl(null);
+    return;
+  }
 
+  let objectUrl;
+
+  (async () => {
     try {
-      const baseUrl = api.defaults.baseURL || API_BASE_URL;
-      const url = `${baseUrl}/documents/${selectedDoc.id}/preview`;
-      setPdfUrl(url);
+      const res = await api.get(`/documents/${selectedDoc.id}/preview`, {
+        responseType: "blob",
+      });
+
+      const blob = new Blob([res.data], { type: "application/pdf" });
+      objectUrl = URL.createObjectURL(blob);
+      setPdfUrl(objectUrl);
     } catch (err) {
       console.error("Error preparando URL de PDF:", err);
       setPdfUrl(null);
     }
-  }, [selectedDoc?.id]);
+  })();
+
+  return () => {
+    if (objectUrl) {
+      URL.revokeObjectURL(objectUrl);
+    }
+  };
+}, [selectedDoc?.id]);
 
   /* =============================== */
   /* FIRMA / VISADO PÚBLICO          */

@@ -324,7 +324,7 @@ export function DetailView({
 
             <div className="detail-toolbar">
               <span className="detail-toolbar-label">
-                Visualización del documento original
+                Visualización del documento final
               </span>
 
               <div className="detail-toolbar-actions">
@@ -383,13 +383,14 @@ export function DetailView({
             <div className="detail-pdf-wrapper">
               {pdfUrl ? (
                 <iframe
-                  title="PDF del documento"
+                  title={`PDF del documento ${selectedDoc.id}`}
                   src={pdfUrl}
                   className="detail-pdf-iframe"
                 />
               ) : (
                 <div className="detail-pdf-empty">
-                  No se encontró el archivo PDF para este documento.
+                  No se pudo cargar la vista previa del PDF. Usa el botón
+                  "Descargar PDF" para ver el documento.
                 </div>
               )}
             </div>
