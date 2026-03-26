@@ -31,28 +31,30 @@ const BUCKET = R2_BUCKET;
    ================================ */
 
 /**
- * Subir un PDF desde disco a R2
+ * Subir un PDF a R2 usando un Buffer en memoria.
+ * Úsalo cuando ya tengas el PDF en req.file.buffer o generado por pdf-lib.
  */
-async function uploadPdfToS3(filePath, fileName) {
+async function uploadPdfToS3(fileName, fileBuffer) {
   try {
-    if (!fs.existsSync(filePath)) {
-      throw new Error(`Archivo no encontrado: ${filePath}`);
+    if (!fileName || typeof fileName !== "string") {
+      throw new Error("fileName inválido en uploadPdfToS3");
     }
-
-    const fileContent = fs.readFileSync(filePath);
+    if (!fileBuffer || !Buffer.isBuffer(fileBuffer)) {
+      throw new Error("Buffer inválido en uploadPdfToS3");
+    }
 
     const command = new PutObjectCommand({
       Bucket: BUCKET,
       Key: fileName,
-      Body: fileContent,
+      Body: fileBuffer,
       ContentType: "application/pdf",
     });
 
     await r2Client.send(command);
-    console.log(`✅ PDF subido a R2: ${fileName}`);
+    console.log(`✅ [R2] PDF subido: ${fileName}`);
     return fileName;
   } catch (error) {
-    console.error("❌ Error al subir PDF a R2:", error.message || error);
+    console.error("❌ [R2] Error al subir PDF:", error.message || error);
     throw error;
   }
 }
@@ -62,6 +64,13 @@ async function uploadPdfToS3(filePath, fileName) {
  */
 async function uploadBufferToS3(fileName, buffer, contentType = "application/octet-stream") {
   try {
+    if (!fileName || typeof fileName !== "string") {
+      throw new Error("fileName inválido en uploadBufferToS3");
+    }
+    if (!buffer || !Buffer.isBuffer(buffer)) {
+      throw new Error("Buffer inválido en uploadBufferToS3");
+    }
+
     const command = new PutObjectCommand({
       Bucket: BUCKET,
       Key: fileName,
@@ -70,10 +79,10 @@ async function uploadBufferToS3(fileName, buffer, contentType = "application/oct
     });
 
     await r2Client.send(command);
-    console.log(`✅ Buffer subido a R2: ${fileName}`);
+    console.log(`✅ [R2] Buffer subido: ${fileName}`);
     return fileName;
   } catch (error) {
-    console.error("❌ Error al subir buffer a R2:", error.message || error);
+    console.error("❌ [R2] Error al subir buffer:", error.message || error);
     throw error;
   }
 }
@@ -83,10 +92,14 @@ async function uploadBufferToS3(fileName, buffer, contentType = "application/oct
    ================================ */
 
 /**
- * Descargar un PDF de R2 a disco local
+ * Descargar un PDF de R2 a disco local.
+ * Útil para diagnósticos o tareas batch.
  */
 async function downloadPdfFromS3(fileName, savePath) {
   try {
+    if (!fileName) throw new Error("fileName requerido en downloadPdfFromS3");
+    if (!savePath) throw new Error("savePath requerido en downloadPdfFromS3");
+
     const command = new GetObjectCommand({
       Bucket: BUCKET,
       Key: fileName,
@@ -106,10 +119,10 @@ async function downloadPdfFromS3(fileName, savePath) {
     const buffer = Buffer.concat(chunks);
 
     fs.writeFileSync(savePath, buffer);
-    console.log(`✅ PDF descargado desde R2: ${fileName}`);
+    console.log(`✅ [R2] PDF descargado: ${fileName} -> ${savePath}`);
     return savePath;
   } catch (error) {
-    console.error("❌ Error al descargar PDF de R2:", error.message);
+    console.error("❌ [R2] Error al descargar PDF:", error.message);
     throw error;
   }
 }
@@ -119,6 +132,8 @@ async function downloadPdfFromS3(fileName, savePath) {
  */
 async function getObjectBuffer(fileName) {
   try {
+    if (!fileName) throw new Error("fileName requerido en getObjectBuffer");
+
     const command = new GetObjectCommand({
       Bucket: BUCKET,
       Key: fileName,
@@ -133,13 +148,13 @@ async function getObjectBuffer(fileName) {
 
     return Buffer.concat(chunks);
   } catch (error) {
-    console.error("❌ Error al obtener buffer desde R2:", error.message);
+    console.error("❌ [R2] Error al obtener buffer:", error.message);
     throw error;
   }
 }
 
 /* ================================
-   FUNCIONES DE URL
+   FUNCIONES DE URL Y DELETE
    ================================ */
 
 /**
@@ -147,6 +162,8 @@ async function getObjectBuffer(fileName) {
  */
 async function getSignedUrl(fileName, expiresIn = 3600) {
   try {
+    if (!fileName) throw new Error("fileName requerido en getSignedUrl");
+
     const command = new GetObjectCommand({
       Bucket: BUCKET,
       Key: fileName,
@@ -155,7 +172,28 @@ async function getSignedUrl(fileName, expiresIn = 3600) {
     const url = await presign(r2Client, command, { expiresIn });
     return url;
   } catch (error) {
-    console.error("❌ Error al generar URL firmada de R2:", error.message);
+    console.error("❌ [R2] Error al generar URL firmada:", error.message);
+    throw error;
+  }
+}
+
+/**
+ * Eliminar un objeto del bucket
+ */
+async function deleteObjectFromS3(fileName) {
+  try {
+    if (!fileName) throw new Error("fileName requerido en deleteObjectFromS3");
+
+    const command = new DeleteObjectCommand({
+      Bucket: BUCKET,
+      Key: fileName,
+    });
+
+    await r2Client.send(command);
+    console.log(`✅ [R2] Objeto eliminado: ${fileName}`);
+    return true;
+  } catch (error) {
+    console.error("❌ [R2] Error al eliminar objeto:", error.message);
     throw error;
   }
 }
@@ -170,4 +208,5 @@ module.exports = {
   downloadPdfFromS3,
   getSignedUrl,
   getObjectBuffer,
+  deleteObjectFromS3,
 };

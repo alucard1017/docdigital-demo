@@ -219,7 +219,7 @@ async function createDocument(req, res) {
 
       // clave S3 original
       originalKey = `documentos/${req.user.id}/original-${Date.now()}-${file.originalname}`;
-      await uploadPdfToS3(fileBuffer, originalKey);
+      await uploadPdfToS3(originalKey, fileBuffer);
       console.log(`✅ Archivo ORIGINAL subido a S3: ${originalKey}`);
 
       // aplicar marca de agua en memoria
@@ -227,7 +227,7 @@ async function createDocument(req, res) {
 
       // clave S3 con marca
       watermarkedKey = `documentos/${req.user.id}/watermark-${Date.now()}-${file.originalname}`;
-      await uploadPdfToS3(watermarkedBuffer, watermarkedKey);
+      await uploadPdfToS3(watermarkedKey, watermarkedBuffer);
       console.log(`✅ Archivo CON MARCA subido a S3: ${watermarkedKey}`);
     } catch (s3Error) {
       console.error(
