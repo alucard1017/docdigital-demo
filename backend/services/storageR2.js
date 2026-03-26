@@ -14,7 +14,6 @@ const R2_ACCESS_KEY_ID = process.env.R2_ACCESS_KEY_ID;
 const R2_SECRET_ACCESS_KEY = process.env.R2_SECRET_ACCESS_KEY;
 const R2_ENDPOINT = process.env.R2_ENDPOINT;
 
-// Cliente S3 apuntando a R2
 const r2Client = new S3Client({
   region: "auto",
   endpoint: R2_ENDPOINT,
@@ -27,12 +26,11 @@ const r2Client = new S3Client({
 const BUCKET = R2_BUCKET;
 
 /* ================================
-   FUNCIONES DE SUBIDA
+   SUBIDA
    ================================ */
 
 /**
- * Subir un PDF a R2 usando un Buffer en memoria.
- * Úsalo cuando ya tengas el PDF en req.file.buffer o generado por pdf-lib.
+ * Sube un PDF a R2 usando un Buffer en memoria.
  */
 async function uploadPdfToS3(fileName, fileBuffer) {
   try {
@@ -60,7 +58,7 @@ async function uploadPdfToS3(fileName, fileBuffer) {
 }
 
 /**
- * Subir un Buffer genérico a R2 (ej: PNG del QR, PDFs generados, etc.)
+ * Sube un Buffer genérico a R2 (ej: PNG del QR, PDFs generados, etc.).
  */
 async function uploadBufferToS3(fileName, buffer, contentType = "application/octet-stream") {
   try {
@@ -88,12 +86,11 @@ async function uploadBufferToS3(fileName, buffer, contentType = "application/oct
 }
 
 /* ================================
-   FUNCIONES DE DESCARGA
+   DESCARGA
    ================================ */
 
 /**
- * Descargar un PDF de R2 a disco local.
- * Útil para diagnósticos o tareas batch.
+ * Descarga un PDF de R2 y lo guarda en disco local (diagnóstico / batch).
  */
 async function downloadPdfFromS3(fileName, savePath) {
   try {
@@ -128,7 +125,7 @@ async function downloadPdfFromS3(fileName, savePath) {
 }
 
 /**
- * Obtener un objeto como Buffer (ej: para pdf-lib)
+ * Obtiene un objeto de R2 como Buffer (útil para pdf-lib).
  */
 async function getObjectBuffer(fileName) {
   try {
@@ -154,11 +151,11 @@ async function getObjectBuffer(fileName) {
 }
 
 /* ================================
-   FUNCIONES DE URL Y DELETE
+   URLS Y DELETE
    ================================ */
 
 /**
- * Obtener URL firmada temporal para ver/descargar
+ * Genera URL firmada temporal para ver/descargar.
  */
 async function getSignedUrl(fileName, expiresIn = 3600) {
   try {
@@ -178,7 +175,7 @@ async function getSignedUrl(fileName, expiresIn = 3600) {
 }
 
 /**
- * Eliminar un objeto del bucket
+ * Elimina un objeto del bucket.
  */
 async function deleteObjectFromS3(fileName) {
   try {
@@ -197,10 +194,6 @@ async function deleteObjectFromS3(fileName) {
     throw error;
   }
 }
-
-/* ================================
-   EXPORTAR
-   ================================ */
 
 module.exports = {
   uploadPdfToS3,

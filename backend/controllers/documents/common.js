@@ -9,7 +9,10 @@ const {
   sendSigningInvitation,
   sendVisadoInvitation,
 } = require("../../services/emailService");
-const { uploadPdfToS3, getSignedUrl } = require("../../services/s3");
+const {
+  uploadPdfToS3,
+  getSignedUrl,
+} = require("../../services/storageR2");
 const {
   isValidEmail,
   isValidRun,
@@ -23,14 +26,6 @@ const {
 
 /**
  * Estados estándar de documentos.
- *
- * BORRADOR       → creado, sin envío.
- * ENVIADO        → enviado a visado/firma, con al menos una invitación emitida.
- * EN_REVISION    → pendiente de visado.
- * EN_FIRMA       → pendiente de firmas.
- * FIRMADO        → todas las firmas completadas.
- * RECHAZADO      → rechazado por propietario o firmante.
- * EXPIRADO       → venció por fecha de expiración.
  */
 const DOCUMENT_STATES = {
   DRAFT: "BORRADOR",
@@ -55,14 +50,16 @@ function generarCodigoVerificacion() {
 }
 
 /**
- * Aplica marca de agua VERIFIRMA a un PDF local.
- * Nota: la idea a futuro es retirar esta marca del PDF final firmado
- * y dejar solo sello/QR/branding “confiable”.
+ * Aplica marca de agua VERIFIRMA a un PDF (trabajando con Buffer).
+ * Devuelve un nuevo Buffer con la marca aplicada.
  */
-async function aplicarMarcaAguaLocal(filePath) {
+async function aplicarMarcaAguaLocal(pdfBuffer) {
   try {
-    const bytes = await fs.promises.readFile(filePath);
-    const pdfDoc = await PDFDocument.load(bytes);
+    if (!pdfBuffer || !Buffer.isBuffer(pdfBuffer)) {
+      throw new Error("Buffer inválido en aplicarMarcaAguaLocal");
+    }
+
+    const pdfDoc = await PDFDocument.load(pdfBuffer);
     const pages = pdfDoc.getPages();
 
     const textoPrincipal = "VERIFIRMA";
@@ -102,10 +99,12 @@ async function aplicarMarcaAguaLocal(filePath) {
     }
 
     const pdfBytes = await pdfDoc.save();
-    await fs.promises.writeFile(filePath, pdfBytes);
-    console.log("✅ Marca de agua VERIFIRMA aplicada a", filePath);
+    console.log("✅ Marca de agua VERIFIRMA aplicada (buffer)");
+    return Buffer.from(pdfBytes);
   } catch (err) {
     console.error("⚠️ Error aplicando marca de agua:", err);
+    // En caso de fallo, devolvemos el buffer original para no romper el flujo.
+    return pdfBuffer;
   }
 }
 
@@ -117,8 +116,7 @@ function computeHash(buffer) {
 }
 
 /**
- * Helper para saber si un documento está en un estado “activo”
- * sobre el que tenga sentido enviar recordatorios.
+ * Helper para saber si un documento está en un estado “activo”.
  */
 function isActiveDocumentStatus(status) {
   return [
