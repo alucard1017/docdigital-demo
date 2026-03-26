@@ -14,6 +14,10 @@ const R2_ACCESS_KEY_ID = process.env.R2_ACCESS_KEY_ID;
 const R2_SECRET_ACCESS_KEY = process.env.R2_SECRET_ACCESS_KEY;
 const R2_ENDPOINT = process.env.R2_ENDPOINT;
 
+if (!R2_BUCKET || !R2_ACCESS_KEY_ID || !R2_SECRET_ACCESS_KEY || !R2_ENDPOINT) {
+  console.warn("⚠️ Config R2 incompleta, revisa variables de entorno.");
+}
+
 const r2Client = new S3Client({
   region: "auto",
   endpoint: R2_ENDPOINT,
@@ -24,6 +28,18 @@ const r2Client = new S3Client({
 });
 
 const BUCKET = R2_BUCKET;
+
+/* ================================
+   HELPERS INTERNOS
+   ================================ */
+
+function ensureBuffer(input) {
+  if (!input) return null;
+  if (Buffer.isBuffer(input)) return input;
+  // pdf-lib.save() devuelve Uint8Array, lo convertimos a Buffer seguro [web:202][web:204]
+  if (input instanceof Uint8Array) return Buffer.from(input);
+  throw new Error("Buffer inválido en ensureBuffer");
+}
 
 /* ================================
    SUBIDA
@@ -37,14 +53,16 @@ async function uploadPdfToS3(fileName, fileBuffer) {
     if (!fileName || typeof fileName !== "string") {
       throw new Error("fileName inválido en uploadPdfToS3");
     }
-    if (!fileBuffer || !Buffer.isBuffer(fileBuffer)) {
+
+    const buffer = ensureBuffer(fileBuffer);
+    if (!buffer) {
       throw new Error("Buffer inválido en uploadPdfToS3");
     }
 
     const command = new PutObjectCommand({
       Bucket: BUCKET,
       Key: fileName,
-      Body: fileBuffer,
+      Body: buffer,
       ContentType: "application/pdf",
     });
 
@@ -60,19 +78,25 @@ async function uploadPdfToS3(fileName, fileBuffer) {
 /**
  * Sube un Buffer genérico a R2 (ej: PNG del QR, PDFs generados, etc.).
  */
-async function uploadBufferToS3(fileName, buffer, contentType = "application/octet-stream") {
+async function uploadBufferToS3(
+  fileName,
+  buffer,
+  contentType = "application/octet-stream"
+) {
   try {
     if (!fileName || typeof fileName !== "string") {
       throw new Error("fileName inválido en uploadBufferToS3");
     }
-    if (!buffer || !Buffer.isBuffer(buffer)) {
+
+    const finalBuffer = ensureBuffer(buffer);
+    if (!finalBuffer) {
       throw new Error("Buffer inválido en uploadBufferToS3");
     }
 
     const command = new PutObjectCommand({
       Bucket: BUCKET,
       Key: fileName,
-      Body: buffer,
+      Body: finalBuffer,
       ContentType: contentType,
     });
 
