@@ -29,7 +29,7 @@ const {
 } = require("../utils/rateLimiter");
 const remindersQueue = require("../queues/remindersQueue");
 
-// Flujo multi-party (tabla `documentos`)
+// Flujo multi‑party (tabla `documentos`)
 const { validateCreateDocumentBody } = require("../validators/createDocumentSchema");
 const { generateVerificationCode } = require("../utils/randomCode");
 const emailQueue = require("../queues/emailQueue");
@@ -37,7 +37,7 @@ const emailQueue = require("../queues/emailQueue");
 const router = express.Router();
 
 /* ================================
-   HELPERS DE PERMISOS / MULTI-TENANT
+   HELPERS DE PERMISOS / MULTI‑TENANT
    ================================ */
 
 function isGlobalAdmin(user) {
@@ -134,7 +134,7 @@ async function checkDocumentOwnership(req, res, next) {
 }
 
 /* ================================
-   HOOK DE AUDITORÍA (logAudit)
+   HOOK DE AUDITORÍA
    ================================ */
 
 function withDocumentAudit(action) {
@@ -296,7 +296,7 @@ router.post(
 );
 
 /* ================================
-   NUEVO: RUTA POST /documents (JSON multi-party, tabla `documentos`)
+   RUTA POST /documents (JSON multi‑party)
    ================================ */
 
 router.post("/multi-party", requireAuth, async (req, res) => {
@@ -358,14 +358,13 @@ router.post("/multi-party", requireAuth, async (req, res) => {
       user.id,
       user.company_id,
       expiresAt || null,
-      null, // hash_pdf
+      null,
       flowType,
     ];
 
     const docResult = await client.query(insertDocText, docValues);
     const documento = docResult.rows[0];
 
-    // Insertar signers uno a uno para evitar SQL dinámico complejo
     const signerInsertSql = `
       INSERT INTO public.signers (
         documento_id,
@@ -400,7 +399,6 @@ router.post("/multi-party", requireAuth, async (req, res) => {
       createdSigners.push(signerRes.rows[0]);
     }
 
-    // Audit log
     const ip =
       (req.headers["x-forwarded-for"] || "")
         .toString()
@@ -503,7 +501,7 @@ router.post(
 );
 
 /* ================================
-   RUTAS DE FLUJO (createFlow/sendFlow/signFlow)
+   RUTAS DE FLUJO
    ================================ */
 
 router.post(
@@ -521,17 +519,26 @@ router.post(
   documentsController.sendFlow
 );
 
-// Firma pública legacy (por firmanteId). Nuevo flujo público usa /api/public/docs/:token/firmar
+// Firma pública legacy (por firmanteId)
 router.post("/firmar-flujo/:firmanteId", documentsController.signFlow);
 
 /* ================================
    RUTAS GET - CON :id
    ================================ */
 
+// PDF completo (descarga/iframe)
 router.get("/:id/pdf", documentsController.getDocumentPdf);
+
+// Preview para miniatura / visor embebido
+router.get(
+  "/:id/preview",
+  requireAuth,
+  checkDocumentCompanyScope,
+  previewDocument
+);
+
 router.get("/:id/timeline", documentsController.getTimeline);
 
-// Timeline legal (document_events)
 router.get(
   "/:id/timeline-legal",
   requireAuth,
@@ -641,7 +648,7 @@ router.post(
 );
 
 /* ================================
-   NUEVO: INVITAR A UN SIGNER (multi-party)
+   NUEVO: INVITAR A UN SIGNER (multi‑party)
    ================================ */
 
 router.post(
@@ -663,7 +670,6 @@ router.post(
     try {
       await client.query("BEGIN");
 
-      // 1) Cargar documento multi-party desde `documentos`
       const docRes = await client.query(
         `
         SELECT id, company_id, titulo, estado, tipo_flujo
@@ -678,7 +684,6 @@ router.post(
       }
       const documento = docRes.rows[0];
 
-      // Scope multi-tenant básico
       if (!isGlobalAdmin(user) && documento.company_id !== user.company_id) {
         await client.query("ROLLBACK");
         return res
@@ -686,7 +691,6 @@ router.post(
           .json({ message: "No tienes permisos sobre este documento" });
       }
 
-      // 2) Cargar signer
       const signerRes = await client.query(
         `
         SELECT
@@ -715,9 +719,8 @@ router.post(
           .json({ message: "No tienes permisos sobre este firmante" });
       }
 
-      // 3) Crear invitation
       const token = require("crypto").randomBytes(24).toString("hex");
-      const expiresAt = new Date(Date.now() + 7 * 24 * 60 * 60 * 1000); // 7 días
+      const expiresAt = new Date(Date.now() + 7 * 24 * 60 * 60 * 1000);
 
       const inviteRes = await client.query(
         `
@@ -736,7 +739,6 @@ router.post(
       );
       const invitation = inviteRes.rows[0];
 
-      // 4) Actualizar estado del signer
       await client.query(
         `
         UPDATE public.signers
@@ -746,7 +748,6 @@ router.post(
         [signer.id]
       );
 
-      // 5) Registrar en audit_logs
       const ip =
         (req.headers["x-forwarded-for"] || "")
           .toString()
@@ -795,7 +796,6 @@ router.post(
 
       await client.query("COMMIT");
 
-      // 6) Encolar envío de correo (no rompe en caso de fallo)
       try {
         if (emailQueue && typeof emailQueue.add === "function") {
           await emailQueue.add("send-signer-invite", {
