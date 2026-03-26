@@ -53,39 +53,56 @@ async function getDocumentPdf(req, res) {
 
     // Verificación de integridad SOLO si hay hash guardado
     if (pdf_hash_final) {
-      const signedUrl = await getSignedUrl(key, 600);
+      try {
+        const signedUrl = await getSignedUrl(key, 600);
 
-      const fileResponse = await axios.get(signedUrl, {
-        responseType: "arraybuffer",
-      });
-      const buffer = Buffer.from(fileResponse.data);
-
-      const currentHash = computeHash(buffer);
-
-      if (currentHash !== pdf_hash_final) {
-        console.error(
-          "❌ Hash de PDF no coincide (vista pública) para documento",
-          docId,
-          { stored_hash: pdf_hash_final, current_hash: currentHash }
-        );
-
-        await logAudit({
-          user: null,
-          action: "public_document_hash_mismatch",
-          entityType: "document",
-          entityId: docId,
-          metadata: {
-            document_id: docId,
-            stored_hash: pdf_hash_final,
-            current_hash: currentHash,
-            context: "getDocumentPdf_public",
-          },
-          req,
+        const fileResponse = await axios.get(signedUrl, {
+          responseType: "arraybuffer",
         });
+        const buffer = Buffer.from(fileResponse.data);
 
-        return res.status(409).json({
-          message:
-            "El archivo del documento no pasa la verificación de integridad. Contacta al administrador.",
+        const currentHash = computeHash(buffer);
+
+        if (currentHash !== pdf_hash_final) {
+          console.error(
+            "❌ Hash de PDF no coincide (vista pública) para documento",
+            docId,
+            {
+              key,
+              stored_hash: pdf_hash_final,
+              current_hash: currentHash,
+            }
+          );
+
+          await logAudit({
+            user: null,
+            action: "public_document_hash_mismatch",
+            entityType: "document",
+            entityId: docId,
+            metadata: {
+              document_id: docId,
+              stored_hash: pdf_hash_final,
+              current_hash: currentHash,
+              key,
+              context: "getDocumentPdf_public",
+            },
+            req,
+          });
+
+          return res.status(409).json({
+            message:
+              "El archivo del documento no pasa la verificación de integridad. Contacta al administrador.",
+          });
+        }
+      } catch (verifyErr) {
+        console.error(
+          "❌ Error verificando hash de PDF para documento",
+          docId,
+          verifyErr
+        );
+        // Si falla la verificación técnica (problema de red/R2), mantenemos 500
+        return res.status(500).json({
+          message: "Error verificando la integridad del documento.",
         });
       }
     }

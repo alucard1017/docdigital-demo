@@ -8,6 +8,10 @@ const { getObjectBuffer, uploadBufferToS3 } = require("./storageR2");
 const db = require("../db");
 const crypto = require("crypto");
 
+/**
+ * Sella el PDF del documento con QR, evidencias y certificación,
+ * sube la versión final y guarda su hash en la tabla documents.
+ */
 async function sellarPdfConQr({
   s3Key,
   documentoId,
@@ -21,21 +25,28 @@ async function sellarPdfConQr({
     throw new Error("codigoVerificacion es obligatorio para sellar el PDF");
   }
 
-  console.log("📄 Sellando PDF con evidencias completas...");
+  console.log("📄 Sellando PDF con evidencias completas...", {
+    documentoId,
+    s3Key,
+    codigoVerificacion,
+  });
 
-  // 1) Descargar y cargar PDF base (sin cambiar metadatos para hash estable)
+  // 1) Descargar y cargar PDF base (sin tocar metadatos, para hash estable)
   const pdfBytes = await getObjectBuffer(s3Key);
   const pdfDoc = await PDFDocument.load(pdfBytes, { updateMetadata: false });
+
   const pages = pdfDoc.getPages();
   const totalPages = pages.length;
-  if (!pages || totalPages === 0) throw new Error("El PDF no tiene páginas");
+  if (!pages || totalPages === 0) {
+    throw new Error("El PDF no tiene páginas");
+  }
 
   const font = await pdfDoc.embedFont(StandardFonts.Helvetica);
   const fontBold = await pdfDoc.embedFont(StandardFonts.HelveticaBold);
 
   const numeroInternoTexto = numeroContratoInterno || "N° interno: —";
 
-  // 2) Obtener firmantes del documento
+  // 2) Obtener firmantes del documento (solo los que realmente firmaron)
   const firmantesRes = await db.query(
     `
     SELECT 
@@ -52,8 +63,7 @@ async function sellarPdfConQr({
     `,
     [documentoId]
   );
-
-  const firmantes = firmantesRes.rows;
+  const firmantes = firmantesRes.rows || [];
 
   // 3) Footer en todas las páginas
   const footerFontSize = 8;
@@ -81,64 +91,71 @@ async function sellarPdfConQr({
   const lastPage = pages[pages.length - 1];
   const { width, height } = lastPage.getSize();
 
-  // Logo
-  const logoPngBytes = await fs.promises.readFile(
-    path.join(__dirname, "../assets/verifirma-logo.png")
-  );
-  const logoImage = await pdfDoc.embedPng(logoPngBytes);
-  const logoWidth = 90;
-  const logoHeight = (logoImage.height / logoImage.width) * logoWidth;
+  // 4.1 Logo
+  try {
+    const logoPngBytes = await fs.promises.readFile(
+      path.join(__dirname, "../assets/verifirma-logo.png")
+    );
+    const logoImage = await pdfDoc.embedPng(logoPngBytes);
+    const logoWidth = 90;
+    const logoHeight = (logoImage.height / logoImage.width) * logoWidth;
 
-  const logoX = width - logoWidth - 15;
-  const logoY = height - logoHeight - 40;
+    const logoX = width - logoWidth - 15;
+    const logoY = height - logoHeight - 40;
 
-  lastPage.drawImage(logoImage, {
-    x: logoX,
-    y: logoY,
-    width: logoWidth,
-    height: logoHeight,
-  });
+    lastPage.drawImage(logoImage, {
+      x: logoX,
+      y: logoY,
+      width: logoWidth,
+      height: logoHeight,
+    });
 
-  lastPage.drawText(numeroInternoTexto, {
-    x: logoX,
-    y: logoY - 16,
-    size: 9,
-    font,
-    color: rgb(0.1, 0.1, 0.1),
-  });
-
-  // QR
-  const urlVerificacion = `https://verifirma.cl/verificar/${codigoVerificacion}`;
-  const qrDataUrl = await QRCode.toDataURL(urlVerificacion, {
-    errorCorrectionLevel: "M",
-  });
-  const qrImage = await pdfDoc.embedPng(qrDataUrl);
-  const qrSize = 80;
-
-  const qrX = width - qrSize - 40;
-  const qrY = 40;
-
-  lastPage.drawImage(qrImage, {
-    x: qrX,
-    y: qrY,
-    width: qrSize,
-    height: qrSize,
-  });
-
-  lastPage.drawText(
-    "Verifique este documento\nescaneando el código QR\no visitando verifirma.cl",
-    {
-      x: qrX,
-      y: qrY - 28,
-      size: 7,
+    lastPage.drawText(numeroInternoTexto, {
+      x: logoX,
+      y: logoY - 16,
+      size: 9,
       font,
-      color: rgb(0.25, 0.25, 0.25),
-      lineHeight: 9,
-    }
-  );
+      color: rgb(0.1, 0.1, 0.1),
+    });
+  } catch (err) {
+    console.error("⚠️ Error embebiendo logo en PDF sellado:", err);
+  }
 
-  // Código de barras lateral
-  let barcodePng;
+  // 4.2 QR de verificación
+  const urlVerificacion = `https://verifirma.cl/verificar/${codigoVerificacion}`;
+  try {
+    const qrDataUrl = await QRCode.toDataURL(urlVerificacion, {
+      errorCorrectionLevel: "M",
+    });
+    const qrImage = await pdfDoc.embedPng(qrDataUrl);
+    const qrSize = 80;
+
+    const qrX = width - qrSize - 40;
+    const qrY = 40;
+
+    lastPage.drawImage(qrImage, {
+      x: qrX,
+      y: qrY,
+      width: qrSize,
+      height: qrSize,
+    });
+
+    lastPage.drawText(
+      "Verifique este documento\nescaneando el código QR\no visitando verifirma.cl",
+      {
+        x: qrX,
+        y: qrY - 28,
+        size: 7,
+        font,
+        color: rgb(0.25, 0.25, 0.25),
+        lineHeight: 9,
+      }
+    );
+  } catch (err) {
+    console.error("⚠️ Error generando/embebiendo QR en PDF sellado:", err);
+  }
+
+  // 4.3 Código de barras lateral
   try {
     const barcodePngBuffer = await bwipjs.toBuffer({
       bcid: "code128",
@@ -149,15 +166,11 @@ async function sellarPdfConQr({
       textxalign: "center",
       rotate: "R",
     });
-    barcodePng = await pdfDoc.embedPng(barcodePngBuffer);
-  } catch (err) {
-    console.error("⚠️ Error generando código de barras:", err);
-    barcodePng = null;
-  }
 
-  if (barcodePng) {
+    const barcodePng = await pdfDoc.embedPng(barcodePngBuffer);
     const barcodeWidth = 35;
-    const barcodeHeight = (barcodePng.height / barcodePng.width) * barcodeWidth;
+    const barcodeHeight =
+      (barcodePng.height / barcodePng.width) * barcodeWidth;
 
     const marginRight = 15;
     const barcodeX = width - barcodeWidth - marginRight;
@@ -183,6 +196,8 @@ async function sellarPdfConQr({
       maxWidth: height - 80,
       lineHeight: 9,
     });
+  } catch (err) {
+    console.error("⚠️ Error generando/embebiendo código de barras:", err);
   }
 
   // 5) TABLA DE EVIDENCIAS DE FIRMAS
@@ -200,8 +215,16 @@ async function sellarPdfConQr({
 
   if (firmantes.length > 0) {
     firmantes.forEach((f, idx) => {
-      const geo = f.geo_location ? JSON.parse(f.geo_location) : null;
-      const location = geo ? `${geo.city}, ${geo.country}` : "Desconocido";
+      let location = "Desconocido";
+      try {
+        const geo = f.geo_location ? JSON.parse(f.geo_location) : null;
+        if (geo && geo.city && geo.country) {
+          location = `${geo.city}, ${geo.country}`;
+        }
+      } catch (err) {
+        console.error("⚠️ Error parseando geo_location en PDF sellado:", err);
+      }
+
       const fecha = f.fecha_firma
         ? new Date(f.fecha_firma).toLocaleString("es-CL", {
             timeZone: "America/Santiago",
@@ -290,6 +313,12 @@ async function sellarPdfConQr({
     .createHash("sha256")
     .update(newBuffer)
     .digest("hex");
+
+  console.log("DEBUG HASH SELLADO >>", {
+    documentoId,
+    newKey,
+    finalHash,
+  });
 
   await db.query(
     `UPDATE documents

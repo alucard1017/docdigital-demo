@@ -52,6 +52,7 @@ function generarCodigoVerificacion() {
 /**
  * Aplica marca de agua VERIFIRMA a un PDF (trabajando con Buffer).
  * Devuelve un nuevo Buffer con la marca aplicada.
+ * En caso de error, devuelve el buffer original para no romper el flujo.
  */
 async function aplicarMarcaAguaLocal(pdfBuffer) {
   try {
@@ -59,7 +60,9 @@ async function aplicarMarcaAguaLocal(pdfBuffer) {
       throw new Error("Buffer inválido en aplicarMarcaAguaLocal");
     }
 
-    const pdfDoc = await PDFDocument.load(pdfBuffer);
+    const pdfDoc = await PDFDocument.load(pdfBuffer, {
+      updateMetadata: false,
+    });
     const pages = pdfDoc.getPages();
 
     const textoPrincipal = "VERIFIRMA";
@@ -99,11 +102,13 @@ async function aplicarMarcaAguaLocal(pdfBuffer) {
     }
 
     const pdfBytes = await pdfDoc.save();
+    const resultBuffer = Buffer.from(pdfBytes);
+
     console.log("✅ Marca de agua VERIFIRMA aplicada (buffer)");
-    return Buffer.from(pdfBytes);
+
+    return resultBuffer;
   } catch (err) {
     console.error("⚠️ Error aplicando marca de agua:", err);
-    // En caso de fallo, devolvemos el buffer original para no romper el flujo.
     return pdfBuffer;
   }
 }
@@ -112,6 +117,10 @@ async function aplicarMarcaAguaLocal(pdfBuffer) {
  * Calcula el hash SHA-256 de un buffer.
  */
 function computeHash(buffer) {
+  if (!buffer || !Buffer.isBuffer(buffer)) {
+    throw new Error("computeHash requiere un Buffer válido");
+  }
+
   return crypto.createHash("sha256").update(buffer).digest("hex");
 }
 
