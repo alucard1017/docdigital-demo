@@ -10,51 +10,80 @@ const router = express.Router();
 
 /* ========= Configuración JWT ========= */
 
-const JWT_SECRET = process.env.JWT_SECRET;
-if (!JWT_SECRET) {
-  console.error("❌ JWT_SECRET no está definido en variables de entorno");
+const JWT_ACCESS_SECRET = process.env.JWT_ACCESS_SECRET || process.env.JWT_SECRET;
+const JWT_REFRESH_SECRET = process.env.JWT_REFRESH_SECRET;
+
+if (!JWT_ACCESS_SECRET) {
+  console.error("❌ JWT_ACCESS_SECRET (o JWT_SECRET) no está definido");
+}
+if (!JWT_REFRESH_SECRET) {
+  console.error("❌ JWT_REFRESH_SECRET no está definido en variables de entorno");
 }
 
 /* ========= Helpers ========= */
 
-// Normalizar RUN: quitar puntos y guiones
 const normalizeRun = (run) => (run || "").replace(/[.\-]/g, "");
 
-/* ========= Helpers de permisos sobre usuarios ========= */
-
-function canManageAllUsers(user) {
-  return user?.role === "SUPER_ADMIN" || user?.role === "ADMIN_GLOBAL";
+// genera access token corto
+function signAccessToken(payload) {
+  return jwt.sign(payload, JWT_ACCESS_SECRET, { expiresIn: "15m" });
 }
 
-function canManageCompanyUsers(user) {
-  return (
-    user?.role === "ADMIN" ||
-    user?.role === "SUPER_ADMIN" ||
-    user?.role === "ADMIN_GLOBAL"
-  );
+// genera refresh token (vida más larga)
+function signRefreshToken(payload) {
+  return jwt.sign(payload, JWT_REFRESH_SECRET, { expiresIn: "30d" });
 }
 
-function isProtectedUser(targetUser) {
-  return targetUser?.role === "SUPER_ADMIN";
+// setea cookies httpOnly
+function setAuthCookies(res, accessToken, refreshToken, rememberMe) {
+  const commonOptions = {
+    httpOnly: true,
+    secure: process.env.NODE_ENV === "production",
+    sameSite: "strict",
+  };
+
+  // access token: siempre cookie de sesión (no persistente)
+  res.cookie("access_token", accessToken, {
+    ...commonOptions,
+  });
+
+  // refresh token: si rememberMe => persistente, si no => sesión
+  const refreshOptions = { ...commonOptions };
+  if (rememberMe) {
+    // ~30 días
+    refreshOptions.maxAge = 30 * 24 * 60 * 60 * 1000;
+  }
+  res.cookie("refresh_token", refreshToken, refreshOptions);
 }
 
-/* ========= Middleware de autenticación ========= */
+// limpia cookies
+function clearAuthCookies(res) {
+  res.clearCookie("access_token");
+  res.clearCookie("refresh_token");
+}
+
+/* ========= Middleware de autenticación basado en access_token (cookie o header) ========= */
 
 function requireAuth(req, res, next) {
   try {
-    const header = req.headers.authorization || "";
+    let token = null;
 
-    if (!header.startsWith("Bearer ")) {
-      return res.status(401).json({ message: "No autorizado" });
+    // Prioridad: cookie httpOnly
+    if (req.cookies && req.cookies.access_token) {
+      token = req.cookies.access_token;
+    } else {
+      const header = req.headers.authorization || "";
+      if (header.startsWith("Bearer ")) {
+        token = header.split(" ")[1];
+      }
     }
 
-    const token = header.split(" ")[1];
     if (!token) {
       return res.status(401).json({ message: "No autorizado" });
     }
 
-    if (!JWT_SECRET) {
-      console.error("❌ requireAuth sin JWT_SECRET configurado");
+    if (!JWT_ACCESS_SECRET) {
+      console.error("❌ requireAuth sin JWT_ACCESS_SECRET configurado");
       return res
         .status(500)
         .json({ message: "Configuración de servidor incompleta" });
@@ -62,10 +91,10 @@ function requireAuth(req, res, next) {
 
     let payload;
     try {
-      payload = jwt.verify(token, JWT_SECRET);
+      payload = jwt.verify(token, JWT_ACCESS_SECRET);
     } catch (err) {
       if (err.name === "TokenExpiredError") {
-        console.warn("⚠️ Token expirado en requireAuth:", {
+        console.warn("⚠️ Token de acceso expirado en requireAuth:", {
           expiredAt: err.expiredAt,
         });
         return res.status(401).json({ message: "Token expirado" });
@@ -109,6 +138,24 @@ function requireAuth(req, res, next) {
   }
 }
 
+/* ========= Helpers de permisos sobre usuarios ========= */
+
+function canManageAllUsers(user) {
+  return user?.role === "SUPER_ADMIN" || user?.role === "ADMIN_GLOBAL";
+}
+
+function canManageCompanyUsers(user) {
+  return (
+    user?.role === "ADMIN" ||
+    user?.role === "SUPER_ADMIN" ||
+    user?.role === "ADMIN_GLOBAL"
+  );
+}
+
+function isProtectedUser(targetUser) {
+  return targetUser?.role === "SUPER_ADMIN";
+}
+
 /* ========= Middleware de autorización por rol ========= */
 
 function requireRole(requiredRole) {
@@ -119,7 +166,6 @@ function requireRole(requiredRole) {
 
     const role = req.user.role;
 
-    // SUPER_ADMIN siempre pasa
     if (role === "SUPER_ADMIN") {
       return next();
     }
@@ -150,14 +196,14 @@ function requireRole(requiredRole) {
 
 router.post("/login", async (req, res) => {
   try {
-    if (!JWT_SECRET) {
-      console.error("❌ Intento de login sin JWT_SECRET configurado");
+    if (!JWT_ACCESS_SECRET || !JWT_REFRESH_SECRET) {
+      console.error("❌ Intento de login sin secretos JWT configurados");
       return res
         .status(500)
         .json({ message: "Configuración de servidor incompleta" });
     }
 
-    const { identifier, password } = req.body || {};
+    const { identifier, password, rememberMe } = req.body || {};
 
     if (!identifier || !password) {
       return res
@@ -177,6 +223,7 @@ router.post("/login", async (req, res) => {
         rawIdentifier,
         normalizedIdentifier,
         isEmail,
+        rememberMe: !!rememberMe,
       });
     }
 
@@ -292,27 +339,36 @@ router.post("/login", async (req, res) => {
       company_id: user.company_id ?? null,
     };
 
-    let token;
+    let accessToken;
+    let refreshToken;
     try {
-      token = jwt.sign(tokenPayload, JWT_SECRET, { expiresIn: "8h" });
+      accessToken = signAccessToken(tokenPayload);
+      refreshToken = signRefreshToken({ id: user.id });
     } catch (err) {
       console.error("❌ Error firmando JWT en /api/auth/login:", err);
       Sentry.captureException(err);
       return res
         .status(500)
-        .json({ message: "Error interno al generar el token" });
+        .json({ message: "Error interno al generar los tokens" });
     }
+
+    // Opcional: aquí podrías guardar refreshToken (o su jti) en BD para poder revocarlo.
+
+    setAuthCookies(res, accessToken, refreshToken, !!rememberMe);
 
     await logAuth({
       userId: user.id,
       run: user.run,
       action: "LOGIN_SUCCESS",
-      metadata: { role: user.role, company_id: user.company_id ?? null },
+      metadata: {
+        role: user.role,
+        company_id: user.company_id ?? null,
+        rememberMe: !!rememberMe,
+      },
       req,
     });
 
     return res.json({
-      token,
       user: tokenPayload,
     });
   } catch (err) {
@@ -321,6 +377,82 @@ router.post("/login", async (req, res) => {
     return res
       .status(500)
       .json({ message: "Error interno del servidor en login" });
+  }
+});
+
+/* ========= POST /api/auth/refresh ========= */
+
+router.post("/refresh", async (req, res) => {
+  try {
+    const token = req.cookies?.refresh_token;
+    if (!token) {
+      return res.status(401).json({ message: "No hay refresh token" });
+    }
+
+    if (!JWT_REFRESH_SECRET || !JWT_ACCESS_SECRET) {
+      console.error("❌ /refresh sin secretos configurados");
+      return res
+        .status(500)
+        .json({ message: "Configuración de servidor incompleta" });
+    }
+
+    let payload;
+    try {
+      payload = jwt.verify(token, JWT_REFRESH_SECRET);
+    } catch (err) {
+      console.error("❌ Refresh token inválido o expirado:", err);
+      return res.status(401).json({ message: "Refresh token inválido" });
+    }
+
+    // Aquí podrías comprobar en BD que el refresh token no esté revocado.
+
+    // Releer usuario por seguridad (rol actualizado, etc.)
+    const userRes = await db.query(
+      `SELECT id, run, email, name, role, company_id FROM public.users WHERE id = $1`,
+      [payload.id]
+    );
+    const user = userRes.rows[0];
+    if (!user) {
+      return res.status(401).json({ message: "Usuario no encontrado" });
+    }
+
+    const tokenPayload = {
+      id: user.id,
+      run: user.run,
+      email: user.email,
+      name: user.name,
+      role: user.role,
+      company_id: user.company_id ?? null,
+    };
+
+    const newAccessToken = signAccessToken(tokenPayload);
+    const newRefreshToken = signRefreshToken({ id: user.id });
+
+    setAuthCookies(res, newAccessToken, newRefreshToken, true); // aquí asumimos que ya quiso "recordarme"
+
+    return res.json({ user: tokenPayload });
+  } catch (err) {
+    console.error("❌ Error en /api/auth/refresh:", err);
+    Sentry.captureException(err);
+    return res
+      .status(500)
+      .json({ message: "Error interno en refresh de sesión" });
+  }
+});
+
+/* ========= POST /api/auth/logout ========= */
+
+router.post("/logout", async (req, res) => {
+  try {
+    clearAuthCookies(res);
+    // aquí podrías marcar el refresh token como revocado en BD
+    return res.json({ message: "Sesión cerrada correctamente" });
+  } catch (err) {
+    console.error("❌ Error en /api/auth/logout:", err);
+    Sentry.captureException(err);
+    return res
+      .status(500)
+      .json({ message: "Error interno al cerrar sesión" });
   }
 });
 

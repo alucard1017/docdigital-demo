@@ -91,7 +91,7 @@ async function sellarPdfConQr({
     });
   });
 
-  // 4) Última página: logo, QR, tabla de evidencias
+  // 4) Última página del documento original: logo, QR, barra lateral y bloque legal corto
   const lastPage = pages[pages.length - 1];
   const { width, height } = lastPage.getSize();
 
@@ -204,85 +204,13 @@ async function sellarPdfConQr({
     console.error("⚠️ Error generando/embebiendo código de barras:", err);
   }
 
-  // 5) TABLA DE EVIDENCIAS DE FIRMAS
-  let tableY = 350;
-
-  lastPage.drawText("EVIDENCIAS DE FIRMA ELECTRÓNICA", {
-    x: 40,
-    y: tableY,
-    size: 11,
-    font: fontBold,
-    color: rgb(0, 0, 0),
-  });
-
-  tableY -= 20;
-
-  if (firmantes.length > 0) {
-    firmantes.forEach((f, idx) => {
-      let location = "Desconocido";
-      try {
-        const geo = f.geo_location ? JSON.parse(f.geo_location) : null;
-        if (geo && geo.city && geo.country) {
-          location = `${geo.city}, ${geo.country}`;
-        }
-      } catch (err) {
-        console.error("⚠️ Error parseando geo_location en PDF sellado:", err);
-      }
-
-      const fecha = f.fecha_firma
-        ? new Date(f.fecha_firma).toLocaleString("es-CL", {
-            timeZone: "America/Santiago",
-          })
-        : "N/A";
-
-      const firmText = [
-        `Firmante ${idx + 1}: ${f.nombre}`,
-        `Email: ${f.email}`,
-        `Fecha: ${fecha}`,
-        `IP: ${f.ip_firma || "N/A"}`,
-        `Ubicación: ${location}`,
-        `Tipo: ${f.tipo_firma || "SIMPLE"}`,
-        "",
-      ].join("\n");
-
-      lastPage.drawText(firmText, {
-        x: 40,
-        y: tableY,
-        size: 8,
-        font,
-        color: rgb(0.1, 0.1, 0.1),
-        lineHeight: 10,
-      });
-
-      tableY -= 80;
-    });
-  } else {
-    lastPage.drawText("No hay firmas registradas", {
-      x: 40,
-      y: tableY,
-      size: 8,
-      font,
-      color: rgb(0.5, 0.5, 0.5),
-    });
-    tableY -= 20;
-  }
-
-  // Línea divisoria
-  lastPage.drawLine({
-    start: { x: 40, y: 75 },
-    end: { x: width - 120, y: 75 },
-    thickness: 0.5,
-    color: rgb(0.8, 0.8, 0.8),
-  });
-
-  // Bloque legal
+  // 4.4 Bloque legal breve en la última página (sin tabla de evidencias)
   const esAvanzada = categoriaFirma === "AVANZADA";
 
   const textoLegal = [
     "Certificado de firma electrónica",
     "",
     `Número interno: ${numeroInternoTexto}`,
-    `Documento ID: ${documentoId}`,
     `Código de verificación: ${codigoVerificacion}`,
     `Verificación en línea: ${urlVerificacion}`,
     "",
@@ -302,6 +230,127 @@ async function sellarPdfConQr({
     color: rgb(0, 0, 0),
     lineHeight: 10,
   });
+
+  // 5) PÁGINA(S) DE CERTIFICADO DE EVIDENCIAS (al final)
+  let evidencesPage = pdfDoc.addPage();
+  let { width: evWidth, height: evHeight } = evidencesPage.getSize();
+  let evY = evHeight - 60;
+
+  // Título principal
+  evidencesPage.drawText("Certificado de firma electrónica VeriFirma", {
+    x: 50,
+    y: evY,
+    size: 14,
+    font: fontBold,
+    color: rgb(0, 0, 0),
+  });
+
+  evY -= 30;
+
+  // Datos generales del documento
+  const resumenDocLines = [
+    `Número interno: ${numeroInternoTexto}`,
+    `ID del documento (platform): ${documentoId}`,
+    `Código de verificación: ${codigoVerificacion}`,
+    `Verificación en línea: ${urlVerificacion}`,
+  ];
+
+  evidencesPage.drawText(resumenDocLines.join("\n"), {
+    x: 50,
+    y: evY,
+    size: 9,
+    font,
+    color: rgb(0.1, 0.1, 0.1),
+    lineHeight: 12,
+  });
+
+  evY -= 70;
+
+  // Subtítulo firmantes
+  evidencesPage.drawText("Firmantes y evidencias registradas", {
+    x: 50,
+    y: evY,
+    size: 11,
+    font: fontBold,
+    color: rgb(0, 0, 0),
+  });
+
+  evY -= 22;
+
+  if (firmantes.length > 0) {
+    firmantes.forEach((f, idx) => {
+      if (evY < 120) {
+        // Si se llena la página, agregar otra para continuar
+        evidencesPage = pdfDoc.addPage();
+        const sizeExtra = evidencesPage.getSize();
+        evWidth = sizeExtra.width;
+        evHeight = sizeExtra.height;
+        evY = evHeight - 80;
+
+        evidencesPage.drawText(
+          "Certificado de firma electrónica VeriFirma (continuación)",
+          {
+            x: 50,
+            y: evY,
+            size: 11,
+            font: fontBold,
+            color: rgb(0, 0, 0),
+          }
+        );
+
+        evY -= 30;
+      }
+
+      let location = "Desconocido";
+      try {
+        const geo = f.geo_location ? JSON.parse(f.geo_location) : null;
+        if (geo && geo.city && geo.country) {
+          location = `${geo.city}, ${geo.country}`;
+        }
+      } catch (err) {
+        console.error("⚠️ Error parseando geo_location en PDF sellado:", err);
+      }
+
+      const fecha = f.fecha_firma
+        ? new Date(f.fecha_firma).toLocaleString("es-CL", {
+            timeZone: "America/Santiago",
+          })
+        : "N/A";
+
+      const firmText = [
+        `Firmante ${idx + 1}: ${f.nombre}`,
+        `Email: ${f.email}`,
+        `Fecha y hora de firma: ${fecha}`,
+        `IP: ${f.ip_firma || "N/A"}`,
+        `Ubicación aproximada: ${location}`,
+        `Tipo de firma: ${f.tipo_firma || "SIMPLE"}`,
+      ].join("\n");
+
+      evidencesPage.drawText(firmText, {
+        x: 50,
+        y: evY,
+        size: 9,
+        font,
+        color: rgb(0.1, 0.1, 0.1),
+        lineHeight: 11,
+      });
+
+      evY -= 80;
+    });
+  } else {
+    evidencesPage.drawText(
+      "No hay firmas registradas para este documento.",
+      {
+        x: 50,
+        y: evY,
+        size: 9,
+        font,
+        color: rgb(0.4, 0.4, 0.4),
+      }
+    );
+
+    evY -= 20;
+  }
 
   // 6) Guardar, calcular hash, generar key inmutable y subir
   const newPdfBytes = await pdfDoc.save();

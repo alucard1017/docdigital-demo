@@ -48,8 +48,9 @@ export function PublicSignView({
   const showSkeleton = publicSignLoading && !document && !publicSignError;
 
   function getDefaultErrorMessage() {
-    if (isVisado) return "No se pudo registrar el visado.";
-    return "No se pudo registrar la firma.";
+    return isVisado
+      ? "No se pudo registrar el visado."
+      : "No se pudo registrar la firma.";
   }
 
   async function handleConfirm() {
@@ -153,9 +154,13 @@ export function PublicSignView({
       <div
         className="login-card"
         style={{
-          maxWidth: 640,
+          maxWidth: 840,
           margin: "0 auto",
-          boxShadow: "0 10px 40px rgba(0,0,0,0.1)",
+          background: "#020617",
+          color: "#e5e7eb",
+          borderRadius: 24,
+          border: "1px solid #1f2937",
+          boxShadow: "0 26px 70px rgba(15,23,42,0.95)",
         }}
       >
         <PublicHeader />
@@ -164,9 +169,9 @@ export function PublicSignView({
         <h1
           style={{
             textAlign: "center",
-            color: isVisado ? "#b45309" : "#1e3a8a",
+            color: isVisado ? "#fbbf24" : "#60a5fa",
             marginBottom: 16,
-            fontSize: "clamp(1.5rem, 5vw, 2rem)",
+            fontSize: "clamp(1.6rem, 4vw, 2.1rem)",
             fontWeight: 800,
             lineHeight: 1.2,
           }}
@@ -179,20 +184,19 @@ export function PublicSignView({
           style={{
             marginBottom: 24,
             padding: 16,
-            borderRadius: 12,
-            backgroundColor: isVisado ? "#fffbeb" : "#eff6ff",
-            border: `2px solid ${isVisado ? "#f59e0b" : "#3b82f6"}`,
-            color: isVisado ? "#92400e" : "#1e3a8a",
+            borderRadius: 14,
+            backgroundColor: isVisado ? "#451a03" : "#0b1120",
+            border: `1px solid ${isVisado ? "#fbbf24" : "#60a5fa"}`,
+            color: "#e5e7eb",
             fontSize: "0.9rem",
             lineHeight: 1.6,
           }}
         >
           {isVisado ? (
             <>
-              <strong>Estás VISANDO este documento.</strong>{" "}
-              El visado deja constancia de que revisaste y validaste su
-              contenido, pero no equivale a la firma definitiva del
-              representante legal.
+              <strong>Estás VISANDO este documento.</strong> El visado deja
+              constancia de que revisaste y validaste su contenido, pero no
+              equivale a la firma definitiva del representante legal.
             </>
           ) : (
             <>
@@ -209,7 +213,7 @@ export function PublicSignView({
             style={{
               padding: 48,
               textAlign: "center",
-              color: "#64748b",
+              color: "#9ca3af",
             }}
           >
             <div className="spinner" style={{ margin: "0 auto 16px" }} />
@@ -222,7 +226,7 @@ export function PublicSignView({
             >
               Cargando información del documento…
             </div>
-            <div style={{ fontSize: "0.85rem", color: "#9ca3af" }}>
+            <div style={{ fontSize: "0.85rem", color: "#6b7280" }}>
               Esto puede tardar unos segundos, no cierres esta ventana.
             </div>
           </div>
@@ -236,9 +240,9 @@ export function PublicSignView({
               marginBottom: 16,
               padding: 16,
               borderRadius: 12,
-              backgroundColor: "#fef2f2",
-              border: "2px solid #fecaca",
-              color: "#b91c1c",
+              backgroundColor: "#450a0a",
+              border: "1px solid #fecaca",
+              color: "#fecaca",
             }}
           >
             <div
@@ -263,10 +267,10 @@ export function PublicSignView({
               className="btn-main"
               style={{
                 padding: "10px 20px",
-                borderRadius: 8,
+                borderRadius: 999,
                 backgroundColor: "#0f172a",
                 color: "#e5e7eb",
-                border: "none",
+                border: "1px solid #1f2937",
                 width: "100%",
               }}
               onClick={() => cargarFirmaPublica(publicSignToken)}
@@ -283,20 +287,21 @@ export function PublicSignView({
             {/* Info del documento */}
             <div
               style={{
-                background: "#f9fafb",
+                background: "#020617",
                 padding: 20,
-                borderRadius: 12,
+                borderRadius: 16,
                 marginBottom: 24,
-                border: "1px solid #e5e7eb",
+                border: "1px solid #1f2937",
               }}
             >
               <div style={{ marginBottom: 12 }}>
                 <label
                   style={{
                     fontSize: "0.75rem",
-                    color: "#6b7280",
+                    color: "#9ca3af",
                     display: "block",
                     marginBottom: 4,
+                    letterSpacing: "0.08em",
                   }}
                 >
                   DOCUMENTO
@@ -305,7 +310,7 @@ export function PublicSignView({
                   style={{
                     fontWeight: 700,
                     fontSize: "1.1rem",
-                    color: "#111827",
+                    color: "#f9fafb",
                   }}
                 >
                   {document.title}
@@ -315,7 +320,7 @@ export function PublicSignView({
               <div
                 style={{
                   display: "grid",
-                  gridTemplateColumns: "1fr 1fr",
+                  gridTemplateColumns: "minmax(0,1fr) minmax(0,1fr)",
                   gap: 12,
                   fontSize: "0.9rem",
                 }}
@@ -324,9 +329,10 @@ export function PublicSignView({
                   <label
                     style={{
                       fontSize: "0.75rem",
-                      color: "#6b7280",
+                      color: "#9ca3af",
                       display: "block",
                       marginBottom: 4,
+                      letterSpacing: "0.08em",
                     }}
                   >
                     EMPRESA
@@ -334,7 +340,7 @@ export function PublicSignView({
                   <div
                     style={{
                       fontWeight: 600,
-                      color: "#374151",
+                      color: "#e5e7eb",
                     }}
                   >
                     {document.destinatario_nombre}
@@ -354,9 +360,10 @@ export function PublicSignView({
                     <label
                       style={{
                         fontSize: "0.75rem",
-                        color: "#6b7280",
+                        color: "#9ca3af",
                         display: "block",
                         marginBottom: 4,
+                        letterSpacing: "0.08em",
                       }}
                     >
                       FIRMANDO COMO
@@ -364,7 +371,7 @@ export function PublicSignView({
                     <div
                       style={{
                         fontWeight: 600,
-                        color: "#374151",
+                        color: "#e5e7eb",
                       }}
                     >
                       {signer.name}
@@ -384,46 +391,61 @@ export function PublicSignView({
 
             {/* Botón ver PDF */}
             <div style={{ textAlign: "center", marginBottom: 24 }}>
-              <a
-                href={pdfUrl}
-                target="_blank"
-                rel="noopener noreferrer"
-                className="btn-main"
-                style={{
-                  textDecoration: "none",
-                  display: "inline-block",
-                  width: "100%",
-                  maxWidth: 400,
-                  padding: "14px 24px",
-                  backgroundColor: "#0f172a",
-                  color: "#fff",
-                  borderRadius: 8,
-                  fontWeight: 600,
-                }}
-              >
-                📄 Ver documento completo (PDF)
-              </a>
+              {pdfUrl ? (
+                <a
+                  href={pdfUrl}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="btn-main btn-primary"
+                  style={{
+                    textDecoration: "none",
+                    display: "inline-block",
+                    width: "100%",
+                    maxWidth: 420,
+                    padding: "14px 24px",
+                    borderRadius: 999,
+                  }}
+                >
+                  📄 Ver documento completo (PDF)
+                </a>
+              ) : (
+                <p style={{ fontSize: "0.85rem", color: "#9ca3af" }}>
+                  No se pudo cargar el PDF adjunto.
+                </p>
+              )}
             </div>
 
-            {/* Aviso legal */}
+            {/* Aviso legal (con scroll interno) */}
             {canActOnDocument && (
               <>
-                <ElectronicSignatureNotice
-                  mode={isVisado ? "visado" : "firma"}
-                  checked={acceptedLegal}
-                  onChange={setAcceptedLegal}
-                />
+                <div
+                  style={{
+                    marginBottom: 12,
+                    padding: 12,
+                    borderRadius: 14,
+                    backgroundColor: "#020617",
+                    border: "1px solid #1f2937",
+                    maxHeight: 260,
+                    overflowY: "auto",
+                  }}
+                >
+                  <ElectronicSignatureNotice
+                    mode={isVisado ? "visado" : "firma"}
+                    checked={acceptedLegal}
+                    onChange={setAcceptedLegal}
+                  />
+                </div>
 
                 {legalError && (
                   <p
                     style={{
-                      color: "#b91c1c",
+                      color: "#fecaca",
                       fontSize: 13,
                       marginBottom: 12,
-                      marginTop: 8,
                       padding: "8px 12px",
-                      background: "#fee2e2",
-                      borderRadius: 6,
+                      background: "#450a0a",
+                      borderRadius: 8,
+                      border: "1px solid #fecaca",
                     }}
                   >
                     ⚠️ {legalError}
@@ -438,15 +460,15 @@ export function PublicSignView({
                 style={{
                   textAlign: "center",
                   padding: 16,
-                  background: "#fef2f2",
-                  borderRadius: 8,
-                  border: "2px solid #fecaca",
+                  background: "#450a0a",
+                  borderRadius: 10,
+                  border: "1px solid #fecaca",
                   marginTop: 16,
                 }}
               >
                 <p
                   style={{
-                    color: "#b91c1c",
+                    color: "#fecaca",
                     fontWeight: 700,
                     margin: 0,
                   }}
@@ -455,7 +477,7 @@ export function PublicSignView({
                 </p>
                 <p
                   style={{
-                    color: "#7f1d1d",
+                    color: "#fecaca",
                     fontSize: "0.9rem",
                     margin: "8px 0 0",
                   }}
@@ -470,15 +492,15 @@ export function PublicSignView({
                 style={{
                   textAlign: "center",
                   padding: 16,
-                  background: "#f0fdf4",
-                  borderRadius: 8,
-                  border: "2px solid #86efac",
+                  background: "#022c22",
+                  borderRadius: 10,
+                  border: "1px solid #22c55e",
                   marginTop: 16,
                 }}
               >
                 <p
                   style={{
-                    color: "#16a34a",
+                    color: "#bbf7d0",
                     fontWeight: 700,
                     margin: 0,
                   }}
@@ -487,7 +509,7 @@ export function PublicSignView({
                 </p>
                 <p
                   style={{
-                    color: "#15803d",
+                    color: "#6ee7b7",
                     fontSize: "0.9rem",
                     margin: "8px 0 0",
                   }}
@@ -502,15 +524,15 @@ export function PublicSignView({
                 style={{
                   textAlign: "center",
                   padding: 16,
-                  background: "#f0fdf4",
-                  borderRadius: 8,
-                  border: "2px solid #86efac",
+                  background: "#022c22",
+                  borderRadius: 10,
+                  border: "1px solid #22c55e",
                   marginTop: 16,
                 }}
               >
                 <p
                   style={{
-                    color: "#16a34a",
+                    color: "#bbf7d0",
                     fontWeight: 700,
                     margin: 0,
                   }}
@@ -537,7 +559,7 @@ export function PublicSignView({
                     padding: "16px 24px",
                     fontSize: "1rem",
                     fontWeight: 700,
-                    borderRadius: 8,
+                    borderRadius: 999,
                     opacity: signing || !acceptedLegal ? 0.6 : 1,
                     cursor:
                       signing || !acceptedLegal ? "not-allowed" : "pointer",
@@ -559,10 +581,10 @@ export function PublicSignView({
                     style={{
                       width: "100%",
                       padding: "12px 24px",
-                      backgroundColor: "#fee2e2",
-                      color: "#b91c1c",
-                      border: "2px solid #fecaca",
-                      borderRadius: 8,
+                      backgroundColor: "#450a0a",
+                      color: "#fecaca",
+                      border: "1px solid #fecaca",
+                      borderRadius: 999,
                       fontWeight: 600,
                     }}
                     onClick={() => {
@@ -582,9 +604,9 @@ export function PublicSignView({
                 style={{
                   marginTop: 24,
                   padding: 20,
-                  borderRadius: 12,
-                  backgroundColor: "#fef2f2",
-                  border: "2px solid #fecaca",
+                  borderRadius: 16,
+                  backgroundColor: "#450a0a",
+                  border: "1px solid #fecaca",
                 }}
               >
                 <h2
@@ -592,7 +614,7 @@ export function PublicSignView({
                     marginTop: 0,
                     marginBottom: 12,
                     fontSize: "1.1rem",
-                    color: "#b91c1c",
+                    color: "#fecaca",
                     fontWeight: 700,
                   }}
                 >
@@ -601,7 +623,7 @@ export function PublicSignView({
                 <p
                   style={{
                     marginBottom: 12,
-                    color: "#7f1d1d",
+                    color: "#fecaca",
                     fontSize: "0.9rem",
                     lineHeight: 1.6,
                   }}
@@ -618,12 +640,14 @@ export function PublicSignView({
                   style={{
                     width: "100%",
                     padding: 12,
-                    borderRadius: 8,
-                    border: "2px solid #fecaca",
+                    borderRadius: 10,
+                    border: "1px solid #fecaca",
                     resize: "vertical",
                     fontFamily: "inherit",
                     fontSize: "0.9rem",
                     marginBottom: 12,
+                    background: "#020617",
+                    color: "#e5e7eb",
                   }}
                   placeholder="Escribe aquí el motivo de rechazo…"
                 />
@@ -634,9 +658,9 @@ export function PublicSignView({
                       marginBottom: 12,
                       padding: "10px 12px",
                       fontSize: "0.85rem",
-                      color: "#b91c1c",
-                      background: "#fee2e2",
-                      borderRadius: 6,
+                      color: "#fecaca",
+                      background: "#7f1d1d",
+                      borderRadius: 8,
                       border: "1px solid #fecaca",
                     }}
                   >
@@ -658,10 +682,10 @@ export function PublicSignView({
                       flex: 1,
                       minWidth: 140,
                       padding: "12px 20px",
-                      borderRadius: 8,
-                      border: "2px solid #e5e7eb",
-                      backgroundColor: "#ffffff",
-                      color: "#374151",
+                      borderRadius: 999,
+                      border: "1px solid #1f2937",
+                      backgroundColor: "#020617",
+                      color: "#e5e7eb",
                       fontWeight: 600,
                     }}
                     onClick={() => {
@@ -680,7 +704,7 @@ export function PublicSignView({
                       flex: 1,
                       minWidth: 140,
                       padding: "12px 20px",
-                      borderRadius: 8,
+                      borderRadius: 999,
                       backgroundColor: "#b91c1c",
                       color: "#ffffff",
                       border: "none",

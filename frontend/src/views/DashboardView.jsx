@@ -105,6 +105,7 @@ export function DashboardView({ user }) {
         display: "flex",
         flexDirection: "column",
         gap: 24,
+        color: "#e5e7eb",
       }}
     >
       <div>
@@ -112,7 +113,7 @@ export function DashboardView({ user }) {
           style={{
             margin: 0,
             fontSize: "1.6rem",
-            color: "#0f172a",
+            color: "#e5e7eb",
             letterSpacing: "-0.02em",
           }}
         >
@@ -122,7 +123,7 @@ export function DashboardView({ user }) {
           style={{
             marginTop: 4,
             fontSize: "0.9rem",
-            color: "#64748b",
+            color: "#9ca3af",
           }}
         >
           Hola <strong>{displayName}</strong>, aquí ves un resumen visual de tus
@@ -135,7 +136,7 @@ export function DashboardView({ user }) {
           style={{
             padding: 40,
             textAlign: "center",
-            color: "#64748b",
+            color: "#9ca3af",
           }}
         >
           Cargando estadísticas…
@@ -145,7 +146,7 @@ export function DashboardView({ user }) {
           style={{
             padding: 40,
             textAlign: "center",
-            color: "#b91c1c",
+            color: "#fecaca",
             fontWeight: 600,
           }}
         >
@@ -163,26 +164,26 @@ export function DashboardView({ user }) {
             <KpiCard
               label="Total documentos"
               value={kpis.total}
-              color="#0f172a"
-              bg="rgba(15, 23, 42, 0.04)"
+              color="#e5e7eb"
+              bg="rgba(15, 23, 42, 0.8)"
             />
             <KpiCard
               label="Pendientes"
               value={kpis.pendientes}
-              color="#f97316"
-              bg="rgba(249, 115, 22, 0.08)"
+              color="#fed7aa"
+              bg="rgba(249, 115, 22, 0.22)"
             />
             <KpiCard
               label="Firmados"
               value={kpis.firmados}
-              color="#22c55e"
-              bg="rgba(34, 197, 94, 0.08)"
+              color="#bbf7d0"
+              bg="rgba(34, 197, 94, 0.22)"
             />
             <KpiCard
               label="Rechazados"
               value={kpis.rechazados}
-              color="#ef4444"
-              bg="rgba(239, 68, 68, 0.08)"
+              color="#fecaca"
+              bg="rgba(239, 68, 68, 0.22)"
             />
           </div>
 
@@ -202,11 +203,26 @@ export function DashboardView({ user }) {
                   data={statusData}
                   margin={{ top: 10, right: 20, left: 0, bottom: 0 }}
                 >
-                  <CartesianGrid strokeDasharray="3 3" stroke="#e5e7eb" />
-                  <XAxis dataKey="status" tick={{ fontSize: 12 }} />
-                  <YAxis allowDecimals={false} />
-                  <Tooltip />
-                  <Legend />
+                  <CartesianGrid strokeDasharray="3 3" stroke="#1f2937" />
+                  <XAxis
+                    dataKey="status"
+                    tick={{ fontSize: 12, fill: "#9ca3af" }}
+                  />
+                  <YAxis
+                    allowDecimals={false}
+                    tick={{ fontSize: 12, fill: "#9ca3af" }}
+                  />
+                  <Tooltip
+                    contentStyle={{
+                      backgroundColor: "#020617",
+                      border: "1px solid #1f2937",
+                      color: "#e5e7eb",
+                      fontSize: 12,
+                    }}
+                  />
+                  <Legend
+                    wrapperStyle={{ color: "#9ca3af", fontSize: 12 }}
+                  />
                   <Bar
                     dataKey="count"
                     name="Cantidad"
@@ -226,11 +242,26 @@ export function DashboardView({ user }) {
                   data={perDayData}
                   margin={{ top: 10, right: 20, left: 0, bottom: 0 }}
                 >
-                  <CartesianGrid strokeDasharray="3 3" stroke="#e5e7eb" />
-                  <XAxis dataKey="date" tick={{ fontSize: 11 }} />
-                  <YAxis allowDecimals={false} />
-                  <Tooltip />
-                  <Legend />
+                  <CartesianGrid strokeDasharray="3 3" stroke="#1f2937" />
+                  <XAxis
+                    dataKey="date"
+                    tick={{ fontSize: 11, fill: "#9ca3af" }}
+                  />
+                  <YAxis
+                    allowDecimals={false}
+                    tick={{ fontSize: 11, fill: "#9ca3af" }}
+                  />
+                  <Tooltip
+                    contentStyle={{
+                      backgroundColor: "#020617",
+                      border: "1px solid #1f2937",
+                      color: "#e5e7eb",
+                      fontSize: 12,
+                    }}
+                  />
+                  <Legend
+                    wrapperStyle={{ color: "#9ca3af", fontSize: 12 }}
+                  />
                   <Line
                     type="monotone"
                     dataKey="count"
@@ -258,8 +289,17 @@ export function DashboardView({ user }) {
             >
               <ResponsiveContainer width="100%" height={260}>
                 <PieChart>
-                  <Tooltip />
-                  <Legend />
+                  <Tooltip
+                    contentStyle={{
+                      backgroundColor: "#020617",
+                      border: "1px solid #1f2937",
+                      color: "#e5e7eb",
+                      fontSize: 12,
+                    }}
+                  />
+                  <Legend
+                    wrapperStyle={{ color: "#9ca3af", fontSize: 12 }}
+                  />
                   <Pie
                     data={tipoTramiteData}
                     dataKey="value"
@@ -285,10 +325,11 @@ export function DashboardView({ user }) {
             <div
               style={{
                 borderRadius: 16,
-                border: "1px solid #e5e7eb",
+                border: "1px solid #1f2937",
                 padding: 16,
                 background:
-                  "radial-gradient(circle at 0 0, rgba(56, 189, 248, 0.1), transparent 55%), radial-gradient(circle at 100% 100%, rgba(129, 140, 248, 0.12), transparent 55%)",
+                  "radial-gradient(circle at 0 0, rgba(56,189,248,0.18), transparent 55%), radial-gradient(circle at 100% 100%, rgba(129,140,248,0.22), transparent 55%)",
+                backgroundColor: "#020617",
               }}
             >
               <h3
@@ -296,7 +337,7 @@ export function DashboardView({ user }) {
                   marginTop: 0,
                   marginBottom: 8,
                   fontSize: "1rem",
-                  color: "#0f172a",
+                  color: "#e5e7eb",
                 }}
               >
                 Siguiente paso sugerido
@@ -304,7 +345,7 @@ export function DashboardView({ user }) {
               <p
                 style={{
                   fontSize: "0.85rem",
-                  color: "#475569",
+                  color: "#cbd5f5",
                   marginBottom: 8,
                 }}
               >
@@ -316,7 +357,7 @@ export function DashboardView({ user }) {
               <p
                 style={{
                   fontSize: "0.85rem",
-                  color: "#475569",
+                  color: "#9ca3af",
                 }}
               >
                 Si ves poca creación en los últimos días, prueba un flujo
@@ -339,8 +380,8 @@ function KpiCard({ label, value, color, bg }) {
         minWidth: 160,
         padding: 14,
         borderRadius: 16,
-        border: "1px solid #e5e7eb",
-        background: bg || "#ffffff",
+        border: "1px solid #1f2937",
+        background: bg || "#020617",
         display: "flex",
         flexDirection: "column",
         gap: 4,
@@ -349,7 +390,7 @@ function KpiCard({ label, value, color, bg }) {
       <span
         style={{
           fontSize: "0.8rem",
-          color: "#6b7280",
+          color: "#9ca3af",
         }}
       >
         {label}
@@ -358,7 +399,7 @@ function KpiCard({ label, value, color, bg }) {
         style={{
           fontSize: "1.4rem",
           fontWeight: 700,
-          color: color || "#0f172a",
+          color: color || "#e5e7eb",
         }}
       >
         {value}
@@ -372,9 +413,9 @@ function ChartCard({ title, description, children }) {
     <div
       style={{
         borderRadius: 16,
-        border: "1px solid #e5e7eb",
+        border: "1px solid #1f2937",
         padding: 16,
-        backgroundColor: "#ffffff",
+        backgroundColor: "#020617",
         display: "flex",
         flexDirection: "column",
         gap: 12,
@@ -387,7 +428,7 @@ function ChartCard({ title, description, children }) {
             margin: 0,
             marginBottom: 4,
             fontSize: "0.95rem",
-            color: "#0f172a",
+            color: "#e5e7eb",
           }}
         >
           {title}
@@ -397,7 +438,7 @@ function ChartCard({ title, description, children }) {
             style={{
               margin: 0,
               fontSize: "0.8rem",
-              color: "#6b7280",
+              color: "#9ca3af",
             }}
           >
             {description}

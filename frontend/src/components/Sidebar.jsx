@@ -63,7 +63,7 @@ export function Sidebar({
           >
             VeriFirma
           </div>
-          <div style={{ fontSize: "0.75rem", color: "#6b7280" }}>
+          <div style={{ fontSize: "0.75rem", color: "#9ca3af" }}>
             Panel principal
           </div>
         </div>
@@ -75,9 +75,10 @@ export function Sidebar({
           marginBottom: 16,
           padding: 8,
           borderRadius: 10,
-          background: "#0f172a",
+          background: "#020617",
           color: "#e5e7eb",
           fontSize: "0.7rem",
+          border: "1px solid #1f2937",
         }}
       >
         <div style={{ display: "flex", justifyContent: "space-between" }}>
@@ -131,9 +132,9 @@ export function Sidebar({
 
       <div
         className={`nav-item ${
-          statusFilter === "PENDIENTES" ? "active" : ""
+          statusFilter === "ONLY_PENDIENTES" ? "active" : ""
         }`}
-        onClick={() => handleStatusFilter("PENDIENTES")}
+        onClick={() => handleStatusFilter("ONLY_PENDIENTES")}
         title="Mostrar solo documentos pendientes"
       >
         <span>⏳</span> Solo pendientes
@@ -141,9 +142,9 @@ export function Sidebar({
 
       <div
         className={`nav-item ${
-          statusFilter === "FIRMADOS" ? "active" : ""
+          statusFilter === "ONLY_FIRMADOS" ? "active" : ""
         }`}
-        onClick={() => handleStatusFilter("FIRMADOS")}
+        onClick={() => handleStatusFilter("ONLY_FIRMADOS")}
         title="Mostrar solo documentos firmados"
       >
         <span>✅</span> Solo firmados
@@ -151,9 +152,9 @@ export function Sidebar({
 
       <div
         className={`nav-item ${
-          statusFilter === "RECHAZADOS" ? "active" : ""
+          statusFilter === "ONLY_RECHAZADOS" ? "active" : ""
         }`}
-        onClick={() => handleStatusFilter("RECHAZADOS")}
+        onClick={() => handleStatusFilter("ONLY_RECHAZADOS")}
         title="Mostrar solo documentos rechazados"
       >
         <span>❌</span> Solo rechazados
@@ -303,6 +304,7 @@ export function Sidebar({
           background: "#020617",
           color: "#9ca3af",
           fontSize: "0.68rem",
+          border: "1px solid #1f2937",
         }}
       >
         <div style={{ marginBottom: 4 }}>

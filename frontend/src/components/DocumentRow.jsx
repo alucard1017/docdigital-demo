@@ -15,7 +15,7 @@ function getDocumentoLabel(value) {
   return "Otro";
 }
 
-// NUEVO: separa el tipo en 2 líneas
+// Separa el tipo en 2 líneas
 function splitTipoTramite(labelTramite, labelDoc) {
   const linea1 = labelTramite || "";
   const linea2 = labelDoc || "";
@@ -49,6 +49,7 @@ export function DocumentRow({ doc, onOpenDetail }) {
 
   const { linea1, linea2 } = splitTipoTramite(labelTramite, labelDoc);
 
+  // solo colores, el resto lo maneja la clase .doc-chip-tipo
   const chipBgColor =
     tipoTramite === "notaria"
       ? "#eef2ff"
@@ -116,40 +117,35 @@ export function DocumentRow({ doc, onOpenDetail }) {
 
   return (
     <tr className="doc-row" onClick={handleOpenDetail}>
+      {/* N° contrato */}
       <td className="doc-cell-id">
         <span className="doc-id-pill">
           {doc.numero_contrato_interno || `#${doc.id}`}
         </span>
       </td>
 
+      {/* Título + fecha */}
       <td className="doc-cell-title">
         <div className="doc-title-main">{doc.title || "Sin título"}</div>
         <div className="doc-title-sub">{formattedFecha}</div>
       </td>
 
+      {/* Tipo de trámite / documento */}
       <td>
         <div
           className="doc-chip-tipo"
           style={{
             backgroundColor: chipBgColor,
             color: chipTextColor,
-            display: "inline-flex",
-            flexDirection: "column",
-            alignItems: "center",
-            justifyContent: "center",
-            paddingTop: 6,
-            paddingBottom: 6,
-            lineHeight: 1.1,
-            minWidth: 90,
-            textAlign: "center",
           }}
           title={`${labelTramite} · ${labelDoc}`}
         >
           <span>{linea1}</span>
-          <span style={{ fontSize: "0.75rem", opacity: 0.8 }}>{linea2}</span>
+          <span className="doc-chip-sub">{linea2}</span>
         </div>
       </td>
 
+      {/* Estado */}
       <td className="doc-cell-status">
         <span
           className="doc-status-pill"
@@ -160,6 +156,7 @@ export function DocumentRow({ doc, onOpenDetail }) {
         </span>
       </td>
 
+      {/* Firmante */}
       <td className="doc-cell-signer">
         <div className="doc-signer-main">
           {doc.firmante_nombre || "No asignado"}
@@ -169,25 +166,30 @@ export function DocumentRow({ doc, onOpenDetail }) {
         )}
       </td>
 
+      {/* Acciones */}
       <td className="doc-cell-actions">
         <div className="doc-actions">
           {doc.status === DOC_STATUS.RECHAZADO && doc.reject_reason && (
             <button
               type="button"
-              className="btn-main btn-secondary-danger"
+              className="btn-main btn-secondary-danger btn-xs"
               onClick={handleVerRechazo}
             >
               Ver rechazo
             </button>
           )}
 
-          <button type="button" className="btn-main" onClick={handleVerPdf}>
+          <button
+            type="button"
+            className="btn-main btn-secondary btn-xs"
+            onClick={handleVerPdf}
+          >
             Ver PDF
           </button>
 
           <button
             type="button"
-            className="btn-main btn-primary"
+            className="btn-main btn-primary btn-xs"
             onClick={(e) => {
               e.stopPropagation();
               handleOpenDetail();

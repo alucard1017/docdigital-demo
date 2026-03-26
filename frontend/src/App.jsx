@@ -33,18 +33,11 @@ import api from "./api/client";
 
 /* ========= Helpers de rol ========= */
 
-function isSuperAdmin(user) {
-  return user?.role === "SUPER_ADMIN";
-}
-function isGlobalAdmin(user) {
-  return user?.role === "ADMIN_GLOBAL";
-}
-function isCompanyAdmin(user) {
-  return user?.role === "ADMIN";
-}
-function isAnyAdmin(user) {
-  return isSuperAdmin(user) || isGlobalAdmin(user) || isCompanyAdmin(user);
-}
+const isSuperAdmin = (user) => user?.role === "SUPER_ADMIN";
+const isGlobalAdmin = (user) => user?.role === "ADMIN_GLOBAL";
+const isCompanyAdmin = (user) => user?.role === "ADMIN";
+const isAnyAdmin = (user) =>
+  isSuperAdmin(user) || isGlobalAdmin(user) || isCompanyAdmin(user);
 
 /* ========= Helpers RUN ========= */
 
@@ -109,10 +102,9 @@ function App() {
     }
   });
 
-  // === Onboarding ===
+  // Onboarding
   const [checkingOnboarding, setCheckingOnboarding] = useState(false);
   const [showOnboarding, setShowOnboarding] = useState(false);
-
   const [runProductTour, setRunProductTour] = useState(false);
 
   const [loadingDocs, setLoadingDocs] = useState(false);
@@ -154,14 +146,12 @@ function App() {
   const cargarDocs = useCallback(
     async (sortParam = sort) => {
       if (!token) return;
+
       setLoadingDocs(true);
       setErrorDocs("");
 
       try {
-        const res = await api.get("/docs", {
-          params: { sort: sortParam },
-        });
-
+        const res = await api.get("/docs", { params: { sort: sortParam } });
         const data = res.data;
         setDocs(Array.isArray(data) ? data : []);
       } catch (err) {
@@ -203,36 +193,34 @@ function App() {
     };
   }, [token, socket, cargarDocs]);
 
-// Cargar URL de PDF para la vista de detalle
-useEffect(() => {
-  if (!selectedDoc?.id) {
-    setPdfUrl(null);
-    return;
-  }
-
-  let objectUrl;
-
-  (async () => {
-    try {
-      const res = await api.get(`/documents/${selectedDoc.id}/preview`, {
-        responseType: "blob",
-      });
-
-      const blob = new Blob([res.data], { type: "application/pdf" });
-      objectUrl = URL.createObjectURL(blob);
-      setPdfUrl(objectUrl);
-    } catch (err) {
-      console.error("Error preparando URL de PDF:", err);
+  // Cargar URL de PDF para la vista de detalle
+  useEffect(() => {
+    if (!selectedDoc?.id) {
       setPdfUrl(null);
+      return;
     }
-  })();
 
-  return () => {
-    if (objectUrl) {
-      URL.revokeObjectURL(objectUrl);
-    }
-  };
-}, [selectedDoc?.id]);
+    let objectUrl;
+
+    (async () => {
+      try {
+        const res = await api.get(`/documents/${selectedDoc.id}/preview`, {
+          responseType: "blob",
+        });
+
+        const blob = new Blob([res.data], { type: "application/pdf" });
+        objectUrl = URL.createObjectURL(blob);
+        setPdfUrl(objectUrl);
+      } catch (err) {
+        console.error("Error preparando URL de PDF:", err);
+        setPdfUrl(null);
+      }
+    })();
+
+    return () => {
+      if (objectUrl) URL.revokeObjectURL(objectUrl);
+    };
+  }, [selectedDoc?.id]);
 
   /* =============================== */
   /* FIRMA / VISADO PÚBLICO          */
@@ -314,7 +302,6 @@ useEffect(() => {
 
       if (isVerificationPublic) {
         setView("verification");
-        return;
       }
     };
 
@@ -413,16 +400,13 @@ useEffect(() => {
     }
 
     try {
-      let body = undefined;
+      let body;
 
       if (accion === "rechazar") {
         body = { motivo: extraData.motivo };
       }
 
-      const res = await api.post(
-        `/docs/${id}/${accion}`,
-        body ? body : undefined
-      );
+      const res = await api.post(`/docs/${id}/${accion}`, body);
 
       const data = res.data;
 
@@ -463,26 +447,25 @@ useEffect(() => {
     throw new Error("Frontend test error");
   };
 
-  // === Onboarding: consulta estado ===
-const checkOnboarding = useCallback(async () => {
-  if (!token) return;
-  try {
-    setCheckingOnboarding(true);
-    const res = await api.get("/onboarding/status");
-    const data = res.data;
-    if (data?.needsOnboarding) {
-      setShowOnboarding(true);
-    } else {
+  // Onboarding: consulta estado
+  const checkOnboarding = useCallback(async () => {
+    if (!token) return;
+    try {
+      setCheckingOnboarding(true);
+      const res = await api.get("/onboarding/status");
+      const data = res.data;
+      if (data?.needsOnboarding) {
+        setShowOnboarding(true);
+      } else {
+        setShowOnboarding(false);
+      }
+    } catch (err) {
+      console.error("[ONBOARDING CHECK] Error:", err.message);
       setShowOnboarding(false);
+    } finally {
+      setCheckingOnboarding(false);
     }
-  } catch (err) {
-    console.error("[ONBOARDING CHECK] Error:", err.message);
-    // Fallback: no mostrar onboarding si falla
-    setShowOnboarding(false);
-  } finally {
-    setCheckingOnboarding(false);
-  }
-}, [token]);
+  }, [token]);
 
   const handleOnboardingCompleted = () => {
     setShowOnboarding(false);
@@ -640,12 +623,10 @@ const checkOnboarding = useCallback(async () => {
       d.status === DOC_STATUS.PENDIENTE_VISADO ||
       d.status === DOC_STATUS.PENDIENTE_FIRMA;
 
-    if (statusFilter === "PENDIENTES" && !esPendiente) return false;
-    if (statusFilter === "VISADOS" && d.status !== DOC_STATUS.VISADO)
+    if (statusFilter === "ONLY_PENDIENTES" && !esPendiente) return false;
+    if (statusFilter === "ONLY_FIRMADOS" && d.status !== DOC_STATUS.FIRMADO)
       return false;
-    if (statusFilter === "FIRMADOS" && d.status !== DOC_STATUS.FIRMADO)
-      return false;
-    if (statusFilter === "RECHAZADOS" && d.status !== DOC_STATUS.RECHAZADO)
+    if (statusFilter === "ONLY_RECHAZADOS" && d.status !== DOC_STATUS.RECHAZADO)
       return false;
 
     if (search.trim() !== "") {
@@ -691,6 +672,7 @@ const checkOnboarding = useCallback(async () => {
         <OnboardingWizard
           onCompleted={handleOnboardingCompleted}
           onSkipped={handleOnboardingSkipped}
+          checking={checkingOnboarding}
         />
       )}
 
@@ -700,9 +682,17 @@ const checkOnboarding = useCallback(async () => {
           docs={docs}
           pendientes={pendientes}
           view={view}
-          setView={setView}
+          setView={(nextView) => {
+            setView(nextView);
+            if (nextView === "list") {
+              setPage(1);
+            }
+          }}
           statusFilter={statusFilter}
-          setStatusFilter={setStatusFilter}
+          setStatusFilter={(val) => {
+            setStatusFilter(val);
+            setPage(1);
+          }}
           logout={logout}
           isAnyAdmin={anyAdmin}
         />
@@ -723,9 +713,15 @@ const checkOnboarding = useCallback(async () => {
                 cargarDocs(value);
               }}
               statusFilter={statusFilter}
-              setStatusFilter={setStatusFilter}
+              setStatusFilter={(value) => {
+                setStatusFilter(value);
+                setPage(1);
+              }}
               search={search}
-              setSearch={setSearch}
+              setSearch={(value) => {
+                setSearch(value);
+                setPage(1);
+              }}
               totalFiltrado={totalFiltrado}
               pendientes={pendientes}
               visados={visados}
