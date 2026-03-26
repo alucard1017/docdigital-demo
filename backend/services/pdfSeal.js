@@ -6,6 +6,7 @@ const bwipjs = require("@bwip-js/node");
 const { PDFDocument, rgb, StandardFonts, degrees } = require("pdf-lib");
 const { getObjectBuffer, uploadBufferToS3 } = require("./storageR2");
 const db = require("../db");
+const crypto = require("crypto");
 
 async function sellarPdfConQr({
   s3Key,
@@ -275,13 +276,26 @@ async function sellarPdfConQr({
     lineHeight: 10,
   });
 
-  // 6) Guardar y subir
-  const newPdfBytes = await pdfDoc.save(); // Uint8Array [web:202]
+  // 6) Guardar, subir y actualizar documento con hash final
+  const newPdfBytes = await pdfDoc.save();
   const newKey = s3Key.endsWith(".pdf")
     ? s3Key.replace(/\.pdf$/i, "_sellado.pdf")
     : `${s3Key}_sellado.pdf`;
 
   await uploadBufferToS3(newKey, newPdfBytes, "application/pdf");
+
+  const finalHash = crypto
+    .createHash("sha256")
+    .update(Buffer.from(newPdfBytes))
+    .digest("hex");
+
+  await db.query(
+    `UPDATE documents
+     SET pdf_final_url = $1,
+         pdf_hash_final = $2
+     WHERE id = $3`,
+    [newKey, finalHash, documentoId]
+  );
 
   console.log(`✅ PDF sellado con ${firmantes.length} evidencias: ${newKey}`);
 

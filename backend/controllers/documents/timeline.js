@@ -43,9 +43,9 @@ async function getDocumentPdf(req, res) {
         .json({ message: "Documento sin archivo asociado" });
     }
 
-    // Siempre usamos el PDF que el usuario debe ver:
-    // - Si está FIRMADO y hay pdf_final_url -> usar ese
-    // - Si no, usar original o file_path
+    // PDF que debe ver el usuario:
+    // - FIRMADO con pdf_final_url -> sellado
+    // - En otro caso, original o file_path
     const key =
       status === "FIRMADO" && pdf_final_url
         ? pdf_final_url
