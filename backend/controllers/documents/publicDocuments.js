@@ -475,14 +475,14 @@ async function publicSignDocument(req, res) {
       }
     }
 
-    return res.json({
-      ...doc,
-      file_url: doc.file_path,
-      documentStatus: newDocStatus,
-      message: allSigned
-        ? "Documento firmado correctamente por todos los firmantes"
-        : "Firma registrada. Aún faltan firmantes por completar la firma",
-    });
+return res.json({
+  ...doc,
+  file_url: doc.pdf_final_url || doc.file_path,
+  documentStatus: newDocStatus,
+  message: allSigned
+    ? "Documento firmado correctamente por todos los firmantes"
+    : "Firma registrada. Aún faltan firmantes por completar la firma",
+});
   } catch (err) {
     console.error("❌ Error firmando documento público:", err);
     return res.status(500).json({ message: "Error interno del servidor" });
@@ -710,12 +710,12 @@ async function publicRejectDocument(req, res) {
       req,
     });
 
-    return res.json({
-      ...doc,
-      file_url: doc.file_path,
-      documentStatus: "RECHAZADO",
-      message: "Documento rechazado correctamente",
-    });
+return res.json({
+  ...doc,
+  file_url: doc.pdf_final_url || doc.file_path,
+  documentStatus: "RECHAZADO",
+  message: "Documento rechazado correctamente",
+});
   } catch (err) {
     console.error("❌ Error rechazando documento público:", err);
     return res.status(500).json({ message: "Error interno del servidor" });
@@ -863,12 +863,12 @@ async function publicVisarDocument(req, res) {
       req,
     });
 
-    return res.json({
-      ...doc,
-      file_url: doc.file_path,
-      documentStatus: "PENDIENTE_FIRMA",
-      message: "Documento visado correctamente desde enlace público",
-    });
+return res.json({
+  ...doc,
+  file_url: doc.pdf_final_url || doc.file_path,
+  documentStatus: "PENDIENTE_FIRMA",
+  message: "Documento visado correctamente desde enlace público",
+});
   } catch (err) {
     console.error("❌ Error visando documento público:", err);
     return res.status(500).json({ message: "Error interno del servidor" });

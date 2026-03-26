@@ -531,10 +531,10 @@ router.post("/firmar-flujo/:firmanteId", documentsController.signFlow);
 // PDF completo (URL firmada / JSON)
 router.get("/:id/pdf", documentsController.getDocumentPdf);
 
-// Preview para visor/miniatura (usa mismo PDF, pero endpoint separado)
-router.get("/:id/preview", documentsController.getDocumentPdf);
+// Preview para visor/miniatura (usa el buffer de report.js)
+router.get("/:id/preview", previewDocument);
 
-// NUEVO: descarga para frontend (/api/documents/:id/download)
+// Descarga para frontend (/api/documents/:id/download)
 router.get("/:id/download", downloadDocument);
 
 router.get("/:id/timeline", documentsController.getTimeline);
