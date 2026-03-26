@@ -459,13 +459,26 @@ async function publicSignDocument(req, res) {
           const docNuevo = docNuevoRes.rows[0];
           const baseKey = doc.pdf_original_url || doc.file_path;
 
-          await sellarPdfConQr({
+          // sellarPdfConQr debe devolver la key del PDF final en S3
+          const finalKey = await sellarPdfConQr({
             s3Key: baseKey,
             documentoId: docNuevo.id,
             codigoVerificacion: docNuevo.codigo_verificacion,
             categoriaFirma: docNuevo.categoria_firma || "SIMPLE",
             numeroContratoInterno: doc.numero_contrato_interno,
           });
+
+          // Guardar la ruta final en documents.pdf_final_url
+          if (finalKey) {
+            await db.query(
+              `UPDATE documents
+               SET pdf_final_url = $1,
+                   updated_at = NOW()
+               WHERE id = $2`,
+              [finalKey, doc.id]
+            );
+            doc.pdf_final_url = finalKey; // para que la respuesta ya lo traiga
+          }
         }
       } catch (sealError) {
         console.error(

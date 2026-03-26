@@ -10,7 +10,10 @@ const crypto = require("crypto");
 
 /**
  * Sella el PDF del documento con QR, evidencias y certificación,
- * sube la versión final y guarda su hash en la tabla documents.
+ * sube la versión final y guarda su hash y ruta final en la tabla documents.
+ *
+ * IMPORTANTE:
+ * - documentoId debe ser el ID de la tabla `documents` (no de `documentos`).
  */
 async function sellarPdfConQr({
   s3Key,
@@ -20,7 +23,8 @@ async function sellarPdfConQr({
   numeroContratoInterno,
 }) {
   if (!s3Key) throw new Error("s3Key es obligatorio para sellar el PDF");
-  if (!documentoId) throw new Error("documentoId es obligatorio para sellar el PDF");
+  if (!documentoId)
+    throw new Error("documentoId es obligatorio para sellar el PDF");
   if (!codigoVerificacion) {
     throw new Error("codigoVerificacion es obligatorio para sellar el PDF");
   }
@@ -303,10 +307,7 @@ async function sellarPdfConQr({
   const newPdfBytes = await pdfDoc.save();
   const newBuffer = Buffer.from(newPdfBytes);
 
-  const finalHash = crypto
-    .createHash("sha256")
-    .update(newBuffer)
-    .digest("hex");
+  const finalHash = crypto.createHash("sha256").update(newBuffer).digest("hex");
 
   const newKey = `documentos/${documentoId}/final-${finalHash}.pdf`;
 
@@ -319,15 +320,18 @@ async function sellarPdfConQr({
   });
 
   await db.query(
-    `UPDATE documents
-     SET pdf_final_url = $1,
-         pdf_hash_final = $2
-     WHERE id = $3`,
+    `
+    UPDATE documents
+    SET pdf_final_url = $1,
+        pdf_hash_final = $2
+    WHERE id = $3
+    `,
     [newKey, finalHash, documentoId]
   );
 
   console.log(`✅ PDF sellado con ${firmantes.length} evidencias: ${newKey}`);
 
+  // Devolvemos la key final por si el caller la quiere usar
   return newKey;
 }
 
