@@ -76,7 +76,7 @@ async function signDocument(req, res) {
       req,
     });
 
-    // Sellar PDF con QR / código y guardar ruta firmada en pdf_final_url
+    // Sellar PDF con QR / código y dejar que pdfSeal.js actualice pdf_final_url y pdf_hash_final
     try {
       if (doc.nuevo_documento_id) {
         const docNuevoRes = await db.query(
@@ -91,7 +91,7 @@ async function signDocument(req, res) {
 
           const sourceKey = doc.pdf_original_url || doc.file_path;
           if (sourceKey) {
-            const newKey = await sellarPdfConQr({
+            await sellarPdfConQr({
               s3Key: sourceKey,
               documentoId: docNuevo.id,
               codigoVerificacion: docNuevo.codigo_verificacion,
@@ -99,14 +99,17 @@ async function signDocument(req, res) {
               numeroContratoInterno: doc.numero_contrato_interno,
             });
 
-            await db.query(
-              `UPDATE documents
-               SET pdf_final_url = $1
-               WHERE id = $2`,
-              [newKey, doc.id]
+            // No actualizar pdf_final_url aquí: ya lo hace pdfSeal.js.
+            // Si quieres devolver el valor actualizado, recarga el documento.
+            const updatedDocRes = await db.query(
+              `SELECT pdf_final_url 
+               FROM documents 
+               WHERE id = $1`,
+              [doc.id]
             );
-
-            doc.pdf_final_url = newKey;
+            if (updatedDocRes.rowCount > 0) {
+              doc.pdf_final_url = updatedDocRes.rows[0].pdf_final_url;
+            }
           }
         }
       }
@@ -290,55 +293,54 @@ async function rejectDocument(req, res) {
       ]
     );
 
-await logAudit({
-  user: req.user,
-  action: "document_rejected",
-  entityType: "document",
-  entityId: doc.id,
-  metadata: { motivo: motivo || "Sin especificar" },
-  req,
-});
+    await logAudit({
+      user: req.user,
+      action: "document_rejected",
+      entityType: "document",
+      entityId: doc.id,
+      metadata: { motivo: motivo || "Sin especificar" },
+      req,
+    });
 
-// ========= NOTIFICAR AL CREADOR POR EMAIL =========
-const creadorRes = await db.query(
-  `SELECT u.email, u.name
-   FROM users u
-   WHERE u.id = $1`,
-  [doc.owner_id]
-);
+    // Notificar al creador por email
+    const creadorRes = await db.query(
+      `SELECT u.email, u.name
+       FROM users u
+       WHERE u.id = $1`,
+      [doc.owner_id]
+    );
 
-if (creadorRes.rowCount > 0) {
-  const creador = creadorRes.rows[0];
-  const { sendNotification } = require("../../services/emailService");
-  
-  const subject = `❌ Documento rechazado: ${doc.title}`;
-  const html = `
-    <div style="font-family: sans-serif; max-width: 600px; margin: 0 auto; padding: 20px;">
-      <h2 style="color: #b91c1c;">❌ Documento Rechazado</h2>
-      <p>Hola <strong>${creador.name}</strong>,</p>
-      <p>El documento <strong>${doc.title}</strong> ha sido rechazado.</p>
-      <div style="background: #fef2f2; padding: 16px; border-radius: 8px; border-left: 4px solid #b91c1c; margin: 16px 0;">
-        <strong>Motivo del rechazo:</strong><br/>
-        ${motivo || "Sin especificar"}
-      </div>
-      <p>Por favor, revisa el motivo y toma las acciones necesarias.</p>
-      <a href="${process.env.FRONTEND_URL}" style="display:inline-block;padding:12px 24px;background:#2563eb;color:#fff;text-decoration:none;border-radius:8px;margin-top:16px;">
-        Ver en VeriFirma
-      </a>
-    </div>
-  `;
+    if (creadorRes.rowCount > 0) {
+      const creador = creadorRes.rows[0];
+      const { sendNotification } = require("../../services/emailService");
 
-  sendNotification(creador.email, subject, html).catch(err => 
-    console.error("Error enviando notificación de rechazo:", err)
-  );
-}
+      const subject = `❌ Documento rechazado: ${doc.title}`;
+      const html = `
+        <div style="font-family: sans-serif; max-width: 600px; margin: 0 auto; padding: 20px;">
+          <h2 style="color: #b91c1c;">❌ Documento Rechazado</h2>
+          <p>Hola <strong>${creador.name}</strong>,</p>
+          <p>El documento <strong>${doc.title}</strong> ha sido rechazado.</p>
+          <div style="background: #fef2f2; padding: 16px; border-radius: 8px; border-left: 4px solid #b91c1c; margin: 16px 0;">
+            <strong>Motivo del rechazo:</strong><br/>
+            ${motivo || "Sin especificar"}
+          </div>
+          <p>Por favor, revisa el motivo y toma las acciones necesarias.</p>
+          <a href="${process.env.FRONTEND_URL}" style="display:inline-block;padding:12px 24px;background:#2563eb;color:#fff;text-decoration:none;border-radius:8px;margin-top:16px;">
+            Ver en VeriFirma
+          </a>
+        </div>
+      `;
 
-return res.json({
-  ...doc,
-  file_url: doc.file_path,
-  message: "Documento rechazado exitosamente",
-});
+      sendNotification(creador.email, subject, html).catch((err) =>
+        console.error("Error enviando notificación de rechazo:", err)
+      );
+    }
 
+    return res.json({
+      ...doc,
+      file_url: doc.file_path,
+      message: "Documento rechazado exitosamente",
+    });
   } catch (err) {
     console.error("❌ Error rechazando documento:", err);
     return res.status(500).json({ message: "Error interno del servidor" });

@@ -299,20 +299,18 @@ async function sellarPdfConQr({
     lineHeight: 10,
   });
 
-  // 6) Guardar, subir y actualizar documento con hash final
+  // 6) Guardar, calcular hash, generar key inmutable y subir
   const newPdfBytes = await pdfDoc.save();
   const newBuffer = Buffer.from(newPdfBytes);
-
-  const newKey = s3Key.endsWith(".pdf")
-    ? s3Key.replace(/\.pdf$/i, "_sellado.pdf")
-    : `${s3Key}_sellado.pdf`;
-
-  await uploadBufferToS3(newKey, newBuffer, "application/pdf");
 
   const finalHash = crypto
     .createHash("sha256")
     .update(newBuffer)
     .digest("hex");
+
+  const newKey = `documentos/${documentoId}/final-${finalHash}.pdf`;
+
+  await uploadBufferToS3(newKey, newBuffer, "application/pdf");
 
   console.log("DEBUG HASH SELLADO >>", {
     documentoId,

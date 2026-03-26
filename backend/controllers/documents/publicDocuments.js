@@ -157,12 +157,11 @@ async function getPublicDocByDocumentToken(req, res) {
         VALUES ($1, NULL, 'INVITATION_OPENED', $2, $3, $4)
         `,
         [
-          row.id, // document_id
+          doc.id,
           req.ip,
           req.headers["user-agent"] || null,
           JSON.stringify({
             source: "public_signer_link",
-            signer_email: row.signer_email,
           }),
         ]
       );
@@ -246,7 +245,7 @@ async function publicSignDocument(req, res) {
       [row.signer_id]
     );
 
-    // NUEVO: sincronizar también document_participants
+    // Sincronizar también document_participants
     try {
       await db.query(
         `
@@ -278,7 +277,7 @@ async function publicSignDocument(req, res) {
     const { signed_count, total_signers } = countRes.rows[0];
     const allSigned = Number(signed_count) >= Number(total_signers);
 
-    // DEBUG: recuento paralelo en document_participants
+    // Debug paralelo en document_participants
     try {
       const dpCountRes = await db.query(
         `
@@ -368,7 +367,7 @@ async function publicSignDocument(req, res) {
       ]
     );
 
-    // Nueva capa de evidencia en document_events (timeline legal)
+    // Evidencia en document_events (timeline legal)
     try {
       await db.query(
         `
@@ -387,7 +386,7 @@ async function publicSignDocument(req, res) {
           doc.id,
           req.ip,
           req.headers["user-agent"] || null,
-          null, // TODO: hash_document si ya lo calculas
+          null,
           JSON.stringify({
             signer_email: row.signer_email,
             signer_name: row.signer_name,
@@ -440,6 +439,7 @@ async function publicSignDocument(req, res) {
       req,
     });
 
+    // Sellar SOLO cuando todos firmaron, delegando todo a pdfSeal.js
     if (allSigned && doc.nuevo_documento_id) {
       try {
         const docNuevoRes = await db.query(
@@ -453,7 +453,7 @@ async function publicSignDocument(req, res) {
           const docNuevo = docNuevoRes.rows[0];
           const baseKey = doc.pdf_original_url || doc.file_path;
 
-          const newKey = await sellarPdfConQr({
+          await sellarPdfConQr({
             s3Key: baseKey,
             documentoId: docNuevo.id,
             codigoVerificacion: docNuevo.codigo_verificacion,
@@ -461,12 +461,7 @@ async function publicSignDocument(req, res) {
             numeroContratoInterno: doc.numero_contrato_interno,
           });
 
-          await db.query(
-            `UPDATE documents
-             SET pdf_final_url = $1
-             WHERE id = $2`,
-            [newKey, doc.id]
-          );
+          // No actualizar pdf_final_url aquí, ya lo hace pdfSeal.js.
         }
       } catch (sealError) {
         console.error(
@@ -568,7 +563,7 @@ async function publicRejectDocument(req, res) {
       [row.signer_id, motivo]
     );
 
-    // NUEVO: sincronizar también document_participants en rechazo
+    // Sincronizar también document_participants en rechazo
     try {
       await db.query(
         `
@@ -640,7 +635,7 @@ async function publicRejectDocument(req, res) {
       ]
     );
 
-    // Nueva capa de evidencia en document_events (timeline legal)
+    // Evidencia de rechazo en document_events
     try {
       await db.query(
         `
@@ -795,7 +790,7 @@ async function publicVisarDocument(req, res) {
       ]
     );
 
-    // Nueva capa de evidencia para visado público (document_events)
+    // Evidencia de visado en document_events
     try {
       await db.query(
         `
