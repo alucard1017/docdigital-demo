@@ -526,16 +526,11 @@ router.post("/firmar-flujo/:firmanteId", documentsController.signFlow);
    RUTAS GET - CON :id
    ================================ */
 
-// PDF completo (descarga/iframe)
+// PDF completo (URL firmada / JSON)
 router.get("/:id/pdf", documentsController.getDocumentPdf);
 
-// Preview para miniatura / visor embebido
-router.get(
-  "/:id/preview",
-  requireAuth,
-  checkDocumentCompanyScope,
-  previewDocument
-);
+// Preview para visor/miniatura (usa mismo PDF, pero endpoint separado)
+router.get("/:id/preview", documentsController.getDocumentPdf);
 
 router.get("/:id/timeline", documentsController.getTimeline);
 

@@ -3,12 +3,11 @@ const { db, getSignedUrl, computeHash, axios } = require("./common");
 const { logAudit } = require("../../utils/auditLog");
 
 /* ================================
-   GET: URL firmada solo para VER PDF (público)
+   GET: URL firmada para VER PDF
    ================================ */
 async function getDocumentPdf(req, res) {
   try {
     const docId = Number(req.params.id);
-
     if (Number.isNaN(docId)) {
       return res.status(400).json({ message: "ID de documento inválido" });
     }
@@ -49,7 +48,8 @@ async function getDocumentPdf(req, res) {
         ? pdf_final_url
         : pdf_original_url || file_path;
 
-    const signedUrl = await getSignedUrl(key, 600); // 10 minutos
+    // Verificación de integridad (hash)
+    const signedUrl = await getSignedUrl(key, 600);
     const fileResponse = await axios.get(signedUrl, {
       responseType: "arraybuffer",
     });
@@ -97,12 +97,11 @@ async function getDocumentPdf(req, res) {
 }
 
 /* ================================
-   GET: Timeline del documento (document_events + audit_log)
+   GET: Timeline del documento
    ================================ */
 async function getTimeline(req, res) {
   try {
     const docId = Number(req.params.id);
-
     if (Number.isNaN(docId)) {
       return res.status(400).json({ message: "ID de documento inválido" });
     }
@@ -134,21 +133,20 @@ async function getTimeline(req, res) {
 
     const doc = docRes.rows[0];
 
-    // NUEVO: participantes del flujo (document_participants)
+    // Participantes del flujo (sin flow_order, usamos step_order)
     const participantsRes = await db.query(
       `
       SELECT
         id,
         role_in_doc,
         status,
-        flow_order,
         step_order,
         "name",
         email,
         signed_at
       FROM document_participants
       WHERE document_id = $1
-      ORDER BY flow_order ASC
+      ORDER BY step_order ASC, id ASC
       `,
       [doc.id]
     );
@@ -276,7 +274,7 @@ async function getTimeline(req, res) {
         tipo_tramite: doc.tipo_tramite,
         tipo_documento: doc.tipo_documento,
       },
-      participants, // NUEVO: flujo multiparte listo para el frontend
+      participants,
       timeline: {
         currentStep,
         nextStep,
@@ -291,17 +289,15 @@ async function getTimeline(req, res) {
 }
 
 /* ================================
-   GET: Timeline legal (document_events solo)
+   GET: Timeline legal (document_events)
    ================================ */
 async function getLegalTimeline(req, res) {
   try {
     const docId = Number(req.params.id);
-
     if (Number.isNaN(docId)) {
       return res.status(400).json({ message: "ID de documento inválido" });
     }
 
-    // Confirmar que el documento existe (para dar 404 bonito)
     const docRes = await db.query(
       `SELECT id, title, status, company_id
        FROM documents
@@ -315,7 +311,6 @@ async function getLegalTimeline(req, res) {
 
     const doc = docRes.rows[0];
 
-    // Leer eventos de la tabla nueva document_events
     const eventsRes = await db.query(
       `
       SELECT
@@ -368,7 +363,6 @@ async function getLegalTimeline(req, res) {
 async function getSigners(req, res) {
   try {
     const docId = Number(req.params.id);
-
     if (Number.isNaN(docId)) {
       return res.status(400).json({ message: "ID de documento inválido" });
     }
