@@ -47,8 +47,7 @@ async function downloadDocument(req, res) {
          id,
          title,
          file_path,
-         pdf_final_url,
-         pdf_hash
+         pdf_final_url
        FROM documents
        WHERE ${where}`,
       params
@@ -59,6 +58,8 @@ async function downloadDocument(req, res) {
     }
 
     const doc = result.rows[0];
+
+    // Prioriza PDF final sellado, si existe; si no, usa el original
     const storageKey = doc.pdf_final_url || doc.file_path;
 
     if (!storageKey) {
@@ -73,31 +74,8 @@ async function downloadDocument(req, res) {
     });
     const buffer = Buffer.from(fileResponse.data);
 
-    // Verificación de integridad (solo log + header de warning)
-    if (doc.pdf_hash) {
-      const currentHash = computeHash(buffer);
-      if (currentHash !== doc.pdf_hash) {
-        console.error("❌ Hash de PDF no coincide para documento", doc.id);
-
-        await logAudit({
-          user: req.user || null,
-          action: "document_hash_mismatch",
-          entityType: "document",
-          entityId: doc.id,
-          metadata: {
-            stored_hash: doc.pdf_hash,
-            current_hash: currentHash,
-            file_path: storageKey,
-          },
-          req,
-        });
-
-        res.setHeader(
-          "X-Document-Hash-Warning",
-          "El hash del PDF no coincide con el registrado"
-        );
-      }
-    }
+    // Si en el futuro quieres volver a validar integridad con hash,
+    // aquí podrías calcular computeHash(buffer) y comparar contra otra columna.
 
     const filename = buildSafeFilename(doc.title, `documento-${doc.id}`);
 
@@ -133,8 +111,7 @@ async function previewDocument(req, res) {
          id,
          title,
          file_path,
-         pdf_final_url,
-         pdf_hash
+         pdf_final_url
        FROM documents
        WHERE ${where}`,
       params
@@ -145,6 +122,8 @@ async function previewDocument(req, res) {
     }
 
     const doc = result.rows[0];
+
+    // Igual que en download: prioridad al PDF final
     const storageKey = doc.pdf_final_url || doc.file_path;
 
     if (!storageKey) {
@@ -159,29 +138,8 @@ async function previewDocument(req, res) {
     });
     const buffer = Buffer.from(fileResponse.data);
 
-    // Verificación de hash (solo log + header de warning)
-    if (doc.pdf_hash) {
-      const currentHash = computeHash(buffer);
-      if (currentHash !== doc.pdf_hash) {
-        await logAudit({
-          user: req.user || null,
-          action: "document_hash_mismatch_preview",
-          entityType: "document",
-          entityId: doc.id,
-          metadata: {
-            stored_hash: doc.pdf_hash,
-            current_hash: currentHash,
-            file_path: storageKey,
-          },
-          req,
-        });
-
-        res.setHeader(
-          "X-Document-Hash-Warning",
-          "El hash del PDF no coincide con el registrado (preview)"
-        );
-      }
-    }
+    // Aquí también podrías reintroducir validación de hash contra otra columna,
+    // si más adelante lo necesitas.
 
     res.setHeader("Content-Type", "application/pdf");
     // Sin Content-Disposition para que el navegador lo muestre en visor/iframe
