@@ -19,7 +19,7 @@ async function getDocumentPdf(req, res) {
          pdf_original_url,
          pdf_final_url,
          status,
-         pdf_hash
+         pdf_hash_final
        FROM documents
        WHERE id = $1`,
       [docId]
@@ -34,30 +34,33 @@ async function getDocumentPdf(req, res) {
       pdf_original_url,
       pdf_final_url,
       status,
-      pdf_hash,
+      pdf_hash_final,
     } = result.rows[0];
 
-    if (!file_path && !pdf_original_url) {
+    if (!file_path && !pdf_original_url && !pdf_final_url) {
       return res
         .status(404)
         .json({ message: "Documento sin archivo asociado" });
     }
 
+    // Siempre usamos el PDF que el usuario debe ver:
+    // - Si está FIRMADO y hay pdf_final_url -> usar ese
+    // - Si no, usar original o file_path
     const key =
       status === "FIRMADO" && pdf_final_url
         ? pdf_final_url
         : pdf_original_url || file_path;
 
-    // Verificación de integridad (hash)
-    const signedUrl = await getSignedUrl(key, 600);
-    const fileResponse = await axios.get(signedUrl, {
-      responseType: "arraybuffer",
-    });
-    const buffer = Buffer.from(fileResponse.data);
+    // Verificación de integridad SOLO si hay hash guardado
+    if (pdf_hash_final) {
+      const signedUrl = await getSignedUrl(key, 600);
+      const fileResponse = await axios.get(signedUrl, {
+        responseType: "arraybuffer",
+      });
+      const buffer = Buffer.from(fileResponse.data);
 
-    if (pdf_hash) {
       const currentHash = computeHash(buffer);
-      if (currentHash !== pdf_hash) {
+      if (currentHash !== pdf_hash_final) {
         console.error(
           "❌ Hash de PDF no coincide (vista pública) para documento",
           docId
@@ -70,7 +73,7 @@ async function getDocumentPdf(req, res) {
           entityId: docId,
           metadata: {
             document_id: docId,
-            stored_hash: pdf_hash,
+            stored_hash: pdf_hash_final,
             current_hash: currentHash,
             context: "getDocumentPdf_public",
           },
@@ -133,7 +136,6 @@ async function getTimeline(req, res) {
 
     const doc = docRes.rows[0];
 
-    // Participantes del flujo (sin flow_order, usamos step_order)
     const participantsRes = await db.query(
       `
       SELECT
@@ -152,7 +154,6 @@ async function getTimeline(req, res) {
     );
     const participants = participantsRes.rows || [];
 
-    // Eventos de negocio
     const eventsRes = await db.query(
       `SELECT 
          id,
@@ -169,7 +170,6 @@ async function getTimeline(req, res) {
     );
     const documentEvents = eventsRes.rows || [];
 
-    // Eventos de auditoría
     const auditRes = await db.query(
       `SELECT
          id,

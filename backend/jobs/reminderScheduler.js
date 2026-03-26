@@ -1,9 +1,7 @@
 // backend/jobs/reminderScheduler.js
 const cron = require("node-cron");
 const db = require("../db");
-const {
-  sendSigningInvitation,
-} = require("../services/emailService");
+const { sendSigningInvitation } = require("../services/emailService");
 
 const FRONT_BASE_URL =
   process.env.FRONTEND_URL || "https://docdigital-demo.onrender.com";
@@ -22,7 +20,6 @@ async function procesarRecordatoriosPendientes() {
   try {
     console.log("⏰ Iniciando procesamiento de recordatorios pendientes...");
 
-    // Buscar recordatorios listos para enviar
     const recordatoriosRes = await db.query(
       `SELECT 
          r.id,
@@ -31,8 +28,9 @@ async function procesarRecordatoriosPendientes() {
          r.email,
          r.attempt,
          r.max_attempts,
+         r.status,
          d.titulo,
-         f.id as token_firmante_id
+         f.token_publico AS token_firmante
        FROM recordatorios r
        JOIN documentos d ON d.id = r.documento_id
        LEFT JOIN firmantes f ON f.id = r.firmante_id
@@ -53,9 +51,8 @@ async function procesarRecordatoriosPendientes() {
 
     for (const rec of recordatorios) {
       try {
-        const url = buildPublicSignUrl(rec.token_firmante_id);
+        const url = buildPublicSignUrl(rec.token_firmante);
 
-        // Enviar email
         await sendSigningInvitation(
           rec.email,
           rec.titulo,
@@ -63,7 +60,6 @@ async function procesarRecordatoriosPendientes() {
           rec.email.split("@")[0]
         );
 
-        // Marcar como SENT
         await db.query(
           `UPDATE recordatorios
            SET status = 'SENT',
@@ -75,11 +71,12 @@ async function procesarRecordatoriosPendientes() {
         );
 
         console.log(
-          `✅ Recordatorio ${rec.id} enviado a ${rec.email} (intento ${rec.attempt + 1}/${rec.max_attempts})`
+          `✅ Recordatorio ${rec.id} enviado a ${rec.email} (intento ${
+            rec.attempt + 1
+          }/${rec.max_attempts})`
         );
         enviados++;
       } catch (emailErr) {
-        // Incrementar intento y marcar como FAILED si llega a max
         const nuevoIntento = rec.attempt + 1;
         const status =
           nuevoIntento >= rec.max_attempts ? "FAILED" : "PENDING";
@@ -110,17 +107,18 @@ async function procesarRecordatoriosPendientes() {
 }
 
 /**
- * Cancela recordatorios de documentos firmados
+ * Cancela recordatorios de documentos firmados o rechazados
  */
 async function cancelarRecordatoriosFirmados() {
   try {
     const canceladosRes = await db.query(
       `UPDATE recordatorios
-       SET status = 'CANCELLED'
+       SET status = 'CANCELLED',
+           updated_at = NOW()
        WHERE status IN ('PENDING', 'SENT')
          AND documento_id IN (
            SELECT id FROM documentos
-           WHERE estado = 'FIRMADO' OR estado = 'RECHAZADO'
+           WHERE estado IN ('FIRMADO', 'RECHAZADO')
          )
        RETURNING id`
     );
@@ -136,11 +134,9 @@ async function cancelarRecordatoriosFirmados() {
 }
 
 /**
- * Inicia el scheduler
- * Ejecuta cada hora a los 15 minutos
+ * Inicia el scheduler (cada hora a los :15)
  */
 function iniciarReminderScheduler() {
-  // Cada hora a las :15 minutos
   cron.schedule("15 * * * *", async () => {
     console.log("▶️ Ejecutando cron de recordatorios...");
     await procesarRecordatoriosPendientes();
@@ -151,4 +147,3 @@ function iniciarReminderScheduler() {
 }
 
 module.exports = { iniciarReminderScheduler };
-
