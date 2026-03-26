@@ -44,8 +44,8 @@ async function getDocumentPdf(req, res) {
     }
 
     // PDF que debe ver el usuario:
-    // - FIRMADO con pdf_final_url -> sellado
-    // - En otro caso, original o file_path
+    // - Si está FIRMADO y hay pdf_final_url -> PDF sellado
+    // - En otro caso, original o file_path (compatibilidad legacy)
     const key =
       status === "FIRMADO" && pdf_final_url
         ? pdf_final_url
@@ -54,16 +54,19 @@ async function getDocumentPdf(req, res) {
     // Verificación de integridad SOLO si hay hash guardado
     if (pdf_hash_final) {
       const signedUrl = await getSignedUrl(key, 600);
+
       const fileResponse = await axios.get(signedUrl, {
         responseType: "arraybuffer",
       });
       const buffer = Buffer.from(fileResponse.data);
 
       const currentHash = computeHash(buffer);
+
       if (currentHash !== pdf_hash_final) {
         console.error(
           "❌ Hash de PDF no coincide (vista pública) para documento",
-          docId
+          docId,
+          { stored_hash: pdf_hash_final, current_hash: currentHash }
         );
 
         await logAudit({

@@ -23,9 +23,9 @@ async function sellarPdfConQr({
 
   console.log("📄 Sellando PDF con evidencias completas...");
 
-  // 1) Descargar y cargar PDF base
+  // 1) Descargar y cargar PDF base (sin cambiar metadatos para hash estable)
   const pdfBytes = await getObjectBuffer(s3Key);
-  const pdfDoc = await PDFDocument.load(pdfBytes);
+  const pdfDoc = await PDFDocument.load(pdfBytes, { updateMetadata: false });
   const pages = pdfDoc.getPages();
   const totalPages = pages.length;
   if (!pages || totalPages === 0) throw new Error("El PDF no tiene páginas");
@@ -278,15 +278,17 @@ async function sellarPdfConQr({
 
   // 6) Guardar, subir y actualizar documento con hash final
   const newPdfBytes = await pdfDoc.save();
+  const newBuffer = Buffer.from(newPdfBytes);
+
   const newKey = s3Key.endsWith(".pdf")
     ? s3Key.replace(/\.pdf$/i, "_sellado.pdf")
     : `${s3Key}_sellado.pdf`;
 
-  await uploadBufferToS3(newKey, newPdfBytes, "application/pdf");
+  await uploadBufferToS3(newKey, newBuffer, "application/pdf");
 
   const finalHash = crypto
     .createHash("sha256")
-    .update(Buffer.from(newPdfBytes))
+    .update(newBuffer)
     .digest("hex");
 
   await db.query(
