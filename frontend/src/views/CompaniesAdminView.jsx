@@ -214,6 +214,7 @@ export function CompaniesAdminView() {
           boxShadow: "0 24px 70px rgba(15,23,42,0.8)",
         }}
       >
+        {/* Header + form */}
         <div
           style={{
             marginBottom: 16,
@@ -241,10 +242,11 @@ export function CompaniesAdminView() {
                 margin: 0,
                 fontSize: "0.85rem",
                 color: "#9ca3af",
+                maxWidth: 420,
               }}
             >
               Administra las empresas que pueden usar la plataforma y asigna
-              usuarios y planes.
+              usuarios y planes con una vista clara y de alto contraste.
             </p>
           </div>
 
@@ -288,6 +290,7 @@ export function CompaniesAdminView() {
           </form>
         </div>
 
+        {/* Empty state o tabla */}
         {companies.length === 0 ? (
           <div
             style={{
@@ -453,7 +456,9 @@ export function CompaniesAdminView() {
                       typeof c.users_count === "number" ? c.users_count : 0;
 
                     const rowBg =
-                      idx % 2 === 0 ? "rgba(15,23,42,1)" : "rgba(15,23,42,0.96)";
+                      idx % 2 === 0
+                        ? "rgba(15,23,42,1)"
+                        : "rgba(15,23,42,0.96)";
 
                     return (
                       <tr
