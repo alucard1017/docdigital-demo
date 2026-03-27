@@ -89,68 +89,6 @@ function App() {
   const [formErrors, setFormErrors] = useState({});
   const [tipoTramite, setTipoTramite] = useState("propio");
 
-  async function handleLogin(e) {
-    e.preventDefault();
-    setIsLoggingIn(true);
-    setMessage("Conectando con el servidor seguro...");
-
-    const inputVal = identifier.trim();
-    const isEmail = inputVal.includes("@");
-
-    const cleanValue = isEmail
-      ? inputVal.toLowerCase()
-      : inputVal.replace(/[^0-9kK]/g, "").toUpperCase();
-
-    if (!isEmail && cleanValue.length < 2) {
-      setMessage("❌ El RUT ingresado no es válido");
-      setIsLoggingIn(false);
-      return;
-    }
-
-    if (import.meta.env.DEV) {
-      console.log("[LOGIN] payload:", { identifier: cleanValue, isEmail });
-    }
-
-    try {
-      const res = await api.post(
-        "/auth/login",
-        {
-          identifier: cleanValue,
-          password,
-        },
-        {
-          withCredentials: true, // mantiene cookies httpOnly
-        }
-      );
-
-      const data = res.data;
-
-      if (!data || !data.user || !data.accessToken) {
-        setMessage("❌ Respuesta inesperada del servidor de autenticación");
-        return;
-      }
-
-      setUser(data.user);
-      setToken(data.accessToken);
-
-      localStorage.setItem("user", JSON.stringify(data.user));
-      localStorage.setItem("accessToken", data.accessToken);
-
-      setMessage("Acceso concedido");
-      setView("list");
-      checkOnboarding();
-    } catch (err) {
-      console.error("[LOGIN ERROR]", err);
-      const msg =
-        err.response?.data?.message ||
-        err.message ||
-        "Error de conexión, intenta nuevamente.";
-      setMessage("❌ " + msg);
-    } finally {
-      setIsLoggingIn(false);
-    }
-  }
-
   const [user, setUser] = useState(() => {
     try {
       return typeof localStorage !== "undefined"
@@ -205,8 +143,139 @@ function App() {
 
   const apiRoot = API_BASE_URL;
 
-  // WebSocket para notificaciones en tiempo real
-  const socket = token ? useSocket(token) : null;
+  /* =============================== */
+  /* LOGIN                           */
+  /* =============================== */
+
+  async function handleLogin(e) {
+    e.preventDefault();
+    setIsLoggingIn(true);
+    setMessage("Conectando con el servidor seguro...");
+
+    const inputVal = identifier.trim();
+    const isEmail = inputVal.includes("@");
+
+    const cleanValue = isEmail
+      ? inputVal.toLowerCase()
+      : inputVal.replace(/[^0-9kK]/g, "").toUpperCase();
+
+    if (!isEmail && cleanValue.length < 2) {
+      setMessage("❌ El RUT ingresado no es válido");
+      setIsLoggingIn(false);
+      return;
+    }
+
+    if (import.meta.env.DEV) {
+      console.log("[LOGIN] payload:", { identifier: cleanValue, isEmail });
+    }
+
+    try {
+      const res = await api.post(
+        "/auth/login",
+        {
+          identifier: cleanValue,
+          password,
+        },
+        {
+          withCredentials: true,
+        }
+      );
+
+      const data = res.data;
+
+      if (!data || !data.user || !data.accessToken) {
+        setMessage("❌ Respuesta inesperada del servidor de autenticación");
+        return;
+      }
+
+      setUser(data.user);
+      setToken(data.accessToken);
+
+      localStorage.setItem("user", JSON.stringify(data.user));
+      localStorage.setItem("accessToken", data.accessToken);
+
+      setMessage("Acceso concedido");
+      setView("list");
+      checkOnboarding();
+    } catch (err) {
+      console.error("[LOGIN ERROR]", err);
+      const msg =
+        err.response?.data?.message ||
+        err.message ||
+        "Error de conexión, intenta nuevamente.";
+      setMessage("❌ " + msg);
+    } finally {
+      setIsLoggingIn(false);
+    }
+  }
+
+  /* =============================== */
+  /* SOCKET (siempre se llama hook) */
+  /* =============================== */
+
+  const socketApi = useSocket(token); // siempre se llama
+  const socket = token ? socketApi : null;
+
+  /* =============================== */
+  /* ONBOARDING                      */
+  /* =============================== */
+
+  const checkOnboarding = useCallback(async () => {
+    if (!token) return;
+    try {
+      setCheckingOnboarding(true);
+      const res = await api.get("/onboarding/status");
+      const data = res.data;
+      if (data?.needsOnboarding) {
+        setShowOnboarding(true);
+      } else {
+        setShowOnboarding(false);
+      }
+    } catch (err) {
+      console.error("[ONBOARDING CHECK] Error:", err.message);
+      setShowOnboarding(false);
+    } finally {
+      setCheckingOnboarding(false);
+    }
+  }, [token]);
+
+  const handleOnboardingCompleted = () => {
+    setShowOnboarding(false);
+    setRunProductTour(true);
+  };
+
+  const handleOnboardingSkipped = () => {
+    setShowOnboarding(false);
+    setRunProductTour(false);
+  };
+
+  useEffect(() => {
+    if (token) {
+      checkOnboarding();
+    }
+  }, [token, checkOnboarding]);
+
+  /* =============================== */
+  /* REHIDRATACIÓN INICIAL          */
+  /* =============================== */
+
+  useEffect(() => {
+    if (token || user) return;
+    if (typeof localStorage === "undefined") return;
+
+    const storedToken = localStorage.getItem("accessToken");
+    const storedUser = localStorage.getItem("user");
+
+    if (storedToken && storedUser) {
+      try {
+        const parsedUser = JSON.parse(storedUser);
+        setUser(parsedUser);
+        setToken(storedToken);
+      } catch {
+        // ignore
+      }
+    }
+  }, [token, user]);
 
   /* =============================== */
   /* CARGA DE DOCUMENTOS             */
@@ -465,49 +534,11 @@ function App() {
     throw new Error("Frontend test error");
   };
 
-  // Onboarding: consulta estado
-  const checkOnboarding = useCallback(async () => {
-    if (!token) return;
-    try {
-      setCheckingOnboarding(true);
-      const res = await api.get("/onboarding/status");
-      const data = res.data;
-      if (data?.needsOnboarding) {
-        setShowOnboarding(true);
-      } else {
-        setShowOnboarding(false);
-      }
-    } catch (err) {
-      console.error("[ONBOARDING CHECK] Error:", err.message);
-      setShowOnboarding(false);
-    } finally {
-      setCheckingOnboarding(false);
-    }
-  }, [token]);
-
-  const handleOnboardingCompleted = () => {
-    setShowOnboarding(false);
-    setRunProductTour(true);
-  };
-
-  const handleOnboardingSkipped = () => {
-    setShowOnboarding(false);
-    setRunProductTour(false);
-  };
-
-  useEffect(() => {
-    if (token) {
-      checkOnboarding();
-    }
-  }, [token, checkOnboarding]);
-
   /* =============================== */
-  /* MODO DE VISTA (RUTAS)           */
+  /* RUTAS SEGÚN TOKEN               */
   /* =============================== */
 
   const pathname = window.location.pathname;
-
-  let mode = "app";
 
   if (!token && pathname === "/forgot-password") {
     return <ForgotPasswordView />;
@@ -521,21 +552,7 @@ function App() {
     return <RegisterView />;
   }
 
-  // Rehidratación rápida desde localStorage antes de mostrar el login
   if (!token) {
-    if (typeof localStorage !== "undefined") {
-      const storedToken = localStorage.getItem("accessToken");
-      const storedUser = localStorage.getItem("user");
-      if (storedToken && storedUser && !user) {
-        try {
-          setUser(JSON.parse(storedUser));
-          setToken(storedToken);
-        } catch {
-          // si falla el parse, seguimos al login normal
-        }
-      }
-    }
-
     const displayIdentifier =
       isEmailMode || identifier.includes("@")
         ? identifier
@@ -566,9 +583,8 @@ function App() {
       />
     );
   }
-  /* =============================== */
-  /* RENDER SEGÚN MODO               */
-  /* =============================== */
+
+  let mode = "app";
 
   if (
     mode === "verification-portal" ||
@@ -589,42 +605,6 @@ function App() {
         publicSignMode={publicSignMode}
         API_URL={apiRoot}
         cargarFirmaPublica={cargarFirmaPublica}
-      />
-    );
-  }
-
-  if (!token) {
-    const displayIdentifier =
-      isEmailMode || identifier.includes("@")
-        ? identifier
-        : formatRun(identifier);
-
-    if (pathname === "/register") {
-      return <RegisterView />;
-    }
-
-    return (
-      <LoginView
-        identifier={displayIdentifier}
-        setIdentifier={(value) => {
-          if (/[a-zA-Z]/.test(value) || value.includes("@")) {
-            setIsEmailMode(true);
-            setIdentifier(value);
-          } else {
-            setIsEmailMode(false);
-            const clean = value.replace(/[^0-9kK]/g, "");
-            setIdentifier(clean);
-          }
-        }}
-        password={password}
-        setPassword={setPassword}
-        showPassword={showPassword}
-        setShowPassword={setShowPassword}
-        showHelp={showHelp}
-        setShowHelp={setShowHelp}
-        message={message}
-        isLoggingIn={isLoggingIn}
-        handleLogin={handleLogin}
       />
     );
   }
@@ -706,7 +686,6 @@ function App() {
   const totalFiltrado = docsFiltrados.length;
   const totalPaginas = Math.ceil(totalFiltrado / pageSize) || 1;
 
-  // NUEVO: arrays seguros para evitar problemas con length
   const safeDocsFiltrados = Array.isArray(docsFiltrados)
     ? docsFiltrados
     : [];
@@ -753,7 +732,7 @@ function App() {
           isAnyAdmin={anyAdmin}
         />
 
-                <div className="content-body">
+        <div className="content-body">
           <ProductTour
             tourId="dashboard_principal"
             run={runProductTour}
@@ -914,7 +893,7 @@ function App() {
                 <>
                   <div className="table-wrapper">
                     <table className="doc-table">
-                      {/* aquí va tu thead original */}
+                      {/* tu thead original aquí */}
                       <tbody>
                         {docsPaginados.map((d) => (
                           <DocumentRow

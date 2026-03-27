@@ -2,17 +2,41 @@
 import { useEffect, useRef, useCallback } from "react";
 import { io } from "socket.io-client";
 
-const SOCKET_URL =
-  import.meta.env.VITE_SOCKET_URL ||
-  import.meta.env.VITE_API_URL ||
-  "http://localhost:4000";
+/**
+ * Construye una URL de WebSocket limpia:
+ * - Usa VITE_SOCKET_URL si existe.
+ * - Si no, usa VITE_API_URL PERO quitando "/api" del final.
+ * - Fallback: http://localhost:4000
+ */
+const buildSocketUrl = () => {
+  const rawSocket = import.meta.env.VITE_SOCKET_URL;
+  const rawApi = import.meta.env.VITE_API_URL;
+
+  if (typeof rawSocket === "string" && rawSocket.trim()) {
+    return rawSocket.trim().replace(/\/+$/, "");
+  }
+
+  if (typeof rawApi === "string" && rawApi.trim()) {
+    return rawApi
+      .trim()
+      .replace(/\/api\/?$/i, "") // quita /api o /api/
+      .replace(/\/+$/, ""); // quita barras finales
+  }
+
+  return "http://localhost:4000";
+};
+
+const SOCKET_URL = buildSocketUrl();
 
 export function useSocket(accessToken) {
   const socketRef = useRef(null);
   const listenersRef = useRef({});
 
   useEffect(() => {
-    if (!accessToken) return;
+    if (!accessToken) {
+      // Si no hay token, no abrimos socket
+      return;
+    }
 
     console.log("[WS] Conectando a:", SOCKET_URL);
 
@@ -44,20 +68,23 @@ export function useSocket(accessToken) {
 
     return () => {
       console.log("[WS] Cleanup: desconectando socket");
-      if (socketRef.current) {
+
+      const currentSocket = socketRef.current || socket;
+
+      if (currentSocket) {
         const entries = Object.entries(listenersRef.current || {});
         entries.forEach(([event, callbacks]) => {
           const safeCallbacks = Array.isArray(callbacks) ? callbacks : [];
           safeCallbacks.forEach((cb) => {
-            socketRef.current.off(event, cb);
+            currentSocket.off(event, cb);
           });
         });
+
         listenersRef.current = {};
-        socketRef.current.disconnect();
-        socketRef.current = null;
-      } else {
-        socket.disconnect();
+        currentSocket.disconnect();
       }
+
+      socketRef.current = null;
     };
   }, [accessToken]);
 
