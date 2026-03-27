@@ -521,18 +521,51 @@ function App() {
     return <RegisterView />;
   }
 
-  if (isVerificationPortal) {
-    mode = "verification-portal";
-  } else if (isSigningPortal) {
-    mode = "signing-portal";
-  } else if (!isVerificationPortal && pathname === "/verificar") {
-    mode = "verification-route";
-  } else if (view === "public-sign") {
-    mode = "public-sign";
-  } else if (view === "verification") {
-    mode = "verification-view";
-  }
+  // Rehidratación rápida desde localStorage antes de mostrar el login
+  if (!token) {
+    if (typeof localStorage !== "undefined") {
+      const storedToken = localStorage.getItem("accessToken");
+      const storedUser = localStorage.getItem("user");
+      if (storedToken && storedUser && !user) {
+        try {
+          setUser(JSON.parse(storedUser));
+          setToken(storedToken);
+        } catch {
+          // si falla el parse, seguimos al login normal
+        }
+      }
+    }
 
+    const displayIdentifier =
+      isEmailMode || identifier.includes("@")
+        ? identifier
+        : formatRun(identifier);
+
+    return (
+      <LoginView
+        identifier={displayIdentifier}
+        setIdentifier={(value) => {
+          if (/[a-zA-Z]/.test(value) || value.includes("@")) {
+            setIsEmailMode(true);
+            setIdentifier(value);
+          } else {
+            setIsEmailMode(false);
+            const clean = value.replace(/[^0-9kK]/g, "");
+            setIdentifier(clean);
+          }
+        }}
+        password={password}
+        setPassword={setPassword}
+        showPassword={showPassword}
+        setShowPassword={setShowPassword}
+        showHelp={showHelp}
+        setShowHelp={setShowHelp}
+        message={message}
+        isLoggingIn={isLoggingIn}
+        handleLogin={handleLogin}
+      />
+    );
+  }
   /* =============================== */
   /* RENDER SEGÚN MODO               */
   /* =============================== */
