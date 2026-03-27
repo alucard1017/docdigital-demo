@@ -49,7 +49,6 @@ export function DocumentRow({ doc, onOpenDetail }) {
 
   const { linea1, linea2 } = splitTipoTramite(labelTramite, labelDoc);
 
-  // solo colores, el resto lo maneja la clase .doc-chip-tipo
   const chipBgColor =
     tipoTramite === "notaria"
       ? "#eef2ff"
@@ -68,15 +67,30 @@ export function DocumentRow({ doc, onOpenDetail }) {
       ? "#dc2626"
       : "#0f766e";
 
-  const formattedFecha = doc.created_at
-    ? new Date(doc.created_at).toLocaleString("es-CO", {
-        day: "2-digit",
-        month: "2-digit",
-        year: "numeric",
-        hour: "2-digit",
-        minute: "2-digit",
-      })
-    : "-";
+  // Partimos la fecha en 2–3 líneas para que no se solape
+  let fechaLinea1 = "-";
+  let fechaLinea2 = "";
+  let fechaLinea3 = "";
+
+  if (doc.created_at) {
+    const d = new Date(doc.created_at);
+
+    const dia = d.toLocaleDateString("es-CO", {
+      day: "2-digit",
+      month: "2-digit",
+      year: "numeric",
+    });
+
+    const hora = d.toLocaleTimeString("es-CO", {
+      hour: "2-digit",
+      minute: "2-digit",
+    });
+
+    // línea 1: fecha, línea 2: hora, línea 3: texto libre (opcional)
+    fechaLinea1 = dia;
+    fechaLinea2 = hora;
+    fechaLinea3 = "Fecha creación";
+  }
 
   const estadoLabel = STATUS_LABELS[doc.status] || doc.status || "Sin estado";
   const estadoColor = STATUS_COLORS[doc.status] || "#6b7280";
@@ -124,10 +138,14 @@ export function DocumentRow({ doc, onOpenDetail }) {
         </span>
       </td>
 
-      {/* Título + fecha */}
+      {/* Título + fecha en varias líneas */}
       <td className="doc-cell-title">
         <div className="doc-title-main">{doc.title || "Sin título"}</div>
-        <div className="doc-title-sub">{formattedFecha}</div>
+        <div className="doc-title-sub-multiline">
+          <div>{fechaLinea1}</div>
+          <div>{fechaLinea2}</div>
+          <div className="doc-title-sub-hint">{fechaLinea3}</div>
+        </div>
       </td>
 
       {/* Tipo de trámite / documento */}

@@ -371,10 +371,22 @@ body {
   font-weight: 600;
 }
 
-.doc-cell-title,
-.doc-title-main,
-.doc-cell-signer .doc-signer-main {
-  color: #f9fafb;
+.doc-cell-title {
+  vertical-align: top;
+}
+
+.doc-title-sub-multiline {
+  margin-top: 4px;
+  font-size: 0.78rem;
+  line-height: 1.1;
+  color: #9ca3af;
+  display: flex;
+  flex-direction: column;
+}
+
+.doc-title-sub-hint {
+  color: #6b7280;
+  font-size: 0.7rem;
 }
 .doc-title-sub {
   color: #9ca3af;
