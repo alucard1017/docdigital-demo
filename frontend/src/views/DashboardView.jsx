@@ -1,4 +1,4 @@
-// src/views/DashboardView.jsx
+// frontend/src/views/DashboardView.jsx
 import React, { useEffect, useState } from "react";
 import {
   BarChart,
@@ -18,8 +18,8 @@ import {
 import api from "../api/client";
 
 const COLORS = ["#4f46e5", "#22c55e", "#f97316", "#ef4444", "#0ea5e9", "#a855f7"];
-
-const SAFE_COLORS = Array.isArray(COLORS) && COLORS.length > 0 ? COLORS : ["#4b5563"];
+const SAFE_COLORS =
+  Array.isArray(COLORS) && COLORS.length > 0 ? COLORS : ["#4b5563"];
 
 export function DashboardView({ user }) {
   const [loading, setLoading] = useState(true);
@@ -49,41 +49,47 @@ export function DashboardView({ user }) {
         const res = await api.get("/docs/stats");
         const data = res.data || {};
 
+        const safeKpis = data.kpis || {};
+
         setKpis({
-          total: data.kpis?.total ?? 0,
-          pendientes: data.kpis?.pendientes ?? 0,
-          firmados: data.kpis?.firmados ?? 0,
-          rechazados: data.kpis?.rechazados ?? 0,
+          total: safeKpis.total ?? 0,
+          pendientes: safeKpis.pendientes ?? 0,
+          firmados: safeKpis.firmados ?? 0,
+          rechazados: safeKpis.rechazados ?? 0,
         });
 
         const status = [];
-        if (data.kpis?.pendientes) {
-          status.push({ status: "PENDIENTES", count: data.kpis.pendientes });
+        if (safeKpis.pendientes) {
+          status.push({ status: "PENDIENTES", count: safeKpis.pendientes });
         }
-        if (data.kpis?.firmados) {
-          status.push({ status: "FIRMADO", count: data.kpis.firmados });
+        if (safeKpis.firmados) {
+          status.push({ status: "FIRMADO", count: safeKpis.firmados });
         }
-        if (data.kpis?.rechazados) {
-          status.push({ status: "RECHAZADO", count: data.kpis.rechazados });
+        if (safeKpis.rechazados) {
+          status.push({ status: "RECHAZADO", count: safeKpis.rechazados });
         }
         status.sort((a, b) => {
           const order = ["PENDIENTES", "FIRMADO", "RECHAZADO"];
           return order.indexOf(a.status) - order.indexOf(b.status);
         });
-        setStatusData(status);
+        setStatusData(Array.isArray(status) ? status : []);
 
         setPerDayData(
-          (data.perDay || []).map((d) => ({
-            date: d.date,
-            count: Number(d.count || 0),
-          }))
+          Array.isArray(data.perDay)
+            ? data.perDay.map((d) => ({
+                date: d.date,
+                count: Number(d.count || 0),
+              }))
+            : []
         );
 
         setTipoTramiteData(
-          (data.porTipoTramite || []).map((t) => ({
-            name: t.tipo_tramite || "Sin tipo",
-            value: Number(t.count || 0),
-          }))
+          Array.isArray(data.porTipoTramite)
+            ? data.porTipoTramite.map((t) => ({
+                name: t.tipo_tramite || "Sin tipo",
+                value: Number(t.count || 0),
+              }))
+            : []
         );
       } catch (err) {
         console.error("Error cargando stats:", err);
@@ -108,6 +114,9 @@ export function DashboardView({ user }) {
         flexDirection: "column",
         gap: 24,
         color: "#e5e7eb",
+        minHeight: "100%",
+        background:
+          "radial-gradient(circle at top, #020617 0, #020617 45%, #0b1120 100%)",
       }}
     >
       <div>
@@ -302,31 +311,34 @@ export function DashboardView({ user }) {
                   <Legend
                     wrapperStyle={{ color: "#9ca3af", fontSize: 12 }}
                   />
-		  <Pie
-		    data={tipoTramiteData}
-	  	    dataKey="value"
-		    nameKey="name"
-	 	    cx="50%"
-		    cy="50%"
-		    outerRadius={80}
-		    label={({ name, percent }) =>
-		      `${name} ${(percent * 100).toFixed(0)}%`
-		    }
-		  >
-		    {tipoTramiteData.map((entry, index) => {
-		      const palette = SAFE_COLORS;
-		      const color =
- 		       palette.length > 0
-  		        ? palette[index % palette.length]
-		          : "#4b5563";
-		      return (
- 		       <Cell
- 		         key={`cell-${entry.name}-${index}`}
-		          fill={color}
- 		       />
- 		     );
-		    })}
-		  </Pie>
+                  <Pie
+                    data={tipoTramiteData}
+                    dataKey="value"
+                    nameKey="name"
+                    cx="50%"
+                    cy="50%"
+                    outerRadius={80}
+                    label={({ name, percent }) =>
+                      `${name} ${(percent * 100).toFixed(0)}%`
+                    }
+                  >
+                    {(Array.isArray(tipoTramiteData)
+                      ? tipoTramiteData
+                      : []
+                    ).map((entry, index) => {
+                      const palette = SAFE_COLORS;
+                      const color =
+                        palette.length > 0
+                          ? palette[index % palette.length]
+                          : "#4b5563";
+                      return (
+                        <Cell
+                          key={`cell-${entry?.name ?? "tipo"}-${index}`}
+                          fill={color}
+                        />
+                      );
+                    })}
+                  </Pie>
                 </PieChart>
               </ResponsiveContainer>
             </ChartCard>
