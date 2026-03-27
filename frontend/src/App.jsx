@@ -122,7 +122,7 @@ function App() {
   const [extraSigners, setExtraSigners] = useState([]);
 
   const [sort, setSort] = useState("title_asc");
-  const [statusFilter, setStatusFilter] = useState("TODOS");
+  const [statusFilter, setStatusFilter] = useState("ALL");
   const [search, setSearch] = useState("");
 
   const [page, setPage] = useState(1);
@@ -654,10 +654,10 @@ function App() {
       d.status === DOC_STATUS.PENDIENTE_VISADO ||
       d.status === DOC_STATUS.PENDIENTE_FIRMA;
 
-    if (statusFilter === "ONLY_PENDIENTES" && !esPendiente) return false;
-    if (statusFilter === "ONLY_FIRMADOS" && d.status !== DOC_STATUS.FIRMADO)
+    if (statusFilter === "PENDIENTES" && !esPendiente) return false;
+    if (statusFilter === "FIRMADOS" && d.status !== DOC_STATUS.FIRMADO)
       return false;
-    if (statusFilter === "ONLY_RECHAZADOS" && d.status !== DOC_STATUS.RECHAZADO)
+    if (statusFilter === "RECHAZADOS" && d.status !== DOC_STATUS.RECHAZADO)
       return false;
 
     if (search.trim() !== "") {

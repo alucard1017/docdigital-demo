@@ -1,3 +1,4 @@
+// src/components/ListHeader.jsx
 import React from "react";
 import { API_BASE_URL } from "../constants";
 
@@ -44,7 +45,9 @@ export function ListHeader({
       const url = window.URL.createObjectURL(blob);
       const a = document.createElement("a");
       a.href = url;
-      a.download = `documentos-${new Date().toISOString().slice(0, 10)}.xlsx`;
+      a.download = `documentos-${new Date()
+        .toISOString()
+        .slice(0, 10)}.xlsx`;
       document.body.appendChild(a);
       a.click();
       a.remove();
@@ -57,6 +60,19 @@ export function ListHeader({
 
   const total = pendientes + visados + firmados + rechazados;
 
+  const chipBase = {
+    padding: "6px 12px",
+    borderRadius: 999,
+    fontSize: "0.8rem",
+    fontWeight: 600,
+    border: "1px solid transparent",
+    cursor: "pointer",
+    display: "inline-flex",
+    alignItems: "center",
+    gap: 4,
+    boxShadow: "0 8px 18px rgba(15,23,42,0.7)",
+  };
+
   return (
     <>
       {/* Resumen de estados */}
@@ -64,9 +80,9 @@ export function ListHeader({
         style={{
           display: "flex",
           flexWrap: "wrap",
-          gap: 12,
+          gap: 10,
           marginBottom: 16,
-          fontSize: "0.85rem",
+          fontSize: "0.82rem",
         }}
       >
         {/* Todos */}
@@ -74,15 +90,16 @@ export function ListHeader({
           type="button"
           onClick={() => setStatusFilter("TODOS")}
           style={{
-            padding: "8px 12px",
-            borderRadius: 999,
-            border: "1px solid #e5e7eb",
-            background: statusFilter === "TODOS" ? "#111827" : "#f3f4f6",
-            color: statusFilter === "TODOS" ? "#f9fafb" : "#111827",
-            cursor: "pointer",
+            ...chipBase,
+            backgroundColor:
+              statusFilter === "TODOS" ? "#111827" : "#020617",
+            color: statusFilter === "TODOS" ? "#e5e7eb" : "#9ca3af",
+            borderColor:
+              statusFilter === "TODOS" ? "#4b5563" : "#1f2937",
           }}
         >
-          Todos: <strong>{total}</strong>
+          <span style={{ opacity: 0.8 }}>Todos:</span>
+          <strong>{total}</strong>
         </button>
 
         {/* Pendientes */}
@@ -90,16 +107,20 @@ export function ListHeader({
           type="button"
           onClick={() => setStatusFilter("PENDIENTES")}
           style={{
-            padding: "8px 12px",
-            borderRadius: 999,
-            border: "1px solid #e5e7eb",
-            background:
-              statusFilter === "PENDIENTES" ? "#3730a3" : "#eef2ff",
-            color: statusFilter === "PENDIENTES" ? "#eef2ff" : "#3730a3",
-            cursor: "pointer",
+            ...chipBase,
+            backgroundColor:
+              statusFilter === "PENDIENTES"
+                ? "#3730a3"
+                : "rgba(55,48,163,0.18)",
+            color: "#e5e7eb",
+            borderColor:
+              statusFilter === "PENDIENTES"
+                ? "#6366f1"
+                : "rgba(129,140,248,0.6)",
           }}
         >
-          Pendientes: <strong>{pendientes}</strong>
+          <span>Pendientes:</span>
+          <strong>{pendientes}</strong>
         </button>
 
         {/* Visados */}
@@ -107,16 +128,20 @@ export function ListHeader({
           type="button"
           onClick={() => setStatusFilter("VISADOS")}
           style={{
-            padding: "8px 12px",
-            borderRadius: 999,
-            border: "1px solid #e5e7eb",
-            background:
-              statusFilter === "VISADOS" ? "#0f766e" : "#ecfeff",
-            color: statusFilter === "VISADOS" ? "#ecfeff" : "#0f766e",
-            cursor: "pointer",
+            ...chipBase,
+            backgroundColor:
+              statusFilter === "VISADOS"
+                ? "#0f766e"
+                : "rgba(15,118,110,0.18)",
+            color: "#ecfeff",
+            borderColor:
+              statusFilter === "VISADOS"
+                ? "#14b8a6"
+                : "rgba(45,212,191,0.7)",
           }}
         >
-          Visados: <strong>{visados}</strong>
+          <span>Visados:</span>
+          <strong>{visados}</strong>
         </button>
 
         {/* Firmados */}
@@ -124,16 +149,20 @@ export function ListHeader({
           type="button"
           onClick={() => setStatusFilter("FIRMADOS")}
           style={{
-            padding: "8px 12px",
-            borderRadius: 999,
-            border: "1px solid #e5e7eb",
-            background:
-              statusFilter === "FIRMADOS" ? "#166534" : "#ecfdf3",
-            color: statusFilter === "FIRMADOS" ? "#ecfdf3" : "#166534",
-            cursor: "pointer",
+            ...chipBase,
+            backgroundColor:
+              statusFilter === "FIRMADOS"
+                ? "#166534"
+                : "rgba(22,101,52,0.2)",
+            color: "#dcfce7",
+            borderColor:
+              statusFilter === "FIRMADOS"
+                ? "#22c55e"
+                : "rgba(34,197,94,0.7)",
           }}
         >
-          Firmados: <strong>{firmados}</strong>
+          <span>Firmados:</span>
+          <strong>{firmados}</strong>
         </button>
 
         {/* Rechazados */}
@@ -141,16 +170,20 @@ export function ListHeader({
           type="button"
           onClick={() => setStatusFilter("RECHAZADOS")}
           style={{
-            padding: "8px 12px",
-            borderRadius: 999,
-            border: "1px solid #e5e7eb",
-            background:
-              statusFilter === "RECHAZADOS" ? "#b91c1c" : "#fef2f2",
-            color: statusFilter === "RECHAZADOS" ? "#fef2f2" : "#b91c1c",
-            cursor: "pointer",
+            ...chipBase,
+            backgroundColor:
+              statusFilter === "RECHAZADOS"
+                ? "#b91c1c"
+                : "rgba(185,28,28,0.2)",
+            color: "#fee2e2",
+            borderColor:
+              statusFilter === "RECHAZADOS"
+                ? "#f97373"
+                : "rgba(248,113,113,0.7)",
           }}
         >
-          Rechazados: <strong>{rechazados}</strong>
+          <span>Rechazados:</span>
+          <strong>{rechazados}</strong>
         </button>
       </div>
 
@@ -160,16 +193,18 @@ export function ListHeader({
           display: "flex",
           justifyContent: "space-between",
           alignItems: "flex-start",
-          gap: 16,
-          marginBottom: 30,
+          gap: 18,
+          marginBottom: 26,
         }}
       >
         <div>
           <h1
             style={{
               margin: 0,
-              fontSize: "2.1rem",
+              fontSize: "1.9rem",
               fontWeight: 800,
+              letterSpacing: "-0.03em",
+              color: "#e5e7eb",
             }}
           >
             Bandeja de Entrada
@@ -178,7 +213,7 @@ export function ListHeader({
             style={{
               margin: "4px 0 0 0",
               fontSize: "0.85rem",
-              color: "#6b7280",
+              color: "#9ca3af",
             }}
           >
             {totalFiltrado} documentos encontrados con los filtros actuales
@@ -191,8 +226,8 @@ export function ListHeader({
               display: "flex",
               flexWrap: "wrap",
               gap: 12,
-              fontSize: "0.9rem",
-              color: "#64748b",
+              fontSize: "0.85rem",
+              color: "#9ca3af",
               alignItems: "center",
             }}
           >
@@ -201,7 +236,7 @@ export function ListHeader({
               style={{
                 display: "flex",
                 alignItems: "center",
-                gap: 8,
+                gap: 6,
               }}
             >
               <span>Ordenar por:</span>
@@ -209,10 +244,14 @@ export function ListHeader({
                 value={sort}
                 onChange={(e) => setSort(e.target.value)}
                 style={{
-                  padding: "4px 8px",
+                  padding: "5px 10px",
                   borderRadius: 999,
-                  border: "1px solid #cbd5f5",
-                  fontSize: "0.9rem",
+                  border: "1px solid #1d4ed8",
+                  fontSize: "0.85rem",
+                  background: "#020617",
+                  color: "#e5e7eb",
+                  boxShadow:
+                    "0 0 0 1px rgba(15,23,42,0.9), 0 8px 18px rgba(15,23,42,0.8)",
                 }}
               >
                 <option value="title_asc">Título (A → Z)</option>
@@ -229,7 +268,7 @@ export function ListHeader({
               style={{
                 display: "flex",
                 alignItems: "center",
-                gap: 8,
+                gap: 6,
               }}
             >
               <span>Estado:</span>
@@ -237,10 +276,14 @@ export function ListHeader({
                 value={statusFilter}
                 onChange={(e) => setStatusFilter(e.target.value)}
                 style={{
-                  padding: "4px 8px",
+                  padding: "5px 10px",
                   borderRadius: 999,
-                  border: "1px solid #cbd5f5",
-                  fontSize: "0.9rem",
+                  border: "1px solid #1d4ed8",
+                  fontSize: "0.85rem",
+                  background: "#020617",
+                  color: "#e5e7eb",
+                  boxShadow:
+                    "0 0 0 1px rgba(15,23,42,0.9), 0 8px 18px rgba(15,23,42,0.8)",
                 }}
               >
                 <option value="TODOS">Todos</option>
@@ -256,9 +299,9 @@ export function ListHeader({
               style={{
                 display: "flex",
                 alignItems: "center",
-                gap: 8,
+                gap: 6,
                 flexGrow: 1,
-                minWidth: 200,
+                minWidth: 220,
               }}
             >
               <span>Buscar:</span>
@@ -270,10 +313,14 @@ export function ListHeader({
                 style={{
                   flexGrow: 1,
                   maxWidth: 260,
-                  padding: "4px 10px",
+                  padding: "6px 12px",
                   borderRadius: 999,
-                  border: "1px solid #cbd5f5",
-                  fontSize: "0.9rem",
+                  border: "1px solid #1d4ed8",
+                  fontSize: "0.85rem",
+                  background: "#020617",
+                  color: "#e5e7eb",
+                  boxShadow:
+                    "0 0 0 1px rgba(15,23,42,0.9), 0 8px 18px rgba(15,23,42,0.8)",
                 }}
               />
             </div>
@@ -294,20 +341,28 @@ export function ListHeader({
             className="btn-main"
             onClick={handleDownloadReport}
             style={{
-              background: "#059669",
+              background:
+                "linear-gradient(135deg, #10b981, #059669)",
               color: "#ffffff",
-              fontSize: "0.85rem",
+              fontSize: "0.82rem",
               padding: "8px 16px",
-              borderRadius: "6px",
-              fontWeight: 600,
+              borderRadius: 999,
+              fontWeight: 700,
               cursor: "pointer",
+              border: "none",
+              boxShadow:
+                "0 10px 26px rgba(5,150,105,0.55)",
             }}
           >
-            📊 Descargar Reporte
+            📊 Descargar reporte
           </button>
 
-          <button className="btn-sync" onClick={onSync}>
-            <span>🔄</span> Sincronizar Bandeja
+          <button
+            className="btn-sync"
+            onClick={onSync}
+            type="button"
+          >
+            <span>🔄</span> Sincronizar bandeja
           </button>
         </div>
       </div>

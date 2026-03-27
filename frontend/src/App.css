@@ -194,9 +194,7 @@ body {
 /* ---------- TABLA BANDEJA DE DOCUMENTOS (DESKTOP) ---------- */
 
 .table-wrapper {
-  width: 100%;
-  max-width: 100%;
-  overflow-x: auto;
+  overflow-x: hidden;
 }
 
 .doc-table {
@@ -355,6 +353,7 @@ body {
 .doc-cell-id {
   display: flex;
   justify-content: center;
+  padding-left: 8px;
 }
 
 /* El pill en sí */
@@ -369,10 +368,13 @@ body {
   color: #e5e7eb;
   font-size: 0.75rem;
   font-weight: 600;
+  margin-left: 8px;
 }
 
 .doc-cell-title {
   vertical-align: top;
+  padding-left: 24px;
+  max-width: 260px;
 }
 
 .doc-title-sub-multiline {
@@ -382,6 +384,7 @@ body {
   color: #9ca3af;
   display: flex;
   flex-direction: column;
+  margin-left: 110px;
 }
 
 .doc-title-sub-hint {
@@ -426,7 +429,25 @@ body {
   text-align: center;
 }
 
-.doc-cell-signer .doc-signer-main {
+.doc-cell-signer {
+  max-width: 220px;
+}
+
+.doc-title-main {
+  display: inline-block;
+  margin-left: 105px;
+  max-width: 180px;
+  white-space: normal;
+  word-break: break-word;
+}
+
+.doc-signer-main,
+.doc-signer-sub {
+  white-space: normal;
+  word-break: break-word;
+}
+
+.doc-signer-main {
   font-size: 0.86rem;
   color: #e5e7eb;
 }
@@ -648,6 +669,18 @@ body {
   border-top-color: var(--primary);
   margin: 0 auto;
   animation: spin 0.6s linear infinite;
+}
+
+/* Línea vertical a la izquierda de la columna Acciones */
+.acciones-header::before {
+  content: "";
+  position: absolute;
+  left: -1px;              /* se pega al borde izquierdo del th */
+  top: -9999px;            /* empieza muy arriba */
+  bottom: -9999px;         /* y termina muy abajo */
+  width: 1px;
+  background: rgba(255, 255, 255, 0.2);
+  pointer-events: none;
 }
 
 @keyframes spin {

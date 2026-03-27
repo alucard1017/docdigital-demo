@@ -32,6 +32,24 @@ export function Sidebar({
 
   const totalDocs = docs.length || 0;
 
+  const subtleText = "#9ca3af";
+
+  const navItemBaseStyle = {
+    display: "flex",
+    alignItems: "center",
+    gap: 6,
+    padding: "6px 8px",
+    borderRadius: 10,
+    fontSize: "0.8rem",
+    fontWeight: 500,
+    cursor: "pointer",
+    color: subtleText,
+    transition: "background-color 0.18s ease, color 0.18s ease, transform 0.08s ease",
+  };
+
+  const makeNavItemClass = (isActive) =>
+    `nav-item${isActive ? " active" : ""}`;
+
   return (
     <aside className="sidebar sidebar-root">
       {/* Branding */}
@@ -39,31 +57,38 @@ export function Sidebar({
         style={{
           display: "flex",
           alignItems: "center",
-          gap: 8,
-          marginBottom: 12,
+          gap: 10,
+          marginBottom: 16,
         }}
       >
         <div
           style={{
-            width: 28,
-            height: 28,
-            borderRadius: 8,
+            width: 30,
+            height: 30,
+            borderRadius: 10,
             background:
-              "linear-gradient(135deg, #4f46e5 0%, #0ea5e9 50%, #22c55e 100%)",
+              "conic-gradient(from 180deg at 50% 50%, #4f46e5 0deg, #0ea5e9 90deg, #22c55e 210deg, #4f46e5 360deg)",
+            boxShadow: "0 8px 25px rgba(15,23,42,0.9)",
           }}
         />
         <div>
           <div
             style={{
-              fontWeight: 700,
-              letterSpacing: "0.08em",
-              fontSize: "0.75rem",
+              fontWeight: 800,
+              letterSpacing: "0.12em",
+              fontSize: "0.78rem",
               textTransform: "uppercase",
+              color: "#e5e7eb",
             }}
           >
             VeriFirma
           </div>
-          <div style={{ fontSize: "0.75rem", color: "#9ca3af" }}>
+          <div
+            style={{
+              fontSize: "0.74rem",
+              color: subtleText,
+            }}
+          >
             Panel principal
           </div>
         </div>
@@ -72,38 +97,78 @@ export function Sidebar({
       {/* Usuario */}
       <div
         style={{
-          marginBottom: 16,
-          padding: 8,
-          borderRadius: 10,
-          background: "#020617",
+          marginBottom: 18,
+          padding: 10,
+          borderRadius: 12,
+          background:
+            "radial-gradient(circle at top left, rgba(59,130,246,0.30), transparent 55%), #020617",
+          border: "1px solid rgba(37,99,235,0.5)",
           color: "#e5e7eb",
           fontSize: "0.7rem",
-          border: "1px solid #1f2937",
+          boxShadow: "0 14px 32px rgba(15,23,42,0.9)",
         }}
       >
-        <div style={{ display: "flex", justifyContent: "space-between" }}>
+        <div
+          style={{
+            display: "flex",
+            justifyContent: "space-between",
+            gap: 8,
+            alignItems: "flex-start",
+          }}
+        >
           <div>
-            <div style={{ fontWeight: 700, marginBottom: 4 }}>
+            <div
+              style={{
+                fontWeight: 700,
+                marginBottom: 3,
+                fontSize: "0.72rem",
+                textTransform: "uppercase",
+                letterSpacing: "0.08em",
+                color: subtleText,
+              }}
+            >
               Sesión activa
             </div>
-            <div>{user?.name || "Usuario"}</div>
-            <div style={{ opacity: 0.7 }}>
+            <div style={{ fontWeight: 600 }}>
+              {user?.name || "Usuario"}
+            </div>
+            <div
+              style={{
+                opacity: 0.8,
+                fontSize: "0.7rem",
+                color: subtleText,
+              }}
+            >
               {user?.email || "usuario@correo.com"}
             </div>
           </div>
+
           <div
             style={{
-              alignSelf: "flex-start",
-              paddingInline: 8,
-              paddingBlock: 2,
+              paddingInline: 10,
+              paddingBlock: 3,
               borderRadius: 999,
-              background: "#1f2937",
-              fontSize: "0.65rem",
+              background:
+                "linear-gradient(135deg, #111827, #020617)",
+              border: "1px solid #1f2937",
+              fontSize: "0.68rem",
               textTransform: "uppercase",
               letterSpacing: "0.08em",
+              display: "inline-flex",
+              alignItems: "center",
+              gap: 4,
             }}
           >
-            {user?.role || "USER"}
+            <span
+              style={{
+                width: 7,
+                height: 7,
+                borderRadius: "999px",
+                backgroundColor: "#22c55e",
+                boxShadow: "0 0 0 4px rgba(34,197,94,0.25)",
+              }}
+            />
+            <span>{user?.role || "USER"}</span>
           </div>
         </div>
       </div>
@@ -112,107 +177,119 @@ export function Sidebar({
       <h3 className="sidebar-section-label">Bandeja</h3>
 
       <div
-        className={`nav-item ${view === "list" ? "active" : ""}`}
+        className={makeNavItemClass(view === "list")}
+        style={navItemBaseStyle}
         onClick={() => handleChangeView("list")}
         title="Ver todos los trámites"
       >
-        <span>📄</span> Mis trámites
+        <span>📄</span>
+        <span>Mis trámites</span>
       </div>
 
       <div
-        className={`nav-item ${view === "upload" ? "active" : ""}`}
+        className={makeNavItemClass(view === "upload")}
+        style={navItemBaseStyle}
         onClick={() => handleChangeView("upload")}
         title="Crear nuevo trámite de firma"
       >
-        <span>📤</span> Crear nuevo trámite
+        <span>📤</span>
+        <span>Crear nuevo trámite</span>
       </div>
 
       {/* Atajos */}
       <h3 className="sidebar-section-label">Atajos</h3>
 
       <div
-        className={`nav-item ${
-          statusFilter === "ONLY_PENDIENTES" ? "active" : ""
-        }`}
+        className={makeNavItemClass(statusFilter === "ONLY_PENDIENTES")}
+        style={navItemBaseStyle}
         onClick={() => handleStatusFilter("ONLY_PENDIENTES")}
         title="Mostrar solo documentos pendientes"
       >
-        <span>⏳</span> Solo pendientes
+        <span>⏳</span>
+        <span>Solo pendientes</span>
       </div>
 
       <div
-        className={`nav-item ${
-          statusFilter === "ONLY_FIRMADOS" ? "active" : ""
-        }`}
+        className={makeNavItemClass(statusFilter === "ONLY_FIRMADOS")}
+        style={navItemBaseStyle}
         onClick={() => handleStatusFilter("ONLY_FIRMADOS")}
         title="Mostrar solo documentos firmados"
       >
-        <span>✅</span> Solo firmados
+        <span>✅</span>
+        <span>Solo firmados</span>
       </div>
 
       <div
-        className={`nav-item ${
-          statusFilter === "ONLY_RECHAZADOS" ? "active" : ""
-        }`}
+        className={makeNavItemClass(statusFilter === "ONLY_RECHAZADOS")}
+        style={navItemBaseStyle}
         onClick={() => handleStatusFilter("ONLY_RECHAZADOS")}
         title="Mostrar solo documentos rechazados"
       >
-        <span>❌</span> Solo rechazados
+        <span>❌</span>
+        <span>Solo rechazados</span>
       </div>
 
       <div
-        className={`nav-item ${view === "verification" ? "active" : ""}`}
+        className={makeNavItemClass(view === "verification")}
+        style={navItemBaseStyle}
         onClick={() => handleChangeView("verification")}
         title="Verificar estado público de documentos"
       >
-        <span>🔍</span> Verificar documento
+        <span>🔍</span>
+        <span>Verificar documento</span>
       </div>
 
       {/* Reportes */}
       <h3 className="sidebar-section-label">Reportes</h3>
 
       <div
-        className={`nav-item ${
-          view === "email-metrics" ? "active" : ""
-        }`}
+        className={makeNavItemClass(view === "email-metrics")}
+        style={navItemBaseStyle}
         onClick={() => handleChangeView("email-metrics")}
         title="Ver métricas de email"
       >
-        <span>📊</span> Analytics
+        <span>📊</span>
+        <span>Analytics</span>
       </div>
 
       <div
-        className={`nav-item ${
-          view === "company-analytics" ? "active" : ""
-        }`}
+        className={makeNavItemClass(view === "company-analytics")}
+        style={navItemBaseStyle}
         onClick={() => handleChangeView("company-analytics")}
         title="Analytics de la empresa"
       >
-        <span>📈</span> Analytics Empresa
+        <span>📈</span>
+        <span>Analytics Empresa</span>
       </div>
 
       <div
-        className={`nav-item ${view === "pricing" ? "active" : ""}`}
+        className={makeNavItemClass(view === "pricing")}
+        style={navItemBaseStyle}
         onClick={() => handleChangeView("pricing")}
         title="Ver planes y facturación"
       >
-        <span>💳</span> Planes y facturación
+        <span>💳</span>
+        <span>Planes y facturación</span>
       </div>
 
       <div
-        className={`nav-item ${view === "templates" ? "active" : ""}`}
+        className={makeNavItemClass(view === "templates")}
+        style={navItemBaseStyle}
         onClick={() => handleChangeView("templates")}
         title="Gestionar plantillas de documentos"
       >
-        <span>📋</span> Plantillas
+        <span>📋</span>
+        <span>Plantillas</span>
       </div>
 
       <div
-        className={`nav-item ${view === "profile" ? "active" : ""}`}
+        className={makeNavItemClass(view === "profile")}
+        style={navItemBaseStyle}
         onClick={() => handleChangeView("profile")}
         title="Editar tu perfil"
       >
-        <span>👤</span> Mi perfil
+        <span>👤</span>
+        <span>Mi perfil</span>
       </div>
 
       {/* Administración */}
@@ -221,73 +298,75 @@ export function Sidebar({
           <h3 className="sidebar-section-label">Administración</h3>
 
           <div
-            className={`nav-item ${view === "users" ? "active" : ""}`}
+            className={makeNavItemClass(view === "users")}
+            style={navItemBaseStyle}
             onClick={() => handleChangeView("users")}
             title="Gestionar usuarios de la empresa"
           >
-            <span>👥</span> Usuarios
+            <span>👥</span>
+            <span>Usuarios</span>
           </div>
 
           <div
-            className={`nav-item ${
-              view === "reminders-config" ? "active" : ""
-            }`}
+            className={makeNavItemClass(view === "reminders-config")}
+            style={navItemBaseStyle}
             onClick={() => handleChangeView("reminders-config")}
             title="Configurar recordatorios automáticos"
           >
-            <span>🔔</span> Recordatorios
+            <span>🔔</span>
+            <span>Recordatorios</span>
           </div>
 
           <div
-            className={`nav-item ${
-              view === "dashboard" ? "active" : ""
-            }`}
+            className={makeNavItemClass(view === "dashboard")}
+            style={navItemBaseStyle}
             onClick={() => handleChangeView("dashboard")}
             title="Dashboard administrativo"
           >
-            <span>📊</span> Dashboard
+            <span>📊</span>
+            <span>Dashboard</span>
           </div>
 
           {isAdminGlobalOrOwner && (
             <>
               <div
-                className={`nav-item ${
-                  view === "companies" ? "active" : ""
-                }`}
+                className={makeNavItemClass(view === "companies")}
+                style={navItemBaseStyle}
                 onClick={() => handleChangeView("companies")}
                 title="Gestionar empresas"
               >
-                <span>🏢</span> Empresas
+                <span>🏢</span>
+                <span>Empresas</span>
               </div>
 
               <div
-                className={`nav-item ${
-                  view === "status" ? "active" : ""
-                }`}
+                className={makeNavItemClass(view === "status")}
+                style={navItemBaseStyle}
                 onClick={() => handleChangeView("status")}
                 title="Estado del sistema"
               >
-                <span>⚙️</span> Estado Sistema
+                <span>⚙️</span>
+                <span>Estado Sistema</span>
               </div>
 
               <div
-                className={`nav-item ${
-                  view === "audit-logs" ? "active" : ""
-                }`}
+                className={makeNavItemClass(view === "audit-logs")}
+                style={navItemBaseStyle}
                 onClick={() => handleChangeView("audit-logs")}
                 title="Auditoría de negocio"
               >
-                <span>📜</span> Auditoría (negocio)
+                <span>📜</span>
+                <span>Auditoría (negocio)</span>
               </div>
 
               <div
-                className={`nav-item ${
-                  view === "auth-logs" ? "active" : ""
-                }`}
+                className={makeNavItemClass(view === "auth-logs")}
+                style={navItemBaseStyle}
                 onClick={() => handleChangeView("auth-logs")}
                 title="Logs de autenticación"
               >
-                <span>🔐</span> Auth logs
+                <span>🔐</span>
+                <span>Auth logs</span>
               </div>
             </>
           )}
@@ -298,30 +377,38 @@ export function Sidebar({
       <div
         style={{
           marginTop: "auto",
-          marginBottom: 8,
-          padding: 8,
-          borderRadius: 10,
+          marginBottom: 10,
+          padding: 10,
+          borderRadius: 12,
           background: "#020617",
-          color: "#9ca3af",
-          fontSize: "0.68rem",
+          color: subtleText,
+          fontSize: "0.7rem",
           border: "1px solid #1f2937",
+          boxShadow: "0 10px 26px rgba(15,23,42,0.8)",
         }}
       >
         <div style={{ marginBottom: 4 }}>
-          Trámites totales: <strong>{totalDocs}</strong>
+          Trámites totales:{" "}
+          <strong style={{ color: "#e5e7eb" }}>{totalDocs}</strong>
         </div>
         <div>
-          Pendientes hoy: <strong>{pendientes}</strong>
+          Pendientes hoy:{" "}
+          <strong style={{ color: "#fbbf24" }}>{pendientes}</strong>
         </div>
       </div>
 
       <div
         className="nav-item"
+        style={{
+          ...navItemBaseStyle,
+          marginTop: 0,
+          color: "#fecaca",
+        }}
         onClick={logout}
-        style={{ marginTop: 0 }}
         title="Cerrar sesión"
       >
-        <span>🚪</span> Cerrar sesión
+        <span>🚪</span>
+        <span>Cerrar sesión</span>
       </div>
     </aside>
   );
