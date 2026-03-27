@@ -19,6 +19,8 @@ import api from "../api/client";
 
 const COLORS = ["#4f46e5", "#22c55e", "#f97316", "#ef4444", "#0ea5e9", "#a855f7"];
 
+const SAFE_COLORS = Array.isArray(COLORS) && COLORS.length > 0 ? COLORS : ["#4b5563"];
+
 export function DashboardView({ user }) {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
@@ -300,24 +302,31 @@ export function DashboardView({ user }) {
                   <Legend
                     wrapperStyle={{ color: "#9ca3af", fontSize: 12 }}
                   />
-                  <Pie
-                    data={tipoTramiteData}
-                    dataKey="value"
-                    nameKey="name"
-                    cx="50%"
-                    cy="50%"
-                    outerRadius={80}
-                    label={({ name, percent }) =>
-                      `${name} ${(percent * 100).toFixed(0)}%`
-                    }
-                  >
-                    {tipoTramiteData.map((entry, index) => (
-                      <Cell
-                        key={`cell-${entry.name}-${index}`}
-                        fill={COLORS[index % COLORS.length]}
-                      />
-                    ))}
-                  </Pie>
+		  <Pie
+		    data={tipoTramiteData}
+	  	    dataKey="value"
+		    nameKey="name"
+	 	    cx="50%"
+		    cy="50%"
+		    outerRadius={80}
+		    label={({ name, percent }) =>
+		      `${name} ${(percent * 100).toFixed(0)}%`
+		    }
+		  >
+		    {tipoTramiteData.map((entry, index) => {
+		      const palette = SAFE_COLORS;
+		      const color =
+ 		       palette.length > 0
+  		        ? palette[index % palette.length]
+		          : "#4b5563";
+		      return (
+ 		       <Cell
+ 		         key={`cell-${entry.name}-${index}`}
+		          fill={color}
+ 		       />
+ 		     );
+		    })}
+		  </Pie>
                 </PieChart>
               </ResponsiveContainer>
             </ChartCard>

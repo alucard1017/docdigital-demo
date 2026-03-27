@@ -45,8 +45,10 @@ export function useSocket(accessToken) {
     return () => {
       console.log("[WS] Cleanup: desconectando socket");
       if (socketRef.current) {
-        Object.entries(listenersRef.current).forEach(([event, callbacks]) => {
-          callbacks.forEach((cb) => {
+        const entries = Object.entries(listenersRef.current || {});
+        entries.forEach(([event, callbacks]) => {
+          const safeCallbacks = Array.isArray(callbacks) ? callbacks : [];
+          safeCallbacks.forEach((cb) => {
             socketRef.current.off(event, cb);
           });
         });
@@ -61,11 +63,11 @@ export function useSocket(accessToken) {
 
   const on = useCallback((event, callback) => {
     const socket = socketRef.current;
-    if (!socket) return;
+    if (!socket || !event || typeof callback !== "function") return;
 
     socket.on(event, callback);
 
-    if (!listenersRef.current[event]) {
+    if (!Array.isArray(listenersRef.current[event])) {
       listenersRef.current[event] = [];
     }
     listenersRef.current[event].push(callback);
@@ -73,11 +75,11 @@ export function useSocket(accessToken) {
 
   const off = useCallback((event, callback) => {
     const socket = socketRef.current;
-    if (!socket) return;
+    if (!socket || !event || typeof callback !== "function") return;
 
     socket.off(event, callback);
 
-    if (listenersRef.current[event]) {
+    if (Array.isArray(listenersRef.current[event])) {
       listenersRef.current[event] = listenersRef.current[event].filter(
         (cb) => cb !== callback
       );

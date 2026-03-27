@@ -20,8 +20,7 @@ const ProductTour = ({ tourId = "dashboard_principal", run, onFinish }) => {
       },
       {
         target: ".hero-dashboard-actions .btn-primary",
-        content:
-          "Haz clic aquí para crear un nuevo documento y enviarlo a firma.",
+        content: "Haz clic aquí para crear un nuevo documento y enviarlo a firma.",
         title: "Nuevo documento",
         placement: "bottom",
       },
@@ -41,19 +40,22 @@ const ProductTour = ({ tourId = "dashboard_principal", run, onFinish }) => {
       },
     ];
 
-    setSteps(baseSteps);
+    const safeSteps = Array.isArray(baseSteps) ? baseSteps : [];
+    setSteps(safeSteps);
     setIsReady(true);
   }, []);
 
   const loadTourProgress = useCallback(async () => {
     try {
       const res = await api.get(`/onboarding/tour/${tourId}`);
-      const data = res.data;
+      const data = res.data || {};
       if (data.completed) {
         setStepIndex(0);
         setIsRunning(false);
       } else if (typeof data.currentStep === "number") {
         setStepIndex(data.currentStep);
+      } else {
+        setStepIndex(0);
       }
     } catch (err) {
       console.error("Error cargando progreso de tour:", err);
@@ -65,8 +67,8 @@ const ProductTour = ({ tourId = "dashboard_principal", run, onFinish }) => {
     async ({ completed, currentStep }) => {
       try {
         await api.put(`/onboarding/tour/${tourId}`, {
-          completed,
-          currentStep,
+          completed: !!completed,
+          currentStep: typeof currentStep === "number" ? currentStep : 0,
         });
       } catch (err) {
         console.error("Error guardando progreso de tour:", err);
@@ -81,7 +83,8 @@ const ProductTour = ({ tourId = "dashboard_principal", run, onFinish }) => {
   }, [buildSteps, loadTourProgress]);
 
   useEffect(() => {
-    if (run && isReady && steps.length > 0) {
+    const hasSteps = Array.isArray(steps) && steps.length > 0;
+    if (run && isReady && hasSteps) {
       setIsRunning(true);
     } else {
       setIsRunning(false);
@@ -89,7 +92,7 @@ const ProductTour = ({ tourId = "dashboard_principal", run, onFinish }) => {
   }, [run, isReady, steps]);
 
   const handleJoyrideCallback = async (data) => {
-    const { status, type, index, action } = data;
+    const { status, type, index, action } = data || {};
 
     const finishedStatuses = [STATUS.FINISHED, STATUS.SKIPPED];
 
@@ -97,19 +100,21 @@ const ProductTour = ({ tourId = "dashboard_principal", run, onFinish }) => {
       setIsRunning(false);
       setStepIndex(0);
       await saveTourProgress({ completed: true, currentStep: 0 });
-      if (onFinish) onFinish();
+      if (typeof onFinish === "function") onFinish();
       return;
     }
 
     if (type === EVENTS.STEP_AFTER || type === EVENTS.TARGET_NOT_FOUND) {
+      const currentIndex = typeof index === "number" ? index : 0;
       const newIndex =
-        action === ACTIONS.PREV ? Math.max(index - 1, 0) : index + 1;
+        action === ACTIONS.PREV ? Math.max(currentIndex - 1, 0) : currentIndex + 1;
       setStepIndex(newIndex);
       await saveTourProgress({ completed: false, currentStep: newIndex });
     }
   };
 
-  if (!isReady || !steps.length) {
+  const hasSteps = Array.isArray(steps) && steps.length > 0;
+  if (!isReady || !hasSteps) {
     return null;
   }
 
