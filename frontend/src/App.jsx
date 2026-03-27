@@ -705,7 +705,12 @@ function App() {
 
   const totalFiltrado = docsFiltrados.length;
   const totalPaginas = Math.ceil(totalFiltrado / pageSize) || 1;
-  const docsPaginados = docsFiltrados.slice(
+
+  // NUEVO: arrays seguros para evitar problemas con length
+  const safeDocsFiltrados = Array.isArray(docsFiltrados)
+    ? docsFiltrados
+    : [];
+  const docsPaginados = safeDocsFiltrados.slice(
     (page - 1) * pageSize,
     page * pageSize
   );
@@ -867,7 +872,7 @@ function App() {
                     Reintentar carga
                   </button>
                 </div>
-              ) : docsPaginados.length === 0 ? (
+              ) : safeDocsFiltrados.length === 0 ? (
                 <div
                   style={{
                     padding: 40,
@@ -911,16 +916,7 @@ function App() {
                 <>
                   <div className="table-wrapper">
                     <table className="doc-table">
-                      <thead>
-                        <tr>
-                          <th>N° de contrato</th>
-                          <th>Título del documento</th>
-                          <th>Tipo de trámite</th>
-                          <th style={{ textAlign: "center" }}>Estado actual</th>
-                          <th>Firmante final</th>
-                          <th style={{ textAlign: "center" }}>Acciones</th>
-                        </tr>
-                      </thead>
+                      {/* ... */}
                       <tbody>
                         {docsPaginados.map((d) => (
                           <DocumentRow
@@ -935,7 +931,7 @@ function App() {
                       </tbody>
                     </table>
                   </div>
-
+                  {/* paginación igual que antes */}
                   <div
                     style={{
                       display: "flex",
@@ -973,8 +969,6 @@ function App() {
                   </div>
                 </>
               )}
-            </>
-          )}
 
           {view === "upload" && (
             <NewDocumentForm
