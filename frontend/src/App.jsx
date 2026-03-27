@@ -753,7 +753,7 @@ function App() {
           isAnyAdmin={anyAdmin}
         />
 
-        <div className="content-body">
+                <div className="content-body">
           <ProductTour
             tourId="dashboard_principal"
             run={runProductTour}
@@ -761,34 +761,32 @@ function App() {
           />
 
           {view === "list" && (
-            <ListHeader
-              sort={sort}
-              setSort={(value) => {
-                setSort(value);
-                setPage(1);
-                cargarDocs(value);
-              }}
-              statusFilter={statusFilter}
-              setStatusFilter={(value) => {
-                setStatusFilter(value);
-                setPage(1);
-              }}
-              search={search}
-              setSearch={(value) => {
-                setSearch(value);
-                setPage(1);
-              }}
-              totalFiltrado={totalFiltrado}
-              pendientes={pendientes}
-              visados={visados}
-              firmados={firmados}
-              rechazados={rechazados}
-              onSync={cargarDocs}
-            />
-          )}
-
-          {view === "list" && (
             <>
+              <ListHeader
+                sort={sort}
+                setSort={(value) => {
+                  setSort(value);
+                  setPage(1);
+                  cargarDocs(value);
+                }}
+                statusFilter={statusFilter}
+                setStatusFilter={(value) => {
+                  setStatusFilter(value);
+                  setPage(1);
+                }}
+                search={search}
+                setSearch={(value) => {
+                  setSearch(value);
+                  setPage(1);
+                }}
+                totalFiltrado={totalFiltrado}
+                pendientes={pendientes}
+                visados={visados}
+                firmados={firmados}
+                rechazados={rechazados}
+                onSync={cargarDocs}
+              />
+
               <div className="hero-dashboard">
                 <div className="hero-dashboard-inner">
                   <h1 className="hero-dashboard-title">
@@ -916,7 +914,7 @@ function App() {
                 <>
                   <div className="table-wrapper">
                     <table className="doc-table">
-                      {/* ... */}
+                      {/* aquí va tu thead original */}
                       <tbody>
                         {docsPaginados.map((d) => (
                           <DocumentRow
@@ -931,7 +929,6 @@ function App() {
                       </tbody>
                     </table>
                   </div>
-                  {/* paginación igual que antes */}
                   <div
                     style={{
                       display: "flex",
@@ -969,6 +966,8 @@ function App() {
                   </div>
                 </>
               )}
+            </>
+          )}
 
           {view === "upload" && (
             <NewDocumentForm
