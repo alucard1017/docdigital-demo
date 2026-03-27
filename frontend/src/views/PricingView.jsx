@@ -199,6 +199,10 @@ function PricingView() {
 
   const currentPlanId = subscription?.currentPlanId;
 
+  const hasPaymentMethods =
+    Array.isArray(paymentMethods) && paymentMethods.length > 0;
+  const hasInvoices = Array.isArray(invoices) && invoices.length > 0;
+
   return (
     <div
       style={{
@@ -527,7 +531,7 @@ function PricingView() {
                 <p style={{ fontSize: "0.9rem", color: "#94a3b8" }}>
                   Cargando métodos de pago...
                 </p>
-              ) : paymentMethods.length === 0 ? (
+              ) : !hasPaymentMethods ? (
                 <p style={{ fontSize: "0.9rem", color: "#9ca3af" }}>
                   Aún no hay métodos de pago registrados. Agrega uno para
                   activar tu suscripción.
@@ -586,7 +590,7 @@ function PricingView() {
                 >
                   {updatingPaymentMethod
                     ? "Redirigiendo a portal seguro..."
-                    : paymentMethods.length > 0
+                    : hasPaymentMethods
                     ? "Actualizar método de pago"
                     : "Agregar método de pago"}
                 </button>
@@ -628,7 +632,7 @@ function PricingView() {
                 >
                   Cargando facturas...
                 </p>
-              ) : invoices.length === 0 ? (
+              ) : !hasInvoices ? (
                 <p
                   style={{
                     padding: 12,
