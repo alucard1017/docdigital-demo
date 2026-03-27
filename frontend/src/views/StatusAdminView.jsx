@@ -46,11 +46,15 @@ export function StatusAdminView() {
     fetchAll();
   }, []);
 
-  const bg = "#020617"; // slate-950
-  const cardBg = "#020617"; // fondo oscuro
   const cardBorder = "#1f2937";
   const subtleText = "#94a3b8";
   const strongText = "#e5e7eb";
+
+  // helpers seguros para arrays
+  const docActions = Array.isArray(metrics?.documents?.actions_last_60m)
+    ? metrics.documents.actions_last_60m
+    : [];
+  const hasDocActivity = docActions.length > 0;
 
   return (
     <div
@@ -58,7 +62,8 @@ export function StatusAdminView() {
       style={{
         minHeight: "100%",
         padding: 24,
-        background: "radial-gradient(circle at top, #020617 0, #020617 45%, #0b1120 100%)",
+        background:
+          "radial-gradient(circle at top, #020617 0, #020617 45%, #0b1120 100%)",
         color: "#e5e7eb",
       }}
     >
@@ -97,8 +102,8 @@ export function StatusAdminView() {
                 maxWidth: 560,
               }}
             >
-              Monitorea la salud de la API, la base de datos y la actividad reciente para
-              detectar problemas antes que tus usuarios.
+              Monitorea la salud de la API, la base de datos y la actividad
+              reciente para detectar problemas antes que tus usuarios.
             </p>
           </div>
 
@@ -241,7 +246,9 @@ export function StatusAdminView() {
                 <div>
                   <div style={{ color: subtleText }}>Hora servidor</div>
                   <div style={{ fontWeight: 500, color: strongText }}>
-                    {new Date(health.timestamp).toLocaleString()}
+                    {health.timestamp
+                      ? new Date(health.timestamp).toLocaleString()
+                      : "N/A"}
                   </div>
                 </div>
                 <div>
@@ -330,7 +337,8 @@ export function StatusAdminView() {
                 >
                   Documentos (60 min)
                 </h3>
-                {metrics.documents?.actions_last_60m?.length === 0 ? (
+
+                {!hasDocActivity ? (
                   <p
                     style={{
                       margin: 0,
@@ -350,7 +358,7 @@ export function StatusAdminView() {
                       color: strongText,
                     }}
                   >
-                    {metrics.documents.actions_last_60m.map((row) => (
+                    {docActions.map((row) => (
                       <li key={row.action}>
                         <span
                           style={{
