@@ -213,7 +213,7 @@ function App() {
   /* SOCKET (siempre se llama hook) */
   /* =============================== */
 
-  const socketApi = useSocket(token); // siempre se llama
+  const socketApi = useSocket(token);
   const socket = token ? socketApi : null;
 
   /* =============================== */
@@ -307,29 +307,29 @@ function App() {
   );
 
   // WebSocket listeners
-  useEffect(() => {
-    if (!token || !socket) return;
+useEffect(() => {
+  if (!token || !socket || typeof socket.on !== "function") return;
 
-    const handleSent = (data) => {
-      console.log("📡 Documento enviado:", data);
-      alert(`✅ Documento enviado: ${data.titulo}`);
-      cargarDocs();
-    };
+  const handleSent = (data) => {
+    console.log("📡 Documento enviado:", data);
+    alert(`✅ Documento enviado: ${data.titulo}`);
+    cargarDocs();
+  };
 
-    const handleSigned = (data) => {
-      console.log("📡 Documento firmado:", data);
-      alert(`✅ Documento firmado: ${data.titulo}`);
-      cargarDocs();
-    };
+  const handleSigned = (data) => {
+    console.log("📡 Documento firmado:", data);
+    alert(`✅ Documento firmado: ${data.titulo}`);
+    cargarDocs();
+  };
 
-    socket.on("document:sent", handleSent);
-    socket.on("document:signed", handleSigned);
+  socket.on("document:sent", handleSent);
+  socket.on("document:signed", handleSigned);
 
-    return () => {
-      socket.off("document:sent", handleSent);
-      socket.off("document:signed", handleSigned);
-    };
-  }, [token, socket, cargarDocs]);
+  return () => {
+    socket.off("document:sent", handleSent);
+    socket.off("document:signed", handleSigned);
+  };
+}, [token, socket, cargarDocs]);
 
   // Cargar URL de PDF para la vista de detalle
   useEffect(() => {
@@ -686,9 +686,7 @@ function App() {
   const totalFiltrado = docsFiltrados.length;
   const totalPaginas = Math.ceil(totalFiltrado / pageSize) || 1;
 
-  const safeDocsFiltrados = Array.isArray(docsFiltrados)
-    ? docsFiltrados
-    : [];
+  const safeDocsFiltrados = Array.isArray(docsFiltrados) ? docsFiltrados : [];
   const docsPaginados = safeDocsFiltrados.slice(
     (page - 1) * pageSize,
     page * pageSize
@@ -893,7 +891,7 @@ function App() {
                 <>
                   <div className="table-wrapper">
                     <table className="doc-table">
-                      {/* tu thead original aquí */}
+                      {/* thead original de documentos */}
                       <tbody>
                         {docsPaginados.map((d) => (
                           <DocumentRow

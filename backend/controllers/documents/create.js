@@ -1,606 +1,1077 @@
 // backend/controllers/documents/create.js
 const {
-  crypto,
+  path,
+  fs,
+  axios,
   db,
-  sendSigningInvitation,
-  sendVisadoInvitation,
   uploadPdfToS3,
   getSignedUrl,
+  sendSigningInvitation,
+  sendVisadoInvitation,
   isValidEmail,
-  isValidRun,
   validateLength,
+  sellarPdfConQr,
   generarNumeroContratoInterno,
   generarCodigoVerificacion,
   aplicarMarcaAguaLocal,
-  fs,
+  computeHash,
+  DOCUMENT_STATES,
 } = require("./common");
-const { logAudit } = require("../../utils/auditLog");
 
-const MAX_PDF_SIZE = 10 * 1024 * 1024; // 10 MB
+const pool = db?.pool || db;
 
-function computeHash(buffer) {
-  return require("crypto").createHash("sha256").update(buffer).digest("hex");
+/* ================================
+   HELPERS GENERALES
+   ================================ */
+
+function normalizeBoolean(value, defaultValue = false) {
+  if (value === undefined || value === null) return defaultValue;
+  if (typeof value === "boolean") return value;
+  if (typeof value === "string") {
+    const v = value.trim().toLowerCase();
+    return ["true", "1", "yes", "si", "sí"].includes(v);
+  }
+  if (typeof value === "number") return value === 1;
+  return defaultValue;
+}
+
+function normalizeArray(value) {
+  if (Array.isArray(value)) return value;
+  if (value === undefined || value === null || value === "") return [];
+  if (typeof value === "string") {
+    try {
+      const parsed = JSON.parse(value);
+      return Array.isArray(parsed) ? parsed : [];
+    } catch {
+      return [];
+    }
+  }
+  return [];
+}
+
+function toJson(value, fallback = null) {
+  try {
+    return value == null ? fallback : JSON.stringify(value);
+  } catch {
+    return fallback;
+  }
+}
+
+function safeLower(value) {
+  return String(value || "").trim().toLowerCase();
+}
+
+function uniqueBy(arr, keyFn) {
+  const seen = new Set();
+  return arr.filter((item) => {
+    const key = keyFn(item);
+    if (seen.has(key)) return false;
+    seen.add(key);
+    return true;
+  });
 }
 
 /* ================================
-   GET: Listar documentos del usuario
+   HELPERS FIRMANTES
    ================================ */
-async function getUserDocuments(req, res) {
+
+function buildSignerName(signer = {}) {
+  return (
+    signer.nombreCompleto ||
+    signer.nombre ||
+    signer.name ||
+    [signer.nombres, signer.apellidos].filter(Boolean).join(" ").trim() ||
+    "Firmante"
+  );
+}
+
+function buildSignerEmail(signer = {}) {
+  return (
+    signer.email ||
+    signer.correo ||
+    signer.mail ||
+    signer.email_address ||
+    ""
+  )
+    .trim()
+    .toLowerCase();
+}
+
+function buildSignerPhone(signer = {}) {
+  return (
+    signer.telefono ||
+    signer.phone ||
+    signer.celular ||
+    signer.mobile ||
+    null
+  );
+}
+
+function buildSignerOrder(signer = {}, index = 0) {
+  const value =
+    signer.orden_firma ??
+    signer.orden ??
+    signer.order ??
+    signer.sign_order ??
+    index + 1;
+
+  const num = Number(value);
+  return Number.isFinite(num) && num > 0 ? num : index + 1;
+}
+
+function buildSignerType(signer = {}) {
+  return (
+    signer.tipo ||
+    signer.role ||
+    signer.rol ||
+    "FIRMANTE"
+  )
+    .toString()
+    .trim()
+    .toUpperCase();
+}
+
+function buildSignerMustSign(signer = {}) {
+  if (signer.debe_firmar !== undefined)
+    return normalizeBoolean(signer.debe_firmar, true);
+  if (signer.must_sign !== undefined)
+    return normalizeBoolean(signer.must_sign, true);
+  return true;
+}
+
+function buildSignerMustReview(signer = {}) {
+  if (signer.debe_visar !== undefined)
+    return normalizeBoolean(signer.debe_visar, false);
+  if (signer.must_review !== undefined)
+    return normalizeBoolean(signer.must_review, false);
+  return false;
+}
+
+function sanitizeSigners(rawSigners = []) {
+  const signers = normalizeArray(rawSigners)
+    .map((signer, index) => ({
+      ...signer,
+      nombre: buildSignerName(signer),
+      email: buildSignerEmail(signer),
+      telefono: buildSignerPhone(signer),
+      orden: buildSignerOrder(signer, index),
+      tipo: buildSignerType(signer),
+      debe_firmar: buildSignerMustSign(signer),
+      debe_visar: buildSignerMustReview(signer),
+      mensaje_personalizado:
+        signer.mensaje_personalizado || signer.customMessage || null,
+    }))
+    .filter((s) => s.email && isValidEmail(s.email));
+
+  return uniqueBy(
+    signers.sort((a, b) => a.orden - b.orden),
+    (s) => `${safeLower(s.email)}|${s.orden}|${s.tipo}`
+  );
+}
+
+/* ================================
+   CONFIG DE RECORDATORIOS
+   ================================ */
+
+async function getReminderConfig(client, companyId) {
   try {
-    const { sort } = req.query;
-    let orderByClause = "title ASC, id ASC";
-
-    if (sort === "fecha_desc") orderByClause = "created_at DESC";
-    if (sort === "fecha_asc") orderByClause = "created_at ASC";
-    if (sort === "numero_asc") orderByClause = "numero_contrato_interno ASC";
-    if (sort === "numero_desc") orderByClause = "numero_contrato_interno DESC";
-
-    const result = await db.query(
-      `SELECT 
-         id, owner_id, title, description, file_path, status,
-         destinatario_nombre, destinatario_email, destinatario_movil,
-         visador_nombre, visador_email, visador_movil,
-         firmante_nombre, firmante_email, firmante_movil, firmante_run,
-         empresa_rut, signature_status, requires_visado, reject_reason,
-         tipo_tramite, tipo_documento, requiere_firma_notarial, created_at, updated_at,
-         numero_contrato_interno,
-         company_id,
-         pdf_hash_final
-       FROM documents 
-       WHERE owner_id = $1 
-       ORDER BY ${orderByClause}`,
-      [req.user.id]
+    const { rows } = await client.query(
+      `
+      SELECT interval_days, max_attempts, enabled
+      FROM reminder_config
+      WHERE company_id = $1
+      LIMIT 1
+      `,
+      [companyId]
     );
 
-    const docs = result.rows.map((row) => ({
-      ...row,
-      requiresVisado: row.requires_visado === true,
-      file_url: row.pdf_final_url || row.file_path,
-    }));
+    if (!rows.length) {
+      return {
+        enabled: true,
+        intervalDays: 3,
+        maxAttempts: 2,
+      };
+    }
 
-    return res.json(docs);
-  } catch (err) {
-    console.error("❌ Error listando documentos:", err);
-    return res.status(500).json({ message: "Error interno del servidor" });
+    return {
+      enabled: rows[0].enabled !== false,
+      intervalDays: Number(rows[0].interval_days || 3),
+      maxAttempts: Number(rows[0].max_attempts || 2),
+    };
+  } catch (error) {
+    console.warn("⚠️ No se pudo leer reminder_config, usando defaults:", error.message);
+    return {
+      enabled: true,
+      intervalDays: 3,
+      maxAttempts: 2,
+    };
+  }
+}
+
+async function createAutomaticReminders(
+  client,
+  { documentId, signers, intervalDays, maxAttempts }
+) {
+  if (!documentId || !Array.isArray(signers) || !signers.length) return 0;
+  if (!intervalDays || !maxAttempts || maxAttempts <= 0) return 0;
+
+  let created = 0;
+
+  for (const signer of signers) {
+    if (!signer?.email) continue;
+
+    for (let attempt = 1; attempt <= maxAttempts; attempt++) {
+      await client.query(
+        `
+        INSERT INTO recordatorios (
+          documento_id,
+          destinatario_email,
+          destinatario_nombre,
+          tipo,
+          numero_intento,
+          programado_para,
+          estado,
+          metadata,
+          created_at,
+          updated_at
+        )
+        VALUES (
+          $1,
+          $2,
+          $3,
+          $4,
+          $5,
+          NOW() + (($6::int * $5::int) || ' days')::interval,
+          'PENDIENTE',
+          $7::jsonb,
+          NOW(),
+          NOW()
+        )
+        `,
+        [
+          documentId,
+          signer.email,
+          signer.nombre,
+          signer.debe_visar ? "VISADO" : "FIRMA",
+          attempt,
+          intervalDays,
+          JSON.stringify({
+            signer_order: signer.orden,
+            signer_type: signer.tipo,
+          }),
+        ]
+      );
+      created++;
+    }
+  }
+
+  return created;
+}
+
+/* ================================
+   EVENTOS: NUEVO + LEGACY
+   ================================ */
+
+async function insertDocumentEvent(client, payload) {
+  const {
+    documentId,
+    companyId,
+    userId,
+    eventType,
+    details = null,
+  } = payload;
+
+  try {
+    await client.query(
+      `
+      INSERT INTO document_events (
+        document_id,
+        company_id,
+        user_id,
+        event_type,
+        details,
+        created_at
+      )
+      VALUES ($1, $2, $3, $4, $5::jsonb, NOW())
+      `,
+      [documentId, companyId, userId || null, eventType, toJson(details, "{}")]
+    );
+  } catch (error) {
+    console.warn("⚠️ No se pudo insertar document_events:", error.message);
+  }
+}
+
+async function insertLegacyEvento(client, payload) {
+  const {
+    documentoId,
+    usuarioId,
+    tipo,
+    descripcion,
+    metadata = null,
+  } = payload;
+
+  try {
+    await client.query(
+      `
+      INSERT INTO eventos (
+        documento_id,
+        usuario_id,
+        tipo,
+        descripcion,
+        metadata,
+        created_at
+      )
+      VALUES ($1, $2, $3, $4, $5::jsonb, NOW())
+      `,
+      [documentoId, usuarioId || null, tipo, descripcion, toJson(metadata, "{}")]
+    );
+  } catch (error) {
+    console.warn("⚠️ No se pudo insertar evento legacy:", error.message);
   }
 }
 
 /* ================================
-   POST: Crear nuevo documento / trámite
+   INSERT FIRMANTES (LEGACY + NUEVO)
    ================================ */
-async function createDocument(req, res) {
-  try {
-    console.log("DEBUG DOCS >> POST /api/docs recibido");
-    console.log("DEBUG BODY >>", {
-      title: req.body.title,
-      destinatario_email: req.body.destinatario_email,
-      firmante_email: req.body.firmante_email,
-      visador_email: req.body.visador_email,
-      requiresVisado: req.body.requiresVisado,
-      tipo_tramite: req.body.tipo_tramite,
-      tipo_documento: req.body.tipo_documento,
-      requiere_firma_notarial: req.body.requiere_firma_notarial,
-      firmante_adicional_email: req.body.firmante_adicional_email,
-    });
 
-    const {
-      title,
-      description,
-      destinatario_nombre,
-      destinatario_email,
-      destinatario_movil,
-      visador_nombre,
-      visador_email,
-      visador_movil,
-      firmante_nombre_completo,
-      firmante_email,
-      firmante_movil,
-      firmante_run,
-      empresa_rut,
-      requiresVisado,
-      firmante_adicional_nombre_completo,
-      firmante_adicional_email,
-      firmante_adicional_movil,
-      tipo_tramite,
-      tipo_documento,
-      requiere_firma_notarial,
-    } = req.body;
+async function createLegacySigners(client, { documentoId, signers }) {
+  const inserted = [];
 
-    const file = req.file;
+  for (const signer of signers) {
+    const { rows } = await client.query(
+      `
+      INSERT INTO firmantes (
+        documento_id,
+        nombre,
+        email,
+        telefono,
+        orden,
+        tipo,
+        estado,
+        debe_firmar,
+        debe_visar,
+        created_at,
+        updated_at
+      )
+      VALUES ($1, $2, $3, $4, $5, $6, 'PENDIENTE', $7, $8, NOW(), NOW())
+      RETURNING *
+      `,
+      [
+        documentoId,
+        signer.nombre,
+        signer.email,
+        signer.telefono,
+        signer.orden,
+        signer.tipo,
+        signer.debe_firmar,
+        signer.debe_visar,
+      ]
+    );
 
-    const companyId = req.user?.company_id;
-    if (!companyId) {
-      console.error(
-        "❌ Error creando documento: usuario sin company_id",
-        req.user && {
-          id: req.user.id,
-          email: req.user.email,
-          role: req.user.role,
-        }
-      );
-      return res.status(400).json({
-        message:
-          "Tu usuario no tiene empresa asociada (company_id). Contacta al administrador.",
-      });
-    }
+    inserted.push(rows[0]);
+  }
 
-    // Validación de archivo
-    if (!file) {
-      return res
-        .status(400)
-        .json({ message: "El archivo PDF es obligatorio" });
-    }
+  return inserted;
+}
 
-    if (file.mimetype !== "application/pdf") {
-      return res.status(400).json({ message: "Solo se permiten PDFs" });
-    }
+async function createCanonicalSigners(client, { documentId, companyId, signers }) {
+  const inserted = [];
 
-    if (file.size > MAX_PDF_SIZE) {
-      return res.status(400).json({ message: "PDF demasiado grande" });
-    }
+  for (const signer of signers) {
+    const { rows } = await client.query(
+      `
+      INSERT INTO document_signers (
+        document_id,
+        company_id,
+        name,
+        email,
+        phone,
+        signer_order,
+        role,
+        status,
+        must_sign,
+        must_review,
+        metadata,
+        created_at,
+        updated_at
+      )
+      VALUES (
+        $1, $2, $3, $4, $5, $6, $7, 'PENDIENTE', $8, $9, $10::jsonb, NOW(), NOW()
+      )
+      RETURNING *
+      `,
+      [
+        documentId,
+        companyId,
+        signer.nombre,
+        signer.email,
+        signer.telefono,
+        signer.orden,
+        signer.tipo,
+        signer.debe_firmar,
+        signer.debe_visar,
+        toJson(
+          {
+            mensaje_personalizado: signer.mensaje_personalizado,
+          },
+          "{}"
+        ),
+      ]
+    );
 
-    const tipoTramiteNormalizado =
-      tipo_tramite === "notaria" ? "notaria" : "propio";
-    const tipoDocumentoNormalizado =
-      tipo_documento === "contratos" ? "contratos" : "poderes";
+    inserted.push(rows[0]);
+  }
 
-    const requiereNotaria =
-      requiere_firma_notarial === "true" || requiere_firma_notarial === true;
+  return inserted;
+}
 
-    // Validaciones campos obligatorios
-    if (
-      !title ||
-      !firmante_nombre_completo ||
-      !firmante_email ||
-      !firmante_run ||
-      !destinatario_nombre ||
-      !destinatario_email ||
-      !empresa_rut
-    ) {
-      return res.status(400).json({ message: "Faltan campos obligatorios" });
-    }
+async function syncParticipantsFromSigners(client, { documentId, companyId, signers }) {
+  const inserted = [];
 
-    if (!isValidEmail(firmante_email)) {
-      return res.status(400).json({ message: "Email del firmante inválido" });
-    }
+  for (const signer of signers) {
+    const participantRole = signer.debe_visar ? "VISADOR" : "FIRMANTE";
 
-    if (!isValidEmail(destinatario_email)) {
-      return res
-        .status(400)
-        .json({ message: "Email del destinatario inválido" });
-    }
+    const { rows } = await client.query(
+      `
+      INSERT INTO document_participants (
+        document_id,
+        company_id,
+        name,
+        email,
+        phone,
+        role,
+        sort_order,
+        status,
+        metadata,
+        created_at,
+        updated_at
+      )
+      VALUES (
+        $1, $2, $3, $4, $5, $6, $7, 'PENDIENTE', $8::jsonb, NOW(), NOW()
+      )
+      RETURNING *
+      `,
+      [
+        documentId,
+        companyId,
+        signer.nombre,
+        signer.email,
+        signer.telefono,
+        participantRole,
+        signer.orden,
+        toJson(
+          {
+            tipo_original: signer.tipo,
+            debe_firmar: signer.debe_firmar,
+            debe_visar: signer.debe_visar,
+          },
+          "{}"
+        ),
+      ]
+    );
 
-    if (visador_email && !isValidEmail(visador_email)) {
-      return res.status(400).json({ message: "Email del visador inválido" });
-    }
+    inserted.push(rows[0]);
+  }
 
-    if (firmante_adicional_email && !isValidEmail(firmante_adicional_email)) {
-      return res
-        .status(400)
-        .json({ message: "Email del firmante adicional inválido" });
-    }
+  return inserted;
+}
 
-    console.log("DEBUG RUN ORIGINAL:", firmante_run, typeof firmante_run);
-    const runValue = Array.isArray(firmante_run)
-      ? firmante_run[0]
-      : firmante_run;
-    console.log("DEBUG RUN NORMALIZADO:", runValue, typeof runValue);
+/* ================================
+   STORAGE / PDF
+   ================================ */
 
-    if (!isValidRun(runValue)) {
-      return res.status(400).json({
-        message: "RUN del firmante inválido (ej: 12.345.678-9)",
-      });
-    }
+async function uploadMainPdfToStorage(file, companyId, code) {
+  const ext = path.extname(file.originalname || ".pdf") || ".pdf";
+  const key = `documents/${companyId}/${Date.now()}-${code}${ext}`;
+  const uploaded = await uploadPdfToS3(file.buffer, key, file.mimetype || "application/pdf");
 
+  if (typeof uploaded === "string") {
+    return { key, url: uploaded };
+  }
+
+  return {
+    key: uploaded?.key || key,
+    url: uploaded?.url || uploaded?.Location || null,
+  };
+}
+
+async function fetchPdfBufferFromUrl(url) {
+  const response = await axios.get(url, { responseType: "arraybuffer" });
+  return Buffer.from(response.data);
+}
+
+/* ================================
+   INVITACIONES ASÍNCRONAS
+   ================================ */
+
+async function sendInvitationsInBackground({
+  companyId,
+  documentId,
+  documentoId,
+  code,
+  signers,
+  publicUrl,
+  actorName,
+}) {
+  const jobs = signers.map(async (signer) => {
     try {
-      validateLength(title, 5, 200, "Título");
-      validateLength(firmante_nombre_completo, 3, 100, "Nombre del firmante");
-    } catch (err) {
-      return res.status(400).json({ message: err.message });
-    }
+      const payload = {
+        companyId,
+        documentId,
+        documentoId,
+        signerName: signer.nombre,
+        signerEmail: signer.email,
+        signerPhone: signer.telefono,
+        verificationCode: code,
+        publicUrl,
+        actorName,
+        signerOrder: signer.orden,
+      };
 
-    let originalKey = null;
-    let watermarkedKey = null;
-    let pdfHashFinal = null;
-
-    // Subida a S3 + marca de agua
-    try {
-      const fileBuffer = file.buffer;
-      if (!fileBuffer) {
-        console.error("❌ createDocument: req.file sin buffer:", file);
-        return res
-          .status(400)
-          .json({ message: "No se recibió el archivo PDF correctamente" });
+      if (signer.debe_visar) {
+        await sendVisadoInvitation(payload);
+      } else {
+        await sendSigningInvitation(payload);
       }
 
-      // Hash del PDF base (marca de agua incluida)
-      pdfHashFinal = computeHash(fileBuffer);
+      return { ok: true, email: signer.email };
+    } catch (error) {
+      console.error(`❌ Error enviando invitación a ${signer.email}:`, error.message);
+      return { ok: false, email: signer.email, error: error.message };
+    }
+  });
 
-      originalKey = `documentos/${req.user.id}/original-${Date.now()}-${file.originalname}`;
-      await uploadPdfToS3(originalKey, fileBuffer);
-      console.log(`✅ Archivo ORIGINAL subido a S3: ${originalKey}`);
+  return Promise.allSettled(jobs);
+}
 
-      const watermarkedBuffer = await aplicarMarcaAguaLocal(fileBuffer);
+/* ================================
+   CREATE DOCUMENT (LEGACY + NUEVO)
+   ================================ */
 
-      watermarkedKey = `documentos/${req.user.id}/watermark-${Date.now()}-${file.originalname}`;
-      await uploadPdfToS3(watermarkedKey, watermarkedBuffer);
-      console.log(`✅ Archivo CON MARCA subido a S3: ${watermarkedKey}`);
-    } catch (s3Error) {
-      console.error(
-        "⚠️ Error subiendo a S3 / generando hash:",
-        s3Error.message
-      );
-      return res
-        .status(500)
-        .json({ message: "No se pudo procesar/subir el archivo PDF" });
+async function createDocument(req, res) {
+  const client = await pool.connect();
+
+  let tempSignedUrl = null;
+
+  try {
+    await client.query("BEGIN");
+
+    const companyId =
+      req.user?.company_id || req.user?.companyId || req.body.company_id;
+    const userId = req.user?.id || req.user?.userId || null;
+
+    const autoSendFlow = normalizeBoolean(req.body.autoSendFlow, false);
+    const titulo =
+      req.body.titulo ||
+      req.body.title ||
+      req.body.nombre ||
+      req.file?.originalname ||
+      "Documento sin título";
+
+    const descripcion = req.body.descripcion || req.body.description || null;
+
+    const signers = sanitizeSigners(
+      req.body.signers || req.body.firmantes || req.body.participants
+    );
+
+    if (!companyId) {
+      await client.query("ROLLBACK");
+      return res.status(400).json({ message: "company_id es requerido" });
     }
 
-    const signatureToken = crypto.randomUUID();
-    const signatureExpiresAt = new Date(
-      Date.now() + 7 * 24 * 60 * 60 * 1000
+    if (!req.file && !req.body.pdfUrl && !req.body.fileUrl) {
+      await client.query("ROLLBACK");
+      return res.status(400).json({ message: "Debes enviar un PDF" });
+    }
+
+    if (!validateLength(titulo, 2, 255)) {
+      await client.query("ROLLBACK");
+      return res.status(400).json({ message: "Título inválido" });
+    }
+
+    if (!signers.length) {
+      await client.query("ROLLBACK");
+      return res
+        .status(400)
+        .json({ message: "Debes enviar al menos un firmante válido" });
+    }
+
+    const requiresVisado = signers.some((s) => s.debe_visar);
+    const verificationCode = generarCodigoVerificacion();
+    const numeroContratoInterno = await generarNumeroContratoInterno(
+      client,
+      companyId
     );
-    const requires_visado = requiresVisado === "true";
 
-    const initialStatus = requires_visado
-      ? "PENDIENTE_VISADO"
-      : "PENDIENTE_FIRMA";
+    let originalBuffer;
+    let originalFilename;
+    let mimeType = "application/pdf";
 
-    const result = await db.query(
-      `INSERT INTO documents (
-         owner_id, title, description, file_path, status,
-         destinatario_nombre, destinatario_email, destinatario_movil,
-         visador_nombre, visador_email, visador_movil,
-         firmante_nombre, firmante_email, firmante_movil, firmante_run,
-         empresa_rut, requires_visado, signature_token,
-         signature_token_expires_at, signature_status,
-         tipo_tramite, tipo_documento, estado,
-         pdf_original_url, pdf_final_url, requiere_firma_notarial,
-         company_id, pdf_hash_final,
-         created_at, updated_at
-       ) VALUES (
-         $1, $2, $3, $4, $5,
-         $6, $7, $8,
-         $9, $10, $11,
-         $12, $13, $14, $15,
-         $16, $17, $18, $19,
-         $20,
-         $21, $22, $23,
-         $24, $25, $26,
-         $27, $28,
-         NOW(), NOW()
-       )
-       RETURNING *`,
-      [
-        req.user.id,
+    if (req.file?.buffer) {
+      originalBuffer = req.file.buffer;
+      originalFilename =
+        req.file.originalname || `documento-${Date.now()}.pdf`;
+      mimeType = req.file.mimetype || mimeType;
+    } else {
+      const remoteUrl = req.body.pdfUrl || req.body.fileUrl;
+      originalBuffer = await fetchPdfBufferFromUrl(remoteUrl);
+      originalFilename = `documento-${Date.now()}.pdf`;
+    }
+
+    const watermarkedBuffer = await aplicarMarcaAguaLocal(originalBuffer);
+    const documentHash = computeHash(watermarkedBuffer);
+
+    const uploadResult = await uploadMainPdfToStorage(
+      {
+        buffer: watermarkedBuffer,
+        originalname: originalFilename,
+        mimetype: mimeType,
+      },
+      companyId,
+      verificationCode
+    );
+
+    const storageKey = uploadResult.key;
+    const storageUrl = uploadResult.url;
+
+    let signedBuffer = null;
+    try {
+      if (storageKey && typeof getSignedUrl === "function") {
+        tempSignedUrl = await getSignedUrl(storageKey, 900);
+        signedBuffer = await fetchPdfBufferFromUrl(tempSignedUrl);
+      }
+    } catch (e) {
+      console.warn(
+        "⚠️ No se pudo recuperar signed URL para sellado inicial:",
+        e.message
+      );
+    }
+
+    let sealedHash = null;
+    try {
+      const sourceForSeal = signedBuffer || watermarkedBuffer;
+      const sealedBuffer = await sellarPdfConQr(sourceForSeal, {
+        verificationCode,
+        hash: documentHash,
+      });
+      if (sealedBuffer && Buffer.isBuffer(sealedBuffer)) {
+        sealedHash = computeHash(sealedBuffer);
+      }
+    } catch (e) {
+      console.warn(
+        "⚠️ No se pudo sellar PDF con QR en createDocument:",
+        e.message
+      );
+    }
+
+    const initialDocumentStatus = autoSendFlow
+      ? "PENDIENTE_FIRMA"
+      : "BORRADOR";
+
+    const initialLegacyStatus = autoSendFlow
+      ? DOCUMENT_STATES.SIGNING
+      : DOCUMENT_STATES.DRAFT;
+
+    const { rows: documentRows } = await client.query(
+      `
+      INSERT INTO documents (
+        company_id,
         title,
         description,
-        watermarkedKey,
-        initialStatus,
-        destinatario_nombre,
-        destinatario_email,
-        destinatario_movil,
-        visador_nombre,
-        visador_email,
-        visador_movil,
-        firmante_nombre_completo,
-        firmante_email,
-        firmante_movil,
-        runValue,
-        empresa_rut,
-        requires_visado,
-        signatureToken,
-        signatureExpiresAt,
-        "PENDIENTE",
-        tipoTramiteNormalizado,
-        tipoDocumentoNormalizado,
-        "borrador",
-        originalKey,
-        null,
-        requiereNotaria,
+        status,
+        file_name,
+        file_url,
+        storage_key,
+        hash_sha256,
+        sealed_hash_sha256,
+        verification_code,
+        requires_review,
+        created_by,
+        metadata,
+        created_at,
+        updated_at
+      )
+      VALUES (
+        $1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13::jsonb, NOW(), NOW()
+      )
+      RETURNING *
+      `,
+      [
         companyId,
-        pdfHashFinal,
+        titulo,
+        descripcion,
+        initialDocumentStatus,
+        originalFilename,
+        storageUrl,
+        storageKey,
+        documentHash,
+        sealedHash,
+        verificationCode,
+        requiresVisado,
+        userId,
+        toJson(
+          {
+            autoSendFlow,
+            numeroContratoInterno,
+            signerCount: signers.length,
+          },
+          "{}"
+        ),
       ]
     );
 
-    const doc = result.rows[0];
-    console.log("✅ DOCUMENTO INSERTADO EN DB:", {
-      id: doc.id,
-      title: doc.title,
-      owner_id: doc.owner_id,
-      company_id: doc.company_id,
-      status: doc.status,
+    const document = documentRows[0];
+
+    const { rows: legacyRows } = await client.query(
+      `
+      INSERT INTO documentos (
+        empresa_id,
+        titulo,
+        descripcion,
+        url_archivo,
+        hash_documento,
+        codigo_verificacion,
+        estado,
+        requiere_visado,
+        creado_por,
+        numero_contrato_interno,
+        created_at,
+        updated_at
+      )
+      VALUES (
+        $1, $2, $3, $4, $5, $6, $7, $8, $9, $10, NOW(), NOW()
+      )
+      RETURNING *
+      `,
+      [
+        companyId,
+        titulo,
+        descripcion,
+        storageUrl,
+        documentHash,
+        verificationCode,
+        initialLegacyStatus,
+        requiresVisado,
+        userId,
+        numeroContratoInterno,
+      ]
+    );
+
+    const documentoNuevo = legacyRows[0];
+
+    await client.query(
+      `
+      UPDATE documents
+      SET nuevo_documento_id = $2,
+          updated_at = NOW()
+      WHERE id = $1
+      `,
+      [document.id, documentoNuevo.id]
+    );
+
+    const legacySigners = await createLegacySigners(client, {
+      documentoId: documentoNuevo.id,
+      signers,
     });
 
-    // ... (resto del código de createDocument igual que lo tienes, no toca el hash)
+    const canonicalSigners = await createCanonicalSigners(client, {
+      documentId: document.id,
+      companyId,
+      signers,
+    });
 
-    // NO cambio nada más de abajo para no introducir bugs nuevos
-    // (correlativo, documentos v2, firmantes, participantes, eventos, emails, etc.)
+    const participants = await syncParticipantsFromSigners(client, {
+      documentId: document.id,
+      companyId,
+      signers,
+    });
 
-    // --- A partir de aquí deja tu lógica tal como está ---
+    await insertDocumentEvent(client, {
+      documentId: document.id,
+      companyId,
+      userId,
+      eventType: "DOCUMENT_CREATED",
+      details: {
+        legacy_documento_id: documentoNuevo.id,
+        autoSendFlow,
+        signers: signers.length,
+      },
+    });
 
-    // Correlativo interno
-    const correlativoRes = await db.query(
-      `SELECT valor::bigint AS ultimo
-       FROM configuraciones
-       WHERE clave = 'ultimo_correlativo_contrato'`
-    );
+    await insertLegacyEvento(client, {
+      documentoId: documentoNuevo.id,
+      usuarioId: userId,
+      tipo: "DOCUMENTO_CREADO",
+      descripcion: "Documento creado correctamente",
+      metadata: {
+        document_id: document.id,
+        autoSendFlow,
+      },
+    });
 
-    const ultimoCorrelativo =
-      correlativoRes.rowCount > 0 ? Number(correlativoRes.rows[0].ultimo) : 0;
+    let remindersCreated = 0;
 
-    const numeroContratoInterno = generarNumeroContratoInterno(
-      ultimoCorrelativo
-    );
+    if (autoSendFlow) {
+      await client.query(
+        `
+        UPDATE documentos
+        SET estado = $2,
+            updated_at = NOW()
+        WHERE id = $1
+        `,
+        [documentoNuevo.id, DOCUMENT_STATES.SIGNING]
+      );
 
-    await db.query(
-      `INSERT INTO configuraciones (clave, valor)
-       VALUES ('ultimo_correlativo_contrato', $1)
-       ON CONFLICT (clave) DO UPDATE SET valor = EXCLUDED.valor`,
-      [String(ultimoCorrelativo + 1)]
-    );
+      await client.query(
+        `
+        UPDATE documents
+        SET status = 'PENDIENTE_FIRMA',
+            updated_at = NOW()
+        WHERE id = $1
+        `,
+        [document.id]
+      );
 
-    await db.query(
-      `UPDATE documents
-       SET numero_contrato_interno = $1
-       WHERE id = $2`,
-      [numeroContratoInterno, doc.id]
-    );
-
-    const codigoVerificacion = generarCodigoVerificacion();
-    const categoriaFirma = "SIMPLE";
-
-    const documentosResult = await db.query(
-      `INSERT INTO documentos (
-         titulo,
-         tipo,
-         estado,
-         categoria_firma,
-         codigo_verificacion,
-         creado_por,
-         company_id,
-         created_at,
-         updated_at
-       ) VALUES (
-         $1, $2, $3, $4, $5, $6, $7, NOW(), NOW()
-       )
-       RETURNING id, codigo_verificacion, categoria_firma`,
-      [
-        doc.title,
-        tipoTramiteNormalizado || "propio",
-        "BORRADOR",
-        categoriaFirma,
-        codigoVerificacion,
-        req.user.id,
+      await insertDocumentEvent(client, {
+        documentId: document.id,
         companyId,
-      ]
-    );
+        userId,
+        eventType: "DOCUMENT_SENT",
+        details: {
+          signers: signers.length,
+          requiresVisado,
+        },
+      });
 
-    const documentoNuevo = documentosResult.rows[0];
+      await insertLegacyEvento(client, {
+        documentoId: documentoNuevo.id,
+        usuarioId: userId,
+        tipo: "DOCUMENTO_ENVIADO",
+        descripcion: "Documento enviado a firma/visado",
+        metadata: {
+          document_id: document.id,
+        },
+      });
 
-    await db.query(
-      `UPDATE documents
-       SET nuevo_documento_id = $1
-       WHERE id = $2`,
-      [documentoNuevo.id, doc.id]
-    );
+      const reminderConfig = await getReminderConfig(client, companyId);
 
-    const signerMainToken = crypto.randomUUID();
-    await db.query(
-      `INSERT INTO document_signers (
-         document_id, role, name, email, sign_token
-       ) VALUES ($1, 'FIRMANTE', $2, $3, $4)`,
-      [doc.id, firmante_nombre_completo, firmante_email, signerMainToken]
-    );
-
-    try {
-      await db.query(
-        `INSERT INTO firmantes (
-           documento_id, nombre, email, rut, rol, orden_firma, estado, tipo_firma,
-           created_at
-         )
-         VALUES ($1, $2, $3, $4, 'FIRMANTE', 1, 'PENDIENTE', 'SIMPLE', NOW())`,
-        [documentoNuevo.id, firmante_nombre_completo, firmante_email, runValue]
-      );
-    } catch (firmErr) {
-      console.error("⚠️ Error creando firmante en tabla firmantes:", firmErr);
-    }
-
-    let signerAdditionalToken = null;
-    if (firmante_adicional_email) {
-      signerAdditionalToken = crypto.randomUUID();
-      await db.query(
-        `INSERT INTO document_signers (
-           document_id, role, name, email, sign_token
-         ) VALUES ($1, 'FIRMANTE', $2, $3, $4)`,
-        [
-          doc.id,
-          firmante_adicional_nombre_completo || "Firmante adicional",
-          firmante_adicional_email,
-          signerAdditionalToken,
-        ]
-      );
-
-      try {
-        await db.query(
-          `INSERT INTO firmantes (
-             documento_id, nombre, email, rut, rol, orden_firma, estado, tipo_firma,
-             created_at
-           )
-           VALUES ($1, $2, $3, NULL, 'FIRMANTE', 2, 'PENDIENTE', 'SIMPLE', NOW())`,
-          [
-            documentoNuevo.id,
-            firmante_adicional_nombre_completo || "Firmante adicional",
-            firmante_adicional_email,
-          ]
-        );
-      } catch (firmErr) {
-        console.error(
-          "⚠️ Error creando firmante adicional en tabla firmantes:",
-          firmErr
-        );
+      if (reminderConfig.enabled) {
+        remindersCreated = await createAutomaticReminders(client, {
+          documentId: document.id,
+          signers,
+          intervalDays: reminderConfig.intervalDays,
+          maxAttempts: reminderConfig.maxAttempts,
+        });
       }
     }
 
-    if (requires_visado && visador_email) {
-      await db.query(
-        `INSERT INTO document_participants (document_id, step_order, role, name, email)
-         VALUES 
-         ($1, 1, 'VISADOR', $2, $3),
-         ($1, 2, 'FIRMANTE', $4, $5)`,
-        [
-          doc.id,
-          visador_nombre || "Visador",
-          visador_email,
-          firmante_nombre_completo,
-          firmante_email,
-        ]
-      );
-    } else {
-      await db.query(
-        `INSERT INTO document_participants (document_id, step_order, role, name, email)
-         VALUES 
-         ($1, 2, 'FIRMANTE', $2, $3)`,
-        [doc.id, firmante_nombre_completo, firmante_email]
-      );
-    }
+    await client.query("COMMIT");
+    client.release();
 
-    await db.query(
-      `INSERT INTO document_events (
-         document_id, actor, action, details, from_status, to_status,
-         tipo_evento, detalle, ip, user_agent
-       ) 
-       VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)`,
-      [
-        doc.id,
-        req.user.name || "Sistema",
-        "CREADO",
-        `Documento "${title}" creado`,
-        null,
-        initialStatus,
-        "DOCUMENTO_CREADO",
-        JSON.stringify({
-          titulo: title,
-          creadoPor: req.user.id,
-          tipo_tramite: tipoTramiteNormalizado,
-          tipo_documento: tipoDocumentoNormalizado,
-        }),
-        req.ip,
-        req.headers["user-agent"] || null,
-      ]
-    );
+    const publicUrl = `${req.protocol}://${req.get(
+      "host"
+    )}/api/public/documents/${verificationCode}`;
 
-    await logAudit({
-      user: req.user,
-      action: "document_created",
-      entityType: "document",
-      entityId: doc.id,
-      metadata: {
-        titulo: title,
-        documento_nuevo_id: documentoNuevo.id,
-        company_id: companyId,
-      },
-      req,
-    });
-
-    const frontBaseUrl =
-      process.env.FRONTEND_URL || "https://docdigital-demo.onrender.com";
-
-    const emailPromises = [];
-
-    const publicVerifyUrl = `${frontBaseUrl}/verificar`;
-    const verificationCode = documentoNuevo.codigo_verificacion;
-
-    if (firmante_email) {
-      const urlFirma = `${frontBaseUrl}/firma-publica?token=${signerMainToken}`;
-      emailPromises.push(
-        sendSigningInvitation(
-          firmante_email,
-          title,
-          urlFirma,
-          firmante_nombre_completo,
-          {
-            verificationCode,
-            publicVerifyUrl,
-          }
-        )
-      );
-    }
-
-    if (firmante_adicional_email && signerAdditionalToken) {
-      const urlFirmaAdicional = `${frontBaseUrl}/firma-publica?token=${signerAdditionalToken}`;
-      emailPromises.push(
-        sendSigningInvitation(
-          firmante_adicional_email,
-          title,
-          urlFirmaAdicional,
-          firmante_adicional_nombre_completo || "",
-          {
-            verificationCode,
-            publicVerifyUrl,
-          }
-        )
-      );
-    }
-
-    if (requires_visado && visador_email) {
-      const urlVisado = `${frontBaseUrl}/firma-publica?token=${signatureToken}&mode=visado`;
-      emailPromises.push(
-        sendVisadoInvitation(
-          visador_email,
-          title,
-          urlVisado,
-          visador_nombre || ""
-        )
-      );
-    }
-
-    if (destinatario_email && destinatario_email !== firmante_email) {
-      const { sendDestinationNotification } =
-        require("../../services/emailService");
-
-      emailPromises.push(
-        sendDestinationNotification(
-          destinatario_email,
-          title,
-          destinatario_nombre || empresa_rut || "Empresa",
-          verificationCode
-        )
-      );
-    }
-
-    if (emailPromises.length > 0) {
-      (async () => {
-        try {
-          await Promise.all(emailPromises);
-          console.log(
-            `✅ [DOC EMAIL] Correos procesados para documento ${doc.id}`
-          );
-        } catch (emailError) {
-          console.error(
-            "⚠️ [DOC EMAIL] Algún correo falló al enviar:",
-            emailError.message
-          );
-        }
-      })();
+    if (autoSendFlow) {
+      void sendInvitationsInBackground({
+        companyId,
+        documentId: document.id,
+        documentoId: documentoNuevo.id,
+        code: verificationCode,
+        signers,
+        publicUrl,
+        actorName: req.user?.nombre || req.user?.name || "Sistema",
+      });
     }
 
     return res.status(201).json({
-      ...doc,
-      requiresVisado: doc.requires_visado === true,
-      file_url: doc.pdf_final_url || doc.file_path,
+      message: autoSendFlow
+        ? "Documento creado y enviado a firma correctamente"
+        : "Documento creado correctamente",
+      id: document.id,
       documentoId: documentoNuevo.id,
-      codigoVerificacion: documentoNuevo.codigo_verificacion,
-      categoriaFirma: documentoNuevo.categoria_firma,
-      message:
-        "Documento creado exitosamente. Los correos se están enviando en segundo plano.",
+      estado: autoSendFlow ? DOCUMENT_STATES.SIGNING : DOCUMENT_STATES.DRAFT,
+      documentsStatus: autoSendFlow ? "PENDIENTE_FIRMA" : "BORRADOR",
+      codigoVerificacion: verificationCode,
+      recordatoriosCreados: remindersCreated,
+      signersCount: canonicalSigners.length,
+      participantsCount: participants.length,
+      fileUrl: storageUrl,
+      hash: documentHash,
+      legacyFirmantes: legacySigners.length,
     });
-  } catch (err) {
-    console.error("❌ Error creando documento:", err);
-    return res.status(500).json({ message: "Error interno del servidor" });
+  } catch (error) {
+    try {
+      await client.query("ROLLBACK");
+    } catch (_) {}
+
+    client.release();
+
+    console.error("❌ Error en createDocument:", error);
+
+    return res.status(500).json({
+      message: "Error al crear el documento",
+      error: error.message,
+    });
   }
 }
 
+/* ================================
+   GET USER DOCUMENTS (FILTROS + PAGINACIÓN)
+   ================================ */
+
+function isGlobalAdmin(user) {
+  return user?.role === "SUPER_ADMIN" || user?.role === "ADMIN_GLOBAL";
+}
+
+function normalizeStatus(value) {
+  if (!value) return null;
+  return String(value).trim().toUpperCase();
+}
+
+async function getUserDocuments(req, res) {
+  try {
+    const user = req.user;
+
+    if (!user || !user.id) {
+      return res.status(401).json({ message: "No autenticado" });
+    }
+
+    const {
+      status,
+      search,
+      page = 1,
+      limit = 20,
+      company_id: queryCompanyId,
+      sort = "created_at",
+      order = "desc",
+    } = req.query;
+
+    const pageNum = Math.max(parseInt(page, 10) || 1, 1);
+    const limitNum = Math.min(Math.max(parseInt(limit, 10) || 20, 1), 100);
+    const offset = (pageNum - 1) * limitNum;
+
+    const allowedSortFields = {
+      created_at: "d.created_at",
+      updated_at: "d.updated_at",
+      title: "d.title",
+      status: "d.status",
+    };
+
+    const sortField = allowedSortFields[sort] || "d.created_at";
+    const sortDirection = String(order).toLowerCase() === "asc" ? "ASC" : "DESC";
+
+    const values = [];
+    const where = [];
+
+    if (isGlobalAdmin(user)) {
+      if (queryCompanyId) {
+        const companyIdNum = Number(queryCompanyId);
+        if (!Number.isNaN(companyIdNum)) {
+          values.push(companyIdNum);
+          where.push(`d.company_id = $${values.length}`);
+        }
+      }
+    } else {
+      if (!user.company_id) {
+        return res
+          .status(400)
+          .json({ message: "Tu usuario no tiene company_id asignado" });
+      }
+
+      values.push(user.company_id);
+      where.push(`d.company_id = $${values.length}`);
+    }
+
+    const normalizedStatus = normalizeStatus(status);
+    if (normalizedStatus) {
+      values.push(normalizedStatus);
+      where.push(`UPPER(d.status) = $${values.length}`);
+    }
+
+    if (search && String(search).trim()) {
+      values.push(`%${String(search).trim()}%`);
+      where.push(`(
+        d.title ILIKE $${values.length}
+        OR COALESCE(d.description, '') ILIKE $${values.length}
+        OR COALESCE(d.verification_code, '') ILIKE $${values.length}
+      )`);
+    }
+
+    const whereSql = where.length ? `WHERE ${where.join(" AND ")}` : "";
+
+    const countSql = `
+      SELECT COUNT(*) AS total
+      FROM documents d
+      ${whereSql}
+    `;
+
+    const countResult = await pool.query(countSql, values);
+    const total = Number(countResult.rows[0]?.total || 0);
+
+    values.push(limitNum);
+    const limitIndex = values.length;
+
+    values.push(offset);
+    const offsetIndex = values.length;
+
+    const dataSql = `
+      SELECT
+        d.id,
+        d.title,
+        d.description,
+        d.status,
+        d.company_id,
+        d.created_by,
+        d.created_at,
+        d.updated_at,
+        d.verification_code,
+        COALESCE(s.signers_count, 0) AS signers_count
+      FROM documents d
+      LEFT JOIN (
+        SELECT document_id, COUNT(*) AS signers_count
+        FROM document_signers
+        GROUP BY document_id
+      ) s ON s.document_id = d.id
+      ${whereSql}
+      ORDER BY ${sortField} ${sortDirection}
+      LIMIT $${limitIndex}
+      OFFSET $${offsetIndex}
+    `;
+
+    const dataResult = await pool.query(dataSql, values);
+
+    return res.json({
+      data: dataResult.rows,
+      pagination: {
+        page: pageNum,
+        limit: limitNum,
+        total,
+        totalPages: Math.ceil(total / limitNum),
+        hasNextPage: offset + limitNum < total,
+        hasPrevPage: pageNum > 1,
+      },
+      filters: {
+        status: normalizedStatus,
+        search: search || null,
+        company_id: queryCompanyId || (isGlobalAdmin(user) ? null : user.company_id),
+        sort,
+        order: sortDirection.toLowerCase(),
+      },
+    });
+  } catch (err) {
+    console.error("❌ Error obteniendo documentos del usuario:", err);
+    return res
+      .status(500)
+      .json({ message: "Error obteniendo documentos" });
+  }
+}
+
+/* ================================
+   EXPORTS
+   ================================ */
+
 module.exports = {
-  getUserDocuments,
   createDocument,
+  getUserDocuments,
 };

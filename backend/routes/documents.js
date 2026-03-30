@@ -8,13 +8,15 @@ const { upload, handleMulterError } = require("../middlewares/uploadPdf");
 const { validatePdf } = require("../middlewares/pdfValidator");
 
 const documentsController = require("../controllers/documents");
-const { resendReminder } = require("../controllers/documents/reminders");
+
 const {
-  downloadDocument,      // ← se usará para /:id/download
+  downloadDocument,
   downloadReportPdf,
   getDocumentAnalytics,
   previewDocument,
 } = require("../controllers/documents/report");
+
+const { resendReminder } = require("../controllers/documents/reminders");
 const {
   getReminderStatus,
   retryReminder,
@@ -27,9 +29,8 @@ const {
 const {
   createRedisRateLimitMiddleware,
 } = require("../utils/rateLimiter");
-const remindersQueue = require("../queues/remindersQueue");
 
-// Flujo multi‑party (tabla `documentos`)
+const remindersQueue = require("../queues/remindersQueue");
 const {
   validateCreateDocumentBody,
 } = require("../validators/createDocumentSchema");
@@ -42,15 +43,16 @@ const router = express.Router();
    HELPERS DE PERMISOS / MULTI‑TENANT
    ================================ */
 
-function isGlobalAdmin(user) {
-  return user?.role === "SUPER_ADMIN" || user?.role === "ADMIN_GLOBAL";
-}
+const isGlobalAdmin = (user) =>
+  user?.role === "SUPER_ADMIN" || user?.role === "ADMIN_GLOBAL";
 
 async function loadDocumentById(id) {
   const docRes = await db.query(
-    `SELECT id, owner_id, title, status, company_id
-     FROM documents
-     WHERE id = $1`,
+    `
+    SELECT id, owner_id, title, status, company_id
+    FROM documents
+    WHERE id = $1
+    `,
     [id]
   );
   return docRes.rowCount > 0 ? docRes.rows[0] : null;
@@ -94,6 +96,46 @@ async function checkDocumentCompanyScope(req, res, next) {
     return next();
   } catch (err) {
     console.error("❌ Error verificando permisos de documento:", err);
+    return res.status(500).json({ message: "Error interno del servidor" });
+  }
+}
+
+async function checkLegacyDocumentCompanyScope(req, res, next) {
+  try {
+    const id = Number(req.params.id);
+    const user = req.user;
+
+    if (Number.isNaN(id)) {
+      return res.status(400).json({ message: "ID de documento inválido" });
+    }
+
+    const docRes = await db.query(
+      `
+      SELECT id, creado_por, titulo, estado, company_id
+      FROM documentos
+      WHERE id = $1
+      `,
+      [id]
+    );
+
+    if (docRes.rowCount === 0) {
+      return res.status(404).json({ message: "Documento no encontrado" });
+    }
+
+    const doc = docRes.rows[0];
+
+    if (!isGlobalAdmin(user)) {
+      if (!user.company_id || doc.company_id !== user.company_id) {
+        return res
+          .status(403)
+          .json({ message: "No tienes permisos sobre este documento" });
+      }
+    }
+
+    req.documentLegacy = doc;
+    return next();
+  } catch (err) {
+    console.error("❌ Error verificando permisos de documento legacy:", err);
     return res.status(500).json({ message: "Error interno del servidor" });
   }
 }
@@ -186,34 +228,27 @@ function withDocumentAudit(action) {
    RUTAS GET - ESPECÍFICAS (SIN ID)
    ================================ */
 
-router.get("/stats", requireAuth, documentsController.getDocumentStats);
-router.get("/analytics", requireAuth, getDocumentAnalytics);
+// Logs de diagnóstico en arranque
+console.log(
+  ">>> documentsController.getDocumentStats type:",
+  typeof documentsController.getDocumentStats
+);
+console.log(
+  ">>> getDocumentAnalytics type:",
+  typeof getDocumentAnalytics
+);
 
-router.get("/export/excel", requireAuth, async (req, res) => {
-  try {
-    const { generarExcelDocumentos } = require("../services/excelExport");
+if (typeof documentsController.getDocumentStats === "function") {
+  router.get("/stats", requireAuth, documentsController.getDocumentStats);
+} else {
+  console.warn("[routes/documents] getDocumentStats no es función; ruta /stats deshabilitada");
+}
 
-    const excelBuffer = await generarExcelDocumentos({
-      userId: req.user.id,
-      companyId: req.user.company_id,
-      isGlobalAdmin: isGlobalAdmin(req.user),
-    });
-
-    const filename = `documentos-${new Date()
-      .toISOString()
-      .slice(0, 10)}.xlsx`;
-
-    res.setHeader(
-      "Content-Type",
-      "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
-    );
-    res.setHeader("Content-Disposition", `attachment; filename="${filename}"`);
-    return res.send(excelBuffer);
-  } catch (error) {
-    console.error("❌ Error exportando Excel:", error);
-    return res.status(500).json({ error: "Error exportando Excel" });
-  }
-});
+if (typeof getDocumentAnalytics === "function") {
+  router.get("/analytics", requireAuth, getDocumentAnalytics);
+} else {
+  console.warn("[routes/documents] getDocumentAnalytics no es función; ruta /analytics deshabilitada");
+}
 
 /* ================================
    RUTAS GET - AUDITORÍA LEGACY
@@ -248,25 +283,27 @@ router.get("/audit", requireAuth, async (req, res) => {
     }
 
     const whereSql = where.length ? `WHERE ${where.join(" AND ")}` : "";
-
     const safeLimit = Math.min(Number(limit) || 100, 1000);
+
     values.push(safeLimit);
     const limitIndex = values.length;
 
     const result = await db.query(
-      `SELECT
-         id,
-         documento_id,
-         usuario_id,
-         evento_tipo,
-         descripcion,
-         ip_address,
-         user_agent,
-         created_at
-       FROM auditoria_documentos
-       ${whereSql}
-       ORDER BY created_at DESC
-       LIMIT $${limitIndex}`,
+      `
+      SELECT
+        id,
+        documento_id,
+        usuario_id,
+        evento_tipo,
+        descripcion,
+        ip_address,
+        user_agent,
+        created_at
+      FROM auditoria_documentos
+      ${whereSql}
+      ORDER BY created_at DESC
+      LIMIT $${limitIndex}
+      `,
       values
     );
 
@@ -298,7 +335,7 @@ router.post(
 );
 
 /* ================================
-   RUTA POST /documents (JSON multi‑party)
+   RUTA POST /documents/multi-party (JSON multi‑party)
    ================================ */
 
 router.post("/multi-party", requireAuth, async (req, res) => {
@@ -324,6 +361,7 @@ router.post("/multi-party", requireAuth, async (req, res) => {
   } = req.body;
 
   const client = await db.connect();
+
   try {
     await client.query("BEGIN");
 
@@ -387,6 +425,7 @@ router.post("/multi-party", requireAuth, async (req, res) => {
     `;
 
     const createdSigners = [];
+
     for (const s of signers) {
       const signerRes = await client.query(signerInsertSql, [
         documento.id,
@@ -406,6 +445,7 @@ router.post("/multi-party", requireAuth, async (req, res) => {
         .toString()
         .split(",")[0]
         .trim() || req.socket.remoteAddress || null;
+
     const userAgent = req.headers["user-agent"] || null;
 
     const auditText = `
@@ -461,9 +501,9 @@ router.post("/multi-party", requireAuth, async (req, res) => {
   } catch (err) {
     await client.query("ROLLBACK");
     console.error("❌ Error creando documento multi-party:", err);
-    return res
-      .status(500)
-      .json({ message: "Error interno creando documento multi-party" });
+    return res.status(500).json({
+      message: "Error interno creando documento multi-party",
+    });
   } finally {
     client.release();
   }
@@ -516,7 +556,7 @@ router.post(
 router.post(
   "/enviar-flujo/:id",
   requireAuth,
-  checkDocumentCompanyScope,
+  checkLegacyDocumentCompanyScope,
   withDocumentAudit("DOCUMENT_FLOW_SENT"),
   documentsController.sendFlow
 );
@@ -524,34 +564,69 @@ router.post(
 // Firma pública legacy (por firmanteId)
 router.post("/firmar-flujo/:firmanteId", documentsController.signFlow);
 
+console.log(">>> getDocumentPdf type:", typeof documentsController.getDocumentPdf);
+console.log(">>> getTimeline type:", typeof documentsController.getTimeline);
+console.log(">>> getLegalTimeline type:", typeof documentsController.getLegalTimeline);
+console.log(">>> getSigners type:", typeof documentsController.getSigners);
+console.log(">>> previewDocument type:", typeof previewDocument);
+console.log(">>> downloadDocument type:", typeof downloadDocument);
+
 /* ================================
    RUTAS GET - CON :id
    ================================ */
 
-// PDF completo (URL firmada / JSON)
-router.get("/:id/pdf", documentsController.getDocumentPdf);
+console.log(">>> getDocumentPdf type:", typeof documentsController.getDocumentPdf);
+console.log(">>> getTimeline type:", typeof documentsController.getTimeline);
+console.log(">>> getLegalTimeline type:", typeof documentsController.getLegalTimeline);
+console.log(">>> getSigners type:", typeof documentsController.getSigners);
+console.log(">>> previewDocument type:", typeof previewDocument);
+console.log(">>> downloadDocument type:", typeof downloadDocument);
 
-// Preview para visor/miniatura (usa el buffer de report.js)
-router.get("/:id/preview", previewDocument);
+if (typeof documentsController.getDocumentPdf === "function") {
+  router.get("/:id/pdf", documentsController.getDocumentPdf);
+} else {
+  console.warn("[routes/documents] getDocumentPdf no es función; ruta /:id/pdf deshabilitada");
+}
 
-// Descarga para frontend (/api/documents/:id/download)
-router.get("/:id/download", downloadDocument);
+if (typeof previewDocument === "function") {
+  router.get("/:id/preview", previewDocument);
+} else {
+  console.warn("[routes/documents] previewDocument no es función; ruta /:id/preview deshabilitada");
+}
 
-router.get("/:id/timeline", documentsController.getTimeline);
+if (typeof downloadDocument === "function") {
+  router.get("/:id/download", downloadDocument);
+} else {
+  console.warn("[routes/documents] downloadDocument no es función; ruta /:id/download deshabilitada");
+}
 
-router.get(
-  "/:id/timeline-legal",
-  requireAuth,
-  checkDocumentCompanyScope,
-  documentsController.getLegalTimeline
-);
+if (typeof documentsController.getTimeline === "function") {
+  router.get("/:id/timeline", documentsController.getTimeline);
+} else {
+  console.warn("[routes/documents] getTimeline no es función; ruta /:id/timeline deshabilitada");
+}
 
-router.get(
-  "/:id/signers",
-  requireAuth,
-  checkDocumentCompanyScope,
-  documentsController.getSigners
-);
+if (typeof documentsController.getLegalTimeline === "function") {
+  router.get(
+    "/:id/timeline-legal",
+    requireAuth,
+    checkDocumentCompanyScope,
+    documentsController.getLegalTimeline
+  );
+} else {
+  console.warn("[routes/documents] getLegalTimeline no es función; ruta /:id/timeline-legal deshabilitada");
+}
+
+if (typeof documentsController.getSigners === "function") {
+  router.get(
+    "/:id/signers",
+    requireAuth,
+    checkDocumentCompanyScope,
+    documentsController.getSigners
+  );
+} else {
+  console.warn("[routes/documents] getSigners no es función; ruta /:id/signers deshabilitada");
+}
 
 /* ================================
    RUTAS POST - ACCIONES SOBRE :id
@@ -603,6 +678,7 @@ router.post(
       const {
         enviarRecordatorioManual,
       } = require("../services/reminderService");
+
       const result = await enviarRecordatorioManual(id);
 
       const metadata = buildDocumentAuditMetadata({
@@ -662,11 +738,13 @@ router.post(
     if (!user || !user.company_id) {
       return res.status(401).json({ message: "No autenticado" });
     }
+
     if (Number.isNaN(documentoId) || Number.isNaN(signerId)) {
       return res.status(400).json({ message: "IDs inválidos" });
     }
 
     const client = await db.connect();
+
     try {
       await client.query("BEGIN");
 
@@ -678,10 +756,12 @@ router.post(
         `,
         [documentoId]
       );
+
       if (docRes.rowCount === 0) {
         await client.query("ROLLBACK");
         return res.status(404).json({ message: "Documento no encontrado" });
       }
+
       const documento = docRes.rows[0];
 
       if (!isGlobalAdmin(user) && documento.company_id !== user.company_id) {
@@ -706,10 +786,12 @@ router.post(
         `,
         [signerId, documentoId]
       );
+
       if (signerRes.rowCount === 0) {
         await client.query("ROLLBACK");
         return res.status(404).json({ message: "Signer no encontrado" });
       }
+
       const signer = signerRes.rows[0];
 
       if (signer.company_id && signer.company_id !== user.company_id) {
@@ -737,6 +819,7 @@ router.post(
         `,
         [signer.id, token, expiresAt.toISOString()]
       );
+
       const invitation = inviteRes.rows[0];
 
       await client.query(
@@ -753,6 +836,7 @@ router.post(
           .toString()
           .split(",")[0]
           .trim() || req.socket.remoteAddress || null;
+
       const userAgent = req.headers["user-agent"] || null;
 
       const auditText = `
@@ -823,9 +907,9 @@ router.post(
     } catch (err) {
       await client.query("ROLLBACK");
       console.error("❌ Error invitando signer:", err);
-      return res
-        .status(500)
-        .json({ message: "Error interno enviando invitación" });
+      return res.status(500).json({
+        message: "Error interno enviando invitación",
+      });
     } finally {
       client.release();
     }

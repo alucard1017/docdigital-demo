@@ -191,7 +191,7 @@ body {
   }
 }
 
-/* ---------- TABLA BANDEJA DE DOCUMENTOS (DESKTOP) ---------- */
+/* ---------- TABLA BANDEJA DE DOCUMENTOS / USUARIOS ---------- */
 
 .table-wrapper {
   overflow-x: hidden;
@@ -208,6 +208,13 @@ body {
   table-layout: fixed;
 }
 
+/* QUITAR bordes internos raros */
+.doc-table th,
+.doc-table td {
+  border: none;
+}
+
+/* Cabeceras */
 .doc-table th {
   background: #020617;
   padding: 12px 8px;
@@ -223,6 +230,7 @@ body {
   border-bottom: 1px solid #1f2937;
 }
 
+/* Celdas */
 .doc-table td {
   padding: 12px 8px;
   border-bottom: 1px solid #111827;
@@ -231,20 +239,18 @@ body {
   color: #e5e7eb;
 }
 
-/* 1) N° de contrato */
+/* Anchos genéricos (puedes ajustarlos para usuarios) */
 .doc-table td:nth-child(1) {
   width: 80px;
   min-width: 80px;
   text-align: center;
 }
 
-/* 2) Título del documento (incluye fecha) */
 .doc-table td:nth-child(2) {
   width: 220px;
   min-width: 220px;
 }
 
-/* 3) Tipo de trámite */
 .doc-table td:nth-child(3) {
   width: 160px;
   min-width: 160px;
@@ -253,21 +259,19 @@ body {
   text-overflow: ellipsis;
 }
 
-/* 4) Estado */
 .doc-table td:nth-child(4) {
   width: 140px;
   min-width: 140px;
   text-align: center;
 }
 
-/* 5) Firmante */
 .doc-table td:nth-child(5) {
   width: 180px;
   min-width: 180px;
   padding-left: 16px;
 }
 
-/* 6) Acciones */
+/* Última columna (acciones) */
 .doc-table th:last-child,
 .doc-table td:last-child {
   text-align: center;
@@ -278,6 +282,7 @@ body {
   min-width: 220px;
 }
 
+/* Botones en última columna (para docs; en usuarios igual sirve) */
 .doc-table td:last-child > div {
   display: inline-flex;
   flex-direction: column;
@@ -318,8 +323,7 @@ body {
   color: #7f1d1d;
 }
 
-/* Hover fila */
-
+/* Hover fila genérico */
 .doc-table tbody tr:hover {
   background-color: rgba(15, 23, 42, 0.9);
   cursor: pointer;
@@ -327,18 +331,100 @@ body {
   box-shadow: 0 6px 18px rgba(15, 23, 42, 0.9);
 }
 
+/* Última columna (Acciones) centrada y con ancho fijo */
+.doc-table thead tr th:last-child,
+.doc-table tbody tr td:last-child {
+  text-align: center !important;      /* antes right */
+  white-space: nowrap !important;
+  padding: 12px 16px !important;
+  min-width: 420px !important;
+  width: 420px !important;
+}
 
-/* Badges de estado genéricos */
+/* Botones en columna Acciones: en fila centrada */
+.doc-table tbody tr td:last-child {
+  display: flex;
+  justify-content: center;            /* centra los botones */
+  gap: 8px;
+}
 
-.status-badge {
-  display: inline-block;
-  min-width: 70px;
-  padding: 4px 8px;
-  border-radius: 9999px;
-  font-size: 0.65rem;
-  font-weight: 800;
-  text-align: center;
-  white-space: nowrap;
+/* ---------- VERSIÓN MOBILE: TABLA -> CARDS (6 columnas) ---------- */
+
+@media (max-width: 768px) {
+  .doc-table,
+  .doc-table thead,
+  .doc-table tbody,
+  .doc-table th,
+  .doc-table tr,
+  .doc-table td {
+    display: block;
+    width: 100%;
+  }
+
+  .doc-table thead {
+    display: none;
+  }
+
+  .doc-table tr {
+    background: #020617;
+    border: 1px solid #1f2937;
+    border-radius: 16px;
+    margin-bottom: 12px;
+    padding: 10px 12px;
+    box-shadow: none;
+  }
+
+  .doc-table td {
+    border: none;
+    padding: 4px 0;
+    font-size: 0.85rem;
+  }
+
+  .doc-table td:nth-child(2) {
+    display: block;
+  }
+
+  .doc-table td:nth-child(1)::before {
+    content: "N° contrato: ";
+    font-weight: 600;
+    color: #64748b;
+  }
+
+  .doc-table td:nth-child(3)::before {
+    content: "Tipo: ";
+    font-weight: 600;
+    color: #64748b;
+  }
+
+  .doc-table td:nth-child(4)::before {
+    content: "Estado: ";
+    font-weight: 600;
+    color: #64748b;
+  }
+
+  .doc-table td:nth-child(5)::before {
+    content: "Firmante: ";
+    font-weight: 600;
+    color: #64748b;
+  }
+
+  .doc-table th:last-child,
+  .doc-table td:last-child {
+    width: 100%;
+    min-width: 100%;
+    padding-top: 8px;
+  }
+
+  .doc-table td:last-child > .doc-actions {
+    flex-direction: row;
+    justify-content: flex-start;
+    gap: 8px;
+  }
+
+  .doc-table td:last-child button {
+    max-width: none;
+    width: auto;
+  }
 }
 
 /* -------- Estilos específicos DocumentRow -------- */
@@ -671,17 +757,6 @@ body {
   animation: spin 0.6s linear infinite;
 }
 
-/* Línea vertical a la izquierda de la columna Acciones */
-.acciones-header::before {
-  content: "";
-  position: absolute;
-  left: -1px;              /* se pega al borde izquierdo del th */
-  top: -9999px;            /* empieza muy arriba */
-  bottom: -9999px;         /* y termina muy abajo */
-  width: 1px;
-  background: rgba(255, 255, 255, 0.2);
-  pointer-events: none;
-}
 
 @keyframes spin {
   to {
@@ -1153,4 +1228,30 @@ body {
 /* Botón full width */
 .btn-full {
   width: 100%;
+}
+
+/* === SCROLL TABLA USUARIOS ADMIN === */
+.table-scroll-container {
+  max-height: 500px; /* Ajusta según tu layout, o usa calc(100vh - 300px) */
+  overflow-y: auto;
+  overflow-x: auto;
+}
+
+.table-scroll-container::-webkit-scrollbar {
+  width: 8px;
+  height: 8px;
+}
+
+.table-scroll-container::-webkit-scrollbar-track {
+  background: #1f2937;
+  border-radius: 4px;
+}
+
+.table-scroll-container::-webkit-scrollbar-thumb {
+  background: #4b5563;
+  border-radius: 4px;
+}
+
+.table-scroll-container::-webkit-scrollbar-thumb:hover {
+  background: #6b7280;
 }

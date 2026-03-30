@@ -2,12 +2,6 @@
 import { useEffect, useRef, useCallback } from "react";
 import { io } from "socket.io-client";
 
-/**
- * Construye una URL de WebSocket limpia:
- * - Usa VITE_SOCKET_URL si existe.
- * - Si no, usa VITE_API_URL PERO quitando "/api" del final.
- * - Fallback: http://localhost:4000
- */
 const buildSocketUrl = () => {
   const rawSocket = import.meta.env.VITE_SOCKET_URL;
   const rawApi = import.meta.env.VITE_API_URL;
@@ -20,7 +14,7 @@ const buildSocketUrl = () => {
     return rawApi
       .trim()
       .replace(/\/api\/?$/i, "") // quita /api o /api/
-      .replace(/\/+$/, ""); // quita barras finales
+      .replace(/\/+$/, "");
   }
 
   return "http://localhost:4000";
@@ -34,7 +28,12 @@ export function useSocket(accessToken) {
 
   useEffect(() => {
     if (!accessToken) {
-      // Si no hay token, no abrimos socket
+      // Sin token, aseguramos que no quede socket colgado
+      if (socketRef.current) {
+        socketRef.current.disconnect();
+        socketRef.current = null;
+        listenersRef.current = {};
+      }
       return;
     }
 
@@ -68,16 +67,13 @@ export function useSocket(accessToken) {
 
     return () => {
       console.log("[WS] Cleanup: desconectando socket");
-
       const currentSocket = socketRef.current || socket;
 
       if (currentSocket) {
         const entries = Object.entries(listenersRef.current || {});
         entries.forEach(([event, callbacks]) => {
           const safeCallbacks = Array.isArray(callbacks) ? callbacks : [];
-          safeCallbacks.forEach((cb) => {
-            currentSocket.off(event, cb);
-          });
+          safeCallbacks.forEach((cb) => currentSocket.off(event, cb));
         });
 
         listenersRef.current = {};
@@ -116,5 +112,6 @@ export function useSocket(accessToken) {
     }
   }, []);
 
+  // Devuelve siempre un objeto con on/off definido
   return { on, off };
 }

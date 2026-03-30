@@ -10,12 +10,70 @@ function buildPublicSignUrl(token) {
   return `${FRONT_BASE_URL}/firma-publica?token=${token}`;
 }
 
+async function markReminderAsFailed(reminderId, message) {
+  await db.query(
+    `
+    UPDATE recordatorios
+    SET
+      estado = 'fallido',
+      status = 'FAILED',
+      intentos = COALESCE(intentos, attempt, 0) + 1,
+      attempt = COALESCE(attempt, intentos, 0) + 1,
+      error_message = $2,
+      updated_at = NOW()
+    WHERE id = $1
+    `,
+    [reminderId, message]
+  );
+}
+
+async function markReminderAsProcessed(reminderId) {
+  await db.query(
+    `
+    UPDATE recordatorios
+    SET
+      estado = 'enviado',
+      status = 'SENT',
+      sent_at = NOW(),
+      intentos = COALESCE(intentos, attempt, 0) + 1,
+      attempt = COALESCE(attempt, intentos, 0) + 1,
+      updated_at = NOW()
+    WHERE id = $1
+    `,
+    [reminderId]
+  );
+}
+
+async function markReminderRetry(reminderId, nextState, errorMessage) {
+  const legacyStatusMap = {
+    pendiente: "PENDING",
+    enviado: "SENT",
+    fallido: "FAILED",
+    cancelado: "CANCELLED",
+  };
+
+  await db.query(
+    `
+    UPDATE recordatorios
+    SET
+      estado = $1,
+      status = $2,
+      intentos = COALESCE(intentos, attempt, 0) + 1,
+      attempt = COALESCE(attempt, intentos, 0) + 1,
+      error_message = $3,
+      updated_at = NOW()
+    WHERE id = $4
+    `,
+    [nextState, legacyStatusMap[nextState] || "PENDING", errorMessage, reminderId]
+  );
+}
+
 /**
  * Procesa recordatorios pendientes:
- * - Busca recordatorios con scheduled_at <= NOW()
- * - Usa el signer real (document_signers) para obtener el sign_token
- * - Intenta enviar email
- * - Actualiza status y attempt
+ * - Busca recordatorios cuyo próximo intento ya venció
+ * - Resuelve token de firma del firmante
+ * - Envía email si encuentra token
+ * - Actualiza estados e intentos en esquema nuevo + legacy
  */
 async function procesarRecordatoriosPendientes() {
   try {
@@ -23,59 +81,49 @@ async function procesarRecordatoriosPendientes() {
 
     const recordatoriosRes = await db.query(
       `
-      SELECT 
+      SELECT
         r.id,
-        r.documento_id,          -- referencia al documento original (tabla documentos)
-        r.firmante_id,           -- id del firmante en tabla firmantes (modelo viejo)
-        r.email,
-        r.attempt,
-        r.max_attempts,
-        r.status,
-        d.titulo,
+        r.documento_id,
+        r.firmante_id,
+        COALESCE(r.destinatario_email, r.email) AS email_destino,
+        COALESCE(r.intentos, r.attempt, 0) AS intentos_actuales,
+        COALESCE(r.max_intentos, r.max_attempts, 3) AS max_intentos_actuales,
+        COALESCE(r.estado, LOWER(r.status), 'pendiente') AS estado_actual,
+        COALESCE(r.proximo_intento_at, r.scheduled_at) AS fecha_programada,
+        d.title,
         ds.sign_token AS token_firmante
       FROM recordatorios r
-      JOIN documentos d ON d.id = r.documento_id
-      LEFT JOIN firmantes f ON f.id = r.firmante_id
-      LEFT JOIN documents nd
-        ON nd.nuevo_documento_id = d.id
+      JOIN documents d
+        ON d.id = r.documento_id
       LEFT JOIN document_signers ds
-        ON ds.document_id = nd.id
-       AND ds.email = r.email
-      WHERE r.status = 'PENDING'
-        AND r.scheduled_at <= NOW()
-        AND r.attempt < r.max_attempts
-      ORDER BY r.scheduled_at ASC
+        ON ds.document_id = d.id
+       AND LOWER(ds.email) = LOWER(COALESCE(r.destinatario_email, r.email))
+      WHERE COALESCE(r.estado, LOWER(r.status), 'pendiente') = 'pendiente'
+        AND COALESCE(r.proximo_intento_at, r.scheduled_at) <= NOW()
+        AND COALESCE(r.intentos, r.attempt, 0) < COALESCE(r.max_intentos, r.max_attempts, 3)
+      ORDER BY COALESCE(r.proximo_intento_at, r.scheduled_at) ASC
       LIMIT 100
       `
     );
 
     const recordatorios = recordatoriosRes.rows;
-    console.log(
-      `📬 Encontrados ${recordatorios.length} recordatorios para procesar`
-    );
+    console.log(`📬 Encontrados ${recordatorios.length} recordatorios para procesar`);
 
     let enviados = 0;
     let fallidos = 0;
 
     for (const rec of recordatorios) {
       try {
-        // Preferir token del modelo nuevo; si no existe, no enviamos
         if (!rec.token_firmante) {
           console.warn(
-            `⚠️ Recordatorio ${rec.id} sin token_firmante (sign_token); se marca como FAILED`
+            `⚠️ Recordatorio ${rec.id} sin token_firmante; se marca como fallido`
           );
 
-          await db.query(
-            `
-            UPDATE recordatorios
-            SET status = 'FAILED',
-                attempt = attempt + 1,
-                error_message = 'Token de firma no encontrado para este firmante',
-                updated_at = NOW()
-            WHERE id = $1
-            `,
-            [rec.id]
+          await markReminderAsFailed(
+            rec.id,
+            "Token de firma no encontrado para este firmante"
           );
+
           fallidos++;
           continue;
         }
@@ -83,50 +131,32 @@ async function procesarRecordatoriosPendientes() {
         const url = buildPublicSignUrl(rec.token_firmante);
 
         await sendSigningInvitation(
-          rec.email,
-          rec.titulo,
+          rec.email_destino,
+          rec.title,
           url,
-          rec.email.split("@")[0]
+          rec.email_destino.split("@")[0]
         );
 
-        await db.query(
-          `
-          UPDATE recordatorios
-          SET status = 'SENT',
-              sent_at = NOW(),
-              attempt = attempt + 1,
-              updated_at = NOW()
-          WHERE id = $1
-          `,
-          [rec.id]
-        );
+        await markReminderAsProcessed(rec.id);
 
         console.log(
-          `✅ Recordatorio ${rec.id} enviado a ${rec.email} (intento ${
-            rec.attempt + 1
-          }/${rec.max_attempts})`
+          `✅ Recordatorio ${rec.id} enviado a ${rec.email_destino} (intento ${
+            rec.intentos_actuales + 1
+          }/${rec.max_intentos_actuales})`
         );
+
         enviados++;
       } catch (emailErr) {
-        const nuevoIntento = rec.attempt + 1;
-        const status =
-          nuevoIntento >= rec.max_attempts ? "FAILED" : "PENDING";
+        const nuevoIntento = rec.intentos_actuales + 1;
+        const nextState =
+          nuevoIntento >= rec.max_intentos_actuales ? "fallido" : "pendiente";
 
-        await db.query(
-          `
-          UPDATE recordatorios
-          SET status = $1,
-              attempt = attempt + 1,
-              error_message = $2,
-              updated_at = NOW()
-          WHERE id = $3
-          `,
-          [status, emailErr.message, rec.id]
-        );
+        await markReminderRetry(rec.id, nextState, emailErr.message);
 
         console.error(
           `❌ Error enviando recordatorio ${rec.id}: ${emailErr.message}`
         );
+
         fallidos++;
       }
     }
@@ -140,20 +170,22 @@ async function procesarRecordatoriosPendientes() {
 }
 
 /**
- * Cancela recordatorios de documentos firmados o rechazados
- * (usa la tabla documentos porque recordatorios.documento_id apunta allí)
+ * Cancela recordatorios de documentos completados
  */
 async function cancelarRecordatoriosFirmados() {
   try {
     const canceladosRes = await db.query(
       `
       UPDATE recordatorios
-      SET status = 'CANCELLED',
-          updated_at = NOW()
-      WHERE status IN ('PENDING', 'SENT')
+      SET
+        estado = 'cancelado',
+        status = 'CANCELLED',
+        updated_at = NOW()
+      WHERE COALESCE(estado, LOWER(status), 'pendiente') IN ('pendiente', 'enviado')
         AND documento_id IN (
-          SELECT id FROM documentos
-          WHERE estado IN ('FIRMADO', 'RECHAZADO')
+          SELECT id
+          FROM documents
+          WHERE COALESCE(status, estado) IN ('FIRMADO', 'RECHAZADO', 'COMPLETADO')
         )
       RETURNING id
       `
@@ -169,9 +201,6 @@ async function cancelarRecordatoriosFirmados() {
   }
 }
 
-/**
- * Inicia el scheduler (cada hora a los :15)
- */
 function iniciarReminderScheduler() {
   cron.schedule("15 * * * *", async () => {
     console.log("▶️ Ejecutando cron de recordatorios...");

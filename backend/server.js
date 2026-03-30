@@ -26,8 +26,11 @@ const { requireAuth, requireRole } = require("./routes/auth");
 const plansRoutes = require("./routes/plans");
 const templatesRoutes = require("./routes/templates");
 
+// NUEVO: helpers de plan
+const { isNonExpiringUser } = require("./utils/billing");
+
 /* ================================
-   INICIALIZAR WORKER DE BULLMQ (BACKGROUND JOBS)
+   INICIALIZAR WORKER DE BULLMQ
    ================================ */
 try {
   // require("./queues/remindersWorker");
@@ -40,7 +43,7 @@ try {
 }
 
 /* ================================
-   INICIALIZAR REMINDER SCHEDULER (CRON)
+   INICIALIZAR REMINDER SCHEDULER
    ================================ */
 try {
   const { iniciarReminderScheduler } = require("./jobs/reminderScheduler");
@@ -68,6 +71,8 @@ const adminRoutes = require("./routes/admin");
 const onboardingRoutes = require("./routes/onboarding");
 const billingRoutes = require("./routes/billing");
 const publicDocsRouter = require("./routes/publicDocs");
+const notaryRouter = require("./routes/notary");
+
 
 /* ================================
    LOG DE INICIO
@@ -306,6 +311,35 @@ app.get("/api/sentry-test", (req, res) => {
 console.log("✓ Ruta GET /api/sentry-test registrada");
 
 /* ================================
+   MIDDLEWARE requireActivePlan
+   ================================ */
+// Usuarios que nunca expiran ni pagan: SUPER_ADMIN, ADMIN_GLOBAL, AOEM SAS (company_id=4)
+function requireActivePlan(req, res, next) {
+  const user = req.user;
+
+  if (!user) {
+    return res.status(401).json({ message: "No autenticado" });
+  }
+
+  if (isNonExpiringUser(user)) {
+    return next();
+  }
+
+  if (!user.plan || !user.plan_expires_at) {
+    return res.status(402).json({ message: "No tienes un plan activo" });
+  }
+
+  const now = new Date();
+  const expires = new Date(user.plan_expires_at);
+
+  if (expires < now) {
+    return res.status(402).json({ message: "Tu plan ha expirado" });
+  }
+
+  next();
+}
+
+/* ================================
    RUTAS PRINCIPALES API
    ================================ */
 
@@ -313,21 +347,23 @@ console.log("✓ Ruta GET /api/sentry-test registrada");
 app.use("/api/auth", loginLimiter, authRoutes);
 console.log("✓ Rutas /api/auth registradas");
 
-// Usuarios
-app.use("/api/users", usersRouter);
+// Usuarios (solo autenticado, sin plan obligatorio)
+app.use("/api/users", requireAuth, usersRouter);
 console.log("✓ Rutas /api/users registradas");
 
 // Estado del sistema
-app.use("/api/status", statusRoutes);
+app.use("/api/status", requireAuth, statusRoutes);
 console.log("✓ Rutas /api/status registradas");
 
-// Logs / auditoría
-app.use("/api/logs", logsRoutes);
+// Logs / auditoría (normalmente solo admins, ya manejas roles dentro del router)
+app.use("/api/logs", requireAuth, logsRoutes);
 console.log("✓ Rutas /api/logs registradas");
 
-// Documentos (alias antiguo + nuevo prefijo)
+// Documentos (requiere auth + plan activo salvo AOEM/admins especiales)
 app.use(
   "/api/docs",
+  requireAuth,
+  requireActivePlan,
   (req, res, next) => {
     console.log(`DEBUG DOCS (alias) >> ${req.method} ${req.originalUrl}`);
     next();
@@ -337,6 +373,8 @@ app.use(
 
 app.use(
   "/api/documents",
+  requireAuth,
+  requireActivePlan,
   (req, res, next) => {
     console.log(`DEBUG DOCUMENTS >> ${req.method} ${req.originalUrl}`);
     next();
@@ -361,41 +399,43 @@ console.log("✓ Rutas /api/public registradas");
 app.use("/api/public", publicRegisterRoutes);
 console.log("✓ Rutas /api/public/register registradas");
 
-// Empresas
-app.use("/api/companies", companiesRoutes);
+// Empresas (requiere plan)
+app.use("/api/companies", requireAuth, requireActivePlan, companiesRoutes);
 console.log("✓ Rutas /api/companies registradas");
 
 // Recordatorios
-app.use("/api/reminders", remindersRoutes);
+app.use("/api/reminders", requireAuth, requireActivePlan, remindersRoutes);
 console.log("✓ Rutas /api/reminders registradas");
 
 // Analytics
-app.use("/api/analytics", analyticsRoutes);
+app.use("/api/analytics", requireAuth, requireActivePlan, analyticsRoutes);
 console.log("✓ Rutas /api/analytics registradas");
 
-// Planes
-app.use("/api/plans", plansRoutes);
+// Planes (puede ser solo admin; por ahora solo auth)
+app.use("/api/plans", requireAuth, plansRoutes);
 console.log("✓ Rutas /api/plans registradas");
 
 // Templates
-app.use("/api/templates", templatesRoutes);
+app.use("/api/templates", requireAuth, requireActivePlan, templatesRoutes);
 console.log("✓ Rutas /api/templates registradas");
 
 // Notificaciones
-app.use("/api/notifications", notificationsRoutes);
+app.use("/api/notifications", requireAuth, notificationsRoutes);
 console.log("✓ Rutas /api/notifications registradas");
 
 // Admin
-app.use("/api/admin", adminRoutes);
+app.use("/api/admin", requireAuth, adminRoutes);
 console.log("✓ Rutas /api/admin registradas");
 
 // Onboarding
-app.use("/api/onboarding", onboardingRoutes);
+app.use("/api/onboarding", requireAuth, onboardingRoutes);
 console.log("✓ Rutas /api/onboarding registradas");
 
-app.use("/api/billing", billingRoutes);
+app.use("/api/billing", requireAuth, billingRoutes);
 
 app.use("/public", publicDocsRouter);
+
+app.use("/api/notary", notaryRouter);
 
 /* ================================
    RUTA STORAGE / URLs FIRMADAS

@@ -4,7 +4,7 @@ import api from "../api/client";
 import { UserForm } from "../components/UserForm";
 
 function normalizeRun(run) {
-  return (run || "").replace(/[.\\-]/g, "");
+  return (run || "").replace(/[.\-]/g, "");
 }
 
 function formatRunVisual(value) {
@@ -456,7 +456,7 @@ export function UsersAdminView() {
         </label>
       </div>
 
-            {/* Tabla o vacío */}
+      {/* Tabla o vacío */}
       {users.length === 0 ? (
         <div
           style={{
@@ -484,240 +484,225 @@ export function UsersAdminView() {
             padding: 12,
           }}
         >
-          <div
-            className="table-wrapper"
-            style={{
-              borderRadius: 12,
-              background: "#020617",
-              border: "1px solid #1f2937",
-              overflowX: "auto",
-            }}
-          >
-            <table
-              className="doc-table"
+          <div className="table-scroll-container">
+            <div
+              className="table-wrapper"
               style={{
-                minWidth: 900,
-                width: "100%",
-                borderCollapse: "collapse",
+                borderRadius: 12,
+                background: "#020617",
+                border: "1px solid #1f2937",
+                overflowX: "auto",
               }}
             >
-              <thead>
-                <tr>
-                  <th style={{ width: 40 }}>ID</th>
-                  <th style={{ width: 130 }}>RUN / NIT</th>
-                  <th style={{ width: 180 }}>Nombre completo</th>
-                  <th style={{ width: 220, textAlign: "center" }}>Correo</th>
-                  <th style={{ width: 80, textAlign: "center" }}>Empresa</th>
-                  <th
-                    className="col-role"
-                    style={{ width: 120, textAlign: "center" }}
-                  >
-                    Rol
-                  </th>
-                  <th
-                    className="col-plan"
-                    style={{ width: 90, textAlign: "center" }}
-                  >
-                    Plan
-                  </th>
-                  <th
-                    style={{
-                      textAlign: "center",
-                      width: 90,
-                      borderRight: "1px solid rgba(148, 163, 184, 0.6)",
-                    }}
-                  >
-                    Estado
-                  </th>
-                  <th
-                    style={{
-                      textAlign: "right",
-                      minWidth: 260,
-                      paddingLeft: 16,
-                      paddingRight: 24,
-                    }}
-                  >
-                    Acciones
-                  </th>
-                </tr>
-              </thead>
-              <tbody>
-                {users.map((u) => {
-                  const isInactive = u.active === false;
-                  const isTargetOwner = normalizeRun(u.run) === OWNER_RUN;
-                  const isTargetAdminLike = esAdminPotente(u.role);
-
-                  const canToggle =
-                    canManage &&
-                    !isTargetOwner &&
-                    (isOwner || !isTargetAdminLike);
-
-                  const canEditRow =
-                    canManage &&
-                    (!isTargetOwner || isOwner) &&
-                    (isOwner || !isTargetAdminLike);
-
-                  const canReset = canEditRow;
-                  const canDelete =
-                    canManage &&
-                    !isTargetOwner &&
-                    (isOwner || isSuper || isGlobal || !isTargetAdminLike);
-
-                  return (
-                    <tr
-                      key={u.id}
-                      className={isInactive ? "row-inactive" : ""}
-                      style={
-                        isInactive
-                          ? { opacity: 0.6, backgroundColor: "#020617" }
-                          : {}
-                      }
+              <table
+                className="doc-table"
+                style={{
+                  minWidth: 900,
+                  width: "100%",
+                  borderCollapse: "collapse",
+                }}
+              >
+                <thead>
+                  <tr>
+                    <th style={{ width: 40 }}>ID</th>
+                    <th style={{ width: 130 }}>RUN / NIT</th>
+                    <th style={{ width: 180 }}>Nombre completo</th>
+                    <th style={{ width: 220, textAlign: "center" }}>Correo</th>
+                    <th style={{ width: 80, textAlign: "center" }}>Empresa</th>
+                    <th
+                      className="col-role"
+                      style={{ width: 120, textAlign: "center" }}
                     >
-                      <td>{u.id}</td>
-                      <td>{formatRunVisual(u.run) || "-"}</td>
-                      <td>{u.name || "-"}</td>
-                      <td style={{ textAlign: "center" }}>
-                        {u.email || "-"}
-                      </td>
-                      <td
-                        style={{
-                          textAlign: "center",
-                          padding: "4px 0",
-                        }}
+                      Rol
+                    </th>
+                    <th
+                      className="col-plan"
+                      style={{ width: 90, textAlign: "center" }}
+                    >
+                      Plan
+                    </th>
+                    <th
+                      style={{
+                        textAlign: "center",
+                        width: 90,
+                      }}
+                    >
+                      Estado
+                    </th>
+                    <th>Acciones</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {users.map((u) => {
+                    const isInactive = u.active === false;
+                    const isTargetOwner = normalizeRun(u.run) === OWNER_RUN;
+                    const isTargetAdminLike = esAdminPotente(u.role);
+
+                    const canToggle =
+                      canManage &&
+                      !isTargetOwner &&
+                      (isOwner || !isTargetAdminLike);
+
+                    const canEditRow =
+                      canManage &&
+                      (!isTargetOwner || isOwner) &&
+                      (isOwner || !isTargetAdminLike);
+
+                    const canReset = canEditRow;
+                    const canDelete =
+                      canManage &&
+                      !isTargetOwner &&
+                      (isOwner || isSuper || isGlobal || !isTargetAdminLike);
+
+                    return (
+                      <tr
+                        key={u.id}
+                        className={isInactive ? "row-inactive" : ""}
+                        style={
+                          isInactive
+                            ? { opacity: 0.6, backgroundColor: "#020617" }
+                            : {}
+                        }
                       >
-                        <span
+                        <td>{u.id}</td>
+                        <td>{formatRunVisual(u.run) || "-"}</td>
+                        <td>{u.name || "-"}</td>
+                        <td style={{ textAlign: "center" }}>
+                          {u.email || "-"}
+                        </td>
+                        <td
                           style={{
-                            display: "inline-block",
-                            minWidth: 36,
-                            padding: "2px 6px",
-                            borderRadius: 9999,
-                            backgroundColor: "#0f172a",
-                            fontSize: "0.75rem",
-                            color: "#e5e7eb",
+                            textAlign: "center",
+                            padding: "4px 0",
                           }}
                         >
-                          {u.company_id ?? "-"}
-                        </span>
-                      </td>
-                      <td
-                        className="col-role"
-                        style={{ textAlign: "center" }}
-                      >
-                        <span
-                          className="badge-role"
-                          data-role={u.role || "USER"}
-                        >
-                          {u.role || "USER"}
-                        </span>
-                      </td>
-                      <td
-                        className="col-plan"
-                        style={{ textAlign: "center" }}
-                      >
-                        {u.plan ? (
                           <span
                             style={{
                               display: "inline-block",
-                              padding: "2px 8px",
+                              minWidth: 36,
+                              padding: "2px 6px",
                               borderRadius: 9999,
+                              backgroundColor: "#0f172a",
                               fontSize: "0.75rem",
-                              fontWeight: 600,
-                              backgroundColor:
-                                u.plan.toLowerCase() === "pro"
-                                  ? "#1d4ed8"
-                                  : "#111827",
                               color: "#e5e7eb",
                             }}
                           >
-                            {u.plan.toUpperCase()}
+                            {u.company_id ?? "-"}
                           </span>
-                        ) : (
-                          "-"
-                        )}
-                      </td>
-                      <td
-                        style={{
-                          textAlign: "center",
-                          borderRight:
-                            "1px solid rgba(148, 163, 184, 0.6)",
-                        }}
-                      >
-                        {canToggle ? (
-                          <button
-                            type="button"
-                            onClick={() => toggleActive(u)}
-                            className="btn-pill"
-                            disabled={saving}
-                            style={
-                              u.active
-                                ? {
-                                    background: "#022c22",
-                                    color: "#6ee7b7",
-                                    border: "1px solid #059669",
-                                  }
-                                : {
-                                    background: "#111827",
-                                    color: "#9ca3af",
-                                    border: "1px solid #4b5563",
-                                  }
-                            }
-                          >
-                            {u.active ? "ACTIVO" : "INACTIVO"}
-                          </button>
-                        ) : (
+                        </td>
+                        <td
+                          className="col-role"
+                          style={{ textAlign: "center" }}
+                        >
                           <span
-                            style={{
-                              fontSize: "0.75rem",
-                              color: "#9ca3af",
-                            }}
+                            className="badge-role"
+                            data-role={u.role || "USER"}
                           >
-                            {u.active ? "ACTIVO" : "INACTIVO"}
+                            {u.role || "USER"}
                           </span>
-                        )}
-                      </td>
-                      <td
-                        style={{
-                          textAlign: "right",
-                          paddingRight: 24,
-                        }}
-                      >
-                        {canEditRow && (
-                          <button
-                            type="button"
-                            className="btn-link"
-                            onClick={() => handleEditUser(u)}
-                            style={{ marginRight: 8 }}
-                          >
-                            Editar
-                          </button>
-                        )}
-                        {canReset && (
-                          <button
-                            type="button"
-                            className="btn-link"
-                            onClick={() => handleResetPassword(u)}
-                            disabled={saving}
-                            style={{ marginRight: 8 }}
-                          >
-                            Resetear clave
-                          </button>
-                        )}
-                        {canDelete && (
-                          <button
-                            type="button"
-                            className="btn-link btn-link-danger"
-                            onClick={() => handleDeleteUser(u)}
-                            disabled={saving}
-                          >
-                            Eliminar
-                          </button>
-                        )}
-                      </td>
-                    </tr>
-                  );
-                })}
-              </tbody>
-            </table>
+                        </td>
+                        <td
+                          className="col-plan"
+                          style={{ textAlign: "center" }}
+                        >
+                          {u.plan ? (
+                            <span
+                              style={{
+                                display: "inline-block",
+                                padding: "2px 8px",
+                                borderRadius: 9999,
+                                fontSize: "0.75rem",
+                                fontWeight: 600,
+                                backgroundColor:
+                                  u.plan.toLowerCase() === "pro"
+                                    ? "#1d4ed8"
+                                    : "#111827",
+                                color: "#e5e7eb",
+                              }}
+                            >
+                              {u.plan.toUpperCase()}
+                            </span>
+                          ) : (
+                            "-"
+                          )}
+                        </td>
+                        <td
+                          style={{
+                            textAlign: "center",
+                          }}
+                        >
+                          {canToggle ? (
+                            <button
+                              type="button"
+                              onClick={() => toggleActive(u)}
+                              className="btn-pill"
+                              disabled={saving}
+                              style={
+                                u.active
+                                  ? {
+                                      background: "#022c22",
+                                      color: "#6ee7b7",
+                                      border: "1px solid #059669",
+                                    }
+                                  : {
+                                      background: "#111827",
+                                      color: "#9ca3af",
+                                      border: "1px solid #4b5563",
+                                    }
+                              }
+                            >
+                              {u.active ? "ACTIVO" : "INACTIVO"}
+                            </button>
+                          ) : (
+                            <span
+                              style={{
+                                fontSize: "0.75rem",
+                                color: "#9ca3af",
+                              }}
+                            >
+                              {u.active ? "ACTIVO" : "INACTIVO"}
+                            </span>
+                          )}
+                        </td>
+                        <td>
+                          {canEditRow && (
+                            <button
+                              type="button"
+                              className="btn-link"
+                              onClick={() => handleEditUser(u)}
+                              style={{ marginRight: 8 }}
+                            >
+                              Editar
+                            </button>
+                          )}
+                          {canReset && (
+                            <button
+                              type="button"
+                              className="btn-link"
+                              onClick={() => handleResetPassword(u)}
+                              disabled={saving}
+                              style={{ marginRight: 8 }}
+                            >
+                              Resetear clave
+                            </button>
+                          )}
+                          {canDelete && (
+                            <button
+                              type="button"
+                              className="btn-link btn-link-danger"
+                              onClick={() => handleDeleteUser(u)}
+                              disabled={saving}
+                            >
+                              Eliminar
+                            </button>
+                          )}
+                        </td>
+                      </tr>
+                    );
+                  })}
+                </tbody>
+              </table>
+            </div>
           </div>
         </div>
       )}
