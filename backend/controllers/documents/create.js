@@ -283,48 +283,62 @@ async function createAutomaticReminders(client, { documentId, signers }) {
   for (const signer of signers) {
     if (!signer?.email) continue;
 
-    await client.query(
-      `
-      INSERT INTO recordatorios (
-        documento_id,
-        destinatario_email,
-        destinatario_nombre,
-        firmante_id,
-        tipo,
-        estado,
-        intentos,
-        max_intentos,
-        proximo_intento_at,
-        error_message,
-        sent_at,
-        created_at,
-        updated_at
-      )
-      VALUES (
-        $1,
-        $2,
-        $3,
-        NULL,
-        $4,
-        'pendiente',
-        0,
-        3,
-        NOW() + INTERVAL '12 hours',
-        NULL,
-        NULL,
-        NOW(),
-        NOW()
-      )
-      `,
-      [
-        documentId,
-        signer.email,
-        signer.nombre,
-        signer.debe_visar ? "VISADO" : "FIRMA",
-      ]
-    );
+    try {
+      await client.query("SAVEPOINT sp_create_reminder");
 
-    created++;
+      await client.query(
+        `
+        INSERT INTO recordatorios (
+          documento_id,
+          destinatario_email,
+          destinatario_nombre,
+          firmante_id,
+          tipo,
+          estado,
+          intentos,
+          max_intentos,
+          proximo_intento_at,
+          error_message,
+          sent_at,
+          created_at,
+          updated_at
+        )
+        VALUES (
+          $1,
+          $2,
+          $3,
+          NULL,
+          $4,
+          'pendiente',
+          0,
+          3,
+          NOW() + INTERVAL '12 hours',
+          NULL,
+          NULL,
+          NOW(),
+          NOW()
+        )
+        `,
+        [
+          documentId,
+          signer.email,
+          signer.nombre,
+          signer.debe_visar ? "VISADO" : "FIRMA",
+        ]
+      );
+
+      await client.query("RELEASE SAVEPOINT sp_create_reminder");
+      created++;
+    } catch (err) {
+      try {
+        await client.query("ROLLBACK TO SAVEPOINT sp_create_reminder");
+      } catch (_) {}
+
+      console.error(
+        `⚠️ No se pudo crear recordatorio para ${signer.email}:`,
+        err.message
+      );
+    }
   }
 
   return created;
