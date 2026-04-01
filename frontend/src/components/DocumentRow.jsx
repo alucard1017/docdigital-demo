@@ -6,20 +6,33 @@ import api from "../api/client";
 function getTramiteLabel(value) {
   if (value === "notaria") return "Notaría";
   if (value === "propio") return "Propio";
-  return "Otro";
+  return "";
 }
 
 function getDocumentoLabel(value) {
   if (value === "poderes") return "Poderes";
   if (value === "contratos") return "Contratos";
-  return "Otro";
+  return "";
 }
 
-// Separa el tipo en 2 líneas
-function splitTipoTramite(labelTramite, labelDoc) {
-  const linea1 = labelTramite || "";
-  const linea2 = labelDoc || "";
-  return { linea1, linea2 };
+function buildTipoLabel(tipoTramite, tipoDocumento) {
+  const tramite = getTramiteLabel(tipoTramite);
+  const documento = getDocumentoLabel(tipoDocumento);
+
+  if (tramite && documento) return `${tramite} · ${documento}`;
+  if (documento) return documento;
+  if (tramite) return tramite;
+  return "Sin tipo";
+}
+
+function getContractNumber(doc) {
+  return (
+    doc.numero_contrato_interno ||
+    doc.numero_contrato ||
+    doc.contract_number ||
+    doc.n_contrato ||
+    "Sin número"
+  );
 }
 
 const STATUS_LABELS = {
@@ -29,6 +42,7 @@ const STATUS_LABELS = {
   VISADO: "Visado",
   FIRMADO: "Firmado",
   RECHAZADO: "Rechazado",
+  BORRADOR: "Borrador",
 };
 
 const STATUS_COLORS = {
@@ -38,62 +52,41 @@ const STATUS_COLORS = {
   VISADO: "#0f766e",
   FIRMADO: "#16a34a",
   RECHAZADO: "#b91c1c",
+  BORRADOR: "#6b7280",
 };
 
 export function DocumentRow({ doc, onOpenDetail }) {
-  const tipoTramite = doc.tipo_tramite || null;
-  const tipoDocumento = doc.tipo_documento || null;
+  const tipoLabel = buildTipoLabel(doc.tipo_tramite, doc.tipo_documento);
+  const numeroContrato = getContractNumber(doc);
+  const titleDocumento = doc.title || "Sin título";
 
-  const labelTramite = getTramiteLabel(tipoTramite);
-  const labelDoc = getDocumentoLabel(tipoDocumento);
-
-  const { linea1, linea2 } = splitTipoTramite(labelTramite, labelDoc);
-
-  const chipBgColor =
-    tipoTramite === "notaria"
-      ? "#eef2ff"
-      : tipoDocumento === "poderes"
-      ? "#f5f3ff"
-      : tipoDocumento === "contratos"
-      ? "#fef2f2"
-      : "#ecfeff";
-
-  const chipTextColor =
-    tipoTramite === "notaria"
-      ? "#4f46e5"
-      : tipoDocumento === "poderes"
-      ? "#7c3aed"
-      : tipoDocumento === "contratos"
-      ? "#dc2626"
-      : "#0f766e";
-
-  // Partimos la fecha en 2–3 líneas para que no se solape
   let fechaLinea1 = "-";
   let fechaLinea2 = "";
-  let fechaLinea3 = "";
 
   if (doc.created_at) {
     const d = new Date(doc.created_at);
 
-    const dia = d.toLocaleDateString("es-CO", {
+    fechaLinea1 = d.toLocaleDateString("es-CO", {
       day: "2-digit",
       month: "2-digit",
       year: "numeric",
     });
 
-    const hora = d.toLocaleTimeString("es-CO", {
+    fechaLinea2 = d.toLocaleTimeString("es-CO", {
       hour: "2-digit",
       minute: "2-digit",
     });
-
-    // línea 1: fecha, línea 2: hora, línea 3: texto libre (opcional)
-    fechaLinea1 = dia;
-    fechaLinea2 = hora;
-    fechaLinea3 = "Fecha creación";
   }
 
   const estadoLabel = STATUS_LABELS[doc.status] || doc.status || "Sin estado";
   const estadoColor = STATUS_COLORS[doc.status] || "#6b7280";
+
+  const handleOpenDetail = (e) => {
+    if (e) e.stopPropagation();
+    if (typeof onOpenDetail === "function") {
+      onOpenDetail(doc);
+    }
+  };
 
   const handleVerPdf = async (e) => {
     e.stopPropagation();
@@ -101,7 +94,7 @@ export function DocumentRow({ doc, onOpenDetail }) {
       const res = await api.get(`/docs/${doc.id}/pdf`);
       const data = res.data;
 
-      if (!data || !data.url) {
+      if (!data?.url) {
         throw new Error("No se pudo obtener la URL del PDF");
       }
 
@@ -116,6 +109,34 @@ export function DocumentRow({ doc, onOpenDetail }) {
     }
   };
 
+  const handleDescargarPdf = async (e) => {
+    e.stopPropagation();
+    try {
+      const res = await api.get(`/docs/${doc.id}/pdf`);
+      const data = res.data;
+
+      if (!data?.url) {
+        throw new Error("No se pudo obtener la URL del PDF");
+      }
+
+      const link = document.createElement("a");
+      link.href = data.url;
+      link.download = `${titleDocumento}.pdf`;
+      link.target = "_blank";
+      link.rel = "noopener noreferrer";
+      document.body.appendChild(link);
+      link.click();
+      document.body.removeChild(link);
+    } catch (err) {
+      console.error("Error descargando PDF:", err);
+      const msg =
+        err.response?.data?.message ||
+        err.message ||
+        "No se pudo descargar el PDF";
+      alert("❌ " + msg);
+    }
+  };
+
   const handleVerRechazo = (e) => {
     e.stopPropagation();
     if (!doc.reject_reason) {
@@ -125,96 +146,106 @@ export function DocumentRow({ doc, onOpenDetail }) {
     alert("Motivo de rechazo:\n\n" + doc.reject_reason);
   };
 
-  const handleOpenDetail = () => {
-    onOpenDetail(doc);
-  };
-
   return (
     <tr className="doc-row" onClick={handleOpenDetail}>
-      {/* N° contrato */}
-      <td className="doc-cell-id">
-        <span className="doc-id-pill">
-          {doc.numero_contrato_interno || `#${doc.id}`}
+      <td className="doc-cell-title doc-cell-title-unified">
+        <div className="doc-title-stack">
+          <div className="doc-title-contract-row">
+            <span
+              className={`doc-id-pill ${
+                numeroContrato === "Sin número" ? "is-empty" : ""
+              }`}
+              title={numeroContrato}
+            >
+              {numeroContrato}
+            </span>
+          </div>
+
+          <div className="doc-title-main" title={titleDocumento}>
+            {titleDocumento}
+          </div>
+
+          <div className="doc-title-meta">
+            <span className="doc-date-primary">{fechaLinea1}</span>
+            <span className="doc-date-separator">•</span>
+            <span className="doc-date-secondary">{fechaLinea2}</span>
+          </div>
+
+          <div className="doc-title-sub-hint">Fecha creación</div>
+        </div>
+      </td>
+
+      <td className="doc-cell-type">
+        <span className="doc-chip-tipo" title={tipoLabel}>
+          {tipoLabel}
         </span>
       </td>
 
-      {/* Título + fecha en varias líneas */}
-      <td className="doc-cell-title">
-        <div className="doc-title-main">{doc.title || "Sin título"}</div>
-        <div className="doc-title-sub-multiline">
-          <div>{fechaLinea1}</div>
-          <div>{fechaLinea2}</div>
-          <div className="doc-title-sub-hint">{fechaLinea3}</div>
-        </div>
-      </td>
-
-      {/* Tipo de trámite / documento */}
-      <td>
-        <div
-          className="doc-chip-tipo"
-          style={{
-            backgroundColor: chipBgColor,
-            color: chipTextColor,
-          }}
-          title={`${labelTramite} · ${labelDoc}`}
-        >
-          <span>{linea1}</span>
-          <span className="doc-chip-sub">{linea2}</span>
-        </div>
-      </td>
-
-      {/* Estado */}
       <td className="doc-cell-status">
-        <span
-          className="doc-status-pill"
-          style={{ backgroundColor: estadoColor }}
-          onClick={(e) => e.stopPropagation()}
-        >
-          {estadoLabel}
-        </span>
+        <div className="doc-status-wrap">
+          <span
+            className="doc-status-pill"
+            style={{ backgroundColor: estadoColor }}
+            onClick={(e) => e.stopPropagation()}
+            title={estadoLabel}
+          >
+            {estadoLabel}
+          </span>
+        </div>
       </td>
 
-      {/* Firmante */}
       <td className="doc-cell-signer">
         <div className="doc-signer-main">
           {doc.firmante_nombre || "No asignado"}
         </div>
-        {doc.destinatario_nombre && (
-          <div className="doc-signer-sub">{doc.destinatario_nombre}</div>
-        )}
+        <div className="doc-signer-sub">
+          {doc.destinatario_nombre || "Sin empresa"}
+        </div>
       </td>
 
-      {/* Acciones */}
-      <td className="doc-cell-actions">
+      <td className="doc-cell-actions" onClick={(e) => e.stopPropagation()}>
         <div className="doc-actions">
+          <button
+            type="button"
+            className="btn-main btn-primary btn-xs"
+            onClick={handleVerPdf}
+            title="Ver PDF"
+            aria-label={`Ver PDF de ${titleDocumento}`}
+          >
+            PDF
+          </button>
+
+          <button
+            type="button"
+            className="btn-main btn-secondary btn-xs"
+            onClick={handleOpenDetail}
+            title="Abrir detalle"
+            aria-label={`Abrir detalle de ${titleDocumento}`}
+          >
+            Abrir
+          </button>
+
+          <button
+            type="button"
+            className="btn-main btn-ghost btn-xs"
+            onClick={handleDescargarPdf}
+            title="Descargar PDF"
+            aria-label={`Descargar PDF de ${titleDocumento}`}
+          >
+            Descarga
+          </button>
+
           {doc.status === DOC_STATUS.RECHAZADO && doc.reject_reason && (
             <button
               type="button"
               className="btn-main btn-secondary-danger btn-xs"
               onClick={handleVerRechazo}
+              title="Ver motivo de rechazo"
+              aria-label={`Ver motivo de rechazo de ${titleDocumento}`}
             >
-              Ver rechazo
+              Rechazo
             </button>
           )}
-
-          <button
-            type="button"
-            className="btn-main btn-secondary btn-xs"
-            onClick={handleVerPdf}
-          >
-            Ver PDF
-          </button>
-
-          <button
-            type="button"
-            className="btn-main btn-primary btn-xs"
-            onClick={(e) => {
-              e.stopPropagation();
-              handleOpenDetail();
-            }}
-          >
-            Abrir documento
-          </button>
         </div>
       </td>
     </tr>

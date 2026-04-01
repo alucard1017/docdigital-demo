@@ -38,51 +38,104 @@ async function generateQrImageUrl(targetUrl) {
 }
 
 // Wrapper genérico para enviar HTML usando Brevo HTTP
-async function sendEmail({ to, subject, html, documentoId = null, firmanteId = null }) {
-  console.log("📬 [EMAIL] Enviando email (Brevo HTTP):", { to, subject, documentoId });
-  
+// Mejorado: logging detallado y manejo de errores
+async function sendEmail({
+  to,
+  subject,
+  html,
+  documentoId = null,
+  firmanteId = null,
+}) {
   const trackingId = crypto.randomUUID();
-  
-  const ok = await sendEmailHttp({ 
-    to, 
-    subject, 
-    html,
-    headers: {
-      'X-Mailin-custom': JSON.stringify({
+
+  console.log("📬 [EMAIL] Intentando enviar email:", {
+    to,
+    subject,
+    documentoId,
+    firmanteId,
+    trackingId,
+  });
+
+  try {
+    // Se asume que sendEmailHttp devuelve un objeto:
+    // { ok: boolean, status: number|null, data: any, error: string|null }
+    const result = await sendEmailHttp({
+      to,
+      subject,
+      html,
+      headers: {
+        "X-Mailin-custom": JSON.stringify({
+          documentoId,
+          firmanteId,
+          trackingId,
+        }),
+      },
+    });
+
+    if (!result || result.ok !== true) {
+      console.error("❌ [EMAIL] Falló el envío (Brevo HTTP):", {
+        to,
+        subject,
         documentoId,
         firmanteId,
         trackingId,
-      }),
-    },
-  });
-  
-  if (!ok) {
-    console.error("❌ [EMAIL] Falló el envío (Brevo HTTP)");
+        status: result?.status ?? null,
+        error: result?.error ?? null,
+        data: result?.data ?? null,
+      });
+      return false;
+    }
+
+    console.log("✅ [EMAIL] Envío aceptado por Brevo:", {
+      to,
+      subject,
+      documentoId,
+      firmanteId,
+      trackingId,
+      status: result.status,
+      messageId: result.data?.messageId ?? null,
+    });
+
+    if (documentoId) {
+      const db = require("../db");
+      try {
+        await db.query(
+          `INSERT INTO email_tracking (
+             documento_id,
+             firmante_id,
+             email,
+             event_type,
+             tracking_id,
+             created_at
+           )
+           VALUES ($1, $2, $3, 'sent', $4, NOW())`,
+          [documentoId, firmanteId || null, to, trackingId]
+        );
+        console.log(
+          `📊 [EMAIL] Email tracking registrado (sent) para ${to} - documento ${documentoId}`
+        );
+      } catch (err) {
+        console.error(
+          "❌ [EMAIL] Error registrando email tracking en BD:",
+          err.message
+        );
+      }
+    }
+
+    return true;
+  } catch (err) {
+    console.error("❌ [EMAIL] Excepción al enviar email:", {
+      to,
+      subject,
+      documentoId,
+      firmanteId,
+      trackingId,
+      message: err.message,
+      stack: err.stack,
+      name: err.name,
+    });
     return false;
   }
-
-  if (documentoId) {
-    const db = require("../db");
-    try {
-      await db.query(
-        `INSERT INTO email_tracking (
-           documento_id,
-           firmante_id,
-           email,
-           event_type,
-           tracking_id,
-           created_at
-         )
-         VALUES ($1, $2, $3, 'sent', $4, NOW())`,
-        [documentoId, firmanteId || null, to, trackingId]
-      );
-      console.log(`📊 Email tracking registrado: sent → ${to}`);
-    } catch (err) {
-      console.error("❌ Error registrando email tracking:", err.message);
-    }
-  }
-
-  return ok;
 }
 
 /* ================================
@@ -320,7 +373,12 @@ async function sendSigningInvitation(
   signerName = "",
   options = {}
 ) {
-  const { verificationCode = "", qrTargetUrl = "", documentoId = null, firmanteId = null } = options;
+  const {
+    verificationCode = "",
+    qrTargetUrl = "",
+    documentoId = null,
+    firmanteId = null,
+  } = options;
 
   const subject = `Invitación a firmar: ${docTitle}`;
 
@@ -431,9 +489,9 @@ async function sendSigningInvitation(
     </html>
   `;
 
-  return sendEmail({ 
-    to: email, 
-    subject, 
+  return sendEmail({
+    to: email,
+    subject,
     html,
     documentoId,
     firmanteId,
@@ -507,9 +565,9 @@ async function sendVisadoInvitation(
     </html>
   `;
 
-  return sendEmail({ 
-    to: email, 
-    subject, 
+  return sendEmail({
+    to: email,
+    subject,
     html,
     documentoId,
   });
@@ -559,9 +617,11 @@ async function sendRejectionNotification(
           <div class="info-box danger">
             <h4>📋 Detalles del rechazo</h4>
             <ul class="details-list">
-              ><strong>Rechazado por:</strong> ${firmanteNombre} (${firmanteEmail})</li>
-              ><strong>Fecha:</strong> ${new Date(fechaRechazo).toLocaleString("es-CL")}</li>
-              ><strong>Motivo:</strong> <em>${motivo || "No especificado"}</em></li>
+              <li><strong>Rechazado por:</strong> ${firmanteNombre} (${firmanteEmail})</li>
+              <li><strong>Fecha:</strong> ${new Date(fechaRechazo).toLocaleString(
+                "es-CL"
+              )}</li>
+              <li><strong>Motivo:</strong> <em>${motivo || "No especificado"}</em></li>
             </ul>
           </div>
 
@@ -591,9 +651,9 @@ async function sendRejectionNotification(
     </html>
   `;
 
-  return sendEmail({ 
-    to: emisorEmail, 
-    subject, 
+  return sendEmail({
+    to: emisorEmail,
+    subject,
     html,
     documentoId: documentId,
   });
@@ -671,9 +731,9 @@ async function sendReminder(
     </html>
   `;
 
-  return sendEmail({ 
-    to: email, 
-    subject, 
+  return sendEmail({
+    to: email,
+    subject,
     html,
     documentoId,
     firmanteId,
@@ -681,9 +741,9 @@ async function sendReminder(
 }
 
 async function sendNotification(email, subject, html) {
-  return sendEmail({ 
-    to: email, 
-    subject, 
+  return sendEmail({
+    to: email,
+    subject,
     html,
   });
 }

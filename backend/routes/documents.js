@@ -8,7 +8,6 @@ const { upload, handleMulterError } = require("../middlewares/uploadPdf");
 const { validatePdf } = require("../middlewares/pdfValidator");
 
 const documentsController = require("../controllers/documents");
-
 const {
   downloadDocument,
   downloadReportPdf,
@@ -36,6 +35,11 @@ const {
 } = require("../validators/createDocumentSchema");
 const { generateVerificationCode } = require("../utils/randomCode");
 const emailQueue = require("../queues/emailQueue");
+
+const {
+  getReminderSchedulerStatus,
+  ejecutarRecordatorios,
+} = require("../jobs/reminderScheduler");
 
 const router = express.Router();
 
@@ -228,7 +232,6 @@ function withDocumentAudit(action) {
    RUTAS GET - ESPECÍFICAS (SIN ID)
    ================================ */
 
-// Logs de diagnóstico en arranque
 console.log(
   ">>> documentsController.getDocumentStats type:",
   typeof documentsController.getDocumentStats
@@ -241,13 +244,17 @@ console.log(
 if (typeof documentsController.getDocumentStats === "function") {
   router.get("/stats", requireAuth, documentsController.getDocumentStats);
 } else {
-  console.warn("[routes/documents] getDocumentStats no es función; ruta /stats deshabilitada");
+  console.warn(
+    "[routes/documents] getDocumentStats no es función; ruta /stats deshabilitada"
+  );
 }
 
 if (typeof getDocumentAnalytics === "function") {
   router.get("/analytics", requireAuth, getDocumentAnalytics);
 } else {
-  console.warn("[routes/documents] getDocumentAnalytics no es función; ruta /analytics deshabilitada");
+  console.warn(
+    "[routes/documents] getDocumentAnalytics no es función; ruta /analytics deshabilitada"
+  );
 }
 
 /* ================================
@@ -331,7 +338,25 @@ router.post(
   handleMulterError,
   validatePdf,
   withDocumentAudit("DOCUMENT_CREATED"),
-  documentsController.createDocument
+  async (req, res, next) => {
+    try {
+      console.log("📥 [POST /documents] body:", req.body);
+      console.log("📎 [POST /documents] file:", {
+        originalname: req.file?.originalname,
+        mimetype: req.file?.mimetype,
+        size: req.file?.size,
+      });
+
+      return await documentsController.createDocument(req, res, next);
+    } catch (err) {
+      console.error("❌ Error en createDocument:", err);
+      if (!res.headersSent) {
+        return res.status(500).json({
+          message: "Error interno creando documento",
+        });
+      }
+    }
+  }
 );
 
 /* ================================
@@ -575,35 +600,36 @@ console.log(">>> downloadDocument type:", typeof downloadDocument);
    RUTAS GET - CON :id
    ================================ */
 
-console.log(">>> getDocumentPdf type:", typeof documentsController.getDocumentPdf);
-console.log(">>> getTimeline type:", typeof documentsController.getTimeline);
-console.log(">>> getLegalTimeline type:", typeof documentsController.getLegalTimeline);
-console.log(">>> getSigners type:", typeof documentsController.getSigners);
-console.log(">>> previewDocument type:", typeof previewDocument);
-console.log(">>> downloadDocument type:", typeof downloadDocument);
-
 if (typeof documentsController.getDocumentPdf === "function") {
   router.get("/:id/pdf", documentsController.getDocumentPdf);
 } else {
-  console.warn("[routes/documents] getDocumentPdf no es función; ruta /:id/pdf deshabilitada");
+  console.warn(
+    "[routes/documents] getDocumentPdf no es función; ruta /:id/pdf deshabilitada"
+  );
 }
 
 if (typeof previewDocument === "function") {
   router.get("/:id/preview", previewDocument);
 } else {
-  console.warn("[routes/documents] previewDocument no es función; ruta /:id/preview deshabilitada");
+  console.warn(
+    "[routes/documents] previewDocument no es función; ruta /:id/preview deshabilitada"
+  );
 }
 
 if (typeof downloadDocument === "function") {
   router.get("/:id/download", downloadDocument);
 } else {
-  console.warn("[routes/documents] downloadDocument no es función; ruta /:id/download deshabilitada");
+  console.warn(
+    "[routes/documents] downloadDocument no es función; ruta /:id/download deshabilitada"
+  );
 }
 
 if (typeof documentsController.getTimeline === "function") {
   router.get("/:id/timeline", documentsController.getTimeline);
 } else {
-  console.warn("[routes/documents] getTimeline no es función; ruta /:id/timeline deshabilitada");
+  console.warn(
+    "[routes/documents] getTimeline no es función; ruta /:id/timeline deshabilitada"
+  );
 }
 
 if (typeof documentsController.getLegalTimeline === "function") {
@@ -614,7 +640,9 @@ if (typeof documentsController.getLegalTimeline === "function") {
     documentsController.getLegalTimeline
   );
 } else {
-  console.warn("[routes/documents] getLegalTimeline no es función; ruta /:id/timeline-legal deshabilitada");
+  console.warn(
+    "[routes/documents] getLegalTimeline no es función; ruta /:id/timeline-legal deshabilitada"
+  );
 }
 
 if (typeof documentsController.getSigners === "function") {
@@ -625,7 +653,9 @@ if (typeof documentsController.getSigners === "function") {
     documentsController.getSigners
   );
 } else {
-  console.warn("[routes/documents] getSigners no es función; ruta /:id/signers deshabilitada");
+  console.warn(
+    "[routes/documents] getSigners no es función; ruta /:id/signers deshabilitada"
+  );
 }
 
 /* ================================
@@ -675,9 +705,7 @@ router.post(
     try {
       const id = Number(req.params.id);
 
-      const {
-        enviarRecordatorioManual,
-      } = require("../services/reminderService");
+      const { enviarRecordatorioManual } = require("../services/reminderService");
 
       const result = await enviarRecordatorioManual(id);
 
@@ -721,6 +749,47 @@ router.post(
   "/recordatorios/reintentar/:recordatorioId",
   requireAuth,
   retryReminder
+);
+
+router.get(
+  "/recordatorios/scheduler-status",
+  requireAuth,
+  async (req, res) => {
+    try {
+      const status = getReminderSchedulerStatus();
+      return res.json({ ok: true, scheduler: status });
+    } catch (err) {
+      console.error(
+        "❌ Error obteniendo estado del reminder scheduler:",
+        err
+      );
+      return res.status(500).json({
+        ok: false,
+        message: "Error obteniendo estado del scheduler",
+      });
+    }
+  }
+);
+
+router.post(
+  "/recordatorios/scheduler-ejecutar",
+  requireAuth,
+  async (req, res) => {
+    try {
+      const result = await ejecutarRecordatorios({ source: "manual_api" });
+
+      return res.json({ ok: true, result });
+    } catch (err) {
+      console.error(
+        "❌ Error ejecutando reminder scheduler manualmente:",
+        err
+      );
+      return res.status(500).json({
+        ok: false,
+        message: "Error ejecutando el scheduler manualmente",
+      });
+    }
+  }
 );
 
 /* ================================

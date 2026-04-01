@@ -24,10 +24,11 @@ const {
   generarNumeroContratoInterno,
 } = require("../../utils/numeroContratoInterno");
 
-/**
- * Estados estándar de documentos.
- */
-const DOCUMENT_STATES = {
+/* ================================
+   ESTADOS DE DOCUMENTO
+   ================================ */
+
+const DOCUMENT_STATES = Object.freeze({
   DRAFT: "BORRADOR",
   SENT: "ENVIADO",
   UNDER_REVIEW: "EN_REVISION",
@@ -35,11 +36,12 @@ const DOCUMENT_STATES = {
   SIGNED: "FIRMADO",
   REJECTED: "RECHAZADO",
   EXPIRED: "EXPIRADO",
-};
+});
 
-/**
- * Genera un código alfanumérico para verificación pública de documentos.
- */
+/* ================================
+   HELPERS BASE
+   ================================ */
+
 function generarCodigoVerificacion() {
   return crypto
     .randomBytes(6)
@@ -49,11 +51,26 @@ function generarCodigoVerificacion() {
     .toUpperCase();
 }
 
-/**
- * Aplica marca de agua VERIFIRMA a un PDF (trabajando con Buffer).
- * Devuelve un nuevo Buffer con la marca aplicada.
- * En caso de error, devuelve el buffer original para no romper el flujo.
- */
+function computeHash(buffer) {
+  if (!buffer || !Buffer.isBuffer(buffer)) {
+    throw new Error("computeHash requiere un Buffer válido");
+  }
+
+  return crypto.createHash("sha256").update(buffer).digest("hex");
+}
+
+function isActiveDocumentStatus(status) {
+  return [
+    DOCUMENT_STATES.SENT,
+    DOCUMENT_STATES.UNDER_REVIEW,
+    DOCUMENT_STATES.SIGNING,
+  ].includes(status);
+}
+
+/* ================================
+   PDF / MARCA DE AGUA
+   ================================ */
+
 async function aplicarMarcaAguaLocal(pdfBuffer) {
   try {
     if (!pdfBuffer || !Buffer.isBuffer(pdfBuffer)) {
@@ -63,10 +80,12 @@ async function aplicarMarcaAguaLocal(pdfBuffer) {
     const pdfDoc = await PDFDocument.load(pdfBuffer, {
       updateMetadata: false,
     });
+
     const pages = pdfDoc.getPages();
 
     const textoPrincipal = "VERIFIRMA";
-    const textoSecundario = "Documento en proceso – No válido como original";
+    const textoSecundario =
+      "Documento en proceso - No valido como original";
     const fontSizeMain = 30;
     const fontSizeSub = 11;
     const opacity = 0.36;
@@ -105,7 +124,6 @@ async function aplicarMarcaAguaLocal(pdfBuffer) {
     const resultBuffer = Buffer.from(pdfBytes);
 
     console.log("✅ Marca de agua VERIFIRMA aplicada (buffer)");
-
     return resultBuffer;
   } catch (err) {
     console.error("⚠️ Error aplicando marca de agua:", err);
@@ -113,57 +131,31 @@ async function aplicarMarcaAguaLocal(pdfBuffer) {
   }
 }
 
-/**
- * Calcula el hash SHA-256 de un buffer.
- */
-function computeHash(buffer) {
-  if (!buffer || !Buffer.isBuffer(buffer)) {
-    throw new Error("computeHash requiere un Buffer válido");
-  }
-
-  return crypto.createHash("sha256").update(buffer).digest("hex");
-}
-
-/**
- * Helper para saber si un documento está en un estado “activo”.
- */
-function isActiveDocumentStatus(status) {
-  return [
-    DOCUMENT_STATES.SENT,
-    DOCUMENT_STATES.UNDER_REVIEW,
-    DOCUMENT_STATES.SIGNING,
-  ].includes(status);
-}
+/* ================================
+   EXPORTS
+   ================================ */
 
 module.exports = {
-  // dependencias base
   path,
   crypto,
   fs,
   axios,
   db,
-  // servicios de email
   sendSigningInvitation,
   sendVisadoInvitation,
-  // almacenamiento
   uploadPdfToS3,
   getSignedUrl,
-  // validaciones
   isValidEmail,
   isValidRun,
   validateLength,
-  // pdf-lib
   PDFDocument,
   rgb,
   degrees,
-  // sello y numeración interna
   sellarPdfConQr,
   generarNumeroContratoInterno,
-  // utilidades locales
   generarCodigoVerificacion,
   aplicarMarcaAguaLocal,
   computeHash,
-  // estados
   DOCUMENT_STATES,
   isActiveDocumentStatus,
 };

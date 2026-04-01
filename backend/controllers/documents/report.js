@@ -27,6 +27,76 @@ function buildSafeFilename(base, fallbackPrefix) {
   return `${clean}.pdf`;
 }
 
+/**
+ * Resuelve la URL real del PDF priorizando:
+ * 1) documents.pdf_final_url (si existiera en el futuro)
+ * 2) documents.file_url (directo a R2)
+ * 3) documents.storage_key (via getSignedUrl)
+ * 4) fallback legacy: documentos.url_archivo
+ */
+async function resolvePdfSourceByDocumentId(id, user) {
+  const { where, params } = buildDocumentWhereClause({ id, user });
+
+  const docRes = await db.query(
+    `
+    SELECT
+      id,
+      title,
+      file_url,
+      storage_key,
+      pdf_final_url,
+      nuevo_documento_id
+    FROM documents
+    WHERE ${where}
+    `,
+    params
+  );
+
+  if (docRes.rowCount === 0) {
+    return { ok: false, status: 404, message: "Documento no encontrado" };
+  }
+
+  const doc = docRes.rows[0];
+
+  // 1) PDF final sellado (si lo tuvieras en esta columna a futuro)
+  if (doc.pdf_final_url) {
+    return { ok: true, doc, directUrl: doc.pdf_final_url };
+  }
+
+  // 2) URL directa a R2 guardada en documents.file_url
+  if (doc.file_url) {
+    return { ok: true, doc, directUrl: doc.file_url };
+  }
+
+  // 3) Clave de storage para firmar con getSignedUrl
+  if (doc.storage_key) {
+    const signedUrl = await getSignedUrl(doc.storage_key, 3600);
+    return { ok: true, doc, signedUrl, storageKey: doc.storage_key };
+  }
+
+  // 4) Fallback legacy: buscar en documentos.url_archivo usando nuevo_documento_id
+  if (doc.nuevo_documento_id) {
+    const legacyRes = await db.query(
+      `
+      SELECT url_archivo
+      FROM documentos
+      WHERE id = $1
+      `,
+      [doc.nuevo_documento_id]
+    );
+
+    if (legacyRes.rowCount > 0 && legacyRes.rows[0].url_archivo) {
+      return {
+        ok: true,
+        doc,
+        directUrl: legacyRes.rows[0].url_archivo,
+      };
+    }
+  }
+
+  return { ok: false, status: 404, message: "Documento sin archivo asociado" };
+}
+
 /* ================================
    GET: Descargar PDF (prioriza copia firmada)
    ================================ */
@@ -37,45 +107,28 @@ async function downloadDocument(req, res) {
       return res.status(400).json({ message: "ID de documento requerido" });
     }
 
-    const { where, params } = buildDocumentWhereClause({
-      id,
-      user: req.user,
-    });
+    const resolved = await resolvePdfSourceByDocumentId(id, req.user);
 
-    const result = await db.query(
-      `SELECT
-         id,
-         title,
-         file_path,
-         pdf_final_url
-       FROM documents
-       WHERE ${where}`,
-      params
-    );
-
-    if (result.rowCount === 0) {
-      return res.status(404).json({ message: "Documento no encontrado" });
+    if (!resolved.ok) {
+      return res.status(resolved.status).json({ message: resolved.message });
     }
 
-    const doc = result.rows[0];
+    const { doc, directUrl, signedUrl } = resolved;
 
-    // Prioriza PDF final sellado, si existe; si no, usa el original
-    const storageKey = doc.pdf_final_url || doc.file_path;
-
-    if (!storageKey) {
+    const url = directUrl || signedUrl;
+    if (!url) {
       return res
         .status(404)
-        .json({ message: "Documento sin archivo asociado" });
+        .json({ message: "No se pudo resolver la URL del documento" });
     }
 
-    const signedUrl = await getSignedUrl(storageKey, 3600);
-    const fileResponse = await axios.get(signedUrl, {
+    const fileResponse = await axios.get(url, {
       responseType: "arraybuffer",
     });
     const buffer = Buffer.from(fileResponse.data);
 
-    // Si en el futuro quieres volver a validar integridad con hash,
-    // aquí podrías calcular computeHash(buffer) y comparar contra otra columna.
+    // Aquí podrías validar el hash con computeHash(buffer) comparando con documents.hash_sha256.
+    // computeHash viene de ./common.
 
     const filename = buildSafeFilename(doc.title, `documento-${doc.id}`);
 
@@ -101,45 +154,25 @@ async function previewDocument(req, res) {
       return res.status(400).json({ message: "ID de documento requerido" });
     }
 
-    const { where, params } = buildDocumentWhereClause({
-      id,
-      user: req.user,
-    });
+    const resolved = await resolvePdfSourceByDocumentId(id, req.user);
 
-    const result = await db.query(
-      `SELECT
-         id,
-         title,
-         file_path,
-         pdf_final_url
-       FROM documents
-       WHERE ${where}`,
-      params
-    );
-
-    if (result.rowCount === 0) {
-      return res.status(404).json({ message: "Documento no encontrado" });
+    if (!resolved.ok) {
+      return res.status(resolved.status).json({ message: resolved.message });
     }
 
-    const doc = result.rows[0];
+    const { directUrl, signedUrl } = resolved;
 
-    // Igual que en download: prioridad al PDF final
-    const storageKey = doc.pdf_final_url || doc.file_path;
-
-    if (!storageKey) {
+    const url = directUrl || signedUrl;
+    if (!url) {
       return res
         .status(404)
-        .json({ message: "Documento sin archivo asociado" });
+        .json({ message: "No se pudo resolver la URL del documento" });
     }
 
-    const signedUrl = await getSignedUrl(storageKey, 3600);
-    const fileResponse = await axios.get(signedUrl, {
+    const fileResponse = await axios.get(url, {
       responseType: "arraybuffer",
     });
     const buffer = Buffer.from(fileResponse.data);
-
-    // Aquí también podrías reintroducir validación de hash contra otra columna,
-    // si más adelante lo necesitas.
 
     res.setHeader("Content-Type", "application/pdf");
     // Sin Content-Disposition para que el navegador lo muestre en visor/iframe

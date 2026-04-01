@@ -53,7 +53,7 @@ async function getEmailMetrics(req, res) {
         COUNT(*) FILTER (WHERE et.event_type = 'clicked')   AS emails_clicados,
         COUNT(*) FILTER (WHERE et.event_type = 'bounced')   AS emails_rebotados,
         COUNT(DISTINCT et.documento_id) AS documentos_unicos,
-        COUNT(DISTINCT et.email) AS destinatarios_unicos
+        COUNT(DISTINCT et.email)        AS destinatarios_unicos
       FROM email_tracking et
       ${whereSql}
       `,
@@ -70,9 +70,18 @@ async function getEmailMetrics(req, res) {
 
     const divisor = emailsEnviados > 0 ? emailsEnviados : 1;
 
-    const tasaApertura = ((emailsAbiertos / divisor) * 100).toFixed(2);
-    const tasaClick = ((emailsClicados / divisor) * 100).toFixed(2);
-    const tasaRebote = ((emailsRebotados / divisor) * 100).toFixed(2);
+    const tasaApertura =
+      emailsEnviados > 0
+        ? Number(((emailsAbiertos / divisor) * 100).toFixed(2))
+        : 0;
+    const tasaClick =
+      emailsEnviados > 0
+        ? Number(((emailsClicados / divisor) * 100).toFixed(2))
+        : 0;
+    const tasaRebote =
+      emailsEnviados > 0
+        ? Number(((emailsRebotados / divisor) * 100).toFixed(2))
+        : 0;
 
     const recentEventsRes = await query(
       `
@@ -82,7 +91,7 @@ async function getEmailMetrics(req, res) {
         et.email,
         et.event_type,
         et.created_at,
-        d.titulo
+        d.title
       FROM email_tracking et
       LEFT JOIN documents d ON d.id = et.documento_id
       ${whereSql}
@@ -98,12 +107,12 @@ async function getEmailMetrics(req, res) {
         emails_entregados: emailsEntregados,
         emails_abiertos: emailsAbiertos,
         emails_clicados: emailsClicados,
-        emails_rebotados: emailsRebotados,
+        emails_reboteados: emailsRebotados,
         documentos_unicos: Number(metrics.documentos_unicos || 0),
         destinatarios_unicos: Number(metrics.destinatarios_unicos || 0),
-        tasa_apertura: `${tasaApertura}%`,
-        tasa_click: `${tasaClick}%`,
-        tasa_rebote: `${tasaRebote}%`,
+        tasa_apertura: tasaApertura,
+        tasa_click: tasaClick,
+        tasa_rebote: tasaRebote,
       },
       recent_events: recentEventsRes.rows,
     });

@@ -1,8 +1,8 @@
 // frontend/src/hooks/useSocket.js
-import { useEffect, useRef, useCallback } from "react";
+import { useEffect, useRef, useCallback, useMemo, useState } from "react";
 import { io } from "socket.io-client";
 
-const buildSocketUrl = () => {
+function buildSocketUrl() {
   const rawSocket = import.meta.env.VITE_SOCKET_URL;
   const rawApi = import.meta.env.VITE_API_URL;
 
@@ -13,105 +13,237 @@ const buildSocketUrl = () => {
   if (typeof rawApi === "string" && rawApi.trim()) {
     return rawApi
       .trim()
-      .replace(/\/api\/?$/i, "") // quita /api o /api/
+      .replace(/\/api\/?$/i, "")
       .replace(/\/+$/, "");
   }
 
   return "http://localhost:4000";
-};
+}
 
-const SOCKET_URL = buildSocketUrl();
-
-export function useSocket(accessToken) {
+export function useSocket(accessToken, options = {}) {
   const socketRef = useRef(null);
   const listenersRef = useRef({});
+  const authExpiredHandledRef = useRef(false);
+  const [connected, setConnected] = useState(false);
+
+  const socketUrl = useMemo(() => buildSocketUrl(), []);
+  const normalizedToken =
+    typeof accessToken === "string" ? accessToken.trim() : "";
+
+  const clearAllListeners = useCallback((socketInstance) => {
+    if (!socketInstance) return;
+
+    const registry =
+      listenersRef.current && typeof listenersRef.current === "object"
+        ? listenersRef.current
+        : {};
+
+    Object.entries(registry).forEach(([event, callbacks]) => {
+      if (!(callbacks instanceof Set)) return;
+
+      callbacks.forEach((cb) => {
+        try {
+          socketInstance.off(event, cb);
+        } catch (err) {
+          console.warn("[WS] error removiendo listener:", event, err);
+        }
+      });
+    });
+
+    listenersRef.current = {};
+  }, []);
+
+  const disconnect = useCallback(() => {
+    const socket = socketRef.current;
+    if (!socket) return;
+
+    clearAllListeners(socket);
+
+    try {
+      socket.removeAllListeners?.();
+    } catch (_) {}
+
+    try {
+      socket.disconnect();
+    } catch (_) {}
+
+    socketRef.current = null;
+    setConnected(false);
+  }, [clearAllListeners]);
 
   useEffect(() => {
-    if (!accessToken) {
-      // Sin token, aseguramos que no quede socket colgado
-      if (socketRef.current) {
-        socketRef.current.disconnect();
-        socketRef.current = null;
-        listenersRef.current = {};
-      }
+    authExpiredHandledRef.current = false;
+
+    if (!normalizedToken) {
+      disconnect();
       return;
     }
 
-    console.log("[WS] Conectando a:", SOCKET_URL);
+    if (socketRef.current) {
+      disconnect();
+    }
 
-    const socket = io(SOCKET_URL, {
-      auth: { token: accessToken },
+    const socket = io(socketUrl, {
+      auth: { token: normalizedToken },
       transports: ["websocket", "polling"],
       withCredentials: true,
+      autoConnect: true,
+      reconnection: true,
+      reconnectionAttempts: 5,
+      reconnectionDelay: 1500,
     });
 
-    socket.on("connect", () => {
-      console.log("✅ WebSocket conectado. id:", socket.id);
-    });
+    const handleConnect = () => {
+      setConnected(true);
+      authExpiredHandledRef.current = false;
+      if (import.meta.env.DEV) {
+        console.log("[WS] conectado");
+      }
+    };
 
-    socket.on("disconnect", (reason) => {
-      console.log("❌ WebSocket desconectado:", reason);
-    });
+    const handleDisconnect = (reason) => {
+      setConnected(false);
+      if (import.meta.env.DEV) {
+        console.warn("[WS] desconectado:", reason);
+      }
+    };
 
-    socket.on("connect_error", (err) => {
-      console.error(
-        "❌ Error de WebSocket:",
-        err.message,
-        err?.data,
-        "URL:",
-        SOCKET_URL
-      );
-    });
+    const handleConnectError = (err) => {
+      setConnected(false);
+
+      const message =
+        err?.message || err?.data?.message || "Error de conexión WS";
+
+      if (import.meta.env.DEV) {
+        console.error("[WS] connect_error:", message);
+      }
+
+      const isAuthError =
+        /jwt expired|unauthorized|authentication|invalid token|token inválido|token invalido|no autorizado|usuario no válido|usuario no valido/i.test(
+          message
+        );
+
+      if (isAuthError) {
+        try {
+          socket.disconnect();
+        } catch (_) {}
+
+        if (!authExpiredHandledRef.current) {
+          authExpiredHandledRef.current = true;
+
+          try {
+            window.dispatchEvent(
+              new CustomEvent("auth:expired", {
+                detail: {
+                  message,
+                  source: "ws",
+                },
+              })
+            );
+          } catch (eventErr) {
+            console.error("[WS AUTH] error disparando auth:expired:", eventErr);
+          }
+        }
+      }
+    };
+
+    socket.on("connect", handleConnect);
+    socket.on("disconnect", handleDisconnect);
+    socket.on("connect_error", handleConnectError);
 
     socketRef.current = socket;
 
     return () => {
-      console.log("[WS] Cleanup: desconectando socket");
-      const currentSocket = socketRef.current || socket;
+      try {
+        socket.off("connect", handleConnect);
+        socket.off("disconnect", handleDisconnect);
+        socket.off("connect_error", handleConnectError);
+      } catch (_) {}
 
-      if (currentSocket) {
-        const entries = Object.entries(listenersRef.current || {});
-        entries.forEach(([event, callbacks]) => {
-          const safeCallbacks = Array.isArray(callbacks) ? callbacks : [];
-          safeCallbacks.forEach((cb) => currentSocket.off(event, cb));
-        });
+      clearAllListeners(socket);
 
-        listenersRef.current = {};
-        currentSocket.disconnect();
+      try {
+        socket.removeAllListeners?.();
+      } catch (_) {}
+
+      try {
+        socket.disconnect();
+      } catch (_) {}
+
+      if (socketRef.current === socket) {
+        socketRef.current = null;
       }
 
-      socketRef.current = null;
+      setConnected(false);
     };
-  }, [accessToken]);
+  }, [normalizedToken, socketUrl, clearAllListeners, disconnect]);
 
   const on = useCallback((event, callback) => {
     const socket = socketRef.current;
-    if (!socket || !event || typeof callback !== "function") return;
 
-    socket.on(event, callback);
+    if (!socket) return;
+    if (typeof event !== "string" || !event.trim()) return;
+    if (typeof callback !== "function") return;
 
-    if (!Array.isArray(listenersRef.current[event])) {
-      listenersRef.current[event] = [];
+    if (!listenersRef.current || typeof listenersRef.current !== "object") {
+      listenersRef.current = {};
     }
-    listenersRef.current[event].push(callback);
+
+    const eventName = event.trim();
+
+    if (!(listenersRef.current[eventName] instanceof Set)) {
+      listenersRef.current[eventName] = new Set();
+    }
+
+    const eventSet = listenersRef.current[eventName];
+
+    if (eventSet.has(callback)) return;
+
+    eventSet.add(callback);
+    socket.on(eventName, callback);
   }, []);
 
   const off = useCallback((event, callback) => {
     const socket = socketRef.current;
-    if (!socket || !event || typeof callback !== "function") return;
 
-    socket.off(event, callback);
+    if (!socket) return;
+    if (typeof event !== "string" || !event.trim()) return;
+    if (typeof callback !== "function") return;
 
-    if (Array.isArray(listenersRef.current[event])) {
-      listenersRef.current[event] = listenersRef.current[event].filter(
-        (cb) => cb !== callback
-      );
-      if (listenersRef.current[event].length === 0) {
-        delete listenersRef.current[event];
+    const eventName = event.trim();
+
+    try {
+      socket.off(eventName, callback);
+    } catch (_) {}
+
+    const eventSet = listenersRef.current?.[eventName];
+    if (eventSet instanceof Set) {
+      eventSet.delete(callback);
+      if (eventSet.size === 0) {
+        delete listenersRef.current[eventName];
       }
     }
   }, []);
 
-  // Devuelve siempre un objeto con on/off definido
-  return { on, off };
+  const emit = useCallback((event, payload) => {
+    const socket = socketRef.current;
+
+    if (!socket) return;
+    if (typeof event !== "string" || !event.trim()) return;
+
+    try {
+      socket.emit(event.trim(), payload);
+    } catch (err) {
+      console.error("[WS] emit error:", err);
+    }
+  }, []);
+
+  return {
+    connected,
+    on,
+    off,
+    emit,
+    disconnect,
+    socket: socketRef.current,
+  };
 }

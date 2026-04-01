@@ -8,18 +8,22 @@ function validateCreateDocumentBody(body) {
     return errors;
   }
 
-  if (!body.title || typeof body.title !== "string") {
-    errors.push({ field: "title", message: "El título es obligatorio" });
-  }
-
-  if (!Array.isArray(body.signers) || body.signers.length === 0) {
+  const title = (body.title || "").toString().trim();
+  if (!title || title.length < 2 || title.length > 255) {
     errors.push({
-      field: "signers",
-      message: "Debes incluir al menos un signer",
+      field: "title",
+      message: "El título es obligatorio y debe tener entre 2 y 255 caracteres",
     });
   }
 
-  // puedes añadir más validaciones luego
+  // En /multi-party esperamos JSON, no multipart.
+  // Aquí sí debe venir un array real de signers.
+  if (!Array.isArray(body.signers) || body.signers.length === 0) {
+    errors.push({
+      field: "signers",
+      message: "Debes incluir al menos un signer en el cuerpo JSON",
+    });
+  }
 
   return errors;
 }

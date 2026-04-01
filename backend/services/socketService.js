@@ -1,6 +1,6 @@
 // backend/services/socketService.js
 const { Server } = require("socket.io");
-const jwt = require("jsonwebtoken");
+const authSocketMiddleware = require("../socket/authSocketMiddleware");
 
 let io = null;
 
@@ -11,6 +11,11 @@ let io = null;
 function initializeSocketIO(server) {
   if (!server) {
     throw new Error("Servidor HTTP no proporcionado para Socket.IO");
+  }
+
+  if (io) {
+    console.warn("⚠️ Socket.IO ya estaba inicializado, reutilizando instancia existente");
+    return io;
   }
 
   const allowedOrigins = [
@@ -27,57 +32,20 @@ function initializeSocketIO(server) {
       origin: allowedOrigins,
       credentials: true,
     },
+    transports: ["websocket", "polling"],
   });
 
   console.log("✅ Socket.IO inicializado con CORS:", allowedOrigins);
 
-  const JWT_ACCESS_SECRET =
-    process.env.JWT_ACCESS_SECRET || process.env.JWT_SECRET;
-
-  if (!JWT_ACCESS_SECRET) {
-    console.error(
-      "❌ JWT_ACCESS_SECRET (o JWT_SECRET) no definido para WebSocket"
-    );
-  }
-
-  // Middleware de autenticación por JWT
-  io.use((socket, next) => {
-    try {
-      const token = socket.handshake.auth?.token;
-
-      if (!token) {
-        console.warn("⚠️ Conexión WS sin token");
-        return next(new Error("No autorizado"));
-      }
-
-      if (!JWT_ACCESS_SECRET) {
-        console.error(
-          "❌ Intento de conexión WS sin JWT_ACCESS_SECRET configurado"
-        );
-        return next(new Error("Error de configuración"));
-      }
-
-      const payload = jwt.verify(token, JWT_ACCESS_SECRET);
-
-      socket.user = {
-        id: payload.id,
-        email: payload.email,
-        role: payload.role,
-        company_id: payload.company_id ?? null,
-      };
-
-      return next();
-    } catch (err) {
-      console.error("❌ Error en autenticación WS:", err.message);
-      return next(new Error("Token inválido"));
-    }
-  });
+  io.use(authSocketMiddleware);
 
   io.on("connection", (socket) => {
-    const userEmail = socket.user?.email || "desconocido";
-    const companyId = socket.user?.company_id;
+    const user = socket.user || {};
+    const userEmail = user.email || "desconocido";
+    const companyId = user.company_id ?? null;
+    const socketId = socket.id;
 
-    console.log(`✅ Cliente WebSocket conectado: ${userEmail}`);
+    console.log(`✅ Cliente WebSocket conectado: ${userEmail} (${socketId})`);
 
     if (companyId) {
       const room = `company:${companyId}`;
@@ -89,7 +57,7 @@ function initializeSocketIO(server) {
 
     socket.on("disconnect", (reason) => {
       console.log(
-        `❌ Cliente WebSocket desconectado (${reason}): ${userEmail}`
+        `❌ Cliente WebSocket desconectado (${reason}): ${userEmail} (${socketId})`
       );
     });
   });
@@ -106,18 +74,24 @@ function initializeSocketIO(server) {
 function emitToCompany(companyId, event, data) {
   if (!io) {
     console.warn("⚠️ Socket.IO no inicializado (emitToCompany)");
-    return;
+    return false;
   }
 
   if (!companyId) {
     console.warn("⚠️ emitToCompany llamado sin companyId");
-    return;
+    return false;
+  }
+
+  if (!event || typeof event !== "string") {
+    console.warn("⚠️ emitToCompany llamado sin event válido");
+    return false;
   }
 
   const room = `company:${companyId}`;
   io.to(room).emit(event, data);
 
   console.log(`📡 Evento emitido a ${room}: ${event}`);
+  return true;
 }
 
 /**
@@ -128,15 +102,26 @@ function emitToCompany(companyId, event, data) {
 function emitGlobal(event, data) {
   if (!io) {
     console.warn("⚠️ Socket.IO no inicializado (emitGlobal)");
-    return;
+    return false;
+  }
+
+  if (!event || typeof event !== "string") {
+    console.warn("⚠️ emitGlobal llamado sin event válido");
+    return false;
   }
 
   io.emit(event, data);
   console.log(`📡 Evento global emitido: ${event}`);
+  return true;
+}
+
+function getIO() {
+  return io;
 }
 
 module.exports = {
   initializeSocketIO,
   emitToCompany,
   emitGlobal,
+  getIO,
 };

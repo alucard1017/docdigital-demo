@@ -24,17 +24,17 @@ if (!JWT_REFRESH_SECRET) {
 
 const normalizeRun = (run) => (run || "").replace(/[.\-]/g, "");
 
-// genera access token corto
+// Access token corto (15 min)
 function signAccessToken(payload) {
   return jwt.sign(payload, JWT_ACCESS_SECRET, { expiresIn: "15m" });
 }
 
-// genera refresh token (vida más larga)
+// Refresh token (~30 días)
 function signRefreshToken(payload) {
   return jwt.sign(payload, JWT_REFRESH_SECRET, { expiresIn: "30d" });
 }
 
-// setea cookies httpOnly
+// Cookies httpOnly para tokens
 function setAuthCookies(res, accessToken, refreshToken, rememberMe) {
   const commonOptions = {
     httpOnly: true,
@@ -42,33 +42,30 @@ function setAuthCookies(res, accessToken, refreshToken, rememberMe) {
     sameSite: "strict",
   };
 
-  // access token: siempre cookie de sesión (no persistente)
+  // Access token: cookie de sesión (sin maxAge)
   res.cookie("access_token", accessToken, {
     ...commonOptions,
   });
 
-  // refresh token: si rememberMe => persistente, si no => sesión
+  // Refresh token: si rememberMe => persistente, si no => sesión
   const refreshOptions = { ...commonOptions };
   if (rememberMe) {
-    // ~30 días
-    refreshOptions.maxAge = 30 * 24 * 60 * 60 * 1000;
+    refreshOptions.maxAge = 30 * 24 * 60 * 60 * 1000; // 30 días
   }
   res.cookie("refresh_token", refreshToken, refreshOptions);
 }
 
-// limpia cookies
 function clearAuthCookies(res) {
   res.clearCookie("access_token");
   res.clearCookie("refresh_token");
 }
 
-/* ========= Middleware de autenticación basado en access_token (cookie o header) ========= */
+/* ========= Middleware requireAuth ========= */
 
 function requireAuth(req, res, next) {
   try {
     let token = null;
 
-    // Prioridad: cookie httpOnly
     if (req.cookies && req.cookies.access_token) {
       token = req.cookies.access_token;
     } else {
@@ -138,7 +135,7 @@ function requireAuth(req, res, next) {
   }
 }
 
-/* ========= Helpers de permisos sobre usuarios ========= */
+/* ========= Helpers de permisos ========= */
 
 function canManageAllUsers(user) {
   return user?.role === "SUPER_ADMIN" || user?.role === "ADMIN_GLOBAL";
@@ -156,7 +153,7 @@ function isProtectedUser(targetUser) {
   return targetUser?.role === "SUPER_ADMIN";
 }
 
-/* ========= Middleware de autorización por rol ========= */
+/* ========= Middleware de autorización ========= */
 
 function requireRole(requiredRole) {
   return (req, res, next) => {
@@ -352,7 +349,7 @@ router.post("/login", async (req, res) => {
         .json({ message: "Error interno al generar los tokens" });
     }
 
-    // Opcional: aquí podrías guardar refreshToken (o su jti) en BD para poder revocarlo.
+    // Opcional: guardar refreshToken o jti en BD para revocación
 
     setAuthCookies(res, accessToken, refreshToken, !!rememberMe);
 
@@ -370,9 +367,8 @@ router.post("/login", async (req, res) => {
 
     return res.json({
       user: tokenPayload,
-      accessToken,      // nuevo
+      accessToken,
     });
-
   } catch (err) {
     console.error("❌ Error inesperado en /api/auth/login:", err);
     Sentry.captureException(err);
@@ -408,7 +404,6 @@ router.post("/refresh", async (req, res) => {
 
     // Aquí podrías comprobar en BD que el refresh token no esté revocado.
 
-    // Releer usuario por seguridad (rol actualizado, etc.)
     const userRes = await db.query(
       `SELECT id, run, email, name, role, company_id FROM public.users WHERE id = $1`,
       [payload.id]
@@ -430,7 +425,8 @@ router.post("/refresh", async (req, res) => {
     const newAccessToken = signAccessToken(tokenPayload);
     const newRefreshToken = signRefreshToken({ id: user.id });
 
-    setAuthCookies(res, newAccessToken, newRefreshToken, true); // aquí asumimos que ya quiso "recordarme"
+    // Aquí asumimos que el usuario ya eligió "recordarme" en su momento
+    setAuthCookies(res, newAccessToken, newRefreshToken, true);
 
     return res.json({ user: tokenPayload });
   } catch (err) {

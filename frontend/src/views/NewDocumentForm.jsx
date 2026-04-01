@@ -1,4 +1,3 @@
-// src/views/NewDocumentForm.jsx
 import React, { useState } from "react";
 import api from "../api/client";
 
@@ -11,6 +10,19 @@ const TIPOS_DOCUMENTO = [
   { value: "poderes", label: "Poderes y autorizaciones" },
   { value: "contratos", label: "Solo contratos" },
 ];
+
+const EMAIL_REGEX = /^[^\s@]+@[^\s@]+\.[^\s@]+$/i;
+
+function isValidEmail(value) {
+  return EMAIL_REGEX.test((value || "").trim());
+}
+
+function isPdfFile(file) {
+  if (!file) return false;
+  const byType = file.type === "application/pdf";
+  const byName = file.name?.toLowerCase().endsWith(".pdf");
+  return byType || byName;
+}
 
 export function NewDocumentForm({
   tipoTramite,
@@ -26,83 +38,146 @@ export function NewDocumentForm({
   empresaRutValue,
   setEmpresaRutValue,
   formatRunDoc,
-  setView,
+  goToList,
   cargarDocs,
 }) {
   const [tipoDocumento, setTipoDocumento] = useState("");
   const [tipoFlujo, setTipoFlujo] = useState("SECUENCIAL");
   const [fileName, setFileName] = useState("");
   const [submitting, setSubmitting] = useState(false);
+  const [submitMessage, setSubmitMessage] = useState("");
+
+  const resetFormState = (form) => {
+    form.reset();
+    setShowVisador(false);
+    setExtraSigners([]);
+    setFirmanteRunValue("");
+    setEmpresaRutValue("");
+    setTipoDocumento("");
+    setTipoFlujo("SECUENCIAL");
+    setFileName("");
+    setFormErrors({});
+  };
+
+  const addExtraSigner = () => {
+    setExtraSigners((prev) => [...prev, { id: Date.now() + Math.random() }]);
+  };
+
+  const removeExtraSigner = (id) => {
+    setExtraSigners((prev) => prev.filter((signer) => signer.id !== id));
+    setFormErrors((prev) => {
+      const next = { ...prev };
+      const nextSigners = extraSigners.filter((signer) => signer.id !== id);
+
+      Object.keys(next).forEach((key) => {
+        if (key.startsWith("extra_nombre_") || key.startsWith("extra_email_")) {
+          delete next[key];
+        }
+      });
+
+      nextSigners.forEach((_, index) => {
+        const oldNameKey = `extra_nombre_${index}`;
+        const oldEmailKey = `extra_email_${index}`;
+        if (prev[oldNameKey]) next[oldNameKey] = prev[oldNameKey];
+        if (prev[oldEmailKey]) next[oldEmailKey] = prev[oldEmailKey];
+      });
+
+      return next;
+    });
+  };
 
   const handleSubmit = async (e) => {
     e.preventDefault();
     setFormErrors({});
+    setSubmitMessage("");
     setSubmitting(true);
 
-    const form = e.target;
-    const formData = new FormData(form);
+    const form = e.currentTarget;
     const newErrors = {};
+
+    const titleRaw = (form.elements.title?.value || "").trim();
+    const description = (form.elements.description?.value || "").trim();
+    const file = form.elements.file?.files?.[0];
+
+    const firmanteNombre1 = (form.elements.firmante_nombre1?.value || "").trim();
+    const firmanteNombre2 = (form.elements.firmante_nombre2?.value || "").trim();
+    const firmanteApellido1 = (form.elements.firmante_apellido1?.value || "").trim();
+    const firmanteApellido2 = (form.elements.firmante_apellido2?.value || "").trim();
+    const firmanteEmail = (form.elements.firmante_email?.value || "").trim();
+    const firmanteMovil = (form.elements.firmante_movil?.value || "").trim();
+
+    const destinatarioNombre = (form.elements.destinatario_nombre?.value || "").trim();
+    const destinatarioEmail = (form.elements.destinatario_email?.value || "").trim();
+
+    const visadorNombre = (form.elements.visador_nombre?.value || "").trim();
+    const visadorEmail = (form.elements.visador_email?.value || "").trim();
+    const visadorMovil = (form.elements.visador_movil?.value || "").trim();
+
+    const firmanteRunClean = firmanteRunValue.replace(/[^0-9kK]/g, "");
+    const empresaRutClean = empresaRutValue.replace(/[^0-9kK]/g, "");
 
     if (!tipoDocumento) {
       newErrors.tipo_documento =
         "Selecciona si es Poderes y autorizaciones o Solo contratos.";
     }
 
-    formData.append("tipo_tramite", tipoTramite);
-    formData.append("tipo_documento", tipoDocumento);
-    if (tipoTramite === "notaria") {
-      formData.append("requiere_firma_notarial", "true");
+    const title = titleRaw || (file?.name || "").replace(/\.pdf$/i, "").trim();
+    if (!title || title.length < 2) {
+      newErrors.title = "El título debe tener al menos 2 caracteres.";
+    } else if (title.length > 255) {
+      newErrors.title = "El título no puede superar 255 caracteres.";
     }
-    formData.append("tipo_flujo", tipoFlujo);
 
-    const firmanteRunClean = firmanteRunValue.replace(/[^0-9kK]/g, "");
-    const empresaRutClean = empresaRutValue.replace(/[^0-9kK]/g, "");
+    if (!file) {
+      newErrors.file = "Adjunta un archivo PDF.";
+    } else if (!isPdfFile(file)) {
+      newErrors.file = "El archivo debe ser un PDF válido.";
+    }
 
-    const title = form.title.value.trim();
-    const firmanteEmail = form.firmante_email.value.trim();
-
-    const firmanteNombre1 = form.firmante_nombre1.value.trim();
-    const firmanteNombre2 = (form.firmante_nombre2?.value || "").trim();
-    const firmanteApellido1 = form.firmante_apellido1.value.trim();
-    const firmanteApellido2 = (form.firmante_apellido2?.value || "").trim();
-    const firmanteMovil = form.firmante_movil.value.trim();
-
-    const destinatarioNombre = form.destinatario_nombre?.value.trim() || "";
-    const destinatarioEmail = form.destinatario_email.value.trim();
-
-    const file = form.file?.files?.[0];
-
-    if (!title) newErrors.title = "Este campo es obligatorio.";
-    if (!file) newErrors.file = "Adjunta un archivo PDF.";
-
-    if (!firmanteNombre1)
+    if (!firmanteNombre1) {
       newErrors.firmante_nombre1 = "Este campo es obligatorio.";
-    if (!firmanteApellido1)
+    }
+
+    if (!firmanteApellido1) {
       newErrors.firmante_apellido1 = "Este campo es obligatorio.";
-    if (!firmanteEmail)
+    }
+
+    if (!firmanteEmail || !isValidEmail(firmanteEmail)) {
       newErrors.firmante_email = "Ingresa un correo válido.";
-    if (!firmanteRunClean)
+    }
+
+    if (!firmanteMovil) {
+      newErrors.firmante_movil = "El teléfono es obligatorio.";
+    }
+
+    if (!firmanteRunClean) {
       newErrors.firmante_run = "RUN / RUT es obligatorio.";
-    else if (firmanteRunClean.length < 8 || firmanteRunClean.length > 10) {
+    } else if (firmanteRunClean.length < 8 || firmanteRunClean.length > 10) {
       newErrors.firmante_run = "RUN inválido (ej: 12.345.678-9)";
     }
-    if (!firmanteMovil)
-      newErrors.firmante_movil = "El teléfono es obligatorio.";
 
-    if (!destinatarioNombre)
+    if (!destinatarioNombre) {
       newErrors.destinatario_nombre = "Este campo es obligatorio.";
-    if (!destinatarioEmail)
+    }
+
+    if (!destinatarioEmail || !isValidEmail(destinatarioEmail)) {
       newErrors.destinatario_email = "Ingresa un correo válido.";
-    if (!empresaRutClean)
+    }
+
+    if (!empresaRutClean) {
       newErrors.empresa_rut = "El RUT de la empresa es obligatorio.";
-    else if (empresaRutClean.length < 8 || empresaRutClean.length > 10) {
+    } else if (empresaRutClean.length < 8 || empresaRutClean.length > 10) {
       newErrors.empresa_rut = "RUT inválido (ej: 12.345.678-9)";
     }
 
-    if (Object.keys(newErrors).length > 0) {
-      setFormErrors(newErrors);
-      setSubmitting(false);
-      return;
+    if (showVisador) {
+      if (!visadorNombre) {
+        newErrors.visador_nombre = "Nombre del visador obligatorio.";
+      }
+
+      if (!visadorEmail || !isValidEmail(visadorEmail)) {
+        newErrors.visador_email = "Email del visador obligatorio.";
+      }
     }
 
     const firmanteNombreCompleto = [
@@ -112,52 +187,113 @@ export function NewDocumentForm({
       firmanteApellido2,
     ]
       .filter(Boolean)
-      .join(" ");
+      .join(" ")
+      .trim();
 
-    formData.append("firmante_nombre_completo", firmanteNombreCompleto);
-    formData.append("firmante_run", firmanteRunValue);
-    formData.append("firmante_movil", firmanteMovil);
-    formData.append("empresa_rut", empresaRutValue);
-    formData.append("requiresVisado", showVisador ? "true" : "false");
+    const signers = [];
 
-    if (extraSigners.length > 0) {
-      const idx = 0;
-      const nombreExtra = form[`extra_nombre_${idx}`]?.value.trim() || "";
-      const emailExtra = form[`extra_email_${idx}`]?.value.trim() || "";
-      const movilExtra = form[`extra_movil_${idx}`]?.value.trim() || "";
+    if (showVisador && visadorEmail) {
+      signers.push({
+        nombreCompleto: visadorNombre,
+        email: visadorEmail,
+        telefono: visadorMovil || null,
+        orden: 1,
+        tipo: "VISADOR",
+        debe_visar: true,
+        debe_firmar: false,
+      });
+    }
 
-      if (emailExtra) {
-        formData.append(
-          "firmante_adicional_nombre_completo",
-          nombreExtra
-        );
-        formData.append("firmante_adicional_email", emailExtra);
-        formData.append("firmante_adicional_movil", movilExtra);
+    signers.push({
+      nombreCompleto: firmanteNombreCompleto,
+      email: firmanteEmail,
+      telefono: firmanteMovil,
+      orden: showVisador ? 2 : 1,
+      tipo: "FIRMANTE",
+      debe_visar: false,
+      debe_firmar: true,
+      run: firmanteRunValue,
+    });
+
+    extraSigners.forEach((signer, index) => {
+      const nombreExtra =
+        (form.elements[`extra_nombre_${index}`]?.value || "").trim();
+      const emailExtra =
+        (form.elements[`extra_email_${index}`]?.value || "").trim();
+      const movilExtra =
+        (form.elements[`extra_movil_${index}`]?.value || "").trim();
+
+      if (!nombreExtra) {
+        newErrors[`extra_nombre_${index}`] = "Nombre obligatorio.";
       }
+
+      if (!emailExtra || !isValidEmail(emailExtra)) {
+        newErrors[`extra_email_${index}`] = "Email obligatorio.";
+      }
+
+      if (nombreExtra && emailExtra && isValidEmail(emailExtra)) {
+        signers.push({
+          nombreCompleto: nombreExtra,
+          email: emailExtra,
+          telefono: movilExtra || null,
+          orden: signers.length + 1,
+          tipo: "FIRMANTE",
+          debe_visar: false,
+          debe_firmar: true,
+        });
+      }
+    });
+
+    if (Object.keys(newErrors).length > 0) {
+      setFormErrors(newErrors);
+      setSubmitting(false);
+      return;
     }
 
     try {
+      const formData = new FormData();
+      formData.append("title", title);
+      formData.append("description", description);
+      formData.append("file", file);
+      formData.append("autoSendFlow", "true");
+      formData.append("tipo_tramite", tipoTramite);
+      formData.append("tipo_documento", tipoDocumento);
+      formData.append("tipo_flujo", tipoFlujo);
+      formData.append("empresa_rut", empresaRutValue);
+      formData.append("destinatario_nombre", destinatarioNombre);
+      formData.append("destinatario_email", destinatarioEmail);
+      formData.append("requiresVisado", showVisador ? "true" : "false");
+      formData.append("signers", JSON.stringify(signers));
+
+      if (tipoTramite === "notaria") {
+        formData.append("requiere_firma_notarial", "true");
+      }
+
       const res = await api.post("/docs", formData);
 
-      if (!res || !res.data) {
+      if (!res?.data) {
         throw new Error("No se pudo crear el documento en el servidor.");
       }
 
-      alert("✅ ¡Documento procesado correctamente!");
-      form.reset();
-      setShowVisador(false);
-      setExtraSigners([]);
-      setFirmanteRunValue("");
-      setEmpresaRutValue("");
-      setTipoDocumento("");
-      setFileName("");
-      setView("list");
-      cargarDocs();
+      setSubmitMessage("✅ Documento creado y enviado correctamente.");
+      resetFormState(form);
+
+      if (typeof cargarDocs === "function") {
+        await cargarDocs();
+      }
+
+      if (typeof goToList === "function") {
+        await goToList();
+      }
     } catch (err) {
       console.error("Error creando documento:", err);
+
       const msg =
-        err.response?.data?.message || err.message || "Fallo en la subida";
-      alert(msg);
+        err?.response?.data?.message ||
+        err?.message ||
+        "Fallo en la creación del documento.";
+
+      setSubmitMessage(`❌ ${msg}`);
     } finally {
       setSubmitting(false);
     }
@@ -165,14 +301,10 @@ export function NewDocumentForm({
 
   return (
     <div className="card-premium">
-      <h1
-        style={{
-          fontSize: "1.4rem",
-          marginBottom: 8,
-        }}
-      >
+      <h1 style={{ fontSize: "1.4rem", marginBottom: 8 }}>
         Crear nuevo trámite
       </h1>
+
       <p
         style={{
           color: "#64748b",
@@ -180,10 +312,26 @@ export function NewDocumentForm({
           fontSize: "1.05rem",
         }}
       >
-        Configure el tipo de trámite, los participantes y cargue el PDF.
+        Configura el tipo de trámite, los participantes y carga el PDF.
       </p>
 
-      {/* Tipo de trámite + tipo de documento */}
+      {submitMessage && (
+        <div
+          style={{
+            marginBottom: 16,
+            padding: "12px 14px",
+            borderRadius: 12,
+            background: submitMessage.startsWith("✅") ? "#ecfdf5" : "#fef2f2",
+            color: submitMessage.startsWith("✅") ? "#166534" : "#b91c1c",
+            border: `1px solid ${
+              submitMessage.startsWith("✅") ? "#bbf7d0" : "#fecaca"
+            }`,
+          }}
+        >
+          {submitMessage}
+        </div>
+      )}
+
       <div
         style={{
           display: "flex",
@@ -240,20 +388,13 @@ export function NewDocumentForm({
             ))}
           </select>
           {formErrors.tipo_documento && (
-            <p
-              style={{
-                color: "#b91c1c",
-                fontSize: "0.8rem",
-                marginTop: 4,
-              }}
-            >
+            <p style={{ color: "#b91c1c", fontSize: "0.8rem", marginTop: 4 }}>
               {formErrors.tipo_documento}
             </p>
           )}
         </div>
       </div>
 
-      {/* Tipo de flujo */}
       <div style={{ marginBottom: 24 }}>
         <label
           style={{
@@ -277,24 +418,19 @@ export function NewDocumentForm({
             Paralelo (todos a la vez, sin orden)
           </option>
         </select>
-        <p style={{ fontSize: 12, color: "#6b7280", marginTop: 4 }}>
-          {tipoFlujo === "SECUENCIAL"
-            ? "Los firmantes deben firmar en el orden establecido."
-            : "Todos los firmantes pueden firmar simultáneamente, sin esperar turno."}
-        </p>
       </div>
 
       <form onSubmit={handleSubmit}>
-        {/* Título + PDF */}
         <div
           style={{
             marginBottom: 20,
             display: "flex",
             gap: 16,
             alignItems: "flex-end",
+            flexWrap: "wrap",
           }}
         >
-          <div style={{ flex: 1 }}>
+          <div style={{ flex: 1, minWidth: 280 }}>
             <label
               style={{
                 fontWeight: 700,
@@ -312,11 +448,7 @@ export function NewDocumentForm({
             />
             {formErrors.title && (
               <p
-                style={{
-                  color: "#b91c1c",
-                  fontSize: "0.8rem",
-                  marginTop: 4,
-                }}
+                style={{ color: "#b91c1c", fontSize: "0.8rem", marginTop: 4 }}
               >
                 {formErrors.title}
               </p>
@@ -326,12 +458,12 @@ export function NewDocumentForm({
           <input
             type="file"
             name="file"
-            accept="application/pdf"
+            accept="application/pdf,.pdf"
             id="file-input-contrato"
             style={{ display: "none" }}
             onChange={(e) => {
-              const f = e.target.files?.[0];
-              setFileName(f ? f.name : "");
+              const selectedFile = e.target.files?.[0];
+              setFileName(selectedFile ? selectedFile.name : "");
             }}
           />
 
@@ -357,8 +489,8 @@ export function NewDocumentForm({
                 whiteSpace: "nowrap",
               }}
               onClick={() => {
-                const el = document.getElementById("file-input-contrato");
-                if (el) el.click();
+                const input = document.getElementById("file-input-contrato");
+                input?.click();
               }}
             >
               Subir contrato (PDF)
@@ -376,11 +508,7 @@ export function NewDocumentForm({
             )}
             {formErrors.file && (
               <p
-                style={{
-                  color: "#b91c1c",
-                  fontSize: "0.8rem",
-                  marginTop: 4,
-                }}
+                style={{ color: "#b91c1c", fontSize: "0.8rem", marginTop: 4 }}
               >
                 {formErrors.file}
               </p>
@@ -388,7 +516,6 @@ export function NewDocumentForm({
           </div>
         </div>
 
-        {/* Descripción */}
         <div style={{ marginBottom: 30 }}>
           <label
             style={{
@@ -398,7 +525,7 @@ export function NewDocumentForm({
               marginBottom: 10,
             }}
           >
-            DESCRIPCIÓN Y OBSERVACIONES
+            Descripción y observaciones
           </label>
           <textarea
             name="description"
@@ -408,7 +535,6 @@ export function NewDocumentForm({
           />
         </div>
 
-        {/* Visador */}
         <div
           style={{
             background: "#f1f5f9",
@@ -432,62 +558,81 @@ export function NewDocumentForm({
               type="checkbox"
               checked={showVisador}
               onChange={(e) => setShowVisador(e.target.checked)}
-              style={{
-                marginRight: 15,
-                width: 22,
-                height: 22,
-              }}
+              style={{ marginRight: 15, width: 22, height: 22 }}
             />
-            ¿Este envío requiere la revisión previa de un Visador?
+            ¿Este envío requiere la revisión previa de un visador?
           </label>
 
           {showVisador && (
             <div
               style={{
                 display: "grid",
-                gridTemplateColumns: "1fr 1fr 1fr",
+                gridTemplateColumns: "repeat(auto-fit, minmax(220px, 1fr))",
                 gap: 20,
                 marginTop: 24,
               }}
             >
-              <input
-                name="visador_nombre"
-                className="input-field"
-                placeholder="Nombre Visador"
-                required={showVisador}
-              />
-              <input
-                name="visador_email"
-                type="email"
-                className="input-field"
-                placeholder="Email Visador"
-                required={showVisador}
-              />
+              <div>
+                <input
+                  name="visador_nombre"
+                  className="input-field"
+                  placeholder="Nombre visador"
+                />
+                {formErrors.visador_nombre && (
+                  <p
+                    style={{
+                      color: "#b91c1c",
+                      fontSize: "0.8rem",
+                      marginTop: 4,
+                    }}
+                  >
+                    {formErrors.visador_nombre}
+                  </p>
+                )}
+              </div>
+
+              <div>
+                <input
+                  name="visador_email"
+                  type="email"
+                  className="input-field"
+                  placeholder="Email visador"
+                />
+                {formErrors.visador_email && (
+                  <p
+                    style={{
+                      color: "#b91c1c",
+                      fontSize: "0.8rem",
+                      marginTop: 4,
+                    }}
+                  >
+                    {formErrors.visador_email}
+                  </p>
+                )}
+              </div>
+
               <input
                 name="visador_movil"
                 className="input-field"
-                placeholder="Móvil (Opcional)"
+                placeholder="Móvil (opcional)"
               />
             </div>
           )}
         </div>
 
-        {/* Firmante + empresa */}
         <div
           style={{
             display: "grid",
-            gridTemplateColumns: "1fr 1fr",
+            gridTemplateColumns: "repeat(auto-fit, minmax(320px, 1fr))",
             gap: 24,
           }}
         >
-          {/* Firmante final */}
           <div className="card-mini" style={{ marginTop: 0 }}>
-            <h4>✍️ Firmante Final (Responsable)</h4>
+            <h4>Firmante final</h4>
             <div className="card-content">
               <input
                 name="firmante_nombre1"
                 className="input-field"
-                required
                 placeholder="Primer nombre *"
               />
               {formErrors.firmante_nombre1 && (
@@ -511,7 +656,6 @@ export function NewDocumentForm({
               <input
                 name="firmante_apellido1"
                 className="input-field"
-                required
                 placeholder="Primer apellido *"
               />
               {formErrors.firmante_apellido1 && (
@@ -536,7 +680,6 @@ export function NewDocumentForm({
                 name="firmante_email"
                 type="email"
                 className="input-field"
-                required
                 placeholder="Email corporativo *"
               />
               {formErrors.firmante_email && (
@@ -554,12 +697,9 @@ export function NewDocumentForm({
               <input
                 name="firmante_run"
                 className="input-field"
-                required
                 placeholder="RUN / RUT del representante *"
                 value={firmanteRunValue}
-                onChange={(e) =>
-                  setFirmanteRunValue(formatRunDoc(e.target.value))
-                }
+                onChange={(e) => setFirmanteRunValue(formatRunDoc(e.target.value))}
               />
               {formErrors.firmante_run && (
                 <p
@@ -576,7 +716,6 @@ export function NewDocumentForm({
               <input
                 name="firmante_movil"
                 className="input-field"
-                required
                 placeholder="Teléfono móvil del representante *"
               />
               {formErrors.firmante_movil && (
@@ -593,15 +732,13 @@ export function NewDocumentForm({
             </div>
           </div>
 
-          {/* Destinatario / empresa */}
           <div className="card-mini" style={{ marginTop: 0 }}>
-            <h4>🏢 Destinatario / Empresa</h4>
+            <h4>Destinatario / empresa</h4>
             <div className="card-content">
               <input
                 name="destinatario_nombre"
                 className="input-field"
-                required
-                placeholder="Razón Social *"
+                placeholder="Razón social *"
               />
               {formErrors.destinatario_nombre && (
                 <p
@@ -618,12 +755,9 @@ export function NewDocumentForm({
               <input
                 name="empresa_rut"
                 className="input-field"
-                required
                 placeholder="RUT de la empresa *"
                 value={empresaRutValue}
-                onChange={(e) =>
-                  setEmpresaRutValue(formatRunDoc(e.target.value))
-                }
+                onChange={(e) => setEmpresaRutValue(formatRunDoc(e.target.value))}
               />
               {formErrors.empresa_rut && (
                 <p
@@ -641,7 +775,6 @@ export function NewDocumentForm({
                 name="destinatario_email"
                 type="email"
                 className="input-field"
-                required
                 placeholder="Email de contacto *"
               />
               {formErrors.destinatario_email && (
@@ -659,18 +792,13 @@ export function NewDocumentForm({
           </div>
         </div>
 
-        {/* Firmantes adicionales */}
         {extraSigners.map((signer, index) => (
           <div key={signer.id} className="card-mini">
             <h4>
-              <span>➕ Firmante Adicional #{index + 1}</span>
+              <span>Firmante adicional #{index + 1}</span>
               <button
                 type="button"
-                onClick={() =>
-                  setExtraSigners(
-                    extraSigners.filter((s) => s.id !== signer.id)
-                  )
-                }
+                onClick={() => removeExtraSigner(signer.id)}
                 style={{
                   color: "#ef4444",
                   border: "none",
@@ -680,30 +808,57 @@ export function NewDocumentForm({
                   fontSize: "0.85rem",
                 }}
               >
-                ELIMINAR
+                Eliminar
               </button>
             </h4>
+
             <div
               className="card-content"
               style={{
                 display: "grid",
-                gridTemplateColumns: "1fr 1fr 1fr",
+                gridTemplateColumns: "repeat(auto-fit, minmax(220px, 1fr))",
                 gap: 20,
               }}
             >
-              <input
-                name={`extra_nombre_${index}`}
-                className="input-field"
-                placeholder="Nombre completo *"
-                required
-              />
-              <input
-                name={`extra_email_${index}`}
-                type="email"
-                className="input-field"
-                placeholder="Email *"
-                required
-              />
+              <div>
+                <input
+                  name={`extra_nombre_${index}`}
+                  className="input-field"
+                  placeholder="Nombre completo *"
+                />
+                {formErrors[`extra_nombre_${index}`] && (
+                  <p
+                    style={{
+                      color: "#b91c1c",
+                      fontSize: "0.8rem",
+                      marginTop: 4,
+                    }}
+                  >
+                    {formErrors[`extra_nombre_${index}`]}
+                  </p>
+                )}
+              </div>
+
+              <div>
+                <input
+                  name={`extra_email_${index}`}
+                  type="email"
+                  className="input-field"
+                  placeholder="Email *"
+                />
+                {formErrors[`extra_email_${index}`] && (
+                  <p
+                    style={{
+                      color: "#b91c1c",
+                      fontSize: "0.8rem",
+                      marginTop: 4,
+                    }}
+                  >
+                    {formErrors[`extra_email_${index}`]}
+                  </p>
+                )}
+              </div>
+
               <input
                 name={`extra_movil_${index}`}
                 className="input-field"
@@ -713,7 +868,6 @@ export function NewDocumentForm({
           </div>
         ))}
 
-        {/* Botones finales */}
         <div
           style={{
             marginTop: 32,
@@ -721,14 +875,13 @@ export function NewDocumentForm({
             gap: 16,
             borderTop: "1px solid #f1f5f9",
             paddingTop: 24,
+            flexWrap: "wrap",
           }}
         >
           <button
             type="button"
             className="btn-main"
-            onClick={() =>
-              setExtraSigners([...extraSigners, { id: Date.now() }])
-            }
+            onClick={addExtraSigner}
             style={{
               background: "#e2e8f0",
               color: "#475569",
@@ -737,6 +890,7 @@ export function NewDocumentForm({
           >
             + Añadir firmante adicional
           </button>
+
           <button
             type="submit"
             className="btn-main btn-primary"
@@ -749,9 +903,7 @@ export function NewDocumentForm({
               cursor: submitting ? "not-allowed" : "pointer",
             }}
           >
-            {submitting
-              ? "ENVIANDO..."
-              : "INICIAR FLUJO DE FIRMA DIGITAL"}
+            {submitting ? "Enviando..." : "Iniciar flujo de firma digital"}
           </button>
         </div>
       </form>

@@ -25,26 +25,18 @@ const { setupSwagger } = require("./swagger");
 const { requireAuth, requireRole } = require("./routes/auth");
 const plansRoutes = require("./routes/plans");
 const templatesRoutes = require("./routes/templates");
-
-// NUEVO: helpers de plan
 const { isNonExpiringUser } = require("./utils/billing");
 
 /* ================================
-   INICIALIZAR WORKER DE BULLMQ
+   INICIALIZAR WORKERS / SCHEDULERS
    ================================ */
 try {
   // require("./queues/remindersWorker");
   console.log("✓ Worker de recordatorios inicializado");
 } catch (err) {
-  console.warn(
-    "⚠️ No se pudo iniciar worker de recordatorios:",
-    err.message
-  );
+  console.warn("⚠️ No se pudo iniciar worker de recordatorios:", err.message);
 }
 
-/* ================================
-   INICIALIZAR REMINDER SCHEDULER
-   ================================ */
 try {
   const { iniciarReminderScheduler } = require("./jobs/reminderScheduler");
   iniciarReminderScheduler();
@@ -54,7 +46,7 @@ try {
 }
 
 /* ================================
-   RUTAS
+   IMPORT RUTAS
    ================================ */
 const authRoutes = require("./routes/auth");
 const docRoutes = require("./routes/documents");
@@ -72,7 +64,6 @@ const onboardingRoutes = require("./routes/onboarding");
 const billingRoutes = require("./routes/billing");
 const publicDocsRouter = require("./routes/publicDocs");
 const notaryRouter = require("./routes/notary");
-
 
 /* ================================
    LOG DE INICIO
@@ -313,7 +304,6 @@ console.log("✓ Ruta GET /api/sentry-test registrada");
 /* ================================
    MIDDLEWARE requireActivePlan
    ================================ */
-// Usuarios que nunca expiran ni pagan: SUPER_ADMIN, ADMIN_GLOBAL, AOEM SAS (company_id=4)
 function requireActivePlan(req, res, next) {
   const user = req.user;
 
@@ -347,7 +337,7 @@ function requireActivePlan(req, res, next) {
 app.use("/api/auth", loginLimiter, authRoutes);
 console.log("✓ Rutas /api/auth registradas");
 
-// Usuarios (solo autenticado, sin plan obligatorio)
+// Usuarios
 app.use("/api/users", requireAuth, usersRouter);
 console.log("✓ Rutas /api/users registradas");
 
@@ -355,11 +345,11 @@ console.log("✓ Rutas /api/users registradas");
 app.use("/api/status", requireAuth, statusRoutes);
 console.log("✓ Rutas /api/status registradas");
 
-// Logs / auditoría (normalmente solo admins, ya manejas roles dentro del router)
+// Logs / auditoría
 app.use("/api/logs", requireAuth, logsRoutes);
 console.log("✓ Rutas /api/logs registradas");
 
-// Documentos (requiere auth + plan activo salvo AOEM/admins especiales)
+// Documentos
 app.use(
   "/api/docs",
   requireAuth,
@@ -381,9 +371,8 @@ app.use(
   },
   docRoutes
 );
-console.log("✓ Rutas /api/documents registradas");
-
-// Público (firma, visado, verificación por token)
+console.log("✓ Rutas /api/docs y /api/documents registradas");
+// Público (firma, verificación, etc.)
 app.use(
   "/api/public",
   publicLimiter,
@@ -395,11 +384,11 @@ app.use(
 );
 console.log("✓ Rutas /api/public registradas");
 
-// Registro público (autoregistro de empresas/usuarios)
+// Registro público
 app.use("/api/public", publicRegisterRoutes);
 console.log("✓ Rutas /api/public/register registradas");
 
-// Empresas (requiere plan)
+// Empresas
 app.use("/api/companies", requireAuth, requireActivePlan, companiesRoutes);
 console.log("✓ Rutas /api/companies registradas");
 
@@ -411,7 +400,7 @@ console.log("✓ Rutas /api/reminders registradas");
 app.use("/api/analytics", requireAuth, requireActivePlan, analyticsRoutes);
 console.log("✓ Rutas /api/analytics registradas");
 
-// Planes (puede ser solo admin; por ahora solo auth)
+// Planes
 app.use("/api/plans", requireAuth, plansRoutes);
 console.log("✓ Rutas /api/plans registradas");
 
@@ -431,10 +420,13 @@ console.log("✓ Rutas /api/admin registradas");
 app.use("/api/onboarding", requireAuth, onboardingRoutes);
 console.log("✓ Rutas /api/onboarding registradas");
 
+// Billing
 app.use("/api/billing", requireAuth, billingRoutes);
 
+// Docs públicos
 app.use("/public", publicDocsRouter);
 
+// Notaría
 app.use("/api/notary", notaryRouter);
 
 /* ================================
@@ -665,7 +657,12 @@ const server = app.listen(PORT, () => {
 });
 
 // Inicializar Socket.IO
-initializeSocketIO(server);
+try {
+  initializeSocketIO(server);
+  console.log("✓ Socket.IO inicializado sobre servidor HTTP");
+} catch (err) {
+  console.error("❌ Error inicializando Socket.IO:", err.message);
+}
 
 process.on("unhandledRejection", (reason, promise) => {
   console.error("❌ Unhandled Rejection at:", promise, "reason:", reason);

@@ -1,11 +1,16 @@
 // src/App.jsx
-import { useState, useEffect, useCallback } from "react";
+import { useEffect, useMemo, useState } from "react";
 import "./App.css";
+
 import { Sidebar } from "./components/Sidebar";
 import { DetailView } from "./components/DetailView";
 import { ListHeader } from "./components/ListHeader";
 import { DocumentRow } from "./components/DocumentRow";
+import OnboardingWizard from "./components/Onboarding/OnboardingWizard";
+import ProductTour from "./components/Onboarding/ProductTour";
+
 import { DOC_STATUS, API_BASE_URL } from "./constants";
+
 import { LoginView } from "./views/LoginView";
 import { PublicSignView } from "./views/PublicSignView";
 import { NewDocumentForm } from "./views/NewDocumentForm";
@@ -16,34 +21,75 @@ import { CompaniesAdminView } from "./views/CompaniesAdminView";
 import { StatusAdminView } from "./views/StatusAdminView";
 import { AuditLogsView } from "./views/AuditLogsView";
 import { AuthLogsView } from "./views/AuthLogsView";
-import { getSubdomain } from "./utils/subdomain";
 import RemindersConfigView from "./views/RemindersConfigView";
 import EmailMetricsView from "./views/EmailMetricsView";
-import { useSocket } from "./hooks/useSocket";
 import PricingView from "./views/PricingView";
 import ProfileView from "./views/ProfileView";
 import TemplatesView from "./views/TemplatesView";
 import ForgotPasswordView from "./views/ForgotPasswordView";
 import ResetPasswordView from "./views/ResetPasswordView";
 import CompanyAnalyticsView from "./views/CompanyAnalyticsView";
-import OnboardingWizard from "./components/Onboarding/OnboardingWizard";
-import ProductTour from "./components/Onboarding/ProductTour";
 import RegisterView from "./views/RegisterView";
-import api from "./api/client";
 
-/* ========= Helpers de rol ========= */
+import { getSubdomain } from "./utils/subdomain";
+import {
+  getPath,
+  getNavigationEventName,
+  navigateTo,
+  replaceTo,
+} from "./utils/router";
+import { isAnyAdmin, canViewAuditLogs } from "./utils/permissions";
 
-const isSuperAdmin = (user) => user?.role === "SUPER_ADMIN";
-const isGlobalAdmin = (user) => user?.role === "ADMIN_GLOBAL";
-const isCompanyAdmin = (user) => user?.role === "ADMIN";
-const isAnyAdmin = (user) =>
-  isSuperAdmin(user) || isGlobalAdmin(user) || isCompanyAdmin(user);
+import { useSocket } from "./hooks/useSocket";
+import { useOnboardingStatus } from "./hooks/useOnboardingStatus";
+import { usePublicSign } from "./hooks/usePublicSign";
+import { useDocuments } from "./hooks/useDocuments";
+import { useToast } from "./hooks/useToast";
+import { useAuth } from "./hooks/useAuth";
 
-/* ========= Helpers RUN ========= */
+const ROUTE_MAP = {
+  "/": "list",
+  "/documents": "list",
+  "/new-document": "upload",
+  "/users": "users",
+  "/dashboard": "dashboard",
+  "/companies": "companies",
+  "/status": "status",
+  "/audit-logs": "audit-logs",
+  "/auth-logs": "auth-logs",
+  "/reminders-config": "reminders-config",
+  "/email-metrics": "email-metrics",
+  "/pricing": "pricing",
+  "/profile": "profile",
+  "/templates": "templates",
+  "/company-analytics": "company-analytics",
+};
+
+const VIEW_TO_PATH = {
+  list: "/documents",
+  upload: "/new-document",
+  users: "/users",
+  dashboard: "/dashboard",
+  companies: "/companies",
+  status: "/status",
+  "audit-logs": "/audit-logs",
+  "auth-logs": "/auth-logs",
+  "reminders-config": "/reminders-config",
+  "email-metrics": "/email-metrics",
+  pricing: "/pricing",
+  profile: "/profile",
+  templates: "/templates",
+  "company-analytics": "/company-analytics",
+};
+
+function getProtectedViewFromPath(path) {
+  return ROUTE_MAP[path] || "list";
+}
 
 function formatRun(value) {
   let clean = (value || "").replace(/[^0-9kK]/g, "");
   if (!clean) return "";
+
   const MAX_LEN = 10;
   if (clean.length > MAX_LEN) clean = clean.slice(0, MAX_LEN);
   if (clean.length < 2) return clean;
@@ -51,101 +97,247 @@ function formatRun(value) {
   const body = clean.slice(0, -1);
   const dv = clean.slice(-1);
   const formattedBody = body.replace(/\B(?=(\d{3})+(?!\d))/g, ".");
+
   if (!body) return dv;
   return `${formattedBody}-${dv}`;
 }
 
 function formatRunDoc(value) {
   let clean = (value || "").replace(/[^0-9kK]/g, "");
-  if (clean.length === 0) return "";
+  if (!clean) return "";
   if (clean.length > 10) clean = clean.slice(0, 10);
   if (clean.length <= 1) return clean;
 
   const body = clean.slice(0, -1);
   const dv = clean.slice(-1);
+
   if (!body) return dv;
-
-  return body.replace(/\B(?=(\d{3})+(?!\d))/g, ".") + "-" + dv;
+  return `${body.replace(/\B(?=(\d{3})+(?!\d))/g, ".")}-${dv}`;
 }
-
-/* ========= Component ========= */
 
 function App() {
   const subdomain = getSubdomain();
   const isVerificationPortal = subdomain === "verificar";
   const isSigningPortal = subdomain === "firmar";
 
+  const [path, setPath] = useState(() => getPath());
+  const [view, setView] = useState(() => getProtectedViewFromPath(getPath()));
+
   const [identifier, setIdentifier] = useState("");
   const [password, setPassword] = useState("");
   const [isEmailMode, setIsEmailMode] = useState(false);
-
   const [showPassword, setShowPassword] = useState(false);
   const [showHelp, setShowHelp] = useState(false);
   const [message, setMessage] = useState("");
   const [isLoggingIn, setIsLoggingIn] = useState(false);
-
-  const [view, setView] = useState("list");
+  const [rememberMe, setRememberMe] = useState(false);
 
   const [formErrors, setFormErrors] = useState({});
   const [tipoTramite, setTipoTramite] = useState("propio");
-
-  const [user, setUser] = useState(() => {
-    try {
-      return typeof localStorage !== "undefined"
-        ? JSON.parse(localStorage.getItem("user") || "null")
-        : null;
-    } catch {
-      return null;
-    }
-  });
-
-  const [token, setToken] = useState(() => {
-    try {
-      return typeof localStorage !== "undefined"
-        ? localStorage.getItem("accessToken") || ""
-        : "";
-    } catch {
-      return "";
-    }
-  });
-
-  // Onboarding
-  const [checkingOnboarding, setCheckingOnboarding] = useState(false);
-  const [showOnboarding, setShowOnboarding] = useState(false);
-  const [runProductTour, setRunProductTour] = useState(false);
-
-  const [loadingDocs, setLoadingDocs] = useState(false);
-  const [errorDocs, setErrorDocs] = useState("");
-  const [docs, setDocs] = useState([]);
-
   const [showVisador, setShowVisador] = useState(false);
   const [extraSigners, setExtraSigners] = useState([]);
-
-  const [sort, setSort] = useState("title_asc");
-  const [statusFilter, setStatusFilter] = useState("ALL");
-  const [search, setSearch] = useState("");
-
-  const [page, setPage] = useState(1);
-  const pageSize = 20;
-
-  const [selectedDoc, setSelectedDoc] = useState(null);
-  const [pdfUrl, setPdfUrl] = useState(null);
-
-  const [publicSignDoc, setPublicSignDoc] = useState(null);
-  const [publicSignError, setPublicSignError] = useState("");
-  const [publicSignLoading, setPublicSignLoading] = useState(false);
-  const [publicSignToken, setPublicSignToken] = useState("");
-  const [publicSignPdfUrl, setPublicSignPdfUrl] = useState("");
-  const [publicSignMode, setPublicSignMode] = useState(null);
-
   const [firmanteRunValue, setFirmanteRunValue] = useState("");
   const [empresaRutValue, setEmpresaRutValue] = useState("");
 
   const apiRoot = API_BASE_URL;
 
-  /* =============================== */
-  /* LOGIN                           */
-  /* =============================== */
+  const { user, token, login, logout, authLoading } = useAuth();
+  const { addToast } = useToast();
+
+  const {
+    loadingDocs,
+    errorDocs,
+    docs,
+    sort,
+    setSort,
+    statusFilter,
+    setStatusFilter,
+    search,
+    setSearch,
+    page,
+    setPage,
+    selectedDoc,
+    setSelectedDoc,
+    pdfUrl,
+    cargarDocs,
+    manejarAccionDocumento,
+    docsFiltrados,
+    docsPaginados,
+    pendientes,
+    visados,
+    firmados,
+    rechazados,
+    totalFiltrado,
+    totalPaginas,
+  } = useDocuments(token);
+
+  const {
+    checkingOnboarding,
+    showOnboarding,
+    runProductTour,
+    setRunProductTour,
+    checkOnboarding,
+    handleOnboardingCompleted,
+    handleOnboardingSkipped,
+  } = useOnboardingStatus(token);
+
+  const {
+    publicSignDoc,
+    publicSignError,
+    publicSignLoading,
+    publicSignToken,
+    publicSignPdfUrl,
+    publicSignMode,
+    publicView,
+    cargarFirmaPublica,
+  } = usePublicSign({
+    apiRoot,
+    isSigningPortal,
+    isVerificationPortal,
+  });
+
+  const {
+    connected: socketConnected,
+    on: socketOn,
+    off: socketOff,
+  } = useSocket(token);
+
+  const safeDocs = useMemo(() => (Array.isArray(docs) ? docs : []), [docs]);
+  const safeDocsFiltrados = useMemo(
+    () => (Array.isArray(docsFiltrados) ? docsFiltrados : []),
+    [docsFiltrados]
+  );
+  const safeDocsPaginados = useMemo(
+    () => (Array.isArray(docsPaginados) ? docsPaginados : []),
+    [docsPaginados]
+  );
+
+  const safePendientes = Number.isFinite(pendientes) ? pendientes : 0;
+  const safeVisados = Number.isFinite(visados) ? visados : 0;
+  const safeFirmados = Number.isFinite(firmados) ? firmados : 0;
+  const safeRechazados = Number.isFinite(rechazados) ? rechazados : 0;
+  const safeTotalFiltrado = Number.isFinite(totalFiltrado) ? totalFiltrado : 0;
+  const safeTotalPaginas =
+    Number.isFinite(totalPaginas) && totalPaginas > 0 ? totalPaginas : 1;
+
+  const anyAdmin = isAnyAdmin(user);
+  const canAudit = !!user && canViewAuditLogs(user);
+
+  useEffect(() => {
+    const syncPath = () => {
+      const nextPath = getPath();
+      setPath(nextPath);
+
+      if (!token) return;
+
+      setView((currentView) => {
+        if (currentView === "detail" && selectedDoc) return currentView;
+        return getProtectedViewFromPath(nextPath);
+      });
+    };
+
+    const navigationEvent = getNavigationEventName();
+
+    window.addEventListener("popstate", syncPath);
+    window.addEventListener(navigationEvent, syncPath);
+
+    return () => {
+      window.removeEventListener("popstate", syncPath);
+      window.removeEventListener(navigationEvent, syncPath);
+    };
+  }, [token, selectedDoc]);
+
+  useEffect(() => {
+    const handleAuthExpired = (event) => {
+      const source = event?.detail?.source || "unknown";
+
+      addToast({
+        type: "warning",
+        title: "Sesión expirada",
+        message:
+          source === "ws"
+            ? "Tu sesión expiró en tiempo real. Inicia sesión nuevamente."
+            : "Tu sesión expiró. Inicia sesión nuevamente.",
+      });
+
+      logout({ redirectTo: "/login" });
+    };
+
+    window.addEventListener("auth:expired", handleAuthExpired);
+
+    return () => {
+      window.removeEventListener("auth:expired", handleAuthExpired);
+    };
+  }, [logout, addToast]);
+
+  useEffect(() => {
+    if (!token) return;
+    if (typeof socketOn !== "function" || typeof socketOff !== "function") return;
+
+    const handleSent = (data) => {
+      addToast({
+        type: "success",
+        title: "Documento enviado",
+        message: data?.titulo
+          ? `"${data.titulo}" se envió correctamente`
+          : "El documento se envió correctamente",
+      });
+      cargarDocs();
+    };
+
+    const handleSigned = (data) => {
+      addToast({
+        type: "success",
+        title: "Documento firmado",
+        message: data?.titulo
+          ? `"${data.titulo}" se firmó correctamente`
+          : "El documento se firmó correctamente",
+      });
+      cargarDocs();
+    };
+
+    socketOn("document:sent", handleSent);
+    socketOn("document:signed", handleSigned);
+
+    return () => {
+      socketOff("document:sent", handleSent);
+      socketOff("document:signed", handleSigned);
+    };
+  }, [token, socketOn, socketOff, cargarDocs, addToast]);
+
+  const handleLogout = () => {
+    logout({ redirectTo: "/login" });
+  };
+
+  const handleNavigateProtected = (nextView) => {
+    const nextPath = VIEW_TO_PATH[nextView] || "/documents";
+
+    if (nextView === "list") {
+      setPage(1);
+    }
+
+    setSelectedDoc(null);
+    setView(nextView);
+    navigateTo(nextPath);
+  };
+
+  const handleOpenDetail = (doc) => {
+    setSelectedDoc(doc);
+    setView("detail");
+  };
+
+  const handleBackToList = () => {
+    setSelectedDoc(null);
+    handleNavigateProtected("list");
+  };
+
+  const handleAfterCreateDocument = async () => {
+    handleNavigateProtected("list");
+  };
+
+  const handleTestError = () => {
+    throw new Error("Frontend test error");
+  };
 
   async function handleLogin(e) {
     e.preventDefault();
@@ -165,436 +357,48 @@ function App() {
       return;
     }
 
-    if (import.meta.env.DEV) {
-      console.log("[LOGIN] payload:", { identifier: cleanValue, isEmail });
-    }
-
     try {
-      const res = await api.post(
-        "/auth/login",
-        {
-          identifier: cleanValue,
-          password,
-        },
-        {
-          withCredentials: true,
-        }
-      );
-
-      const data = res.data;
-
-      if (!data || !data.user || !data.accessToken) {
-        setMessage("❌ Respuesta inesperada del servidor de autenticación");
-        return;
-      }
-
-      setUser(data.user);
-      setToken(data.accessToken);
-
-      localStorage.setItem("user", JSON.stringify(data.user));
-      localStorage.setItem("accessToken", data.accessToken);
+      await login({
+        identifier: cleanValue,
+        password,
+        rememberMe,
+      });
 
       setMessage("Acceso concedido");
+      setPassword("");
       setView("list");
-      checkOnboarding();
+      replaceTo("/documents");
+
+      if (typeof checkOnboarding === "function") {
+        checkOnboarding();
+      }
     } catch (err) {
-      console.error("[LOGIN ERROR]", err);
       const msg =
-        err.response?.data?.message ||
-        err.message ||
+        err?.response?.data?.message ||
+        err?.message ||
         "Error de conexión, intenta nuevamente.";
-      setMessage("❌ " + msg);
+
+      setMessage(`❌ ${msg}`);
+
+      addToast({
+        type: "error",
+        title: "No se pudo iniciar sesión",
+        message: msg,
+      });
     } finally {
       setIsLoggingIn(false);
     }
   }
 
-  /* =============================== */
-  /* SOCKET (siempre se llama hook) */
-  /* =============================== */
-
-  const socketApi = useSocket(token);
-  const socket = token ? socketApi : null;
-
-  /* =============================== */
-  /* ONBOARDING                      */
-  /* =============================== */
-
-  const checkOnboarding = useCallback(async () => {
-    if (!token) return;
-    try {
-      setCheckingOnboarding(true);
-      const res = await api.get("/onboarding/status");
-      const data = res.data;
-      if (data?.needsOnboarding) {
-        setShowOnboarding(true);
-      } else {
-        setShowOnboarding(false);
-      }
-    } catch (err) {
-      console.error("[ONBOARDING CHECK] Error:", err.message);
-      setShowOnboarding(false);
-    } finally {
-      setCheckingOnboarding(false);
-    }
-  }, [token]);
-
-  const handleOnboardingCompleted = () => {
-    setShowOnboarding(false);
-    setRunProductTour(true);
-  };
-
-  const handleOnboardingSkipped = () => {
-    setShowOnboarding(false);
-    setRunProductTour(false);
-  };
-
-  useEffect(() => {
-    if (token) {
-      checkOnboarding();
-    }
-  }, [token, checkOnboarding]);
-
-  /* =============================== */
-  /* REHIDRATACIÓN INICIAL          */
-  /* =============================== */
-
-  useEffect(() => {
-    if (token || user) return;
-    if (typeof localStorage === "undefined") return;
-
-    const storedToken = localStorage.getItem("accessToken");
-    const storedUser = localStorage.getItem("user");
-
-    if (storedToken && storedUser) {
-      try {
-        const parsedUser = JSON.parse(storedUser);
-        setUser(parsedUser);
-        setToken(storedToken);
-      } catch {
-        // ignore
-      }
-    }
-  }, [token, user]);
-
-  /* =============================== */
-  /* CARGA DE DOCUMENTOS             */
-  /* =============================== */
-
-  const cargarDocs = useCallback(
-    async (sortParam = sort) => {
-      if (!token) return;
-
-      setLoadingDocs(true);
-      setErrorDocs("");
-
-      try {
-        const res = await api.get("/docs", { params: { sort: sortParam } });
-        const data = res.data;
-        setDocs(Array.isArray(data) ? data : []);
-      } catch (err) {
-        console.error("Fallo al cargar documentos:", err);
-        const msg =
-          err.response?.data?.message ||
-          err.message ||
-          "No se pudieron cargar los documentos. Intenta nuevamente.";
-        setErrorDocs(msg);
-      } finally {
-        setLoadingDocs(false);
-      }
-    },
-    [sort, token]
-  );
-
-  // WebSocket listeners
-useEffect(() => {
-  if (!token || !socket || typeof socket.on !== "function") return;
-
-  const handleSent = (data) => {
-    console.log("📡 Documento enviado:", data);
-    alert(`✅ Documento enviado: ${data.titulo}`);
-    cargarDocs();
-  };
-
-  const handleSigned = (data) => {
-    console.log("📡 Documento firmado:", data);
-    alert(`✅ Documento firmado: ${data.titulo}`);
-    cargarDocs();
-  };
-
-  socket.on("document:sent", handleSent);
-  socket.on("document:signed", handleSigned);
-
-  return () => {
-    socket.off("document:sent", handleSent);
-    socket.off("document:signed", handleSigned);
-  };
-}, [token, socket, cargarDocs]);
-
-  // Cargar URL de PDF para la vista de detalle
-  useEffect(() => {
-    if (!selectedDoc?.id) {
-      setPdfUrl(null);
-      return;
-    }
-
-    let objectUrl;
-
-    (async () => {
-      try {
-        const res = await api.get(`/documents/${selectedDoc.id}/preview`, {
-          responseType: "blob",
-        });
-
-        const blob = new Blob([res.data], { type: "application/pdf" });
-        objectUrl = URL.createObjectURL(blob);
-        setPdfUrl(objectUrl);
-      } catch (err) {
-        console.error("Error preparando URL de PDF:", err);
-        setPdfUrl(null);
-      }
-    })();
-
-    return () => {
-      if (objectUrl) URL.revokeObjectURL(objectUrl);
-    };
-  }, [selectedDoc?.id]);
-
-  /* =============================== */
-  /* FIRMA / VISADO PÚBLICO          */
-  /* =============================== */
-
-  const cargarFirmaPublica = useCallback(
-    async (tokenParam) => {
-      try {
-        setPublicSignLoading(true);
-        setPublicSignError("");
-
-        const params = new URLSearchParams(window.location.search);
-        const modeUrl = params.get("mode");
-        const pathname = window.location.pathname;
-
-        const isVisado = modeUrl === "visado";
-        const isConsultaPublica = pathname === "/consulta-publica";
-
-        const path =
-          isVisado || isConsultaPublica
-            ? `/public/docs/document/${tokenParam}`
-            : `/public/docs/${tokenParam}`;
-
-        const res = await fetch(`${apiRoot}${path}`);
-        const data = await res.json();
-
-        if (!res.ok) {
-          throw new Error(data.message || "No se pudo cargar el documento");
-        }
-
-        if (isVisado || isConsultaPublica) {
-          setPublicSignDoc({ document: data.document, signer: null });
-          setPublicSignPdfUrl(data.pdfUrl);
-        } else {
-          setPublicSignDoc(data);
-          setPublicSignPdfUrl(data.pdfUrl);
-        }
-      } catch (err) {
-        console.error("Error cargando firma pública:", err);
-        setPublicSignError(err.message || "No se pudo cargar el documento");
-        setPublicSignDoc(null);
-        setPublicSignPdfUrl("");
-      } finally {
-        setPublicSignLoading(false);
-      }
-    },
-    [apiRoot]
-  );
-
-  /* =============================== */
-  /* RUTAS PÚBLICAS (sin login)      */
-  /* =============================== */
-
-  useEffect(() => {
-    const syncViewWithLocation = () => {
-      const params = new URLSearchParams(window.location.search);
-      const tokenUrl = params.get("token");
-      const modeUrl = params.get("mode");
-      const pathname = window.location.pathname;
-
-      const isFirmaPublicaPath =
-        pathname === "/public/sign" ||
-        pathname === "/firma-publica" ||
-        (isSigningPortal && pathname === "/");
-
-      const isConsultaPublica = pathname === "/consulta-publica";
-
-      const isVerificationPublic =
-        pathname === "/verificar" ||
-        (isVerificationPortal && pathname === "/");
-
-      if (tokenUrl && (isFirmaPublicaPath || isConsultaPublica)) {
-        setView("public-sign");
-        setPublicSignToken(tokenUrl);
-        setPublicSignMode(isFirmaPublicaPath ? modeUrl || null : null);
-        cargarFirmaPublica(tokenUrl);
-        return;
-      }
-
-      if (isVerificationPublic) {
-        setView("verification");
-      }
-    };
-
-    syncViewWithLocation();
-    window.addEventListener("popstate", syncViewWithLocation);
-    return () => window.removeEventListener("popstate", syncViewWithLocation);
-  }, [isVerificationPortal, isSigningPortal, cargarFirmaPublica]);
-
-  // Carga inicial de documentos cuando estás en la vista de lista
-  useEffect(() => {
-    if (!token) return;
-    if (view !== "list") return;
-    cargarDocs();
-  }, [token, view, sort, cargarDocs]);
-
-  /* =============================== */
-  /* ACCIONES: FIRMAR / VISAR ...    */
-  /* =============================== */
-
-  async function manejarAccionDocumento(id, accion, extraData = {}) {
-    if (accion === "ver") {
-      const doc = docs.find((d) => d.id === id);
-      if (!doc) {
-        alert("No se encontró el documento.");
-        return;
-      }
-
-      try {
-        const res = await api.get(`/docs/${doc.id}/pdf`);
-        const data = res.data;
-        if (!data || !data.url) {
-          throw new Error("No se pudo obtener el PDF");
-        }
-        window.open(data.url, "_blank", "noopener,noreferrer");
-      } catch (err) {
-        console.error("Error abriendo PDF:", err);
-        const msg =
-          err.response?.data?.message ||
-          err.message ||
-          "No se pudo abrir el PDF";
-        alert("❌ " + msg);
-      }
-      return;
-    }
-
-    try {
-      let body;
-
-      if (accion === "rechazar") {
-        body = { motivo: extraData.motivo };
-      }
-
-      const res = await api.post(`/docs/${id}/${accion}`, body);
-
-      const data = res.data;
-
-      if (accion === "firmar") {
-        alert("✅ Documento firmado correctamente");
-      } else if (accion === "visar") {
-        alert("✅ Documento visado correctamente");
-      } else if (accion === "rechazar") {
-        alert("✅ Documento rechazado correctamente");
-      } else if (data?.message) {
-        alert("✅ " + data.message);
-      }
-
-      await cargarDocs();
-      setView("list");
-      setSelectedDoc(null);
-    } catch (err) {
-      const msg =
-        err.response?.data?.message ||
-        err.message ||
-        "No se pudo procesar la acción";
-      alert("❌ " + msg);
-    }
+  if (authLoading) {
+    return <div style={{ padding: 40, textAlign: "center" }}>Cargando sesión...</div>;
   }
 
-  /* =============================== */
-  /* SESIÓN                          */
-  /* =============================== */
-
-  const logout = () => {
-    localStorage.removeItem("user");
-    localStorage.removeItem("accessToken");
-    setToken("");
-    setUser(null);
-    window.location.reload();
-  };
-
-  const handleTestError = () => {
-    throw new Error("Frontend test error");
-  };
-
-  /* =============================== */
-  /* RUTAS SEGÚN TOKEN               */
-  /* =============================== */
-
-  const pathname = window.location.pathname;
-
-  if (!token && pathname === "/forgot-password") {
-    return <ForgotPasswordView />;
-  }
-
-  if (!token && pathname === "/reset-password") {
-    return <ResetPasswordView />;
-  }
-
-  if (!token && pathname === "/register") {
-    return <RegisterView />;
-  }
-
-  if (!token) {
-    const displayIdentifier =
-      isEmailMode || identifier.includes("@")
-        ? identifier
-        : formatRun(identifier);
-
-    return (
-      <LoginView
-        identifier={displayIdentifier}
-        setIdentifier={(value) => {
-          if (/[a-zA-Z]/.test(value) || value.includes("@")) {
-            setIsEmailMode(true);
-            setIdentifier(value);
-          } else {
-            setIsEmailMode(false);
-            const clean = value.replace(/[^0-9kK]/g, "");
-            setIdentifier(clean);
-          }
-        }}
-        password={password}
-        setPassword={setPassword}
-        showPassword={showPassword}
-        setShowPassword={setShowPassword}
-        showHelp={showHelp}
-        setShowHelp={setShowHelp}
-        message={message}
-        isLoggingIn={isLoggingIn}
-        handleLogin={handleLogin}
-      />
-    );
-  }
-
-  let mode = "app";
-
-  if (
-    mode === "verification-portal" ||
-    mode === "verification-route" ||
-    mode === "verification-view"
-  ) {
+  if (publicView === "verification") {
     return <VerificationView API_URL={apiRoot} />;
   }
 
-  if (mode === "signing-portal" || mode === "public-sign") {
+  if (publicView === "public-sign") {
     return (
       <PublicSignView
         publicSignLoading={publicSignLoading}
@@ -609,9 +413,40 @@ useEffect(() => {
     );
   }
 
-  /* =============================== */
-  /* VISTA DETALLE DOCUMENTO         */
-  /* =============================== */
+  if (!token && path === "/forgot-password") return <ForgotPasswordView />;
+  if (!token && path === "/reset-password") return <ResetPasswordView />;
+  if (!token && path === "/register") return <RegisterView />;
+
+  if (!token) {
+    const displayIdentifier =
+      isEmailMode || identifier.includes("@") ? identifier : formatRun(identifier);
+
+    return (
+      <LoginView
+        identifier={displayIdentifier}
+        setIdentifier={(value) => {
+          if (/[a-zA-Z]/.test(value) || value.includes("@")) {
+            setIsEmailMode(true);
+            setIdentifier(value);
+          } else {
+            setIsEmailMode(false);
+            setIdentifier(value.replace(/[^0-9kK]/g, ""));
+          }
+        }}
+        password={password}
+        setPassword={setPassword}
+        showPassword={showPassword}
+        setShowPassword={setShowPassword}
+        showHelp={showHelp}
+        setShowHelp={setShowHelp}
+        message={message}
+        isLoggingIn={isLoggingIn}
+        handleLogin={handleLogin}
+        rememberMe={rememberMe}
+        setRememberMe={setRememberMe}
+      />
+    );
+  }
 
   if (view === "detail" && selectedDoc) {
     const requiereVisado = selectedDoc.requires_visado === true;
@@ -623,10 +458,9 @@ useEffect(() => {
       (!requiereVisado && selectedDoc.status === DOC_STATUS.PENDIENTE) ||
       (requiereVisado && selectedDoc.status === DOC_STATUS.VISADO);
 
-    const puedeRechazar = ![
-      DOC_STATUS.FIRMADO,
-      DOC_STATUS.RECHAZADO,
-    ].includes(selectedDoc.status);
+    const puedeRechazar = ![DOC_STATUS.FIRMADO, DOC_STATUS.RECHAZADO].includes(
+      selectedDoc.status
+    );
 
     return (
       <DetailView
@@ -636,68 +470,13 @@ useEffect(() => {
         puedeVisar={puedeVisar}
         puedeRechazar={puedeRechazar}
         manejarAccionDocumento={manejarAccionDocumento}
-        setView={setView}
+        setView={handleBackToList}
         setSelectedDoc={setSelectedDoc}
-        logout={logout}
+        logout={handleLogout}
         currentUser={user}
       />
     );
   }
-
-  /* =============================== */
-  /* LISTA DOCUMENTOS + OTRAS VISTAS */
-  /* =============================== */
-
-  const docsFiltrados = docs.filter((d) => {
-    const esPendiente =
-      d.status === DOC_STATUS.PENDIENTE ||
-      d.status === DOC_STATUS.PENDIENTE_VISADO ||
-      d.status === DOC_STATUS.PENDIENTE_FIRMA;
-
-    if (statusFilter === "PENDIENTES" && !esPendiente) return false;
-    if (statusFilter === "FIRMADOS" && d.status !== DOC_STATUS.FIRMADO)
-      return false;
-    if (statusFilter === "RECHAZADOS" && d.status !== DOC_STATUS.RECHAZADO)
-      return false;
-
-    if (search.trim() !== "") {
-      const q = search.toLowerCase();
-      const titulo = (d.title || "").toLowerCase();
-      const empresa = (d.destinatario_nombre || "").toLowerCase();
-      if (!titulo.includes(q) && !empresa.includes(q)) return false;
-    }
-
-    return true;
-  });
-
-  const pendientes = docs.filter(
-    (d) =>
-      d.status === DOC_STATUS.PENDIENTE ||
-      d.status === DOC_STATUS.PENDIENTE_VISADO ||
-      d.status === DOC_STATUS.PENDIENTE_FIRMA
-  ).length;
-
-  const visados = docs.filter((d) => d.status === DOC_STATUS.VISADO).length;
-  const firmados = docs.filter((d) => d.status === DOC_STATUS.FIRMADO).length;
-  const rechazados = docs.filter(
-    (d) => d.status === DOC_STATUS.RECHAZADO
-  ).length;
-
-  const totalFiltrado = docsFiltrados.length;
-  const totalPaginas = Math.ceil(totalFiltrado / pageSize) || 1;
-
-  const safeDocsFiltrados = Array.isArray(docsFiltrados) ? docsFiltrados : [];
-  const docsPaginados = safeDocsFiltrados.slice(
-    (page - 1) * pageSize,
-    page * pageSize
-  );
-
-  const anyAdmin = isAnyAdmin(user);
-  const isGlobalAdminOrOwner =
-    !!user &&
-    (user.role === "SUPER_ADMIN" ||
-      user.role === "ADMIN_GLOBAL" ||
-      user.id === 7);
 
   return (
     <div className="dashboard-root">
@@ -712,22 +491,18 @@ useEffect(() => {
       <div className="dashboard-layout">
         <Sidebar
           user={user}
-          docs={docs}
-          pendientes={pendientes}
+          docs={safeDocs}
+          pendientes={safePendientes}
           view={view}
-          setView={(nextView) => {
-            setView(nextView);
-            if (nextView === "list") {
-              setPage(1);
-            }
-          }}
+          setView={handleNavigateProtected}
           statusFilter={statusFilter}
           setStatusFilter={(val) => {
             setStatusFilter(val);
             setPage(1);
           }}
-          logout={logout}
+          logout={handleLogout}
           isAnyAdmin={anyAdmin}
+          socketConnected={socketConnected}
         />
 
         <div className="content-body">
@@ -756,133 +531,78 @@ useEffect(() => {
                   setSearch(value);
                   setPage(1);
                 }}
-                totalFiltrado={totalFiltrado}
-                pendientes={pendientes}
-                visados={visados}
-                firmados={firmados}
-                rechazados={rechazados}
+                totalFiltrado={safeTotalFiltrado}
+                pendientes={safePendientes}
+                visados={safeVisados}
+                firmados={safeFirmados}
+                rechazados={safeRechazados}
                 onSync={cargarDocs}
               />
 
-              <div className="hero-dashboard">
-                <div className="hero-dashboard-inner">
-                  <h1 className="hero-dashboard-title">
-                    Gestiona todas tus firmas digitales en un solo lugar
-                  </h1>
-                  <p className="hero-dashboard-text">
-                    Envía contratos, actas y documentos legales para firma
-                    electrónica avanzada en minutos. Sigue el estado en tiempo
-                    real y mantén un historial completo de cada trámite.
+              <div className="inbox-header-card">
+                <div className="inbox-header-main">
+                  <h2 className="inbox-title">Documentos recientes</h2>
+                  <p className="inbox-subtitle">
+                    Revisa estados, abre contratos y gestiona tus trámites desde esta bandeja.
                   </p>
-                  <div className="hero-dashboard-actions">
-                    <button
-                      type="button"
-                      className="btn-main btn-primary"
-                      onClick={() => setView("upload")}
-                      style={{ paddingInline: 22 }}
-                    >
-                      + Nuevo documento para firma
-                    </button>
-                    <button
-                      type="button"
-                      className="btn-main"
-                      onClick={cargarDocs}
-                      style={{
-                        backgroundColor: "#020617",
-                        color: "#e5e7eb",
-                        border: "1px solid #1e293b",
-                        paddingInline: 22,
-                      }}
-                    >
-                      Ver documentos enviados
-                    </button>
-                  </div>
+                </div>
+
+                <div className="inbox-header-actions">
+                  <button
+                    type="button"
+                    className="btn-main btn-primary"
+                    onClick={() => handleNavigateProtected("upload")}
+                  >
+                    + Nuevo documento
+                  </button>
+
+                  <button
+                    type="button"
+                    className="btn-main btn-ghost"
+                    onClick={cargarDocs}
+                  >
+                    Actualizar bandeja
+                  </button>
                 </div>
               </div>
 
               {loadingDocs ? (
-                <div
-                  style={{
-                    padding: 40,
-                    textAlign: "center",
-                    color: "#64748b",
-                  }}
-                >
+                <div style={{ padding: 40, textAlign: "center", color: "#64748b" }}>
                   <div style={{ marginBottom: 12, fontWeight: 600 }}>
                     Cargando tu bandeja de documentos…
                   </div>
-                  <p
-                    style={{
-                      fontSize: "0.9rem",
-                      color: "#9ca3af",
-                      marginTop: 4,
-                    }}
-                  >
+                  <p style={{ fontSize: "0.9rem", color: "#9ca3af", marginTop: 4 }}>
                     Esto puede tardar unos segundos.
                   </p>
                   <div className="spinner" />
                 </div>
               ) : errorDocs ? (
-                <div
-                  style={{
-                    padding: 40,
-                    textAlign: "center",
-                    color: "#b91c1c",
-                  }}
-                >
+                <div style={{ padding: 40, textAlign: "center", color: "#b91c1c" }}>
                   <p style={{ marginBottom: 8, fontWeight: 700 }}>
                     Ocurrió un problema al cargar la bandeja.
                   </p>
-                  <p
-                    style={{
-                      marginBottom: 16,
-                      fontSize: "0.9rem",
-                      color: "#b91c1c",
-                    }}
-                  >
-                    {errorDocs ||
-                      "Por favor, revisa tu conexión e inténtalo nuevamente."}
+                  <p style={{ marginBottom: 16, fontSize: "0.9rem", color: "#b91c1c" }}>
+                    {errorDocs || "Por favor, revisa tu conexión e inténtalo nuevamente."}
                   </p>
                   <button className="btn-main btn-primary" onClick={cargarDocs}>
                     Reintentar carga
                   </button>
                 </div>
               ) : safeDocsFiltrados.length === 0 ? (
-                <div
-                  style={{
-                    padding: 40,
-                    textAlign: "center",
-                    color: "#64748b",
-                  }}
-                >
+                <div style={{ padding: 40, textAlign: "center", color: "#64748b" }}>
                   <h3 style={{ marginBottom: 8 }}>
                     No encontramos documentos para mostrar.
                   </h3>
-                  <p
-                    style={{
-                      marginBottom: 4,
-                      fontSize: "0.9rem",
-                      color: "#94a3b8",
-                    }}
-                  >
+                  <p style={{ marginBottom: 4, fontSize: "0.9rem", color: "#94a3b8" }}>
                     Puede que no existan documentos con los filtros actuales.
                   </p>
-                  <p
-                    style={{
-                      marginBottom: 16,
-                      fontSize: "0.9rem",
-                      color: "#94a3b8",
-                    }}
-                  >
+                  <p style={{ marginBottom: 16, fontSize: "0.9rem", color: "#94a3b8" }}>
                     Ajusta los filtros o crea un nuevo flujo de firma digital.
                   </p>
                   <button
                     className="btn-main"
-                    onClick={() => setView("upload")}
-                    style={{
-                      background: "#e2e8f0",
-                      color: "#1e293b",
-                    }}
+                    onClick={() => handleNavigateProtected("upload")}
+                    style={{ background: "#e2e8f0", color: "#1e293b" }}
                   >
                     Crear nuevo trámite
                   </button>
@@ -891,21 +611,31 @@ useEffect(() => {
                 <>
                   <div className="table-wrapper">
                     <table className="doc-table">
-                      {/* thead original de documentos */}
+                      <thead>
+                        <tr>
+                          <th className="col-title">Contrato / Documento</th>
+                          <th className="col-type">Tipo</th>
+                          <th className="col-status" style={{ textAlign: "center" }}>
+                            Estado
+                          </th>
+                          <th className="col-party">Firmante / Empresa</th>
+                          <th className="col-actions" style={{ textAlign: "center" }}>
+                            Acciones
+                          </th>
+                        </tr>
+                      </thead>
                       <tbody>
-                        {docsPaginados.map((d) => (
+                        {safeDocsPaginados.map((doc) => (
                           <DocumentRow
-                            key={d.id}
-                            doc={d}
-                            onOpenDetail={(doc) => {
-                              setSelectedDoc(doc);
-                              setView("detail");
-                            }}
+                            key={doc.id}
+                            doc={doc}
+                            onOpenDetail={handleOpenDetail}
                           />
                         ))}
                       </tbody>
                     </table>
                   </div>
+
                   <div
                     style={{
                       display: "flex",
@@ -916,25 +646,24 @@ useEffect(() => {
                     }}
                   >
                     <span>
-                      Página {page} de {totalPaginas || 1}
+                      Página {page} de {safeTotalPaginas}
                     </span>
+
                     <div style={{ display: "flex", gap: 8 }}>
                       <button
                         type="button"
                         className="btn-main"
                         disabled={page === 1}
-                        onClick={() => setPage((p) => Math.max(1, p - 1))}
+                        onClick={() => setPage((prev) => Math.max(1, prev - 1))}
                       >
                         Anterior
                       </button>
                       <button
                         type="button"
                         className="btn-main"
-                        disabled={
-                          page === totalPaginas || totalPaginas === 0
-                        }
+                        disabled={page === safeTotalPaginas}
                         onClick={() =>
-                          setPage((p) => Math.min(totalPaginas, p + 1))
+                          setPage((prev) => Math.min(safeTotalPaginas, prev + 1))
                         }
                       >
                         Siguiente
@@ -961,47 +690,28 @@ useEffect(() => {
               empresaRutValue={empresaRutValue}
               setEmpresaRutValue={setEmpresaRutValue}
               formatRunDoc={formatRunDoc}
-              setView={setView}
+              goToList={handleAfterCreateDocument}
               cargarDocs={cargarDocs}
             />
           )}
 
           {view === "users" && anyAdmin && <UsersAdminView />}
-
           {view === "dashboard" && anyAdmin && <DashboardView user={user} />}
-
-          {view === "companies" && anyAdmin && (
-            <CompaniesAdminView API_URL={apiRoot} />
-          )}
-
-          {view === "status" && anyAdmin && (
-            <StatusAdminView API_URL={apiRoot} />
-          )}
-
-          {view === "audit-logs" && isGlobalAdminOrOwner && (
-            <AuditLogsView API_URL={apiRoot} />
-          )}
-
-          {view === "auth-logs" && isGlobalAdminOrOwner && (
-            <AuthLogsView API_URL={apiRoot} />
-          )}
-
+          {view === "companies" && anyAdmin && <CompaniesAdminView API_URL={apiRoot} />}
+          {view === "status" && anyAdmin && <StatusAdminView API_URL={apiRoot} />}
+          {view === "audit-logs" && canAudit && <AuditLogsView API_URL={apiRoot} />}
+          {view === "auth-logs" && canAudit && <AuthLogsView API_URL={apiRoot} />}
           {view === "reminders-config" && anyAdmin && <RemindersConfigView />}
-
           {view === "email-metrics" && anyAdmin && <EmailMetricsView />}
-
           {view === "pricing" && <PricingView />}
-
           {view === "profile" && <ProfileView />}
-
           {view === "templates" && anyAdmin && <TemplatesView />}
-
-          {view === "company-analytics" && anyAdmin && (
-            <CompanyAnalyticsView />
-          )}
+          {view === "company-analytics" && anyAdmin && <CompanyAnalyticsView />}
 
           {import.meta.env.MODE !== "production" && (
-            <button onClick={handleTestError}>Probar error Sentry</button>
+            <button type="button" onClick={handleTestError}>
+              Probar error Sentry
+            </button>
           )}
         </div>
       </div>

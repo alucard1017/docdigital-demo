@@ -1,158 +1,206 @@
 // frontend/src/views/EmailMetricsView.jsx
-import { useState, useEffect } from "react";
+import { useEffect, useMemo, useState } from "react";
 import api from "../api/client";
 
-export default function EmailMetricsView() {
-  const [metrics, setMetrics] = useState(null);
-  const [loading, setLoading] = useState(true);
-  const [error, setError] = useState(null);
-  const [documentoId, setDocumentoId] = useState("");
+function formatPercent(value) {
+  const n = Number(value ?? 0);
+  if (!Number.isFinite(n)) return "0.00%";
+  return `${n.toFixed(2)}%`;
+}
 
-  useEffect(() => {
-    fetchMetrics();
-  }, []);
+function formatDateTime(value) {
+  if (!value) return "-";
+  const d = new Date(value);
+  if (Number.isNaN(d.getTime())) return "-";
+  return d.toLocaleString("es-CL", {
+    year: "numeric",
+    month: "short",
+    day: "2-digit",
+    hour: "2-digit",
+    minute: "2-digit",
+  });
+}
+
+function getEventBadgeClass(eventType) {
+  switch (String(eventType || "").toLowerCase()) {
+    case "sent":
+      return "bg-blue-100 text-blue-700";
+    case "delivered":
+      return "bg-green-100 text-green-700";
+    case "opened":
+      return "bg-purple-100 text-purple-700";
+    case "clicked":
+      return "bg-amber-100 text-amber-700";
+    case "bounced":
+      return "bg-red-100 text-red-700";
+    default:
+      return "bg-gray-100 text-gray-700";
+  }
+}
+
+export default function EmailMetricsView() {
+  const [data, setData] = useState(null);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState("");
 
   const fetchMetrics = async () => {
     try {
       setLoading(true);
-      setError(null);
+      setError("");
 
-      const params = documentoId ? { documentoId } : {};
-
-      const res = await api.get("/analytics/email-metrics", { params });
-      setMetrics(res.data);
+      const res = await api.get("/analytics/email-metrics");
+      setData(res.data || null);
     } catch (err) {
-      console.error("Error cargando métricas:", err);
       const msg =
         err.response?.data?.message ||
         err.message ||
-        "Error cargando métricas";
+        "Error cargando métricas de email";
       setError(msg);
-      setMetrics(null);
+      setData(null);
     } finally {
       setLoading(false);
     }
   };
 
-  if (loading) return <div className="p-4">Cargando métricas...</div>;
+  useEffect(() => {
+    fetchMetrics();
+  }, []);
 
-  return (
-    <div className="p-6 bg-white rounded-lg shadow">
-      <h1 className="text-2xl font-bold mb-6">Métricas de Emails</h1>
+  const summary = useMemo(() => data?.summary || {}, [data]);
+  const recentEvents = useMemo(
+    () => (Array.isArray(data?.recent_events) ? data.recent_events : []),
+    [data]
+  );
 
-      {error && (
-        <div className="bg-red-100 border border-red-400 text-red-700 px-4 py-3 rounded mb-4">
+  if (loading) {
+    return <div className="p-4 text-sm text-gray-600">Cargando métricas de email...</div>;
+  }
+
+  if (error) {
+    return (
+      <div className="p-4">
+        <div className="mb-4 rounded border border-red-300 bg-red-50 px-4 py-3 text-sm text-red-700">
           {error}
         </div>
-      )}
-
-      <div className="mb-6 flex gap-4">
-        <input
-          type="number"
-          placeholder="Filtrar por documento ID"
-          value={documentoId}
-          onChange={(e) => setDocumentoId(e.target.value)}
-          className="px-3 py-2 border border-gray-300 rounded"
-        />
         <button
           onClick={fetchMetrics}
-          className="bg-blue-600 text-white px-4 py-2 rounded hover:bg-blue-700"
+          className="rounded bg-blue-600 px-4 py-2 text-sm text-white hover:bg-blue-700"
         >
-          Filtrar
-        </button>
-        <button
-          onClick={() => {
-            setDocumentoId("");
-            fetchMetrics();
-          }}
-          className="bg-gray-600 text-white px-4 py-2 rounded hover:bg-gray-700"
-        >
-          Ver Todos
+          Reintentar
         </button>
       </div>
+    );
+  }
 
-      {metrics && (
-        <>
-          <div className="grid grid-cols-4 gap-4 mb-6">
-            <div className="bg-blue-50 p-4 rounded">
-              <div className="text-sm text-gray-600">Emails Enviados</div>
-              <div className="text-2xl font-bold text-blue-600">
-                {metrics.summary?.emails_enviados ?? 0}
-              </div>
-            </div>
-            <div className="bg-green-50 p-4 rounded">
-              <div className="text-sm text-gray-600">Tasa de Apertura</div>
-              <div className="text-2xl font-bold text-green-600">
-                {metrics.summary?.tasa_apertura ?? 0}
-              </div>
-            </div>
-            <div className="bg-purple-50 p-4 rounded">
-              <div className="text-sm text-gray-600">Tasa de Click</div>
-              <div className="text-2xl font-bold text-purple-600">
-                {metrics.summary?.tasa_click ?? 0}
-              </div>
-            </div>
-            <div className="bg-red-50 p-4 rounded">
-              <div className="text-sm text-gray-600">Tasa de Rebote</div>
-              <div className="text-2xl font-bold text-red-600">
-                {metrics.summary?.tasa_rebote ?? 0}
-              </div>
-            </div>
+  return (
+    <div className="rounded-lg bg-white p-6 shadow">
+      <h1 className="mb-6 text-2xl font-bold">Métricas de Email</h1>
+
+      <div className="mb-8 grid grid-cols-1 gap-4 md:grid-cols-2 xl:grid-cols-4">
+        <div className="rounded bg-blue-50 p-4">
+          <div className="text-sm text-gray-600">Emails Enviados</div>
+          <div className="text-3xl font-bold text-blue-600">
+            {Number(summary.emails_enviados ?? 0)}
           </div>
+        </div>
 
-          <div className="grid grid-cols-3 gap-4 mb-6">
-            <div className="bg-gray-50 p-4 rounded">
-              <div className="text-sm text-gray-600">Entregados</div>
-              <div className="text-xl font-bold">
-                {metrics.summary?.emails_entregados ?? 0}
-              </div>
-            </div>
-            <div className="bg-gray-50 p-4 rounded">
-              <div className="text-sm text-gray-600">Abiertos</div>
-              <div className="text-xl font-bold">
-                {metrics.summary?.emails_abiertos ?? 0}
-              </div>
-            </div>
-            <div className="bg-gray-50 p-4 rounded">
-              <div className="text-sm text-gray-600">Clicados</div>
-              <div className="text-xl font-bold">
-                {metrics.summary?.emails_clicados ?? 0}
-              </div>
-            </div>
+        <div className="rounded bg-green-50 p-4">
+          <div className="text-sm text-gray-600">Emails Entregados</div>
+          <div className="text-3xl font-bold text-green-600">
+            {Number(summary.emails_entregados ?? 0)}
           </div>
+        </div>
 
-          <h3 className="text-lg font-bold mb-4">Eventos Recientes</h3>
+        <div className="rounded bg-purple-50 p-4">
+          <div className="text-sm text-gray-600">Tasa de Apertura</div>
+          <div className="text-3xl font-bold text-purple-600">
+            {formatPercent(summary.tasa_apertura)}
+          </div>
+        </div>
+
+        <div className="rounded bg-amber-50 p-4">
+          <div className="text-sm text-gray-600">Tasa de Click</div>
+          <div className="text-3xl font-bold text-amber-600">
+            {formatPercent(summary.tasa_click)}
+          </div>
+        </div>
+      </div>
+
+      <div className="mb-8 grid grid-cols-1 gap-4 md:grid-cols-2 xl:grid-cols-3">
+        <div className="rounded bg-gray-50 p-4">
+          <div className="text-sm text-gray-600">Emails Abiertos</div>
+          <div className="text-2xl font-bold text-gray-800">
+            {Number(summary.emails_abiertos ?? 0)}
+          </div>
+        </div>
+
+        <div className="rounded bg-gray-50 p-4">
+          <div className="text-sm text-gray-600">Emails Clicados</div>
+          <div className="text-2xl font-bold text-gray-800">
+            {Number(summary.emails_clicados ?? 0)}
+          </div>
+        </div>
+
+        <div className="rounded bg-red-50 p-4">
+          <div className="text-sm text-gray-600">Tasa de Rebote</div>
+          <div className="text-2xl font-bold text-red-600">
+            {formatPercent(summary.tasa_rebote)}
+          </div>
+        </div>
+
+        <div className="rounded bg-gray-50 p-4">
+          <div className="text-sm text-gray-600">Documentos Únicos</div>
+          <div className="text-2xl font-bold text-gray-800">
+            {Number(summary.documentos_unicos ?? 0)}
+          </div>
+        </div>
+
+        <div className="rounded bg-gray-50 p-4">
+          <div className="text-sm text-gray-600">Destinatarios Únicos</div>
+          <div className="text-2xl font-bold text-gray-800">
+            {Number(summary.destinatarios_unicos ?? 0)}
+          </div>
+        </div>
+
+        <div className="rounded bg-red-50 p-4">
+          <div className="text-sm text-gray-600">Emails Rebotados</div>
+          <div className="text-2xl font-bold text-red-600">
+            {Number(summary.emails_reboteados ?? 0)}
+          </div>
+        </div>
+      </div>
+
+      <div className="rounded bg-gray-50 p-4">
+        <h2 className="mb-4 text-lg font-bold">Eventos Recientes</h2>
+
+        {recentEvents.length === 0 ? (
+          <div className="text-sm text-gray-500">
+            Aún no hay eventos de email registrados.
+          </div>
+        ) : (
           <div className="overflow-x-auto">
             <table className="w-full text-sm">
-              <thead className="bg-gray-100">
+              <thead className="bg-gray-200">
                 <tr>
                   <th className="px-4 py-2 text-left">Fecha</th>
-                  <th className="px-4 py-2 text-left">Email</th>
                   <th className="px-4 py-2 text-left">Documento</th>
+                  <th className="px-4 py-2 text-left">Email</th>
                   <th className="px-4 py-2 text-left">Evento</th>
                 </tr>
               </thead>
               <tbody>
-                {(metrics.recent_events || []).map((event) => (
+                {recentEvents.map((event) => (
                   <tr key={event.id} className="border-b">
-                    <td className="px-4 py-2">
-                      {new Date(event.created_at).toLocaleString("es-CL")}
-                    </td>
-                    <td className="px-4 py-2">{event.email}</td>
-                    <td className="px-4 py-2">{event.titulo}</td>
+                    <td className="px-4 py-2">{formatDateTime(event.created_at)}</td>
+                    <td className="px-4 py-2">{event.title || `Documento #${event.documento_id}`}</td>
+                    <td className="px-4 py-2">{event.email || "-"}</td>
                     <td className="px-4 py-2">
                       <span
-                        className={`px-2 py-1 rounded text-xs font-semibold ${
-                          event.event_type === "opened"
-                            ? "bg-green-100 text-green-800"
-                            : event.event_type === "clicked"
-                            ? "bg-purple-100 text-purple-800"
-                            : event.event_type === "bounced"
-                            ? "bg-red-100 text-red-800"
-                            : "bg-blue-100 text-blue-800"
-                        }`}
+                        className={`inline-flex rounded-full px-2 py-1 text-xs font-semibold ${getEventBadgeClass(
+                          event.event_type
+                        )}`}
                       >
-                        {event.event_type}
+                        {event.event_type || "-"}
                       </span>
                     </td>
                   </tr>
@@ -160,8 +208,8 @@ export default function EmailMetricsView() {
               </tbody>
             </table>
           </div>
-        </>
-      )}
+        )}
+      </div>
     </div>
   );
 }

@@ -129,58 +129,29 @@ export function CompaniesAdminView() {
 
   if (loading) {
     return (
-      <div
-        style={{
-          padding: 24,
-          minHeight: "100%",
-          background: "#020617",
-          color: "#e5e7eb",
-        }}
-      >
-        <p style={{ fontSize: "0.9rem", color: "#94a3b8" }}>
-          Cargando empresas...
-        </p>
+      <div className="companies-admin-page">
+        <div className="companies-admin-loading">
+          <p className="companies-admin-loading-text">Cargando empresas...</p>
+        </div>
       </div>
     );
   }
 
   if (error) {
     return (
-      <div
-        style={{
-          padding: 24,
-          minHeight: "100%",
-          background: "#020617",
-          color: "#e5e7eb",
-        }}
-      >
-        <h2
-          style={{
-            marginTop: 0,
-            marginBottom: 8,
-            fontSize: "1.1rem",
-            fontWeight: 700,
-            color: "#fecaca",
-          }}
-        >
-          Error al cargar empresas
-        </h2>
-        <p
-          style={{
-            marginBottom: 16,
-            fontSize: "0.9rem",
-            color: "#fecaca",
-          }}
-        >
-          {error}
-        </p>
-        <button
-          className="btn-main btn-primary"
-          onClick={cargarCompanies}
-          style={{ minWidth: 140 }}
-        >
-          Reintentar
-        </button>
+      <div className="companies-admin-page">
+        <div className="companies-admin-error">
+          <h2 className="companies-admin-error-title">
+            Error al cargar empresas
+          </h2>
+          <p className="companies-admin-error-text">{error}</p>
+          <button
+            className="btn-main btn-primary companies-admin-retry-btn"
+            onClick={cargarCompanies}
+          >
+            Reintentar
+          </button>
+        </div>
       </div>
     );
   }
@@ -193,58 +164,12 @@ export function CompaniesAdminView() {
   const muestraDomain = companies.some((c) => c.domain);
 
   return (
-    <div
-      style={{
-        minHeight: "100%",
-        padding: 24,
-        background: "#020617",
-        color: "#e5e7eb",
-      }}
-    >
-      <div
-        className="card-premium"
-        style={{
-          maxWidth: 1040,
-          margin: "0 auto",
-          borderRadius: 18,
-          padding: 20,
-          border: "1px solid #1f2937",
-          background:
-            "radial-gradient(circle at top left, rgba(56,189,248,0.16), rgba(15,23,42,0.98))",
-          boxShadow: "0 24px 70px rgba(15,23,42,0.8)",
-        }}
-      >
-        {/* Header + form */}
-        <div
-          style={{
-            marginBottom: 16,
-            display: "flex",
-            alignItems: "flex-start",
-            justifyContent: "space-between",
-            gap: 16,
-            flexWrap: "wrap",
-          }}
-        >
-          <div>
-            <h2
-              style={{
-                marginTop: 0,
-                marginBottom: 4,
-                fontSize: "1.15rem",
-                fontWeight: 700,
-                color: "#f9fafb",
-              }}
-            >
-              Empresas
-            </h2>
-            <p
-              style={{
-                margin: 0,
-                fontSize: "0.85rem",
-                color: "#9ca3af",
-                maxWidth: 420,
-              }}
-            >
+    <div className="companies-admin-page">
+      <div className="card-premium companies-admin-card">
+        <div className="companies-admin-header">
+          <div className="companies-admin-header-copy">
+            <h2 className="companies-admin-title">Empresas</h2>
+            <p className="companies-admin-description">
               Administra las empresas que pueden usar la plataforma y asigna
               usuarios y planes con una vista clara y de alto contraste.
             </p>
@@ -252,202 +177,60 @@ export function CompaniesAdminView() {
 
           <form
             onSubmit={handleCreate}
-            style={{
-              display: "flex",
-              gap: 8,
-              alignItems: "center",
-              flexWrap: "wrap",
-            }}
+            className="companies-admin-create-form"
           >
             <input
               type="text"
-              className="form-input"
+              className="form-input companies-admin-input"
               placeholder="Nombre de la nueva empresa"
               value={name}
               onChange={(e) => setName(e.target.value)}
-              style={{
-                minWidth: 220,
-                padding: "8px 10px",
-                borderRadius: 999,
-                border: "1px solid #1f2937",
-                background: "#020617",
-                color: "#e5e7eb",
-                fontSize: "0.85rem",
-              }}
             />
             <button
               type="submit"
-              className="btn-main btn-primary"
+              className="btn-main btn-primary companies-admin-create-btn"
               disabled={saving || !name.trim()}
-              style={{
-                paddingInline: 16,
-                borderRadius: 999,
-                fontSize: "0.85rem",
-              }}
             >
               {saving ? "Creando..." : "Crear empresa"}
             </button>
           </form>
         </div>
 
-        {/* Empty state o tabla */}
         {companies.length === 0 ? (
-          <div
-            style={{
-              padding: 24,
-              borderRadius: 12,
-              border: "1px dashed #334155",
-              background:
-                "linear-gradient(135deg, rgba(15,23,42,0.8), rgba(30,64,175,0.4))",
-            }}
-          >
-            <p
-              style={{
-                marginTop: 0,
-                marginBottom: 4,
-                fontSize: "0.95rem",
-                fontWeight: 500,
-                color: "#e5e7eb",
-              }}
-            >
+          <div className="companies-admin-empty">
+            <p className="companies-admin-empty-title">
               Todavía no hay empresas registradas.
             </p>
-            <p
-              style={{
-                margin: 0,
-                fontSize: "0.85rem",
-                color: "#9ca3af",
-              }}
-            >
+            <p className="companies-admin-empty-text">
               Crea tu primera empresa para asignar usuarios y comenzar a
               gestionar documentos.
             </p>
           </div>
         ) : (
-          <div className="table-wrapper" style={{ marginTop: 4 }}>
-            <div
-              style={{
-                maxHeight: "60vh",
-                overflow: "auto",
-                borderRadius: 12,
-                border: "1px solid #1f2937",
-                background:
-                  "linear-gradient(180deg, rgba(15,23,42,0.96), rgba(15,23,42,0.96))",
-              }}
-            >
-              <table
-                className="doc-table"
-                style={{
-                  width: "100%",
-                  borderCollapse: "collapse",
-                  fontSize: "0.86rem",
-                }}
-              >
+          <div className="table-wrapper companies-admin-table-wrapper">
+            <div className="table-scroll-container companies-admin-table-scroll">
+              <table className="doc-table doc-table-companies">
                 <thead>
-                  <tr
-                    style={{
-                      background:
-                        "linear-gradient(90deg, rgba(15,23,42,1), rgba(30,64,175,0.2))",
-                    }}
-                  >
-                    <th
-                      style={{
-                        width: 70,
-                        padding: "10px 10px",
-                        textAlign: "left",
-                        fontWeight: 500,
-                        fontSize: "0.75rem",
-                        letterSpacing: "0.08em",
-                        textTransform: "uppercase",
-                        color: "#9ca3af",
-                        borderBottom: "1px solid #1f2937",
-                      }}
-                    >
-                      ID
-                    </th>
-                    <th
-                      style={{
-                        padding: "10px 10px",
-                        textAlign: "left",
-                        fontWeight: 500,
-                        fontSize: "0.75rem",
-                        letterSpacing: "0.08em",
-                        textTransform: "uppercase",
-                        color: "#9ca3af",
-                        borderBottom: "1px solid #1f2937",
-                      }}
-                    >
-                      Nombre
-                    </th>
+                  <tr className="companies-admin-head-row">
+                    <th className="col-company-id">ID</th>
+                    <th className="col-company-name">Nombre</th>
+
                     {muestraUsers && (
-                      <th
-                        style={{
-                          textAlign: "center",
-                          width: 120,
-                          padding: "10px 10px",
-                          fontWeight: 500,
-                          fontSize: "0.75rem",
-                          letterSpacing: "0.08em",
-                          textTransform: "uppercase",
-                          color: "#9ca3af",
-                          borderBottom: "1px solid #1f2937",
-                        }}
-                      >
-                        Usuarios
-                      </th>
+                      <th className="col-company-users">Usuarios</th>
                     )}
+
                     {muestraPlan && (
-                      <th
-                        className="col-plan"
-                        style={{
-                          textAlign: "center",
-                          width: 120,
-                          padding: "10px 10px",
-                          fontWeight: 500,
-                          fontSize: "0.75rem",
-                          letterSpacing: "0.08em",
-                          textTransform: "uppercase",
-                          color: "#9ca3af",
-                          borderBottom: "1px solid #1f2937",
-                        }}
-                      >
-                        Plan
-                      </th>
+                      <th className="col-company-plan">Plan</th>
                     )}
+
                     {muestraFecha && (
-                      <th
-                        style={{
-                          textAlign: "center",
-                          width: 140,
-                          padding: "10px 10px",
-                          fontWeight: 500,
-                          fontSize: "0.75rem",
-                          letterSpacing: "0.08em",
-                          textTransform: "uppercase",
-                          color: "#9ca3af",
-                          borderBottom: "1px solid #1f2937",
-                        }}
-                      >
-                        Creada
-                      </th>
+                      <th className="col-company-date">Creada</th>
                     )}
-                    <th
-                      style={{
-                        textAlign: "right",
-                        width: 160,
-                        padding: "10px 10px",
-                        fontWeight: 500,
-                        fontSize: "0.75rem",
-                        letterSpacing: "0.08em",
-                        textTransform: "uppercase",
-                        color: "#9ca3af",
-                        borderBottom: "1px solid #1f2937",
-                      }}
-                    >
-                      Acciones
-                    </th>
+
+                    <th className="col-company-actions">Acciones</th>
                   </tr>
                 </thead>
+
                 <tbody>
                   {companies.map((c, idx) => {
                     const planLabel = getPlanLabel(c.plan);
@@ -455,120 +238,65 @@ export function CompaniesAdminView() {
                     const usersCount =
                       typeof c.users_count === "number" ? c.users_count : 0;
 
-                    const rowBg =
+                    const rowClass =
                       idx % 2 === 0
-                        ? "rgba(15,23,42,1)"
-                        : "rgba(15,23,42,0.96)";
+                        ? "company-row company-row-even"
+                        : "company-row company-row-odd";
 
                     return (
-                      <tr
-                        key={c.id}
-                        style={{
-                          background: rowBg,
-                          borderBottom: "1px solid #020617",
-                        }}
-                      >
-                        <td
-                          style={{
-                            padding: "10px 10px",
-                            color: "#cbd5f5",
-                          }}
-                        >
-                          {c.id}
-                        </td>
-                        <td
-                          style={{
-                            padding: "10px 10px",
-                          }}
-                        >
-                          <div
-                            style={{
-                              display: "flex",
-                              flexDirection: "column",
-                              gap: 2,
-                            }}
-                          >
-                            <span
-                              style={{
-                                fontWeight: 500,
-                                color: "#e5e7eb",
-                              }}
-                            >
-                              {c.name}
-                            </span>
+                      <tr key={c.id} className={rowClass}>
+                        <td className="company-cell-id">{c.id}</td>
+
+                        <td className="company-cell-name">
+                          <div className="company-name-stack">
+                            <span className="company-name-text">{c.name}</span>
+
                             {muestraDomain && c.domain && (
-                              <span
-                                style={{
-                                  fontSize: "0.78rem",
-                                  color: "#9ca3af",
-                                }}
-                              >
+                              <span className="company-domain-text">
                                 {c.domain}
                               </span>
                             )}
                           </div>
                         </td>
+
                         {muestraUsers && (
-                          <td
-                            style={{
-                              textAlign: "center",
-                              padding: "10px 10px",
-                              color: "#e5e7eb",
-                            }}
-                          >
-                            {usersCount}
+                          <td className="company-cell-users">
+                            <span className="doc-id-pill">{usersCount}</span>
                           </td>
                         )}
+
                         {muestraPlan && (
-                          <td
-                            style={{
-                              textAlign: "center",
-                              padding: "10px 10px",
-                            }}
-                          >
+                          <td className="company-cell-plan">
                             <span className={planClass}>{planLabel}</span>
                           </td>
                         )}
+
                         {muestraFecha && (
-                          <td
-                            style={{
-                              textAlign: "center",
-                              padding: "10px 10px",
-                              color: "#cbd5f5",
-                            }}
-                          >
+                          <td className="company-cell-date">
                             {formatDate(c.created_at)}
                           </td>
                         )}
-                        <td
-                          style={{
-                            textAlign: "right",
-                            padding: "10px 10px",
-                          }}
-                        >
-                          <button
-                            type="button"
-                            className="btn-link"
-                            onClick={() => handleRename(c.id, c.name)}
-                            style={{
-                              marginRight: 8,
-                              fontSize: "0.8rem",
-                              color: "#93c5fd",
-                            }}
-                          >
-                            Renombrar
-                          </button>
-                          <button
-                            type="button"
-                            className="btn-link"
-                            onClick={() => handleDelete(c.id, c.name)}
-                            style={{
-                              fontSize: "0.8rem",
-                              color: "#fecaca",
-                            }}
-                          >
-                            Eliminar
-                          </button>
+
+                        <td className="doc-cell-actions company-cell-actions">
+                          <div className="doc-actions company-actions">
+                            <button
+                              type="button"
+                              className="btn-main btn-primary btn-xs"
+                              onClick={() => handleRename(c.id, c.name)}
+                              disabled={saving}
+                            >
+                              Editar
+                            </button>
+
+                            <button
+                              type="button"
+                              className="btn-main btn-secondary-danger btn-xs"
+                              onClick={() => handleDelete(c.id, c.name)}
+                              disabled={saving}
+                            >
+                              Eliminar
+                            </button>
+                          </div>
                         </td>
                       </tr>
                     );

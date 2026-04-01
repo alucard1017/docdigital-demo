@@ -36,23 +36,50 @@ const BUCKET = R2_BUCKET;
 function ensureBuffer(input) {
   if (!input) return null;
   if (Buffer.isBuffer(input)) return input;
-  // pdf-lib.save() devuelve Uint8Array, lo convertimos a Buffer seguro [web:202][web:204]
   if (input instanceof Uint8Array) return Buffer.from(input);
-  throw new Error("Buffer inválido en ensureBuffer");
+  throw new Error("Buffer inválido");
+}
+
+function normalizeStorageKey(key) {
+  if (!key || typeof key !== "string") return null;
+
+  const normalized = key
+    .trim()
+    .replace(/\\/g, "/")
+    .replace(/\/{2,}/g, "/")
+    .replace(/^\//, "")
+    .replace(/[<>:"|?*\x00-\x1F]/g, "-")
+    .replace(/\s+/g, "-");
+
+  return normalized || null;
+}
+
+function validateKeyOrThrow(key, fnName) {
+  if (!key || typeof key !== "string") {
+    throw new Error(`fileName inválido en ${fnName}`);
+  }
+}
+
+async function streamToBuffer(readable) {
+  const chunks = [];
+  for await (const chunk of readable) {
+    chunks.push(chunk);
+  }
+  return Buffer.concat(chunks);
 }
 
 /* ================================
    SUBIDA
    ================================ */
 
-/**
- * Sube un PDF a R2 usando un Buffer en memoria.
- */
-async function uploadPdfToS3(fileName, fileBuffer) {
+async function uploadPdfToS3(
+  fileBuffer,
+  fileName,
+  contentType = "application/pdf"
+) {
   try {
-    if (!fileName || typeof fileName !== "string") {
-      throw new Error("fileName inválido en uploadPdfToS3");
-    }
+    const key = normalizeStorageKey(fileName);
+    validateKeyOrThrow(key, "uploadPdfToS3");
 
     const buffer = ensureBuffer(fileBuffer);
     if (!buffer) {
@@ -61,32 +88,32 @@ async function uploadPdfToS3(fileName, fileBuffer) {
 
     const command = new PutObjectCommand({
       Bucket: BUCKET,
-      Key: fileName,
+      Key: key,
       Body: buffer,
-      ContentType: "application/pdf",
+      ContentType: contentType,
     });
 
     await r2Client.send(command);
-    console.log(`✅ [R2] PDF subido: ${fileName}`);
-    return fileName;
+    console.log(`✅ [R2] PDF subido: ${key}`);
+
+    return {
+      key,
+      url: null,
+    };
   } catch (error) {
     console.error("❌ [R2] Error al subir PDF:", error.message || error);
     throw error;
   }
 }
 
-/**
- * Sube un Buffer genérico a R2 (ej: PNG del QR, PDFs generados, etc.).
- */
 async function uploadBufferToS3(
   fileName,
   buffer,
   contentType = "application/octet-stream"
 ) {
   try {
-    if (!fileName || typeof fileName !== "string") {
-      throw new Error("fileName inválido en uploadBufferToS3");
-    }
+    const key = normalizeStorageKey(fileName);
+    validateKeyOrThrow(key, "uploadBufferToS3");
 
     const finalBuffer = ensureBuffer(buffer);
     if (!finalBuffer) {
@@ -95,14 +122,18 @@ async function uploadBufferToS3(
 
     const command = new PutObjectCommand({
       Bucket: BUCKET,
-      Key: fileName,
+      Key: key,
       Body: finalBuffer,
       ContentType: contentType,
     });
 
     await r2Client.send(command);
-    console.log(`✅ [R2] Buffer subido: ${fileName}`);
-    return fileName;
+    console.log(`✅ [R2] Buffer subido: ${key}`);
+
+    return {
+      key,
+      url: null,
+    };
   } catch (error) {
     console.error("❌ [R2] Error al subir buffer:", error.message || error);
     throw error;
@@ -113,17 +144,18 @@ async function uploadBufferToS3(
    DESCARGA
    ================================ */
 
-/**
- * Descarga un PDF de R2 y lo guarda en disco local (diagnóstico / batch).
- */
 async function downloadPdfFromS3(fileName, savePath) {
   try {
-    if (!fileName) throw new Error("fileName requerido en downloadPdfFromS3");
-    if (!savePath) throw new Error("savePath requerido en downloadPdfFromS3");
+    const key = normalizeStorageKey(fileName);
+    validateKeyOrThrow(key, "downloadPdfFromS3");
+
+    if (!savePath) {
+      throw new Error("savePath requerido en downloadPdfFromS3");
+    }
 
     const command = new GetObjectCommand({
       Bucket: BUCKET,
-      Key: fileName,
+      Key: key,
     });
 
     const result = await r2Client.send(command);
@@ -133,43 +165,31 @@ async function downloadPdfFromS3(fileName, savePath) {
       fs.mkdirSync(dir, { recursive: true });
     }
 
-    const chunks = [];
-    for await (const chunk of result.Body) {
-      chunks.push(chunk);
-    }
-    const buffer = Buffer.concat(chunks);
-
+    const buffer = await streamToBuffer(result.Body);
     fs.writeFileSync(savePath, buffer);
-    console.log(`✅ [R2] PDF descargado: ${fileName} -> ${savePath}`);
+
+    console.log(`✅ [R2] PDF descargado: ${key} -> ${savePath}`);
     return savePath;
   } catch (error) {
-    console.error("❌ [R2] Error al descargar PDF:", error.message);
+    console.error("❌ [R2] Error al descargar PDF:", error.message || error);
     throw error;
   }
 }
 
-/**
- * Obtiene un objeto de R2 como Buffer (útil para pdf-lib).
- */
 async function getObjectBuffer(fileName) {
   try {
-    if (!fileName) throw new Error("fileName requerido en getObjectBuffer");
+    const key = normalizeStorageKey(fileName);
+    validateKeyOrThrow(key, "getObjectBuffer");
 
     const command = new GetObjectCommand({
       Bucket: BUCKET,
-      Key: fileName,
+      Key: key,
     });
 
     const response = await r2Client.send(command);
-    const chunks = [];
-
-    for await (const chunk of response.Body) {
-      chunks.push(chunk);
-    }
-
-    return Buffer.concat(chunks);
+    return await streamToBuffer(response.Body);
   } catch (error) {
-    console.error("❌ [R2] Error al obtener buffer:", error.message);
+    console.error("❌ [R2] Error al obtener buffer:", error.message || error);
     throw error;
   }
 }
@@ -178,43 +198,41 @@ async function getObjectBuffer(fileName) {
    URLS Y DELETE
    ================================ */
 
-/**
- * Genera URL firmada temporal para ver/descargar.
- */
 async function getSignedUrl(fileName, expiresIn = 3600) {
   try {
-    if (!fileName) throw new Error("fileName requerido en getSignedUrl");
+    const key = normalizeStorageKey(fileName);
+    validateKeyOrThrow(key, "getSignedUrl");
 
     const command = new GetObjectCommand({
       Bucket: BUCKET,
-      Key: fileName,
+      Key: key,
     });
 
-    const url = await presign(r2Client, command, { expiresIn });
-    return url;
+    return await presign(r2Client, command, { expiresIn });
   } catch (error) {
-    console.error("❌ [R2] Error al generar URL firmada:", error.message);
+    console.error(
+      "❌ [R2] Error al generar URL firmada:",
+      error.message || error
+    );
     throw error;
   }
 }
 
-/**
- * Elimina un objeto del bucket.
- */
 async function deleteObjectFromS3(fileName) {
   try {
-    if (!fileName) throw new Error("fileName requerido en deleteObjectFromS3");
+    const key = normalizeStorageKey(fileName);
+    validateKeyOrThrow(key, "deleteObjectFromS3");
 
     const command = new DeleteObjectCommand({
       Bucket: BUCKET,
-      Key: fileName,
+      Key: key,
     });
 
     await r2Client.send(command);
-    console.log(`✅ [R2] Objeto eliminado: ${fileName}`);
+    console.log(`✅ [R2] Objeto eliminado: ${key}`);
     return true;
   } catch (error) {
-    console.error("❌ [R2] Error al eliminar objeto:", error.message);
+    console.error("❌ [R2] Error al eliminar objeto:", error.message || error);
     throw error;
   }
 }

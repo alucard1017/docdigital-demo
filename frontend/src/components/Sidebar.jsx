@@ -15,14 +15,6 @@ export function Sidebar({
   const OWNER_ID = 7;
   const isOwner = user?.id === OWNER_ID;
 
-  const handleChangeView = (nextView) => {
-    setView(nextView);
-  };
-
-  const handleStatusFilter = (filter) => {
-    setStatusFilter(filter);
-  };
-
   const showAdminSection = isOwner || isAnyAdmin;
   const isAdminGlobalOrOwner =
     !!user &&
@@ -30,25 +22,54 @@ export function Sidebar({
       user.role === "ADMIN_GLOBAL" ||
       user.id === OWNER_ID);
 
-  const totalDocs = docs.length || 0;
+  const totalDocs = Array.isArray(docs) ? docs.length : 0;
+  const safePendientes = Number.isFinite(pendientes) ? pendientes : 0;
 
   const subtleText = "#9ca3af";
 
   const navItemBaseStyle = {
     display: "flex",
     alignItems: "center",
-    gap: 6,
-    padding: "6px 8px",
+    gap: 8,
+    padding: "8px 10px",
     borderRadius: 10,
-    fontSize: "0.8rem",
+    fontSize: "0.82rem",
     fontWeight: 500,
     cursor: "pointer",
     color: subtleText,
-    transition: "background-color 0.18s ease, color 0.18s ease, transform 0.08s ease",
+    transition:
+      "background-color 0.18s ease, color 0.18s ease, transform 0.08s ease",
+    userSelect: "none",
   };
 
   const makeNavItemClass = (isActive) =>
     `nav-item${isActive ? " active" : ""}`;
+
+  const renderNavItem = ({
+    active = false,
+    label,
+    icon,
+    title,
+    onClick,
+  }) => (
+    <div
+      className={makeNavItemClass(active)}
+      style={navItemBaseStyle}
+      onClick={onClick}
+      title={title}
+      role="button"
+      tabIndex={0}
+      onKeyDown={(e) => {
+        if (e.key === "Enter" || e.key === " ") {
+          e.preventDefault();
+          onClick();
+        }
+      }}
+    >
+      <span>{icon}</span>
+      <span>{label}</span>
+    </div>
+  );
 
   return (
     <aside className="sidebar sidebar-root">
@@ -129,9 +150,7 @@ export function Sidebar({
             >
               Sesión activa
             </div>
-            <div style={{ fontWeight: 600 }}>
-              {user?.name || "Usuario"}
-            </div>
+            <div style={{ fontWeight: 600 }}>{user?.name || "Usuario"}</div>
             <div
               style={{
                 opacity: 0.8,
@@ -148,8 +167,7 @@ export function Sidebar({
               paddingInline: 10,
               paddingBlock: 3,
               borderRadius: 999,
-              background:
-                "linear-gradient(135deg, #111827, #020617)",
+              background: "linear-gradient(135deg, #111827, #020617)",
               border: "1px solid #1f2937",
               fontSize: "0.68rem",
               textTransform: "uppercase",
@@ -176,204 +194,167 @@ export function Sidebar({
       {/* Bandeja */}
       <h3 className="sidebar-section-label">Bandeja</h3>
 
-      <div
-        className={makeNavItemClass(view === "list")}
-        style={navItemBaseStyle}
-        onClick={() => handleChangeView("list")}
-        title="Ver todos los trámites"
-      >
-        <span>📄</span>
-        <span>Mis trámites</span>
-      </div>
+      {renderNavItem({
+        active: view === "list",
+        icon: "📄",
+        label: "Mis trámites",
+        title: "Ver todos los trámites",
+        onClick: () => setView("list"),
+      })}
 
-      <div
-        className={makeNavItemClass(view === "upload")}
-        style={navItemBaseStyle}
-        onClick={() => handleChangeView("upload")}
-        title="Crear nuevo trámite de firma"
-      >
-        <span>📤</span>
-        <span>Crear nuevo trámite</span>
-      </div>
+      {renderNavItem({
+        active: view === "upload",
+        icon: "📤",
+        label: "Crear nuevo trámite",
+        title: "Crear nuevo trámite de firma",
+        onClick: () => setView("upload"),
+      })}
 
       {/* Atajos */}
       <h3 className="sidebar-section-label">Atajos</h3>
 
-      <div
-        className={makeNavItemClass(statusFilter === "ONLY_PENDIENTES")}
-        style={navItemBaseStyle}
-        onClick={() => handleStatusFilter("ONLY_PENDIENTES")}
-        title="Mostrar solo documentos pendientes"
-      >
-        <span>⏳</span>
-        <span>Solo pendientes</span>
-      </div>
+      {renderNavItem({
+        active: statusFilter === "ONLY_PENDIENTES",
+        icon: "⏳",
+        label: "Solo pendientes",
+        title: "Mostrar solo documentos pendientes",
+        onClick: () => setStatusFilter("ONLY_PENDIENTES"),
+      })}
 
-      <div
-        className={makeNavItemClass(statusFilter === "ONLY_FIRMADOS")}
-        style={navItemBaseStyle}
-        onClick={() => handleStatusFilter("ONLY_FIRMADOS")}
-        title="Mostrar solo documentos firmados"
-      >
-        <span>✅</span>
-        <span>Solo firmados</span>
-      </div>
+      {renderNavItem({
+        active: statusFilter === "ONLY_FIRMADOS",
+        icon: "✅",
+        label: "Solo firmados",
+        title: "Mostrar solo documentos firmados",
+        onClick: () => setStatusFilter("ONLY_FIRMADOS"),
+      })}
 
-      <div
-        className={makeNavItemClass(statusFilter === "ONLY_RECHAZADOS")}
-        style={navItemBaseStyle}
-        onClick={() => handleStatusFilter("ONLY_RECHAZADOS")}
-        title="Mostrar solo documentos rechazados"
-      >
-        <span>❌</span>
-        <span>Solo rechazados</span>
-      </div>
-
-      <div
-        className={makeNavItemClass(view === "verification")}
-        style={navItemBaseStyle}
-        onClick={() => handleChangeView("verification")}
-        title="Verificar estado público de documentos"
-      >
-        <span>🔍</span>
-        <span>Verificar documento</span>
-      </div>
+      {renderNavItem({
+        active: statusFilter === "ONLY_RECHAZADOS",
+        icon: "❌",
+        label: "Solo rechazados",
+        title: "Mostrar solo documentos rechazados",
+        onClick: () => setStatusFilter("ONLY_RECHAZADOS"),
+      })}
 
       {/* Reportes */}
-      <h3 className="sidebar-section-label">Reportes</h3>
+      {showAdminSection && (
+        <>
+          <h3 className="sidebar-section-label">Reportes</h3>
 
-      <div
-        className={makeNavItemClass(view === "email-metrics")}
-        style={navItemBaseStyle}
-        onClick={() => handleChangeView("email-metrics")}
-        title="Ver métricas de email"
-      >
-        <span>📊</span>
-        <span>Analytics</span>
-      </div>
+          {renderNavItem({
+            active: view === "dashboard",
+            icon: "📊",
+            label: "Dashboard",
+            title: "Dashboard administrativo",
+            onClick: () => setView("dashboard"),
+          })}
 
-      <div
-        className={makeNavItemClass(view === "company-analytics")}
-        style={navItemBaseStyle}
-        onClick={() => handleChangeView("company-analytics")}
-        title="Analytics de la empresa"
-      >
-        <span>📈</span>
-        <span>Analytics Empresa</span>
-      </div>
+          {renderNavItem({
+            active: view === "email-metrics",
+            icon: "📧",
+            label: "Métricas de email",
+            title: "Ver métricas de email",
+            onClick: () => setView("email-metrics"),
+          })}
 
-      <div
-        className={makeNavItemClass(view === "pricing")}
-        style={navItemBaseStyle}
-        onClick={() => handleChangeView("pricing")}
-        title="Ver planes y facturación"
-      >
-        <span>💳</span>
-        <span>Planes y facturación</span>
-      </div>
+          {renderNavItem({
+            active: view === "company-analytics",
+            icon: "📈",
+            label: "Analytics empresa",
+            title: "Analytics de la empresa",
+            onClick: () => setView("company-analytics"),
+          })}
 
-      <div
-        className={makeNavItemClass(view === "templates")}
-        style={navItemBaseStyle}
-        onClick={() => handleChangeView("templates")}
-        title="Gestionar plantillas de documentos"
-      >
-        <span>📋</span>
-        <span>Plantillas</span>
-      </div>
+          {renderNavItem({
+            active: view === "templates",
+            icon: "📋",
+            label: "Plantillas",
+            title: "Gestionar plantillas de documentos",
+            onClick: () => setView("templates"),
+          })}
+        </>
+      )}
 
-      <div
-        className={makeNavItemClass(view === "profile")}
-        style={navItemBaseStyle}
-        onClick={() => handleChangeView("profile")}
-        title="Editar tu perfil"
-      >
-        <span>👤</span>
-        <span>Mi perfil</span>
-      </div>
+      {/* Cuenta */}
+      <h3 className="sidebar-section-label">Cuenta</h3>
+
+      {renderNavItem({
+        active: view === "pricing",
+        icon: "💳",
+        label: "Planes y facturación",
+        title: "Ver planes y facturación",
+        onClick: () => setView("pricing"),
+      })}
+
+      {renderNavItem({
+        active: view === "profile",
+        icon: "👤",
+        label: "Mi perfil",
+        title: "Editar tu perfil",
+        onClick: () => setView("profile"),
+      })}
 
       {/* Administración */}
       {showAdminSection && (
         <>
           <h3 className="sidebar-section-label">Administración</h3>
 
-          <div
-            className={makeNavItemClass(view === "users")}
-            style={navItemBaseStyle}
-            onClick={() => handleChangeView("users")}
-            title="Gestionar usuarios de la empresa"
-          >
-            <span>👥</span>
-            <span>Usuarios</span>
-          </div>
+          {renderNavItem({
+            active: view === "users",
+            icon: "👥",
+            label: "Usuarios",
+            title: "Gestionar usuarios de la empresa",
+            onClick: () => setView("users"),
+          })}
 
-          <div
-            className={makeNavItemClass(view === "reminders-config")}
-            style={navItemBaseStyle}
-            onClick={() => handleChangeView("reminders-config")}
-            title="Configurar recordatorios automáticos"
-          >
-            <span>🔔</span>
-            <span>Recordatorios</span>
-          </div>
-
-          <div
-            className={makeNavItemClass(view === "dashboard")}
-            style={navItemBaseStyle}
-            onClick={() => handleChangeView("dashboard")}
-            title="Dashboard administrativo"
-          >
-            <span>📊</span>
-            <span>Dashboard</span>
-          </div>
+          {renderNavItem({
+            active: view === "reminders-config",
+            icon: "🔔",
+            label: "Recordatorios",
+            title: "Configurar recordatorios automáticos",
+            onClick: () => setView("reminders-config"),
+          })}
 
           {isAdminGlobalOrOwner && (
             <>
-              <div
-                className={makeNavItemClass(view === "companies")}
-                style={navItemBaseStyle}
-                onClick={() => handleChangeView("companies")}
-                title="Gestionar empresas"
-              >
-                <span>🏢</span>
-                <span>Empresas</span>
-              </div>
+              {renderNavItem({
+                active: view === "companies",
+                icon: "🏢",
+                label: "Empresas",
+                title: "Gestionar empresas",
+                onClick: () => setView("companies"),
+              })}
 
-              <div
-                className={makeNavItemClass(view === "status")}
-                style={navItemBaseStyle}
-                onClick={() => handleChangeView("status")}
-                title="Estado del sistema"
-              >
-                <span>⚙️</span>
-                <span>Estado Sistema</span>
-              </div>
+              {renderNavItem({
+                active: view === "status",
+                icon: "⚙️",
+                label: "Estado sistema",
+                title: "Estado del sistema",
+                onClick: () => setView("status"),
+              })}
 
-              <div
-                className={makeNavItemClass(view === "audit-logs")}
-                style={navItemBaseStyle}
-                onClick={() => handleChangeView("audit-logs")}
-                title="Auditoría de negocio"
-              >
-                <span>📜</span>
-                <span>Auditoría (negocio)</span>
-              </div>
+              {renderNavItem({
+                active: view === "audit-logs",
+                icon: "📜",
+                label: "Auditoría negocio",
+                title: "Auditoría de negocio",
+                onClick: () => setView("audit-logs"),
+              })}
 
-              <div
-                className={makeNavItemClass(view === "auth-logs")}
-                style={navItemBaseStyle}
-                onClick={() => handleChangeView("auth-logs")}
-                title="Logs de autenticación"
-              >
-                <span>🔐</span>
-                <span>Auth logs</span>
-              </div>
+              {renderNavItem({
+                active: view === "auth-logs",
+                icon: "🔐",
+                label: "Auth logs",
+                title: "Logs de autenticación",
+                onClick: () => setView("auth-logs"),
+              })}
             </>
           )}
         </>
       )}
 
-      {/* Footer: resumen + logout */}
+      {/* Footer */}
       <div
         style={{
           marginTop: "auto",
@@ -393,23 +374,17 @@ export function Sidebar({
         </div>
         <div>
           Pendientes hoy:{" "}
-          <strong style={{ color: "#fbbf24" }}>{pendientes}</strong>
+          <strong style={{ color: "#fbbf24" }}>{safePendientes}</strong>
         </div>
       </div>
 
-      <div
-        className="nav-item"
-        style={{
-          ...navItemBaseStyle,
-          marginTop: 0,
-          color: "#fecaca",
-        }}
-        onClick={logout}
-        title="Cerrar sesión"
-      >
-        <span>🚪</span>
-        <span>Cerrar sesión</span>
-      </div>
+      {renderNavItem({
+        active: false,
+        icon: "🚪",
+        label: "Cerrar sesión",
+        title: "Cerrar sesión",
+        onClick: logout,
+      })}
     </aside>
   );
 }

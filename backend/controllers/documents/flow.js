@@ -247,16 +247,15 @@ const createAutomaticReminders = async (
   {
     documentId,
     signers,
-    intervalDays,
+    intervalDays,   // ya no lo vamos a usar, pero lo dejamos en la firma por ahora
     maxAttempts,
     companyId,
   }
 ) => {
   if (!documentId || !signers?.length) return 0;
 
-  const scheduledAt = new Date(
-    Date.now() + intervalDays * 24 * 60 * 60 * 1000
-  );
+  // Primer recordatorio SIEMPRE a 12h, ignorando intervalDays
+  const firstReminderAt = new Date(Date.now() + 12 * 60 * 60 * 1000);
 
   for (const signer of signers) {
     const emailDestino = signer.email;
@@ -268,17 +267,12 @@ const createAutomaticReminders = async (
         company_id,
         firmante_id,
         destinatario_email,
-        email,
         tipo,
         estado,
-        status,
         proximo_intento_at,
-        scheduled_at,
         sent_at,
         intentos,
-        attempt,
         max_intentos,
-        max_attempts,
         error_message,
         created_at,
         updated_at
@@ -287,18 +281,13 @@ const createAutomaticReminders = async (
         $1,                  -- documento_id
         $2,                  -- company_id
         $3,                  -- firmante_id
-        $4,                  -- destinatario_email (nuevo)
-        $4,                  -- email (legacy, igual al nuevo)
+        $4,                  -- destinatario_email
         'AUTO',              -- tipo
-        'pendiente',         -- estado (nuevo)
-        'PENDING',           -- status (legacy)
-        $5,                  -- proximo_intento_at (nuevo)
-        $5,                  -- scheduled_at (legacy)
+        'pendiente',         -- estado
+        $5,                  -- proximo_intento_at (12h)
         NULL,                -- sent_at
-        0,                   -- intentos (nuevo)
-        0,                   -- attempt (legacy)
-        $6,                  -- max_intentos (nuevo)
-        $6,                  -- max_attempts (legacy)
+        0,                   -- intentos
+        $6,                  -- max_intentos (3)
         NULL,                -- error_message
         NOW(),
         NOW()
@@ -309,7 +298,7 @@ const createAutomaticReminders = async (
         companyId || null,
         signer.id || null,
         emailDestino,
-        scheduledAt,
+        firstReminderAt,
         maxAttempts,
       ]
     );
@@ -326,10 +315,9 @@ const cancelPendingReminders = async (client, documentId) => {
     UPDATE recordatorios
     SET
       estado = 'cancelado',
-      status = 'CANCELLED',
       updated_at = NOW()
     WHERE documento_id = $1
-      AND COALESCE(estado, LOWER(status), 'pendiente') IN ('pendiente', 'enviado')
+      AND estado IN ('pendiente', 'enviado')
     `,
     [documentId]
   );
@@ -802,22 +790,22 @@ async function sendFlow(req, res) {
       ]
     );
 
-const reminderConfig = await getReminderConfig(client, documento.company_id);
+    const reminderConfig = await getReminderConfig(client, documento.company_id);
 
-let recordatoriosCreados = 0;
+    let recordatoriosCreados = 0;
 
-// cancelamos recordatorios pendientes del documento legacy
-await cancelPendingReminders(client, documento.id);
+    // cancelamos recordatorios pendientes del documento legacy
+    await cancelPendingReminders(client, documento.id); // usamos documentos.id
 
-if (reminderConfig.enabled) {
-  recordatoriosCreados = await createAutomaticReminders(client, {
-    documentId: documento.id,              // OJO: documentos.id (legacy)
-    signers: firmantes,                    // firmantes legacy
-    intervalDays: reminderConfig.intervalDays,
-    maxAttempts: reminderConfig.maxAttempts,
-    companyId: documento.company_id,
-  });
-}
+    if (reminderConfig.enabled) {
+      recordatoriosCreados = await createAutomaticReminders(client, {
+        documentId: documento.id,   // documentos.id (legacy)
+        signers: firmantes,         // firmantes legacy
+        intervalDays: reminderConfig.intervalDays,
+        maxAttempts: reminderConfig.maxAttempts,
+        companyId: documento.company_id,
+      });
+    }
 
     await client.query("COMMIT");
 

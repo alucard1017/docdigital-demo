@@ -255,9 +255,7 @@ export function LoginView({
                 <input
                   type="checkbox"
                   checked={!!rememberMe}
-                  onChange={(e) =>
-                    setRememberMe && setRememberMe(e.target.checked)
-                  }
+                  onChange={(e) => setRememberMe(e.target.checked)}
                   style={{
                     width: 14,
                     height: 14,

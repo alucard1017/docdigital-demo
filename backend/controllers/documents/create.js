@@ -71,6 +71,80 @@ function uniqueBy(arr, keyFn) {
   });
 }
 
+function stripInvisibleChars(value) {
+  return String(value || "").replace(/[\u200B-\u200D\uFEFF]/g, "");
+}
+
+function normalizeText(value) {
+  return stripInvisibleChars(value)
+    .replace(/\s+/g, " ")
+    .trim();
+}
+
+function getSafeBaseFileName(filename) {
+  return normalizeText(String(filename || "").replace(/\.pdf$/i, ""));
+}
+
+function sanitizeFileName(value, fallback = "documento") {
+  const normalized = normalizeText(value)
+    .replace(/[<>:"/\\|?*\x00-\x1F]/g, "-")
+    .replace(/\.+$/g, "")
+    .replace(/^\.+/g, "")
+    .replace(/\s+/g, "-")
+    .replace(/-+/g, "-")
+    .trim();
+
+  return normalized || fallback;
+}
+
+function buildSafeStorageFileName(originalname, code) {
+  const safeBaseName = sanitizeFileName(
+    getSafeBaseFileName(originalname || "documento"),
+    "documento"
+  );
+
+  return `${Date.now()}-${code}-${safeBaseName}.pdf`;
+}
+
+async function fetchPdfBufferFromUrl(url) {
+  const safeUrl = String(url || "").trim();
+
+  if (!safeUrl) {
+    throw new Error("URL vacía en fetchPdfBufferFromUrl");
+  }
+
+  const response = await axios.get(safeUrl, {
+    responseType: "arraybuffer",
+    timeout: 20000,
+    maxContentLength: 25 * 1024 * 1024,
+    maxBodyLength: 25 * 1024 * 1024,
+    headers: {
+      Accept: "application/pdf,application/octet-stream;q=0.9,*/*;q=0.8",
+    },
+    validateStatus: (status) => status >= 200 && status < 300,
+  });
+
+  const contentType = String(response.headers?.["content-type"] || "").toLowerCase();
+
+  if (
+    contentType &&
+    !contentType.includes("application/pdf") &&
+    !contentType.includes("application/octet-stream")
+  ) {
+    console.warn(
+      `⚠️ fetchPdfBufferFromUrl content-type inesperado: ${contentType}`
+    );
+  }
+
+  const buffer = Buffer.from(response.data);
+
+  if (!buffer.length) {
+    throw new Error("El archivo remoto llegó vacío");
+  }
+
+  return buffer;
+}
+
 /* ================================
    HELPERS FIRMANTES
    ================================ */
@@ -177,7 +251,7 @@ async function getReminderConfig(client, companyId) {
   try {
     const { rows } = await client.query(
       `
-      SELECT interval_days, max_attempts, enabled
+      SELECT enabled
       FROM reminder_config
       WHERE company_id = $1
       LIMIT 1
@@ -186,83 +260,71 @@ async function getReminderConfig(client, companyId) {
     );
 
     if (!rows.length) {
-      return {
-        enabled: true,
-        intervalDays: 3,
-        maxAttempts: 2,
-      };
+      return { enabled: true };
     }
 
     return {
       enabled: rows[0].enabled !== false,
-      intervalDays: Number(rows[0].interval_days || 3),
-      maxAttempts: Number(rows[0].max_attempts || 2),
     };
   } catch (error) {
-    console.warn("⚠️ No se pudo leer reminder_config, usando defaults:", error.message);
-    return {
-      enabled: true,
-      intervalDays: 3,
-      maxAttempts: 2,
-    };
+    console.warn(
+      "⚠️ No se pudo leer reminder_config, usando defaults:",
+      error.message
+    );
+    return { enabled: true };
   }
 }
 
-async function createAutomaticReminders(
-  client,
-  { documentId, signers, intervalDays, maxAttempts }
-) {
+async function createAutomaticReminders(client, { documentId, signers }) {
   if (!documentId || !Array.isArray(signers) || !signers.length) return 0;
-  if (!intervalDays || !maxAttempts || maxAttempts <= 0) return 0;
 
   let created = 0;
 
   for (const signer of signers) {
     if (!signer?.email) continue;
 
-    for (let attempt = 1; attempt <= maxAttempts; attempt++) {
-      await client.query(
-        `
-        INSERT INTO recordatorios (
-          documento_id,
-          destinatario_email,
-          destinatario_nombre,
-          tipo,
-          numero_intento,
-          programado_para,
-          estado,
-          metadata,
-          created_at,
-          updated_at
-        )
-        VALUES (
-          $1,
-          $2,
-          $3,
-          $4,
-          $5,
-          NOW() + (($6::int * $5::int) || ' days')::interval,
-          'PENDIENTE',
-          $7::jsonb,
-          NOW(),
-          NOW()
-        )
-        `,
-        [
-          documentId,
-          signer.email,
-          signer.nombre,
-          signer.debe_visar ? "VISADO" : "FIRMA",
-          attempt,
-          intervalDays,
-          JSON.stringify({
-            signer_order: signer.orden,
-            signer_type: signer.tipo,
-          }),
-        ]
-      );
-      created++;
-    }
+    await client.query(
+      `
+      INSERT INTO recordatorios (
+        documento_id,
+        destinatario_email,
+        destinatario_nombre,
+        firmante_id,
+        tipo,
+        estado,
+        intentos,
+        max_intentos,
+        proximo_intento_at,
+        error_message,
+        sent_at,
+        created_at,
+        updated_at
+      )
+      VALUES (
+        $1,
+        $2,
+        $3,
+        NULL,
+        $4,
+        'pendiente',
+        0,
+        3,
+        NOW() + INTERVAL '12 hours',
+        NULL,
+        NULL,
+        NOW(),
+        NOW()
+      )
+      `,
+      [
+        documentId,
+        signer.email,
+        signer.nombre,
+        signer.debe_visar ? "VISADO" : "FIRMA",
+      ]
+    );
+
+    created++;
   }
 
   return created;
@@ -281,6 +343,18 @@ async function insertDocumentEvent(client, payload) {
     details = null,
   } = payload;
 
+  const safeEventType = eventType || "DOCUMENT_CREATED";
+
+  // Mapeo simple de eventType → action legible
+  const action =
+    safeEventType === "DOCUMENT_CREATED"
+      ? "Documento creado"
+      : safeEventType === "DOCUMENT_SENT"
+      ? "Documento enviado"
+      : safeEventType === "DOCUMENT_SIGNED"
+      ? "Documento firmado"
+      : safeEventType;
+
   try {
     await client.query(
       `
@@ -288,13 +362,21 @@ async function insertDocumentEvent(client, payload) {
         document_id,
         company_id,
         user_id,
+        action,
         event_type,
         details,
         created_at
       )
-      VALUES ($1, $2, $3, $4, $5::jsonb, NOW())
+      VALUES ($1, $2, $3, $4, $5, $6::jsonb, NOW())
       `,
-      [documentId, companyId, userId || null, eventType, toJson(details, "{}")]
+      [
+        documentId,
+        companyId,
+        userId || null,
+        action,
+        safeEventType,
+        toJson(details, "{}"),
+      ]
     );
   } catch (error) {
     console.warn("⚠️ No se pudo insertar document_events:", error.message);
@@ -338,33 +420,37 @@ async function createLegacySigners(client, { documentoId, signers }) {
   const inserted = [];
 
   for (const signer of signers) {
+    const rolLegacy = signer.debe_visar ? "VISADOR" : "FIRMANTE";
+    const tipoFirmaLegacy = "SIMPLE";
+
     const { rows } = await client.query(
       `
       INSERT INTO firmantes (
         documento_id,
         nombre,
         email,
-        telefono,
-        orden,
-        tipo,
+        rut,
+        rol,
+        orden_firma,
         estado,
-        debe_firmar,
-        debe_visar,
+        tipo_firma,
+        fecha_firma,
         created_at,
         updated_at
       )
-      VALUES ($1, $2, $3, $4, $5, $6, 'PENDIENTE', $7, $8, NOW(), NOW())
+      VALUES (
+        $1, $2, $3, $4, $5, $6, 'PENDIENTE', $7, NULL, NOW(), NOW()
+      )
       RETURNING *
       `,
       [
         documentoId,
         signer.nombre,
         signer.email,
-        signer.telefono,
+        null,
+        rolLegacy,
         signer.orden,
-        signer.tipo,
-        signer.debe_firmar,
-        signer.debe_visar,
+        tipoFirmaLegacy,
       ]
     );
 
@@ -411,9 +497,7 @@ async function createCanonicalSigners(client, { documentId, companyId, signers }
         signer.debe_firmar,
         signer.debe_visar,
         toJson(
-          {
-            mensaje_personalizado: signer.mensaje_personalizado,
-          },
+          { mensaje_personalizado: signer.mensaje_personalizado },
           "{}"
         ),
       ]
@@ -481,23 +565,31 @@ async function syncParticipantsFromSigners(client, { documentId, companyId, sign
    ================================ */
 
 async function uploadMainPdfToStorage(file, companyId, code) {
-  const ext = path.extname(file.originalname || ".pdf") || ".pdf";
-  const key = `documents/${companyId}/${Date.now()}-${code}${ext}`;
-  const uploaded = await uploadPdfToS3(file.buffer, key, file.mimetype || "application/pdf");
-
-  if (typeof uploaded === "string") {
-    return { key, url: uploaded };
+  if (!file?.buffer) {
+    throw new Error("Archivo inválido en uploadMainPdfToStorage");
   }
+
+  if (!companyId) {
+    throw new Error("companyId requerido en uploadMainPdfToStorage");
+  }
+
+  if (!code) {
+    throw new Error("code requerido en uploadMainPdfToStorage");
+  }
+
+  const safeFileName = buildSafeStorageFileName(file.originalname, code);
+  const key = `documents/${companyId}/${safeFileName}`;
+
+  const uploaded = await uploadPdfToS3(
+    file.buffer,
+    key,
+    file.mimetype || "application/pdf"
+  );
 
   return {
     key: uploaded?.key || key,
     url: uploaded?.url || uploaded?.Location || null,
   };
-}
-
-async function fetchPdfBufferFromUrl(url) {
-  const response = await axios.get(url, { responseType: "arraybuffer" });
-  return Buffer.from(response.data);
 }
 
 /* ================================
@@ -536,7 +628,10 @@ async function sendInvitationsInBackground({
 
       return { ok: true, email: signer.email };
     } catch (error) {
-      console.error(`❌ Error enviando invitación a ${signer.email}:`, error.message);
+      console.error(
+        `❌ Error enviando invitación a ${signer.email}:`,
+        error.message
+      );
       return { ok: false, email: signer.email, error: error.message };
     }
   });
@@ -551,8 +646,6 @@ async function sendInvitationsInBackground({
 async function createDocument(req, res) {
   const client = await pool.connect();
 
-  let tempSignedUrl = null;
-
   try {
     await client.query("BEGIN");
 
@@ -561,47 +654,83 @@ async function createDocument(req, res) {
     const userId = req.user?.id || req.user?.userId || null;
 
     const autoSendFlow = normalizeBoolean(req.body.autoSendFlow, false);
+
+    const rawTitulo =
+      req.body?.titulo ??
+      req.body?.title ??
+      req.body?.nombre ??
+      "";
+
+    const fileTitleFallback = getSafeBaseFileName(
+      req.file?.originalname || ""
+    );
+
     const titulo =
-      req.body.titulo ||
-      req.body.title ||
-      req.body.nombre ||
-      req.file?.originalname ||
+      normalizeText(rawTitulo) ||
+      fileTitleFallback ||
       "Documento sin título";
 
-    const descripcion = req.body.descripcion || req.body.description || null;
+    const descripcion =
+      normalizeText(req.body.descripcion || req.body.description || "") || null;
 
     const signers = sanitizeSigners(
       req.body.signers || req.body.firmantes || req.body.participants
     );
 
+    console.log("[createDocument] Payload normalizado:", {
+      companyId,
+      userId,
+      autoSendFlow,
+      rawTitulo,
+      tituloNormalizado: titulo,
+      signersCount: signers.length,
+      hasFile: !!req.file,
+      hasPdfUrl: !!req.body.pdfUrl,
+      hasFileUrl: !!req.body.fileUrl,
+    });
+
     if (!companyId) {
       await client.query("ROLLBACK");
-      return res.status(400).json({ message: "company_id es requerido" });
+      return res.status(400).json({
+        message: "company_id es requerido para crear el documento",
+        code: "COMPANY_ID_REQUIRED",
+      });
     }
 
     if (!req.file && !req.body.pdfUrl && !req.body.fileUrl) {
       await client.query("ROLLBACK");
-      return res.status(400).json({ message: "Debes enviar un PDF" });
+      return res.status(400).json({
+        message: "Debes adjuntar un PDF o un fileUrl/pdfUrl válido",
+        code: "PDF_REQUIRED",
+      });
     }
 
     if (!validateLength(titulo, 2, 255)) {
       await client.query("ROLLBACK");
-      return res.status(400).json({ message: "Título inválido" });
+      return res.status(400).json({
+        message:
+          "Título inválido: ingresa un título de 2 a 255 caracteres o sube un PDF con nombre válido",
+        code: "TITLE_INVALID",
+      });
     }
 
     if (!signers.length) {
       await client.query("ROLLBACK");
-      return res
-        .status(400)
-        .json({ message: "Debes enviar al menos un firmante válido" });
+      return res.status(400).json({
+        message: "Debes enviar al menos un firmante con email válido",
+        code: "SIGNERS_REQUIRED",
+      });
     }
 
-    const requiresVisado = signers.some((s) => s.debe_visar);
-    const verificationCode = generarCodigoVerificacion();
-    const numeroContratoInterno = await generarNumeroContratoInterno(
-      client,
-      companyId
-    );
+const requiresVisado = signers.some((s) => s.debe_visar);
+const verificationCode = generarCodigoVerificacion();
+
+const numeroContratoInterno = await generarNumeroContratoInterno(
+  client,
+  companyId
+);
+
+console.log("numeroContratoInterno =>", numeroContratoInterno);
 
     let originalBuffer;
     let originalFilename;
@@ -615,7 +744,13 @@ async function createDocument(req, res) {
     } else {
       const remoteUrl = req.body.pdfUrl || req.body.fileUrl;
       originalBuffer = await fetchPdfBufferFromUrl(remoteUrl);
-      originalFilename = `documento-${Date.now()}.pdf`;
+
+      const remoteName =
+        req.body.fileName ||
+        req.body.nombreArchivo ||
+        `documento-${verificationCode}`;
+
+      originalFilename = `${sanitizeFileName(remoteName)}.pdf`;
     }
 
     const watermarkedBuffer = await aplicarMarcaAguaLocal(originalBuffer);
@@ -634,36 +769,6 @@ async function createDocument(req, res) {
     const storageKey = uploadResult.key;
     const storageUrl = uploadResult.url;
 
-    let signedBuffer = null;
-    try {
-      if (storageKey && typeof getSignedUrl === "function") {
-        tempSignedUrl = await getSignedUrl(storageKey, 900);
-        signedBuffer = await fetchPdfBufferFromUrl(tempSignedUrl);
-      }
-    } catch (e) {
-      console.warn(
-        "⚠️ No se pudo recuperar signed URL para sellado inicial:",
-        e.message
-      );
-    }
-
-    let sealedHash = null;
-    try {
-      const sourceForSeal = signedBuffer || watermarkedBuffer;
-      const sealedBuffer = await sellarPdfConQr(sourceForSeal, {
-        verificationCode,
-        hash: documentHash,
-      });
-      if (sealedBuffer && Buffer.isBuffer(sealedBuffer)) {
-        sealedHash = computeHash(sealedBuffer);
-      }
-    } catch (e) {
-      console.warn(
-        "⚠️ No se pudo sellar PDF con QR en createDocument:",
-        e.message
-      );
-    }
-
     const initialDocumentStatus = autoSendFlow
       ? "PENDIENTE_FIRMA"
       : "BORRADOR";
@@ -675,6 +780,7 @@ async function createDocument(req, res) {
     const { rows: documentRows } = await client.query(
       `
       INSERT INTO documents (
+        owner_id,
         company_id,
         title,
         description,
@@ -692,11 +798,12 @@ async function createDocument(req, res) {
         updated_at
       )
       VALUES (
-        $1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13::jsonb, NOW(), NOW()
+        $1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14::jsonb, NOW(), NOW()
       )
       RETURNING *
       `,
       [
+        userId,
         companyId,
         titulo,
         descripcion,
@@ -705,7 +812,7 @@ async function createDocument(req, res) {
         storageUrl,
         storageKey,
         documentHash,
-        sealedHash,
+        null,
         verificationCode,
         requiresVisado,
         userId,
@@ -725,35 +832,45 @@ async function createDocument(req, res) {
     const { rows: legacyRows } = await client.query(
       `
       INSERT INTO documentos (
-        empresa_id,
         titulo,
+        tipo,
+        estado,
+        categoria_firma,
+        codigo_verificacion,
+        creado_por,
+        company_id,
+        empresa_id,
         descripcion,
         url_archivo,
         hash_documento,
-        codigo_verificacion,
-        estado,
+        hash_pdf,
         requiere_visado,
-        creado_por,
         numero_contrato_interno,
+        tipo_flujo,
         created_at,
         updated_at
       )
       VALUES (
-        $1, $2, $3, $4, $5, $6, $7, $8, $9, $10, NOW(), NOW()
+        $1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, NOW(), NOW()
       )
       RETURNING *
       `,
       [
-        companyId,
         titulo,
+        "DOCUMENTO",
+        initialLegacyStatus,
+        "FIRMA",
+        verificationCode,
+        userId,
+        companyId,
+        companyId,
         descripcion,
         storageUrl,
         documentHash,
-        verificationCode,
-        initialLegacyStatus,
+        documentHash,
         requiresVisado,
-        userId,
         numeroContratoInterno,
+        "SECUENCIAL",
       ]
     );
 
@@ -859,8 +976,6 @@ async function createDocument(req, res) {
         remindersCreated = await createAutomaticReminders(client, {
           documentId: document.id,
           signers,
-          intervalDays: reminderConfig.intervalDays,
-          maxAttempts: reminderConfig.maxAttempts,
         });
       }
     }
@@ -871,6 +986,33 @@ async function createDocument(req, res) {
     const publicUrl = `${req.protocol}://${req.get(
       "host"
     )}/api/public/documents/${verificationCode}`;
+
+    try {
+      const sealResult = await sellarPdfConQr({
+        s3Key: storageKey,
+        documentoId: document.id,
+        codigoVerificacion: verificationCode,
+        categoriaFirma: requiresVisado ? "AVANZADA" : "SIMPLE",
+        numeroContratoInterno,
+      });
+
+      if (sealResult?.finalHash) {
+        await pool.query(
+          `
+          UPDATE documents
+          SET sealed_hash_sha256 = $2,
+              updated_at = NOW()
+          WHERE id = $1
+          `,
+          [document.id, sealResult.finalHash]
+        );
+      }
+    } catch (err) {
+      console.warn(
+        "⚠️ Error sellando PDF con QR (post-commit, no bloqueante):",
+        err.message
+      );
+    }
 
     if (autoSendFlow) {
       void sendInvitationsInBackground({
@@ -884,22 +1026,23 @@ async function createDocument(req, res) {
       });
     }
 
-    return res.status(201).json({
-      message: autoSendFlow
-        ? "Documento creado y enviado a firma correctamente"
-        : "Documento creado correctamente",
-      id: document.id,
-      documentoId: documentoNuevo.id,
-      estado: autoSendFlow ? DOCUMENT_STATES.SIGNING : DOCUMENT_STATES.DRAFT,
-      documentsStatus: autoSendFlow ? "PENDIENTE_FIRMA" : "BORRADOR",
-      codigoVerificacion: verificationCode,
-      recordatoriosCreados: remindersCreated,
-      signersCount: canonicalSigners.length,
-      participantsCount: participants.length,
-      fileUrl: storageUrl,
-      hash: documentHash,
-      legacyFirmantes: legacySigners.length,
-    });
+return res.status(201).json({
+  message: autoSendFlow
+    ? "Documento creado y enviado a firma correctamente"
+    : "Documento creado correctamente",
+  id: document.id,
+  documentoId: documentoNuevo.id,
+  estado: autoSendFlow ? DOCUMENT_STATES.SIGNING : DOCUMENT_STATES.DRAFT,
+  documentsStatus: autoSendFlow ? "PENDIENTE_FIRMA" : "BORRADOR",
+  codigoVerificacion: verificationCode,
+  numeroContratoInterno,
+  recordatoriosCreados: remindersCreated,
+  signersCount: canonicalSigners.length,
+  participantsCount: participants.length,
+  fileUrl: storageUrl,
+  hash: documentHash,
+  legacyFirmantes: legacySigners.length,
+});
   } catch (error) {
     try {
       await client.query("ROLLBACK");
@@ -915,7 +1058,6 @@ async function createDocument(req, res) {
     });
   }
 }
-
 /* ================================
    GET USER DOCUMENTS (FILTROS + PAGINACIÓN)
    ================================ */
@@ -959,7 +1101,8 @@ async function getUserDocuments(req, res) {
     };
 
     const sortField = allowedSortFields[sort] || "d.created_at";
-    const sortDirection = String(order).toLowerCase() === "asc" ? "ASC" : "DESC";
+    const sortDirection =
+      String(order).toLowerCase() === "asc" ? "ASC" : "DESC";
 
     const values = [];
     const where = [];
@@ -974,9 +1117,9 @@ async function getUserDocuments(req, res) {
       }
     } else {
       if (!user.company_id) {
-        return res
-          .status(400)
-          .json({ message: "Tu usuario no tiene company_id asignado" });
+        return res.status(400).json({
+          message: "Tu usuario no tiene company_id asignado",
+        });
       }
 
       values.push(user.company_id);
@@ -994,7 +1137,6 @@ async function getUserDocuments(req, res) {
       where.push(`(
         d.title ILIKE $${values.length}
         OR COALESCE(d.description, '') ILIKE $${values.length}
-        OR COALESCE(d.verification_code, '') ILIKE $${values.length}
       )`);
     }
 
@@ -1015,29 +1157,36 @@ async function getUserDocuments(req, res) {
     values.push(offset);
     const offsetIndex = values.length;
 
-    const dataSql = `
-      SELECT
-        d.id,
-        d.title,
-        d.description,
-        d.status,
-        d.company_id,
-        d.created_by,
-        d.created_at,
-        d.updated_at,
-        d.verification_code,
-        COALESCE(s.signers_count, 0) AS signers_count
-      FROM documents d
-      LEFT JOIN (
-        SELECT document_id, COUNT(*) AS signers_count
-        FROM document_signers
-        GROUP BY document_id
-      ) s ON s.document_id = d.id
-      ${whereSql}
-      ORDER BY ${sortField} ${sortDirection}
-      LIMIT $${limitIndex}
-      OFFSET $${offsetIndex}
-    `;
+const dataSql = `
+  SELECT
+    d.id,
+    d.title,
+    d.description,
+    d.status,
+    d.company_id,
+    d.created_by,
+    d.created_at,
+    d.updated_at,
+    d.verification_code,
+    d.nuevo_documento_id,
+    COALESCE(
+      doc.numero_contrato_interno,
+      d.metadata->>'numeroContratoInterno'
+    ) AS numero_contrato_interno,
+    COALESCE(s.signers_count, 0) AS signers_count
+  FROM documents d
+  LEFT JOIN documentos doc
+    ON doc.id = d.nuevo_documento_id
+  LEFT JOIN (
+    SELECT document_id, COUNT(*) AS signers_count
+    FROM document_signers
+    GROUP BY document_id
+  ) s ON s.document_id = d.id
+  ${whereSql}
+  ORDER BY ${sortField} ${sortDirection}
+  LIMIT $${limitIndex}
+  OFFSET $${offsetIndex}
+`;
 
     const dataResult = await pool.query(dataSql, values);
 
@@ -1054,7 +1203,8 @@ async function getUserDocuments(req, res) {
       filters: {
         status: normalizedStatus,
         search: search || null,
-        company_id: queryCompanyId || (isGlobalAdmin(user) ? null : user.company_id),
+        company_id:
+          queryCompanyId || (isGlobalAdmin(user) ? null : user.company_id),
         sort,
         order: sortDirection.toLowerCase(),
       },
