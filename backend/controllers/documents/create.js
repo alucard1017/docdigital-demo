@@ -614,6 +614,7 @@ async function sendInvitationsInBackground({
   companyId,
   documentId,
   documentoId,
+  docTitle,
   code,
   signers,
   publicUrl,
@@ -625,6 +626,7 @@ async function sendInvitationsInBackground({
         companyId,
         documentId,
         documentoId,
+        docTitle,
         signerName: signer.nombre,
         signerEmail: signer.email,
         signerPhone: signer.telefono,
@@ -635,9 +637,29 @@ async function sendInvitationsInBackground({
       };
 
       if (signer.debe_visar) {
-        await sendVisadoInvitation(payload);
+        await sendVisadoInvitation(
+          payload.signerEmail,
+          payload.docTitle,
+          payload.publicUrl,
+          payload.signerName,
+          {
+            documentoId: payload.documentoId,
+            firmanteId: null,
+          }
+        );
       } else {
-        await sendSigningInvitation(payload);
+        await sendSigningInvitation(
+          payload.signerEmail,
+          payload.docTitle,
+          payload.publicUrl,
+          payload.signerName,
+          {
+            verificationCode: payload.verificationCode,
+            qrTargetUrl: payload.publicUrl,
+            documentoId: payload.documentoId,
+            firmanteId: null,
+          }
+        );
       }
 
       return { ok: true, email: signer.email };
@@ -1033,6 +1055,7 @@ console.log("numeroContratoInterno =>", numeroContratoInterno);
         companyId,
         documentId: document.id,
         documentoId: documentoNuevo.id,
+        docTitle: titulo,
         code: verificationCode,
         signers,
         publicUrl,
