@@ -74,44 +74,101 @@ function normalizeToken(token) {
 }
 
 function normalizeUser(user) {
-  return user && typeof user === "object" ? user : null;
+  return user && typeof user === "object" && !Array.isArray(user) ? user : null;
 }
 
-function getTokenFromAnyStorage() {
-  const localStorageSafe = getLocalStorageSafe();
-  const sessionStorageSafe = getSessionStorageSafe();
-
-  return (
-    safeGet(localStorageSafe, ACCESS_TOKEN_KEY) ||
-    safeGet(sessionStorageSafe, ACCESS_TOKEN_KEY) ||
-    ""
-  );
-}
-
-function getUserFromAnyStorage() {
-  const localStorageSafe = getLocalStorageSafe();
-  const sessionStorageSafe = getSessionStorageSafe();
-
-  const raw =
-    safeGet(localStorageSafe, USER_KEY) ||
-    safeGet(sessionStorageSafe, USER_KEY);
-
-  if (!raw) return null;
+function parseUser(raw) {
+  if (!raw || typeof raw !== "string") return null;
 
   try {
-    const parsed = JSON.parse(raw);
-    return normalizeUser(parsed);
+    return normalizeUser(JSON.parse(raw));
   } catch {
     return null;
   }
 }
 
+function clearKeys(storage, keys = []) {
+  if (!storage) return;
+
+  keys.forEach((key) => {
+    safeRemove(storage, key);
+  });
+}
+
+function readSessionFromStorage(storage) {
+  if (!storage) {
+    return {
+      token: "",
+      user: null,
+      mode: null,
+      valid: false,
+    };
+  }
+
+  const token = normalizeToken(safeGet(storage, ACCESS_TOKEN_KEY));
+  const user = parseUser(safeGet(storage, USER_KEY));
+  const mode = safeGet(storage, SESSION_MODE_KEY);
+
+  const valid = !!token && !!user;
+
+  return {
+    token,
+    user,
+    mode,
+    valid,
+  };
+}
+
+function cleanupBrokenSession(storage) {
+  if (!storage) return;
+
+  const token = normalizeToken(safeGet(storage, ACCESS_TOKEN_KEY));
+  const user = parseUser(safeGet(storage, USER_KEY));
+
+  if ((token && !user) || (!token && user)) {
+    clearKeys(storage, [ACCESS_TOKEN_KEY, USER_KEY]);
+  }
+}
+
+function getResolvedSession() {
+  const localStorageSafe = getLocalStorageSafe();
+  const sessionStorageSafe = getSessionStorageSafe();
+
+  cleanupBrokenSession(localStorageSafe);
+  cleanupBrokenSession(sessionStorageSafe);
+
+  const localSession = readSessionFromStorage(localStorageSafe);
+  const sessionSession = readSessionFromStorage(sessionStorageSafe);
+
+  if (localSession.valid) {
+    return {
+      user: localSession.user,
+      token: localSession.token,
+      mode: SESSION_MODE_PERSISTENT,
+    };
+  }
+
+  if (sessionSession.valid) {
+    return {
+      user: sessionSession.user,
+      token: sessionSession.token,
+      mode: SESSION_MODE_TEMPORARY,
+    };
+  }
+
+  return {
+    user: null,
+    token: "",
+    mode: null,
+  };
+}
+
 export function getStoredToken() {
-  return getTokenFromAnyStorage();
+  return getResolvedSession().token;
 }
 
 export function getStoredUser() {
-  return getUserFromAnyStorage();
+  return getResolvedSession().user;
 }
 
 export function setSession(user, token, options = {}) {
@@ -126,28 +183,23 @@ export function setSession(user, token, options = {}) {
   const targetStorage = rememberMe ? localStorageSafe : sessionStorageSafe;
   const otherStorage = rememberMe ? sessionStorageSafe : localStorageSafe;
 
-  if (!targetStorage) return false;
-
-  safeRemove(otherStorage, USER_KEY);
-  safeRemove(otherStorage, ACCESS_TOKEN_KEY);
-
-  if (normalizedUser) {
-    safeSet(targetStorage, USER_KEY, JSON.stringify(normalizedUser));
-  } else {
-    safeRemove(targetStorage, USER_KEY);
+  if (!targetStorage || !normalizedUser || !normalizedToken) {
+    clearSession();
+    return false;
   }
 
-  if (normalizedToken) {
-    safeSet(targetStorage, ACCESS_TOKEN_KEY, normalizedToken);
-  } else {
-    safeRemove(targetStorage, ACCESS_TOKEN_KEY);
-  }
+  clearKeys(otherStorage, [USER_KEY, ACCESS_TOKEN_KEY]);
 
-  safeSet(
-    localStorageSafe,
-    SESSION_MODE_KEY,
-    rememberMe ? SESSION_MODE_PERSISTENT : SESSION_MODE_TEMPORARY
-  );
+  safeSet(targetStorage, USER_KEY, JSON.stringify(normalizedUser));
+  safeSet(targetStorage, ACCESS_TOKEN_KEY, normalizedToken);
+
+  if (localStorageSafe) {
+    safeSet(
+      localStorageSafe,
+      SESSION_MODE_KEY,
+      rememberMe ? SESSION_MODE_PERSISTENT : SESSION_MODE_TEMPORARY
+    );
+  }
 
   return true;
 }
@@ -156,27 +208,32 @@ export function clearSession() {
   const localStorageSafe = getLocalStorageSafe();
   const sessionStorageSafe = getSessionStorageSafe();
 
-  safeRemove(localStorageSafe, USER_KEY);
-  safeRemove(localStorageSafe, ACCESS_TOKEN_KEY);
-  safeRemove(localStorageSafe, SESSION_MODE_KEY);
-
-  safeRemove(sessionStorageSafe, USER_KEY);
-  safeRemove(sessionStorageSafe, ACCESS_TOKEN_KEY);
+  clearKeys(localStorageSafe, [USER_KEY, ACCESS_TOKEN_KEY, SESSION_MODE_KEY]);
+  clearKeys(sessionStorageSafe, [USER_KEY, ACCESS_TOKEN_KEY, SESSION_MODE_KEY]);
 }
 
 export function hasSession() {
-  return !!getStoredToken() && !!getStoredUser();
+  const { token, user } = getResolvedSession();
+  return !!token && !!user;
 }
 
 export function isPersistentSession() {
   const localStorageSafe = getLocalStorageSafe();
-  return (
-    safeGet(localStorageSafe, SESSION_MODE_KEY) === SESSION_MODE_PERSISTENT
-  );
+  const storedMode = safeGet(localStorageSafe, SESSION_MODE_KEY);
+
+  return storedMode === SESSION_MODE_PERSISTENT;
 }
 
 export function getSessionMode() {
-  return isPersistentSession()
-    ? SESSION_MODE_PERSISTENT
-    : SESSION_MODE_TEMPORARY;
+  const resolved = getResolvedSession();
+
+  if (resolved.mode === SESSION_MODE_PERSISTENT) {
+    return SESSION_MODE_PERSISTENT;
+  }
+
+  return SESSION_MODE_TEMPORARY;
+}
+
+export function getSessionSnapshot() {
+  return getResolvedSession();
 }
