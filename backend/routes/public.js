@@ -13,47 +13,53 @@ const router = express.Router();
 
 /* ================================
    FIRMA / VISADO PÚBLICO
-   Base: /api/public
+   Base final esperada: /api/public
    ================================ */
 
 /**
  * GET /api/public/docs/:token
- * Datos + PDF para enlace público de FIRMA (por firmante, sign_token).
+ * Datos + PDF para enlace público de firma por sign_token del firmante.
  */
 router.get("/docs/:token", getPublicDocBySignerToken);
 
 /**
  * GET /api/public/docs/document/:token
- * Datos + PDF usando signature_token del DOCUMENTO (visado / consulta).
+ * Datos + PDF usando signature_token del documento.
  */
 router.get("/docs/document/:token", getPublicDocByDocumentToken);
 
 /**
  * POST /api/public/docs/:token/firmar
- * Firmar documento por token (firmante externo, por sign_token).
+ * Firmar documento por token público del firmante.
  */
 router.post("/docs/:token/firmar", publicSignDocument);
 
 /**
  * POST /api/public/docs/:token/rechazar
- * Rechazar documento por token (firmante externo, por sign_token).
+ * Rechazar documento por token público del firmante.
  */
 router.post("/docs/:token/rechazar", publicRejectDocument);
 
 /**
  * POST /api/public/docs/:token/visar
- * Visar documento por token (visador externo, por signature_token del doc).
+ * Visar documento por token público del documento.
  */
 router.post("/docs/:token/visar", publicVisarDocument);
 
 /* ================================
-   VERIFICACIÓN POR CÓDIGO (QR)
+   VERIFICACIÓN PÚBLICA POR CÓDIGO
    ================================ */
 
 /**
  * GET /api/public/verificar/:codigo
- * Verificación pública por código (QR / código de verificación).
+ * Ruta principal de verificación pública por código.
  */
 router.get("/verificar/:codigo", verifyByCode);
+
+/**
+ * GET /api/public/documents/:codigo
+ * Ruta de compatibilidad para enlaces ya enviados desde email / QR.
+ */
+router.get("/documents/:codigo", verifyByCode);
 
 module.exports = router;

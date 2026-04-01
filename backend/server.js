@@ -424,7 +424,8 @@ console.log("✓ Rutas /api/onboarding registradas");
 app.use("/api/billing", requireAuth, billingRoutes);
 
 // Docs públicos
-app.use("/public", publicDocsRouter);
+app.use("/api/public", publicDocsRouter);
+console.log("✓ Rutas /api/public/documents y /api/public/verificar registradas");
 
 // Notaría
 app.use("/api/notary", notaryRouter);
