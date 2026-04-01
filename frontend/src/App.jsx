@@ -250,7 +250,12 @@ function App() {
   useEffect(() => {
     if (authLoading) return;
 
-    const publicAuthPaths = ["/login", "/forgot-password", "/reset-password", "/register"];
+    const publicAuthPaths = [
+      "/login",
+      "/forgot-password",
+      "/reset-password",
+      "/register",
+    ];
 
     if (!isAuthenticated && !publicAuthPaths.includes(path)) {
       setView("list");
@@ -263,6 +268,34 @@ function App() {
       replaceTo("/documents");
     }
   }, [authLoading, isAuthenticated, path]);
+
+  useEffect(() => {
+    if (!isAuthenticated) return;
+    if (view === "detail") return;
+
+    const validViews = new Set([
+      "list",
+      "upload",
+      "users",
+      "dashboard",
+      "companies",
+      "status",
+      "audit-logs",
+      "auth-logs",
+      "reminders-config",
+      "email-metrics",
+      "pricing",
+      "profile",
+      "templates",
+      "company-analytics",
+    ]);
+
+    if (!validViews.has(view)) {
+      setSelectedDoc(null);
+      setView("list");
+      replaceTo("/documents");
+    }
+  }, [view, isAuthenticated]);
 
   useEffect(() => {
     if (!token) return;
@@ -673,7 +706,9 @@ function App() {
 
     if (view === "users" && anyAdmin) return <UsersAdminView />;
     if (view === "dashboard" && anyAdmin) return <DashboardView user={user} />;
-    if (view === "companies" && anyAdmin) return <CompaniesAdminView API_URL={apiRoot} />;
+    if (view === "companies" && anyAdmin) {
+      return <CompaniesAdminView API_URL={apiRoot} />;
+    }
     if (view === "status" && anyAdmin) return <StatusAdminView API_URL={apiRoot} />;
     if (view === "audit-logs" && canAudit) return <AuditLogsView API_URL={apiRoot} />;
     if (view === "auth-logs" && canAudit) return <AuthLogsView API_URL={apiRoot} />;
@@ -686,17 +721,7 @@ function App() {
 
     return (
       <div style={{ padding: 40, textAlign: "center", color: "#64748b" }}>
-        <h3 style={{ marginBottom: 8 }}>Vista no disponible</h3>
-        <p style={{ marginBottom: 16 }}>
-          No tienes permisos o la sección solicitada no existe.
-        </p>
-        <button
-          type="button"
-          className="btn-main btn-primary"
-          onClick={() => handleNavigateProtected("list")}
-        >
-          Volver a documentos
-        </button>
+        Redirigiendo…
       </div>
     );
   };
