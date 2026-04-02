@@ -17,6 +17,7 @@ export function normalizePath(path) {
 }
 
 export function getPath() {
+  if (typeof window === "undefined") return "/";
   return normalizePath(window.location.pathname);
 }
 
@@ -24,30 +25,86 @@ export function isCurrentPath(path) {
   return getPath() === normalizePath(path);
 }
 
-function notifyNavigation() {
-  window.dispatchEvent(new Event(APP_NAVIGATION_EVENT));
+export function pathsMatch(a, b) {
+  return normalizePath(a) === normalizePath(b);
+}
+
+function notifyNavigation(detail = {}) {
+  if (typeof window === "undefined") return;
+
+  const eventDetail = {
+    path: getPath(),
+    previousPath: detail.previousPath
+      ? normalizePath(detail.previousPath)
+      : null,
+    state: detail.state ?? null,
+    replace: !!detail.replace,
+    source: detail.source || "app",
+  };
+
+  window.dispatchEvent(
+    new CustomEvent(APP_NAVIGATION_EVENT, {
+      detail: eventDetail,
+    })
+  );
+
+  window.dispatchEvent(new PopStateEvent("popstate", { state: eventDetail.state }));
 }
 
 export function navigateTo(path, options = {}) {
+  if (typeof window === "undefined") return;
+
   const nextPath = normalizePath(path);
   const currentPath = getPath();
 
   if (nextPath === currentPath && !options.force) return;
 
   window.history.pushState(options.state ?? {}, "", nextPath);
-  notifyNavigation();
+
+  notifyNavigation({
+    previousPath: currentPath,
+    state: options.state ?? null,
+    replace: false,
+    source: options.source || "navigateTo",
+  });
 }
 
 export function replaceTo(path, options = {}) {
+  if (typeof window === "undefined") return;
+
   const nextPath = normalizePath(path);
   const currentPath = getPath();
 
   if (nextPath === currentPath && !options.force) return;
 
   window.history.replaceState(options.state ?? {}, "", nextPath);
-  notifyNavigation();
+
+  notifyNavigation({
+    previousPath: currentPath,
+    state: options.state ?? null,
+    replace: true,
+    source: options.source || "replaceTo",
+  });
 }
 
 export function getNavigationEventName() {
   return APP_NAVIGATION_EVENT;
+}
+
+export function subscribeToNavigation(listener) {
+  if (typeof window === "undefined" || typeof listener !== "function") {
+    return () => {};
+  }
+
+  const handler = (event) => {
+    listener(event);
+  };
+
+  window.addEventListener(APP_NAVIGATION_EVENT, handler);
+  window.addEventListener("popstate", handler);
+
+  return () => {
+    window.removeEventListener(APP_NAVIGATION_EVENT, handler);
+    window.removeEventListener("popstate", handler);
+  };
 }

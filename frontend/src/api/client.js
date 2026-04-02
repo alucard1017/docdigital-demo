@@ -31,6 +31,8 @@ const AUTH_FAILURE_CODES = new Set([
   "TOKEN_INVALID",
   "UNAUTHORIZED",
   "AUTH_REQUIRED",
+  "INVALID_TOKEN",
+  "SESSION_EXPIRED",
 ]);
 
 const AUTH_FAILURE_MESSAGES = new Set([
@@ -42,7 +44,18 @@ const AUTH_FAILURE_MESSAGES = new Set([
   "usuario no valido",
   "jwt expired",
   "unauthorized",
+  "invalid token",
+  "session expired",
+  "forbidden",
 ]);
+
+const PUBLIC_PATH_PREFIXES = [
+  "/public",
+  "/auth/login",
+  "/auth/register",
+  "/auth/forgot-password",
+  "/auth/reset-password",
+];
 
 const normalizeText = (value) => {
   return typeof value === "string" ? value.trim() : "";
@@ -51,8 +64,31 @@ const normalizeText = (value) => {
 const normalizeLower = (value) => normalizeText(value).toLowerCase();
 const normalizeUpper = (value) => normalizeText(value).toUpperCase();
 
+const normalizeUrlPath = (url = "") => {
+  const value = normalizeText(url);
+
+  if (!value) return "";
+
+  try {
+    if (value.startsWith("http://") || value.startsWith("https://")) {
+      const parsed = new URL(value);
+      return parsed.pathname || "";
+    }
+
+    return value.startsWith("/") ? value : `/${value}`;
+  } catch {
+    return value.startsWith("/") ? value : `/${value}`;
+  }
+};
+
+export const isPublicRequest = (url = "") => {
+  const path = normalizeUrlPath(url);
+
+  return PUBLIC_PATH_PREFIXES.some((prefix) => path.startsWith(prefix));
+};
+
 export const isAuthFailure = (status, message, code) => {
-  if (status !== 401) return false;
+  if (status !== 401 && status !== 403) return false;
 
   const normalizedCode = normalizeUpper(code);
   const normalizedMessage = normalizeLower(message);
@@ -61,7 +97,11 @@ export const isAuthFailure = (status, message, code) => {
     return true;
   }
 
-  return AUTH_FAILURE_MESSAGES.has(normalizedMessage);
+  if (AUTH_FAILURE_MESSAGES.has(normalizedMessage)) {
+    return true;
+  }
+
+  return status === 401;
 };
 
 export const isRequestCanceled = (error) => {
@@ -82,7 +122,7 @@ export const dispatchAuthExpired = (detail = {}) => {
   window.dispatchEvent(
     new CustomEvent("auth:expired", {
       detail: {
-        source: "http",
+        source: detail.source ?? "http",
         status: detail.status ?? 401,
         code: detail.code ?? null,
         message:
@@ -105,7 +145,7 @@ api.interceptors.request.use(
   (config) => {
     const token = getStoredToken();
 
-    if (token) {
+    if (token && !isPublicRequest(config.url)) {
       config.headers = config.headers || {};
       config.headers.Authorization = `Bearer ${token}`;
     }
@@ -116,6 +156,7 @@ api.interceptors.request.use(
         url: config.url,
         baseURL: config.baseURL,
         hasToken: !!token,
+        isPublic: isPublicRequest(config.url),
       });
     }
 
@@ -150,6 +191,7 @@ api.interceptors.response.use(
     const errorCode = data?.code || null;
     const method = error?.config?.method?.toUpperCase() ?? null;
     const url = error?.config?.url ?? null;
+    const publicRequest = isPublicRequest(url);
 
     if (import.meta.env.DEV) {
       console.error("[API RES ERROR]", {
@@ -158,10 +200,11 @@ api.interceptors.response.use(
         status,
         message,
         code: errorCode,
+        isPublic: publicRequest,
       });
     }
 
-    if (isAuthFailure(status, message, errorCode)) {
+    if (!publicRequest && isAuthFailure(status, message, errorCode)) {
       dispatchAuthExpired({
         source: "http",
         status,

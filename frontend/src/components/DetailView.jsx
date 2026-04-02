@@ -221,38 +221,39 @@ export function DetailView({
   const isRejected = selectedDoc.status === DOC_STATUS.RECHAZADO;
 
   // Wrapper para insertar los avisos legales antes de firmar/visar
-  const manejarAccionDocumentoConLegal = async (id, accion, extraData = {}) => {
-    if (accion === "firmar") {
-      if (!acceptedLegalSign) {
-        setSignError(
-          "Debes aceptar el aviso legal de firma electrónica antes de firmar."
-        );
-        alert(
-          "Debes aceptar el aviso legal de firma electrónica antes de firmar."
-        );
-        return;
-      }
-      setSignError("");
+const manejarAccionDocumentoConLegal = async (id, accion, extraData = {}) => {
+  if (accion === "firmar") {
+    if (!acceptedLegalSign) {
+      setSignError(
+        "Debes aceptar el aviso legal de firma electrónica antes de firmar."
+      );
+      alert(
+        "Debes aceptar el aviso legal de firma electrónica antes de firmar."
+      );
+      return;
     }
+    setSignError("");
+  }
 
-    if (accion === "visar") {
-      if (!acceptedLegalVisado) {
-        setVisadoError(
-          "Debes aceptar el aviso legal de visado antes de aprobar el documento."
-        );
-        alert(
-          "Debes aceptar el aviso legal de visado antes de aprobar el documento."
-        );
-        return;
-      }
-      setVisadoError("");
+  if (accion === "visar") {
+    if (!acceptedLegalVisado) {
+      setVisadoError(
+        "Debes aceptar el aviso legal de visado antes de aprobar el documento."
+      );
+      alert(
+        "Debes aceptar el aviso legal de visado antes de aprobar el documento."
+      );
+      return;
     }
+    setVisadoError("");
+  }
 
-    await manejarAccionDocumento(id, accion, extraData);
+  await manejarAccionDocumento(id, accion, extraData);
 
-    setSelectedDoc(null);
-    setView("list");
-  };
+  setSelectedDoc(null);
+  setView("list");
+};
+
     // Siempre volver a la bandeja después de una acción
     setSelectedDoc(null);
     setView("list");

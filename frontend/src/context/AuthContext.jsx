@@ -26,12 +26,18 @@ function normalizeUser(value) {
   return value && typeof value === "object" ? value : null;
 }
 
+function getCurrentPath() {
+  if (typeof window === "undefined") return "";
+  return window.location?.pathname || "";
+}
+
 export function AuthProvider({ children }) {
   const [user, setUserState] = useState(() => normalizeUser(getStoredUser()));
   const [token, setTokenState] = useState(() => normalizeToken(getStoredToken()));
   const [authLoading, setAuthLoading] = useState(true);
 
   const authEventHandledRef = useRef(false);
+  const logoutInProgressRef = useRef(false);
 
   const hydrateSession = useCallback(() => {
     const storedUser = normalizeUser(getStoredUser());
@@ -73,14 +79,20 @@ export function AuthProvider({ children }) {
     setTokenState(nextToken);
 
     authEventHandledRef.current = false;
+    logoutInProgressRef.current = false;
     resetAuthExpiredDispatch();
 
     return data;
   }, []);
 
   const logout = useCallback((options = {}) => {
+    if (logoutInProgressRef.current) return;
+
+    logoutInProgressRef.current = true;
+
     const redirectTo = options.redirectTo || null;
     const replace = options.replace !== false;
+    const currentPath = getCurrentPath();
 
     clearSession();
     setUserState(null);
@@ -90,22 +102,30 @@ export function AuthProvider({ children }) {
     if (import.meta.env.DEV) {
       console.warn("[AUTH] logout ejecutado", {
         redirectTo,
+        currentPath,
         reason: options.reason || null,
       });
     }
 
-    if (redirectTo) {
+    if (redirectTo && currentPath !== redirectTo) {
       if (replace) {
         replaceTo(redirectTo);
       } else {
         navigateTo(redirectTo);
       }
     }
+
+    window.setTimeout(() => {
+      logoutInProgressRef.current = false;
+    }, 500);
   }, []);
 
   useEffect(() => {
     const handleAuthExpired = (event) => {
-      if (authEventHandledRef.current) return;
+      if (authEventHandledRef.current || logoutInProgressRef.current) {
+        return;
+      }
+
       authEventHandledRef.current = true;
 
       if (import.meta.env.DEV) {
@@ -127,7 +147,7 @@ export function AuthProvider({ children }) {
 
       window.setTimeout(() => {
         authEventHandledRef.current = false;
-      }, 800);
+      }, 1000);
     };
 
     window.addEventListener("auth:expired", handleAuthExpired);
@@ -143,10 +163,14 @@ export function AuthProvider({ children }) {
 
       setUserState(normalizedUser);
 
-      if (token) {
+      if (token && normalizedUser) {
         setSession(normalizedUser, token, {
           rememberMe: getSessionMode() === "persistent",
         });
+      }
+
+      if (!normalizedUser && import.meta.env.DEV) {
+        console.warn("[AUTH] updateUser recibió usuario inválido/null");
       }
     },
     [token]
@@ -159,6 +183,18 @@ export function AuthProvider({ children }) {
   const setToken = useCallback((nextToken) => {
     setTokenState(normalizeToken(nextToken));
   }, []);
+
+  useEffect(() => {
+    const onStorageSync = () => {
+      hydrateSession();
+    };
+
+    window.addEventListener("storage", onStorageSync);
+
+    return () => {
+      window.removeEventListener("storage", onStorageSync);
+    };
+  }, [hydrateSession]);
 
   const value = useMemo(
     () => ({

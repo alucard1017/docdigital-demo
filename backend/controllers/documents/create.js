@@ -1194,38 +1194,41 @@ async function getUserDocuments(req, res) {
     values.push(offset);
     const offsetIndex = values.length;
 
-const dataSql = `
-  SELECT
-    d.id,
-    d.title,
-    d.description,
-    d.status,
-    d.company_id,
-    d.created_by,
-    d.created_at,
-    d.updated_at,
-    d.verification_code,
-    d.nuevo_documento_id,
-    COALESCE(
-      doc.numero_contrato_interno,
-      d.metadata->>'numeroContratoInterno'
-    ) AS numero_contrato_interno,
-    COALESCE(s.signers_count, 0) AS signers_count
-  FROM documents d
-  LEFT JOIN documentos doc
-    ON doc.id = d.nuevo_documento_id
-  LEFT JOIN (
-    SELECT document_id, COUNT(*) AS signers_count
-    FROM document_signers
-    GROUP BY document_id
-  ) s ON s.document_id = d.id
-  ${whereSql}
-  ORDER BY ${sortField} ${sortDirection}
-  LIMIT $${limitIndex}
-  OFFSET $${offsetIndex}
-`;
+    const dataSql = `
+      SELECT
+        d.id,
+        d.title,
+        d.description,
+        d.status,
+        d.company_id,
+        d.created_by,
+        d.created_at,
+        d.updated_at,
+        d.verification_code,
+        d.nuevo_documento_id,
+        COALESCE(
+          doc.numero_contrato_interno,
+          d.metadata->>'numeroContratoInterno'
+        ) AS numero_contrato_interno,
+        COALESCE(s.signers_count, 0) AS signers_count
+      FROM documents d
+      LEFT JOIN documentos doc
+        ON doc.id = d.nuevo_documento_id
+      LEFT JOIN (
+        SELECT document_id, COUNT(*) AS signers_count
+        FROM document_signers
+        GROUP BY document_id
+      ) s ON s.document_id = d.id
+      ${whereSql}
+      ORDER BY ${sortField} ${sortDirection}
+      LIMIT $${limitIndex}
+      OFFSET $${offsetIndex}
+    `;
 
     const dataResult = await pool.query(dataSql, values);
+
+    // Log de ayuda (puedes quitarlo en producción)
+    console.log("[getUserDocuments] page:", pageNum, "limit:", limitNum, "total:", total);
 
     return res.json({
       data: dataResult.rows,

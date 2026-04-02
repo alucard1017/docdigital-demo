@@ -156,6 +156,7 @@ function App() {
     setSearch,
     page,
     setPage,
+    pageSize,
     selectedDoc,
     setSelectedDoc,
     pdfUrl,
@@ -169,6 +170,7 @@ function App() {
     rechazados,
     totalFiltrado,
     totalPaginas,
+    pagination,
   } = useDocuments(token);
 
   const {
@@ -219,6 +221,8 @@ function App() {
   const safeTotalFiltrado = Number.isFinite(totalFiltrado) ? totalFiltrado : 0;
   const safeTotalPaginas =
     Number.isFinite(totalPaginas) && totalPaginas > 0 ? totalPaginas : 1;
+  const safeCurrentPage =
+    Number.isFinite(pagination?.page) && pagination.page > 0 ? pagination.page : 1;
 
   const anyAdmin = isAnyAdmin(user);
   const canAudit = !!user && canViewAuditLogs(user);
@@ -364,10 +368,10 @@ function App() {
   };
 
   const handleAfterCreateDocument = async () => {
-    await cargarDocs();
+    setPage(1);
+    await cargarDocs(sort, 1);
     handleNavigateProtected("list");
   };
-
   const handleTestError = () => {
     throw new Error("Frontend test error");
   };
@@ -525,7 +529,6 @@ function App() {
             setSort={(value) => {
               setSort(value);
               setPage(1);
-              cargarDocs(value);
             }}
             statusFilter={statusFilter}
             setStatusFilter={(value) => {
@@ -542,9 +545,8 @@ function App() {
             visados={safeVisados}
             firmados={safeFirmados}
             rechazados={safeRechazados}
-            onSync={cargarDocs}
+            onSync={() => cargarDocs(sort, page)}
           />
-
           <div className="inbox-header-card">
             <div className="inbox-header-main">
               <h2 className="inbox-title">Documentos recientes</h2>
@@ -565,7 +567,7 @@ function App() {
               <button
                 type="button"
                 className="btn-main btn-ghost"
-                onClick={cargarDocs}
+                onClick={() => cargarDocs(sort, page)}
               >
                 Actualizar bandeja
               </button>
@@ -590,7 +592,10 @@ function App() {
               <p style={{ marginBottom: 16, fontSize: "0.9rem", color: "#b91c1c" }}>
                 {errorDocs || "Por favor, revisa tu conexión e inténtalo nuevamente."}
               </p>
-              <button className="btn-main btn-primary" onClick={cargarDocs}>
+              <button
+                className="btn-main btn-primary"
+                onClick={() => cargarDocs(sort, page)}
+              >
                 Reintentar carga
               </button>
             </div>
@@ -652,22 +657,27 @@ function App() {
                 }}
               >
                 <span>
-                  Página {page} de {safeTotalPaginas}
+                  Página {safeCurrentPage} de {safeTotalPaginas} · {safeTotalFiltrado} documentos
                 </span>
 
                 <div style={{ display: "flex", gap: 8 }}>
                   <button
                     type="button"
                     className="btn-main"
-                    disabled={page === 1}
+                    disabled={safeCurrentPage <= 1 || loadingDocs}
                     onClick={() => setPage((prev) => Math.max(1, prev - 1))}
                   >
                     Anterior
                   </button>
+
                   <button
                     type="button"
                     className="btn-main"
-                    disabled={page === safeTotalPaginas}
+                    disabled={
+                      loadingDocs ||
+                      safeCurrentPage >= safeTotalPaginas ||
+                      !pagination?.hasNextPage
+                    }
                     onClick={() =>
                       setPage((prev) => Math.min(safeTotalPaginas, prev + 1))
                     }

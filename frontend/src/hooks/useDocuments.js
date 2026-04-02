@@ -10,7 +10,7 @@ export function useDocuments(token) {
   const [errorDocs, setErrorDocs] = useState("");
   const [docs, setDocs] = useState([]);
 
-  const [sort, setSort] = useState("title_asc");
+  const [sort, setSort] = useState("created_at");
   const [statusFilter, setStatusFilter] = useState("ALL");
   const [search, setSearch] = useState("");
 
@@ -20,10 +20,56 @@ export function useDocuments(token) {
   const [selectedDoc, setSelectedDoc] = useState(null);
   const [pdfUrl, setPdfUrl] = useState(null);
 
+  const [pagination, setPagination] = useState({
+    page: 1,
+    limit: pageSize,
+    total: 0,
+    totalPages: 1,
+    hasNextPage: false,
+    hasPrevPage: false,
+  });
+
+  const mapStatusFilterToApi = useCallback((value) => {
+    if (value === "FIRMADOS") return DOC_STATUS.FIRMADO;
+    if (value === "RECHAZADOS") return DOC_STATUS.RECHAZADO;
+    return undefined;
+  }, []);
+
+  const mapSortToApi = useCallback((value) => {
+    switch (value) {
+      case "title_asc":
+        return { sort: "title", order: "asc" };
+      case "title_desc":
+        return { sort: "title", order: "desc" };
+      case "created_at_asc":
+        return { sort: "created_at", order: "asc" };
+      case "created_at_desc":
+        return { sort: "created_at", order: "desc" };
+      case "updated_at_asc":
+        return { sort: "updated_at", order: "asc" };
+      case "updated_at_desc":
+        return { sort: "updated_at", order: "desc" };
+      case "status_asc":
+        return { sort: "status", order: "asc" };
+      case "status_desc":
+        return { sort: "status", order: "desc" };
+      default:
+        return { sort: "created_at", order: "desc" };
+    }
+  }, []);
+
   const cargarDocs = useCallback(
-    async (sortParam = sort) => {
+    async (sortParam = sort, pageParam = page) => {
       if (!token) {
         setDocs([]);
+        setPagination({
+          page: 1,
+          limit: pageSize,
+          total: 0,
+          totalPages: 1,
+          hasNextPage: false,
+          hasPrevPage: false,
+        });
         return;
       }
 
@@ -31,14 +77,32 @@ export function useDocuments(token) {
       setErrorDocs("");
 
       try {
+        const sortConfig = mapSortToApi(sortParam);
+
         const res = await api.get("/docs", {
-          params: { sort: sortParam },
+          params: {
+            sort: sortConfig.sort,
+            order: sortConfig.order,
+            page: pageParam,
+            limit: pageSize,
+            status: mapStatusFilterToApi(statusFilter),
+            search: search.trim() || undefined,
+          },
         });
 
         const payload = res.data;
         const rows = Array.isArray(payload?.data) ? payload.data : [];
+        const meta = payload?.pagination || {};
 
         setDocs(rows);
+        setPagination({
+          page: Number(meta.page) || pageParam,
+          limit: Number(meta.limit) || pageSize,
+          total: Number(meta.total) || 0,
+          totalPages: Number(meta.totalPages) || 1,
+          hasNextPage: Boolean(meta.hasNextPage),
+          hasPrevPage: Boolean(meta.hasPrevPage),
+        });
       } catch (err) {
         console.error("Fallo al cargar documentos:", err);
 
@@ -49,11 +113,19 @@ export function useDocuments(token) {
 
         setErrorDocs(msg);
         setDocs([]);
+        setPagination({
+          page: 1,
+          limit: pageSize,
+          total: 0,
+          totalPages: 1,
+          hasNextPage: false,
+          hasPrevPage: false,
+        });
       } finally {
         setLoadingDocs(false);
       }
     },
-    [sort, token]
+    [sort, page, token, pageSize, statusFilter, search, mapStatusFilterToApi, mapSortToApi]
   );
 
   useEffect(() => {
@@ -61,11 +133,23 @@ export function useDocuments(token) {
       setDocs([]);
       setSelectedDoc(null);
       setPdfUrl(null);
+      setPagination({
+        page: 1,
+        limit: pageSize,
+        total: 0,
+        totalPages: 1,
+        hasNextPage: false,
+        hasPrevPage: false,
+      });
       return;
     }
 
-    cargarDocs();
-  }, [token, cargarDocs]);
+    cargarDocs(sort, page);
+  }, [token, sort, page, statusFilter, search, cargarDocs]);
+
+  useEffect(() => {
+    setPage(1);
+  }, [statusFilter, search, sort]);
 
   useEffect(() => {
     if (!selectedDoc?.id) {
@@ -108,7 +192,7 @@ export function useDocuments(token) {
             title: "Documento no encontrado",
             message: "No se encontró el documento seleccionado",
           });
-          return;
+          return false;
         }
 
         try {
@@ -120,6 +204,7 @@ export function useDocuments(token) {
           }
 
           window.open(data.url, "_blank", "noopener,noreferrer");
+          return true;
         } catch (err) {
           console.error("Error abriendo PDF:", err);
 
@@ -133,9 +218,9 @@ export function useDocuments(token) {
             title: "No se pudo abrir el PDF",
             message: msg,
           });
-        }
 
-        return;
+          return false;
+        }
       }
 
       try {
@@ -174,8 +259,9 @@ export function useDocuments(token) {
           });
         }
 
-        await cargarDocs();
+        await cargarDocs(sort, page);
         setSelectedDoc(null);
+        return true;
       } catch (err) {
         const msg =
           err.response?.data?.message ||
@@ -187,39 +273,16 @@ export function useDocuments(token) {
           title: "No se pudo procesar la acción",
           message: msg,
         });
+
+        return false;
       }
     },
-    [docs, cargarDocs, addToast]
+    [docs, cargarDocs, addToast, sort, page]
   );
 
   const docsFiltrados = useMemo(() => {
-    const safeDocs = Array.isArray(docs) ? docs : [];
-
-    return safeDocs.filter((d) => {
-      const status = d?.status;
-
-      const esPendiente =
-        status === DOC_STATUS.PENDIENTE ||
-        status === DOC_STATUS.PENDIENTE_VISADO ||
-        status === DOC_STATUS.PENDIENTE_FIRMA;
-
-      if (statusFilter === "PENDIENTES" && !esPendiente) return false;
-      if (statusFilter === "FIRMADOS" && status !== DOC_STATUS.FIRMADO)
-        return false;
-      if (statusFilter === "RECHAZADOS" && status !== DOC_STATUS.RECHAZADO)
-        return false;
-
-      if (search.trim() !== "") {
-        const q = search.toLowerCase();
-        const titulo = String(d?.title || "").toLowerCase();
-        const empresa = String(d?.destinatario_nombre || "").toLowerCase();
-
-        if (!titulo.includes(q) && !empresa.includes(q)) return false;
-      }
-
-      return true;
-    });
-  }, [docs, statusFilter, search]);
+    return Array.isArray(docs) ? docs : [];
+  }, [docs]);
 
   const pendientes = useMemo(() => {
     const safeDocs = Array.isArray(docs) ? docs : [];
@@ -249,13 +312,18 @@ export function useDocuments(token) {
     return safeDocs.filter((d) => d?.status === DOC_STATUS.RECHAZADO).length;
   }, [docs]);
 
-  const totalFiltrado = Array.isArray(docsFiltrados) ? docsFiltrados.length : 0;
-  const totalPaginas = Math.max(1, Math.ceil(totalFiltrado / pageSize));
+  const totalFiltrado = Number.isFinite(pagination.total)
+    ? pagination.total
+    : docsFiltrados.length;
+
+  const totalPaginas =
+    Number.isFinite(pagination.totalPages) && pagination.totalPages > 0
+      ? pagination.totalPages
+      : 1;
 
   const docsPaginados = useMemo(() => {
-    const safeDocsFiltrados = Array.isArray(docsFiltrados) ? docsFiltrados : [];
-    return safeDocsFiltrados.slice((page - 1) * pageSize, page * pageSize);
-  }, [docsFiltrados, page]);
+    return docsFiltrados;
+  }, [docsFiltrados]);
 
   return {
     loadingDocs,
@@ -283,5 +351,6 @@ export function useDocuments(token) {
     rechazados,
     totalFiltrado,
     totalPaginas,
+    pagination,
   };
 }
