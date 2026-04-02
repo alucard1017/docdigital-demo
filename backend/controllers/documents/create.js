@@ -1024,9 +1024,10 @@ const { rows: documentRows } = await client.query(
     await client.query("COMMIT");
     client.release();
 
-    const publicUrl = `${req.protocol}://${req.get(
-      "host"
-    )}/api/public/documents/${verificationCode}`;
+    const FRONTEND_BASE_URL =
+      process.env.FRONTEND_URL || "https://app.verifirma.cl";
+
+    const publicUrl = `${FRONTEND_BASE_URL}/public/sign/${verificationCode}`;
 
     try {
       const sealResult = await sellarPdfConQr({

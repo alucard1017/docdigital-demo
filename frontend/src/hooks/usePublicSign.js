@@ -38,13 +38,27 @@ export function usePublicSign({
           throw new Error(data.message || "No se pudo cargar el documento");
         }
 
-        if (isVisado || isConsultaPublica) {
-          setPublicSignDoc({ document: data.document, signer: null });
-          setPublicSignPdfUrl(data.pdfUrl);
-        } else {
-          setPublicSignDoc(data);
-          setPublicSignPdfUrl(data.pdfUrl);
-        }
+        const normalizedDocument = data?.document || data || null;
+
+        const normalizedSigner =
+          data?.signer ||
+          (Array.isArray(data?.signers) ? data.signers[0] : null) ||
+          null;
+
+        const normalizedPdfUrl =
+          data?.pdfUrl ||
+          data?.document?.pdf_url ||
+          data?.document?.pdfUrl ||
+          data?.pdf_url ||
+          "";
+
+        setPublicSignDoc({
+          ...data,
+          document: normalizedDocument,
+          signer: normalizedSigner,
+        });
+
+        setPublicSignPdfUrl(normalizedPdfUrl);
       } catch (err) {
         console.error("Error cargando firma pública:", err);
         setPublicSignError(err.message || "No se pudo cargar el documento");

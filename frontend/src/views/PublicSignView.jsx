@@ -15,10 +15,23 @@ export function PublicSignView({
   cargarFirmaPublica,
 }) {
   const isVisado = publicSignMode === "visado";
-  const pdfUrl = publicSignPdfUrl || "";
 
-  const document = publicSignDoc?.document || null;
-  const signer = publicSignDoc?.signer || null;
+  const document =
+    publicSignDoc?.document ||
+    publicSignDoc ||
+    null;
+
+  const signer =
+    publicSignDoc?.signer ||
+    (Array.isArray(publicSignDoc?.signers) ? publicSignDoc.signers[0] : null) ||
+    null;
+
+  const pdfUrl =
+    publicSignPdfUrl ||
+    publicSignDoc?.pdfUrl ||
+    publicSignDoc?.document?.pdf_url ||
+    publicSignDoc?.document?.pdfUrl ||
+    "";
 
   const [showReject, setShowReject] = useState(false);
   const [rejectReason, setRejectReason] = useState("");
@@ -374,7 +387,7 @@ export function PublicSignView({
                         color: "#e5e7eb",
                       }}
                     >
-                      {signer.name}
+                      {signer?.name || signer?.nombre || "Firmante"}
                     </div>
                     <div
                       style={{
@@ -382,7 +395,7 @@ export function PublicSignView({
                         color: "#9ca3af",
                       }}
                     >
-                      {signer.email}
+                      {signer?.email || "Sin correo disponible"}
                     </div>
                   </div>
                 )}
