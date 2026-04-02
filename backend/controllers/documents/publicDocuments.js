@@ -926,8 +926,47 @@ async function verifyByCode(req, res) {
       [documento.id]
     );
 
-    const basePath =
-      documento.pdf_final_url || documento.pdf_original_url || null;
+    // Buscar archivo en tabla legacy "documentos"
+    let basePath =
+      documento.pdf_final_url ||
+      documento.pdf_original_url ||
+      documento.archivo_url ||
+      documento.file_path ||
+      null;
+
+    // Si no existe en documentos, buscar espejo en tabla documents
+    if (!basePath) {
+      try {
+        const modernDocRes = await db.query(
+          `
+          SELECT
+            id,
+            file_path,
+            pdf_final_url,
+            pdf_original_url
+          FROM documents
+          WHERE nuevo_documento_id = $1
+          ORDER BY id DESC
+          LIMIT 1
+          `,
+          [documento.id]
+        );
+
+        if (modernDocRes.rowCount > 0) {
+          const modernDoc = modernDocRes.rows[0];
+          basePath =
+            modernDoc.pdf_final_url ||
+            modernDoc.pdf_original_url ||
+            modernDoc.file_path ||
+            null;
+        }
+      } catch (linkErr) {
+        console.error(
+          "⚠️ Error buscando documento relacionado en documents:",
+          linkErr
+        );
+      }
+    }
 
     let pdfUrl = null;
     if (basePath) {
