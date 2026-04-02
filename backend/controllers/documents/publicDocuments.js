@@ -926,7 +926,6 @@ async function verifyByCode(req, res) {
       [documento.id]
     );
 
-    // Buscar archivo en tabla legacy "documentos"
     let basePath =
       documento.pdf_final_url ||
       documento.pdf_original_url ||
@@ -934,37 +933,32 @@ async function verifyByCode(req, res) {
       documento.file_path ||
       null;
 
-    // Si no existe en documentos, buscar espejo en tabla documents
-    if (!basePath) {
-      try {
-        const modernDocRes = await db.query(
-          `
-          SELECT
-            id,
-            file_path,
-            pdf_final_url,
-            pdf_original_url
-          FROM documents
-          WHERE nuevo_documento_id = $1
-          ORDER BY id DESC
-          LIMIT 1
-          `,
-          [documento.id]
-        );
+    let relatedDocument = null;
 
-        if (modernDocRes.rowCount > 0) {
-          const modernDoc = modernDocRes.rows[0];
-          basePath =
-            modernDoc.pdf_final_url ||
-            modernDoc.pdf_original_url ||
-            modernDoc.file_path ||
-            null;
-        }
-      } catch (linkErr) {
-        console.error(
-          "⚠️ Error buscando documento relacionado en documents:",
-          linkErr
-        );
+    if (!basePath) {
+      const modernDocRes = await db.query(
+        `
+        SELECT
+          id,
+          nuevo_documento_id,
+          file_path,
+          pdf_original_url,
+          pdf_final_url
+        FROM documents
+        WHERE nuevo_documento_id = $1
+        ORDER BY id DESC
+        LIMIT 1
+        `,
+        [documento.id]
+      );
+
+      if (modernDocRes.rowCount > 0) {
+        relatedDocument = modernDocRes.rows[0];
+        basePath =
+          relatedDocument.pdf_final_url ||
+          relatedDocument.pdf_original_url ||
+          relatedDocument.file_path ||
+          null;
       }
     }
 
@@ -974,7 +968,6 @@ async function verifyByCode(req, res) {
         pdfUrl = await getSignedUrl(basePath, 3600);
       } catch (urlErr) {
         console.error("⚠️ Error generando signed URL en verifyByCode:", urlErr);
-        pdfUrl = null;
       }
     }
 
@@ -987,7 +980,8 @@ async function verifyByCode(req, res) {
       hash_pdf: documento.hash_pdf,
       created_at: documento.created_at,
       updated_at: documento.updated_at,
-      pdf_final_url: documento.pdf_final_url || null,
+      pdf_final_url:
+        documento.pdf_final_url || relatedDocument?.pdf_final_url || null,
       pdf_url: pdfUrl,
     };
 

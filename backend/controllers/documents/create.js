@@ -813,55 +813,60 @@ console.log("numeroContratoInterno =>", numeroContratoInterno);
       ? DOCUMENT_STATES.SIGNING
       : DOCUMENT_STATES.DRAFT;
 
-    const { rows: documentRows } = await client.query(
-      `
-      INSERT INTO documents (
-        owner_id,
-        company_id,
-        title,
-        description,
-        status,
-        file_name,
-        file_url,
-        storage_key,
-        hash_sha256,
-        sealed_hash_sha256,
-        verification_code,
-        requires_review,
-        created_by,
-        metadata,
-        created_at,
-        updated_at
-      )
-      VALUES (
-        $1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14::jsonb, NOW(), NOW()
-      )
-      RETURNING *
-      `,
-      [
-        userId,
-        companyId,
-        titulo,
-        descripcion,
-        initialDocumentStatus,
-        originalFilename,
-        storageUrl,
-        storageKey,
-        documentHash,
-        null,
-        verificationCode,
-        requiresVisado,
-        userId,
-        toJson(
-          {
-            autoSendFlow,
-            numeroContratoInterno,
-            signerCount: signers.length,
-          },
-          "{}"
-        ),
-      ]
-    );
+const { rows: documentRows } = await client.query(
+  `
+  INSERT INTO documents (
+    owner_id,
+    company_id,
+    title,
+    description,
+    status,
+    file_name,
+    file_url,
+    storage_key,
+    hash_sha256,
+    sealed_hash_sha256,
+    verification_code,
+    requires_review,
+    created_by,
+    metadata,
+    file_path,
+    pdf_original_url,
+    created_at,
+    updated_at
+  )
+  VALUES (
+    $1, $2, $3, $4, $5, $6, $7, $8, $9, $10,
+    $11, $12, $13, $14::jsonb, $15, $16, NOW(), NOW()
+  )
+  RETURNING *
+  `,
+  [
+    userId,
+    companyId,
+    titulo,
+    descripcion,
+    initialDocumentStatus,
+    originalFilename,
+    storageUrl,
+    storageKey,
+    documentHash,
+    null,
+    verificationCode,
+    requiresVisado,
+    userId,
+    toJson(
+      {
+        autoSendFlow,
+        numeroContratoInterno,
+        signerCount: signers.length,
+      },
+      "{}"
+    ),
+    storageKey, // file_path → usamos la key en S3/R2
+    storageUrl, // pdf_original_url → URL firmable / pública si existe
+  ]
+);
 
     const document = documentRows[0];
 
