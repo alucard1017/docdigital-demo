@@ -1024,10 +1024,12 @@ const { rows: documentRows } = await client.query(
     await client.query("COMMIT");
     client.release();
 
-    const FRONTEND_BASE_URL =
-      process.env.FRONTEND_URL || "https://app.verifirma.cl";
+    // URL pública de firma para el firmante
+    // Ejemplo final: https://firmar.verifirma.cl/?token=ABC123
+    const SIGNING_PORTAL_URL =
+      process.env.SIGNING_PORTAL_URL || "https://firmar.verifirma.cl";
 
-    const publicUrl = `${FRONTEND_BASE_URL}/public/sign/${verificationCode}`;
+    const publicUrl = `${SIGNING_PORTAL_URL}/?token=${verificationCode}`;
 
     try {
       const sealResult = await sellarPdfConQr({

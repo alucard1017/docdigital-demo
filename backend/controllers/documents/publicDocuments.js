@@ -4,6 +4,33 @@ const { getSignedUrl } = require("../../services/s3");
 const { sellarPdfConQr } = require("../../services/pdfSeal");
 const { logAudit } = require("../../utils/auditLog");
 
+
+async function getDocumentAndSignerByDocumentToken(documentToken, emailFromQuery = null) {
+  const docRes = await db.query(
+    `
+    SELECT
+      d.*,
+      s.id     AS signer_id,
+      s.status AS signer_status,
+      s.name   AS signer_name,
+      s.email  AS signer_email
+    FROM documents d
+    LEFT JOIN document_signers s
+      ON s.document_id = d.id
+      AND ($2::text IS NULL OR s.email = $2)
+    WHERE d.signature_token = $1
+    LIMIT 1
+    `,
+    [documentToken, emailFromQuery]
+  );
+
+  if (docRes.rowCount === 0) {
+    return null;
+  }
+
+  return docRes.rows[0];
+}
+
 /* ================================
    GET: Datos + PDF para enlace público de FIRMA (por firmante, sign_token)
    ================================ */
@@ -193,7 +220,8 @@ async function publicSignDocument(req, res) {
   try {
     const { token } = req.params;
 
-    const current = await db.query(
+    // 1) Intentar por sign_token (compatibilidad antigua)
+    let current = await db.query(
       `SELECT 
          s.id     AS signer_id,
          s.status AS signer_status,
@@ -206,14 +234,18 @@ async function publicSignDocument(req, res) {
       [token]
     );
 
+    // 2) Si no existe, intentar por signature_token del documento
     if (current.rowCount === 0) {
-      return res
-        .status(404)
-        .json({ message: "Enlace inválido o documento no encontrado" });
+      const rowByDoc = await getDocumentAndSignerByDocumentToken(token);
+      if (!rowByDoc) {
+        return res
+          .status(404)
+          .json({ message: "Enlace inválido o documento no encontrado" });
+      }
+      current = { rows: [rowByDoc], rowCount: 1 };
     }
 
     const row = current.rows[0];
-
     if (
       row.signature_token_expires_at &&
       row.signature_token_expires_at < new Date()
@@ -516,7 +548,8 @@ async function publicRejectDocument(req, res) {
         .json({ message: "Debes indicar un motivo de rechazo." });
     }
 
-    const current = await db.query(
+    // 1) Intentar por sign_token (compatibilidad)
+    let current = await db.query(
       `SELECT 
          s.id     AS signer_id,
          s.status AS signer_status,
@@ -529,10 +562,15 @@ async function publicRejectDocument(req, res) {
       [token]
     );
 
+    // 2) Si no existe, intentar por signature_token del documento
     if (current.rowCount === 0) {
-      return res
-        .status(404)
-        .json({ message: "Enlace inválido o documento no encontrado" });
+      const rowByDoc = await getDocumentAndSignerByDocumentToken(token);
+      if (!rowByDoc) {
+        return res
+          .status(404)
+          .json({ message: "Enlace inválido o documento no encontrado" });
+      }
+      current = { rows: [rowByDoc], rowCount: 1 };
     }
 
     const row = current.rows[0];

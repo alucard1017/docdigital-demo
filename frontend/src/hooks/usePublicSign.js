@@ -26,10 +26,7 @@ export function usePublicSign({
         const isVisado = modeUrl === "visado";
         const isConsultaPublica = pathname === "/consulta-publica";
 
-        const path =
-          isVisado || isConsultaPublica
-            ? `/public/docs/document/${tokenParam}`
-            : `/public/docs/${tokenParam}`;
+        const path = `/public/docs/document/${tokenParam}`;
 
         const res = await fetch(`${apiRoot}${path}`);
         const data = await res.json();

@@ -7,15 +7,18 @@ const {
 } = require("./common");
 const { logAudit } = require("../../utils/auditLog");
 
-const FRONT_BASE_URL =
-  process.env.FRONTEND_URL || "https://docdigital-demo.onrender.com";
+const SIGNING_PORTAL_URL =
+  process.env.SIGNING_PORTAL_URL || "https://firmar.verifirma.cl";
+
+const REVIEW_PORTAL_URL =
+  process.env.REVIEW_PORTAL_URL || "https://firmar.verifirma.cl";
 
 function buildPublicSignUrl(token) {
-  return `${FRONT_BASE_URL}/firma-publica?token=${token}`;
+  return `${SIGNING_PORTAL_URL}/?token=${token}`;
 }
 
 function buildVisadoUrl(token) {
-  return `${FRONT_BASE_URL}/firma-publica?token=${token}&mode=visado`;
+  return `${REVIEW_PORTAL_URL}/?token=${token}&mode=visado`;
 }
 
 /* ================================
