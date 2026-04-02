@@ -123,6 +123,30 @@ function App() {
   const [path, setPath] = useState(() => getPath());
   const [view, setView] = useState(() => getProtectedViewFromPath(getPath()));
 
+  const searchParams =
+    typeof window !== "undefined"
+      ? new URLSearchParams(window.location.search)
+      : new URLSearchParams();
+
+  const tokenFromUrl = searchParams.get("token");
+  const currentPath =
+    typeof window !== "undefined" ? window.location.pathname : "/";
+
+  const isPublicSigningAccess =
+    !!tokenFromUrl &&
+    (
+      currentPath === "/public/sign" ||
+      currentPath === "/firma-publica" ||
+      (isSigningPortal && currentPath === "/")
+    );
+
+  const isPublicVerificationAccess =
+    currentPath === "/verificar" ||
+    (isVerificationPortal && currentPath === "/");
+
+  const isAnyPublicAccess =
+    isPublicSigningAccess || isPublicVerificationAccess;
+
   const [identifier, setIdentifier] = useState("");
   const [password, setPassword] = useState("");
   const [isEmailMode, setIsEmailMode] = useState(false);
@@ -252,8 +276,8 @@ function App() {
   }, [isAuthenticated, selectedDoc]);
 
   useEffect(() => {
-  useEffect(() => {
     if (authLoading) return;
+    if (isAnyPublicAccess) return;
 
     const publicAuthPaths = [
       "/login",
@@ -262,23 +286,7 @@ function App() {
       "/register",
     ];
 
-    const params = new URLSearchParams(window.location.search);
-    const tokenUrl = params.get("token");
-    const pathname = window.location.pathname;
-
-    const isPublicSigningPath =
-      pathname === "/public/sign" ||
-      pathname === "/firma-publica" ||
-      (isSigningPortal && pathname === "/");
-
-    const isPublicVerificationPath =
-      pathname === "/verificar" ||
-      (isVerificationPortal && pathname === "/");
-
-    const isPublicAccess =
-      (tokenUrl && isPublicSigningPath) || isPublicVerificationPath;
-
-    if (!isAuthenticated && !publicAuthPaths.includes(path) && !isPublicAccess) {
+    if (!isAuthenticated && !publicAuthPaths.includes(path)) {
       setView("list");
       setSelectedDoc(null);
       replaceTo("/login");
@@ -288,11 +296,7 @@ function App() {
     if (isAuthenticated && publicAuthPaths.includes(path)) {
       replaceTo("/documents");
     }
-  }, [authLoading, isAuthenticated, path, isSigningPortal, isVerificationPortal]);
-
-      replaceTo("/documents");
-    }
-  }, [authLoading, isAuthenticated, path]);
+  }, [authLoading, isAuthenticated, path, isAnyPublicAccess]);
 
   useEffect(() => {
     if (!isAuthenticated) return;
@@ -457,18 +461,18 @@ function App() {
     );
   }
 
-  if (publicView === "verification") {
+  if (isPublicVerificationAccess || publicView === "verification") {
     return <VerificationView API_URL={apiRoot} />;
   }
 
-  if (publicView === "public-sign") {
+  if (isPublicSigningAccess || publicView === "public-sign") {
     return (
       <PublicSignView
         publicSignLoading={publicSignLoading}
         publicSignError={publicSignError}
         publicSignDoc={publicSignDoc}
         publicSignPdfUrl={publicSignPdfUrl}
-        publicSignToken={publicSignToken}
+        publicSignToken={publicSignToken || tokenFromUrl}
         publicSignMode={publicSignMode}
         API_URL={apiRoot}
         cargarFirmaPublica={cargarFirmaPublica}
