@@ -252,6 +252,7 @@ function App() {
   }, [isAuthenticated, selectedDoc]);
 
   useEffect(() => {
+  useEffect(() => {
     if (authLoading) return;
 
     const publicAuthPaths = [
@@ -261,7 +262,23 @@ function App() {
       "/register",
     ];
 
-    if (!isAuthenticated && !publicAuthPaths.includes(path)) {
+    const params = new URLSearchParams(window.location.search);
+    const tokenUrl = params.get("token");
+    const pathname = window.location.pathname;
+
+    const isPublicSigningPath =
+      pathname === "/public/sign" ||
+      pathname === "/firma-publica" ||
+      (isSigningPortal && pathname === "/");
+
+    const isPublicVerificationPath =
+      pathname === "/verificar" ||
+      (isVerificationPortal && pathname === "/");
+
+    const isPublicAccess =
+      (tokenUrl && isPublicSigningPath) || isPublicVerificationPath;
+
+    if (!isAuthenticated && !publicAuthPaths.includes(path) && !isPublicAccess) {
       setView("list");
       setSelectedDoc(null);
       replaceTo("/login");
@@ -269,6 +286,10 @@ function App() {
     }
 
     if (isAuthenticated && publicAuthPaths.includes(path)) {
+      replaceTo("/documents");
+    }
+  }, [authLoading, isAuthenticated, path, isSigningPortal, isVerificationPortal]);
+
       replaceTo("/documents");
     }
   }, [authLoading, isAuthenticated, path]);
