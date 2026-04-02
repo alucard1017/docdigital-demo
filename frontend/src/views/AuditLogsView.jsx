@@ -31,6 +31,45 @@ function formatDateTime(value) {
   });
 }
 
+function normalizePaginatedResponse(data, currentPage, pageSize) {
+  if (Array.isArray(data)) {
+    const total = data.length;
+    return {
+      rows: data.slice((currentPage - 1) * pageSize, currentPage * pageSize),
+      total,
+      page: currentPage,
+      totalPages: Math.max(1, Math.ceil(total / pageSize)),
+      mode: "client",
+    };
+  }
+
+  if (data && typeof data === "object") {
+    const rows =
+      data.logs || data.rows || data.items || data.data || data.results || [];
+    const total = Number(data.total ?? rows.length) || rows.length;
+    const page = Number(data.page ?? currentPage) || currentPage;
+    const totalPages =
+      Number(data.totalPages ?? Math.ceil(total / pageSize)) ||
+      Math.max(1, Math.ceil(total / pageSize));
+
+    return {
+      rows: Array.isArray(rows) ? rows : [],
+      total,
+      page,
+      totalPages: Math.max(1, totalPages),
+      mode: "server",
+    };
+  }
+
+  return {
+    rows: [],
+    total: 0,
+    page: 1,
+    totalPages: 1,
+    mode: "client",
+  };
+}
+
 export function AuditLogsView() {
   const [logs, setLogs] = useState([]);
   const [loading, setLoading] = useState(true);
@@ -43,25 +82,34 @@ export function AuditLogsView() {
 
   const [page, setPage] = useState(1);
   const [pageSize] = useState(50);
+  const [total, setTotal] = useState(0);
+  const [totalPaginas, setTotalPaginas] = useState(1);
 
   const [selectedLog, setSelectedLog] = useState(null);
   const [prettyMetadata, setPrettyMetadata] = useState("");
 
-  async function cargarLogs() {
+  async function cargarLogs(targetPage = page) {
     setLoading(true);
     setError("");
 
-    const params = {};
+    const params = {
+      page: targetPage,
+      limit: pageSize,
+    };
+
     if (action) params.action = action;
     if (entityType) params.entity_type = entityType;
     if (userId.trim()) params.user_id = userId.trim();
     if (companyId.trim()) params.company_id = companyId.trim();
-    params.limit = 500;
 
     try {
       const res = await api.get("/logs/audit", { params });
-      const data = res.data;
-      setLogs(Array.isArray(data) ? data : []);
+      const parsed = normalizePaginatedResponse(res.data, targetPage, pageSize);
+
+      setLogs(parsed.rows);
+      setTotal(parsed.total);
+      setTotalPaginas(parsed.totalPages);
+      setPage(parsed.page);
     } catch (err) {
       const msg =
         err.response?.data?.message ||
@@ -74,21 +122,21 @@ export function AuditLogsView() {
   }
 
   useEffect(() => {
-    cargarLogs();
+    cargarLogs(1);
   }, []);
+
+  useEffect(() => {
+    cargarLogs(page);
+  }, [page]);
 
   function handleFilterSubmit(e) {
     e.preventDefault();
-    setPage(1);
-    cargarLogs();
+    if (page !== 1) {
+      setPage(1);
+      return;
+    }
+    cargarLogs(1);
   }
-
-  const total = logs.length;
-  const totalPaginas = Math.ceil(total / pageSize) || 1;
-  const logsPaginados = logs.slice(
-    (page - 1) * pageSize,
-    page * pageSize
-  );
 
   function abrirMetadata(log) {
     setSelectedLog(log);
@@ -111,6 +159,12 @@ export function AuditLogsView() {
     setSelectedLog(null);
     setPrettyMetadata("");
   }
+
+  const safePage = Number.isFinite(page) && page > 0 ? page : 1;
+  const safeTotalPaginas =
+    Number.isFinite(totalPaginas) && totalPaginas > 0 ? totalPaginas : 1;
+  const canGoPrev = safePage > 1 && !loading;
+  const canGoNext = safePage < safeTotalPaginas && !loading;
 
   if (loading) {
     return (
@@ -139,7 +193,7 @@ export function AuditLogsView() {
         <p style={{ marginBottom: 16, fontSize: "0.9rem", color: "#7f1d1d" }}>
           {error}
         </p>
-        <button className="btn-main btn-primary" onClick={cargarLogs}>
+        <button className="btn-main btn-primary" onClick={() => cargarLogs(safePage)}>
           Reintentar
         </button>
       </div>
@@ -234,7 +288,7 @@ export function AuditLogsView() {
         </form>
       </div>
 
-      {logsPaginados.length === 0 ? (
+      {logs.length === 0 ? (
         <div
           style={{
             padding: 24,
@@ -278,7 +332,7 @@ export function AuditLogsView() {
                 </tr>
               </thead>
               <tbody>
-                {logsPaginados.map((log) => (
+                {logs.map((log) => (
                   <tr key={log.id}>
                     <td>{log.id}</td>
                     <td>{formatDateTime(log.created_at)}</td>
@@ -349,16 +403,19 @@ export function AuditLogsView() {
               alignItems: "center",
               marginTop: 16,
               fontSize: "0.85rem",
+              gap: 12,
+              flexWrap: "wrap",
             }}
           >
             <span>
-              Mostrando {logsPaginados.length} de {total} eventos
+              Mostrando {logs.length} de {total} eventos · Página {safePage} de{" "}
+              {safeTotalPaginas}
             </span>
             <div style={{ display: "flex", gap: 8 }}>
               <button
                 type="button"
                 className="btn-main"
-                disabled={page === 1}
+                disabled={!canGoPrev}
                 onClick={() => setPage((p) => Math.max(1, p - 1))}
               >
                 Anterior
@@ -366,10 +423,8 @@ export function AuditLogsView() {
               <button
                 type="button"
                 className="btn-main"
-                disabled={page === totalPaginas || totalPaginas === 0}
-                onClick={() =>
-                  setPage((p) => Math.min(totalPaginas, p + 1))
-                }
+                disabled={!canGoNext}
+                onClick={() => setPage((p) => Math.min(safeTotalPaginas, p + 1))}
               >
                 Siguiente
               </button>
