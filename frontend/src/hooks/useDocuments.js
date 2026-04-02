@@ -10,8 +10,11 @@ export function useDocuments(token) {
   const [errorDocs, setErrorDocs] = useState("");
   const [docs, setDocs] = useState([]);
 
+  // sort de la API: usamos claves tipo "fecha_desc", "title_asc", etc.
   const [sort, setSort] = useState("created_at_desc");
-  const [statusFilter, setStatusFilter] = useState("ALL");
+
+  // OJO: los filtros de la UI usan "TODOS", "PENDIENTES", "VISADOS", "FIRMADOS", "RECHAZADOS"
+  const [statusFilter, setStatusFilter] = useState("TODOS");
   const [search, setSearch] = useState("");
 
   const [page, setPage] = useState(1);
@@ -29,12 +32,35 @@ export function useDocuments(token) {
     hasPrevPage: false,
   });
 
-  const [filtersKey, setFiltersKey] = useState("");
+  const resetState = useCallback(() => {
+    setDocs([]);
+    setSelectedDoc(null);
+    setPdfUrl(null);
+    setPagination({
+      page: 1,
+      limit: pageSize,
+      total: 0,
+      totalPages: 1,
+      hasNextPage: false,
+      hasPrevPage: false,
+    });
+  }, [pageSize]);
 
   const mapStatusFilterToApi = useCallback((value) => {
-    if (value === "FIRMADOS") return DOC_STATUS.FIRMADO;
-    if (value === "RECHAZADOS") return DOC_STATUS.RECHAZADO;
-    return undefined;
+    if (!value || value === "TODOS") return undefined;
+
+    switch (value) {
+      case "PENDIENTES":
+        return "PENDIENTES"; // el backend puede mapear esto a varios estados
+      case "VISADOS":
+        return DOC_STATUS.VISADO;
+      case "FIRMADOS":
+        return DOC_STATUS.FIRMADO;
+      case "RECHAZADOS":
+        return DOC_STATUS.RECHAZADO;
+      default:
+        return undefined;
+    }
   }, []);
 
   const mapSortToApi = useCallback((value) => {
@@ -43,8 +69,10 @@ export function useDocuments(token) {
         return { sort: "title", order: "asc" };
       case "title_desc":
         return { sort: "title", order: "desc" };
+      case "fecha_asc":
       case "created_at_asc":
         return { sort: "created_at", order: "asc" };
+      case "fecha_desc":
       case "created_at_desc":
         return { sort: "created_at", order: "desc" };
       case "updated_at_asc":
@@ -55,6 +83,10 @@ export function useDocuments(token) {
         return { sort: "status", order: "asc" };
       case "status_desc":
         return { sort: "status", order: "desc" };
+      case "numero_asc":
+        return { sort: "numero_contrato_interno", order: "asc" };
+      case "numero_desc":
+        return { sort: "numero_contrato_interno", order: "desc" };
       default:
         return { sort: "created_at", order: "desc" };
     }
@@ -63,15 +95,7 @@ export function useDocuments(token) {
   const cargarDocs = useCallback(
     async (sortParam = sort, pageParam = page) => {
       if (!token) {
-        setDocs([]);
-        setPagination({
-          page: 1,
-          limit: pageSize,
-          total: 0,
-          totalPages: 1,
-          hasNextPage: false,
-          hasPrevPage: false,
-        });
+        resetState();
         return;
       }
 
@@ -80,21 +104,23 @@ export function useDocuments(token) {
 
       try {
         const sortConfig = mapSortToApi(sortParam);
+        const apiStatus = mapStatusFilterToApi(statusFilter);
+        const trimmedSearch = search.trim();
 
         const params = {
           sort: sortConfig.sort,
           order: sortConfig.order,
           page: pageParam,
           limit: pageSize,
-          status: mapStatusFilterToApi(statusFilter),
-          search: search.trim() || undefined,
+          status: apiStatus,
+          search: trimmedSearch || undefined,
         };
 
         console.log("[useDocuments] GET /docs params:", params);
 
         const res = await api.get("/docs", { params });
-
         const payload = res.data;
+
         const rows = Array.isArray(payload?.data) ? payload.data : [];
         const meta = payload?.pagination || {};
 
@@ -102,10 +128,17 @@ export function useDocuments(token) {
         setPagination({
           page: Number(meta.page) || pageParam,
           limit: Number(meta.limit) || pageSize,
-          total: Number(meta.total) || 0,
+          total: Number(meta.total) || rows.length,
           totalPages: Number(meta.totalPages) || 1,
-          hasNextPage: Boolean(meta.hasNextPage),
-          hasPrevPage: Boolean(meta.hasPrevPage),
+          hasNextPage:
+            typeof meta.hasNextPage === "boolean"
+              ? meta.hasNextPage
+              : (Number(meta.page) || pageParam) <
+                (Number(meta.totalPages) || 1),
+          hasPrevPage:
+            typeof meta.hasPrevPage === "boolean"
+              ? meta.hasPrevPage
+              : (Number(meta.page) || pageParam) > 1,
         });
       } catch (err) {
         console.error("Fallo al cargar documentos:", err);
@@ -116,68 +149,40 @@ export function useDocuments(token) {
           "No se pudieron cargar los documentos. Intenta nuevamente.";
 
         setErrorDocs(msg);
-        setDocs([]);
-        setPagination({
-          page: 1,
-          limit: pageSize,
-          total: 0,
-          totalPages: 1,
-          hasNextPage: false,
-          hasPrevPage: false,
-        });
+        resetState();
       } finally {
         setLoadingDocs(false);
       }
     },
     [
+      token,
       sort,
       page,
-      token,
       pageSize,
       statusFilter,
       search,
-      mapStatusFilterToApi,
       mapSortToApi,
+      mapStatusFilterToApi,
+      resetState,
     ]
   );
 
+  // Cuando cambian filtros (sort / estado / búsqueda), volver siempre a página 1
   useEffect(() => {
-    const nextKey = JSON.stringify({
-      sort,
-      statusFilter,
-      search: search.trim(),
-    });
-
-    setFiltersKey((prevKey) => {
-      if (!prevKey) return nextKey;
-
-      if (prevKey !== nextKey) {
-        setPage(1);
-      }
-
-      return nextKey;
-    });
+    setPage(1);
   }, [sort, statusFilter, search]);
 
+  // Cada vez que cambian token, página o filtros, recargar docs
   useEffect(() => {
     if (!token) {
-      setDocs([]);
-      setSelectedDoc(null);
-      setPdfUrl(null);
-      setPagination({
-        page: 1,
-        limit: pageSize,
-        total: 0,
-        totalPages: 1,
-        hasNextPage: false,
-        hasPrevPage: false,
-      });
+      resetState();
       return;
     }
 
     cargarDocs(sort, page);
-  }, [token, page, filtersKey, cargarDocs, sort]);
+  }, [token, page, sort, statusFilter, search, cargarDocs, resetState]);
 
+  // Carga del PDF de detalle
   useEffect(() => {
     if (!selectedDoc?.id) {
       setPdfUrl(null);
@@ -307,9 +312,12 @@ export function useDocuments(token) {
     [docs, cargarDocs, addToast, sort, page]
   );
 
+  // Con paginación server-side, docs ya viene paginado
   const docsFiltrados = useMemo(() => {
     return Array.isArray(docs) ? docs : [];
   }, [docs]);
+
+  const docsPaginados = useMemo(() => docsFiltrados, [docsFiltrados]);
 
   const pendientes = useMemo(() => {
     const safeDocs = Array.isArray(docs) ? docs : [];
@@ -347,10 +355,6 @@ export function useDocuments(token) {
     Number.isFinite(pagination.totalPages) && pagination.totalPages > 0
       ? pagination.totalPages
       : 1;
-
-  const docsPaginados = useMemo(() => {
-    return docsFiltrados;
-  }, [docsFiltrados]);
 
   return {
     loadingDocs,
