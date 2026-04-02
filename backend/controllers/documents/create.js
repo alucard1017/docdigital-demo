@@ -827,6 +827,7 @@ const { rows: documentRows } = await client.query(
     hash_sha256,
     sealed_hash_sha256,
     verification_code,
+    signature_token,
     requires_review,
     created_by,
     metadata,
