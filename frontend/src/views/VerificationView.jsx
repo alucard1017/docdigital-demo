@@ -12,9 +12,7 @@ export function VerificationView({ API_URL }) {
   const getApiBase = () => {
     const baseFromProp = API_URL || import.meta.env.VITE_API_URL || "";
     let trimmed = baseFromProp.replace(/\/+$/, "");
-
     trimmed = trimmed.replace(/\/api\/api$/, "/api");
-
     if (trimmed.endsWith("/api")) return trimmed;
     return `${trimmed}/api`;
   };
@@ -135,6 +133,10 @@ export function VerificationView({ API_URL }) {
     }
   }
 
+  // URL de PDF priorizando final sellado, luego URL firmada temporalmente
+  const pdfToShow =
+    doc?.pdf_final_url || doc?.pdf_url || result?.pdfUrl || null;
+
   // Paleta más oscura y con buen contraste
   const bgOuter = "#020617"; // slate-950
   const bgCard =
@@ -249,7 +251,7 @@ export function VerificationView({ API_URL }) {
               padding: 12,
               borderRadius: 12,
               background:
-                "linear-gradient(135deg,rgba(185,28,28,0.16),rgba15,23,42,0.95)",
+                "linear-gradient(135deg,rgba(185,28,28,0.16),rgba(15,23,42,0.95))",
               color: "#fecaca",
               fontSize: "0.9rem",
               border: "1px solid #7f1d1d",
@@ -265,7 +267,7 @@ export function VerificationView({ API_URL }) {
               padding: 18,
               borderRadius: 12,
               background:
-                "linear-gradient(135deg,rgba37,99,235,0.14),rgba15,23,42,0.95)",
+                "linear-gradient(135deg,rgba(37,99,235,0.14),rgba(15,23,42,0.95))",
               color: "#bfdbfe",
               fontSize: "0.9rem",
               border: "1px solid #1d4ed8",
@@ -283,7 +285,7 @@ export function VerificationView({ API_URL }) {
               borderRadius: 16,
               border: "1px solid #1f2937",
               background:
-                "radial-gradient(circle at top left,rgba15,23,42,1,rgba15,23,42,0.96))",
+                "radial-gradient(circle at top left, rgba(15,23,42,1), rgba(15,23,42,0.96))",
             }}
           >
             {doc.status === "RECHAZADO" && (
@@ -293,7 +295,7 @@ export function VerificationView({ API_URL }) {
                   padding: 12,
                   borderRadius: 12,
                   background:
-                    "linear-gradient(135deg,rgba(248,113,113,0.2),rgba15,23,42,0.96)",
+                    "linear-gradient(135deg,rgba(248,113,113,0.2),rgba(15,23,42,0.96))",
                   border: "1px solid #fecaca",
                   color: "#fecaca",
                   fontSize: "0.9rem",
@@ -444,10 +446,10 @@ export function VerificationView({ API_URL }) {
               )}
             </div>
 
-            {doc.pdf_final_url && (
+            {pdfToShow && (
               <div style={{ marginTop: 18 }}>
                 <a
-                  href={doc.pdf_final_url}
+                  href={pdfToShow}
                   target="_blank"
                   rel="noreferrer"
                   style={{
@@ -464,7 +466,7 @@ export function VerificationView({ API_URL }) {
                     boxShadow: "0 12px 28px rgba(248,113,113,0.45)",
                   }}
                 >
-                  📄 Abrir PDF final firmado
+                  📄 Abrir PDF
                 </a>
               </div>
             )}

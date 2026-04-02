@@ -488,14 +488,14 @@ async function publicSignDocument(req, res) {
       }
     }
 
-return res.json({
-  ...doc,
-  file_url: doc.pdf_final_url || doc.file_path,
-  documentStatus: newDocStatus,
-  message: allSigned
-    ? "Documento firmado correctamente por todos los firmantes"
-    : "Firma registrada. Aún faltan firmantes por completar la firma",
-});
+    return res.json({
+      ...doc,
+      file_url: doc.pdf_final_url || doc.file_path,
+      documentStatus: newDocStatus,
+      message: allSigned
+        ? "Documento firmado correctamente por todos los firmantes"
+        : "Firma registrada. Aún faltan firmantes por completar la firma",
+    });
   } catch (err) {
     console.error("❌ Error firmando documento público:", err);
     return res.status(500).json({ message: "Error interno del servidor" });
@@ -723,12 +723,12 @@ async function publicRejectDocument(req, res) {
       req,
     });
 
-return res.json({
-  ...doc,
-  file_url: doc.pdf_final_url || doc.file_path,
-  documentStatus: "RECHAZADO",
-  message: "Documento rechazado correctamente",
-});
+    return res.json({
+      ...doc,
+      file_url: doc.pdf_final_url || doc.file_path,
+      documentStatus: "RECHAZADO",
+      message: "Documento rechazado correctamente",
+    });
   } catch (err) {
     console.error("❌ Error rechazando documento público:", err);
     return res.status(500).json({ message: "Error interno del servidor" });
@@ -876,12 +876,12 @@ async function publicVisarDocument(req, res) {
       req,
     });
 
-return res.json({
-  ...doc,
-  file_url: doc.pdf_final_url || doc.file_path,
-  documentStatus: "PENDIENTE_FIRMA",
-  message: "Documento visado correctamente desde enlace público",
-});
+    return res.json({
+      ...doc,
+      file_url: doc.pdf_final_url || doc.file_path,
+      documentStatus: "PENDIENTE_FIRMA",
+      message: "Documento visado correctamente desde enlace público",
+    });
   } catch (err) {
     console.error("❌ Error visando documento público:", err);
     return res.status(500).json({ message: "Error interno del servidor" });
@@ -926,6 +926,19 @@ async function verifyByCode(req, res) {
       [documento.id]
     );
 
+    const basePath =
+      documento.pdf_final_url || documento.pdf_original_url || null;
+
+    let pdfUrl = null;
+    if (basePath) {
+      try {
+        pdfUrl = await getSignedUrl(basePath, 3600);
+      } catch (urlErr) {
+        console.error("⚠️ Error generando signed URL en verifyByCode:", urlErr);
+        pdfUrl = null;
+      }
+    }
+
     const document = {
       id: documento.id,
       title: documento.titulo,
@@ -936,6 +949,7 @@ async function verifyByCode(req, res) {
       created_at: documento.created_at,
       updated_at: documento.updated_at,
       pdf_final_url: documento.pdf_final_url || null,
+      pdf_url: pdfUrl,
     };
 
     const signers = signersResult.rows.map((s) => ({

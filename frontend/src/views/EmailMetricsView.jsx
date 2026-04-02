@@ -1,10 +1,10 @@
 // frontend/src/views/EmailMetricsView.jsx
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useState, useCallback } from "react";
 import api from "../api/client";
 
 function formatPercent(value) {
   const n = Number(value ?? 0);
-  if (!Number.isFinite(n)) return "0.00%";
+  if (!Number.isFinite(n) || n === 0) return "0.00%";
   return `${n.toFixed(2)}%`;
 }
 
@@ -43,13 +43,20 @@ export default function EmailMetricsView() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
 
-  const fetchMetrics = async () => {
+  const fetchMetrics = useCallback(async () => {
     try {
       setLoading(true);
       setError("");
 
       const res = await api.get("/analytics/email-metrics");
-      setData(res.data || null);
+      const payload = res.data || {};
+
+      setData({
+        summary: payload.summary || {},
+        recent_events: Array.isArray(payload.recent_events)
+          ? payload.recent_events
+          : [],
+      });
     } catch (err) {
       const msg =
         err.response?.data?.message ||
@@ -60,20 +67,25 @@ export default function EmailMetricsView() {
     } finally {
       setLoading(false);
     }
-  };
+  }, []);
 
   useEffect(() => {
     fetchMetrics();
-  }, []);
+  }, [fetchMetrics]);
 
   const summary = useMemo(() => data?.summary || {}, [data]);
+
   const recentEvents = useMemo(
     () => (Array.isArray(data?.recent_events) ? data.recent_events : []),
     [data]
   );
 
   if (loading) {
-    return <div className="p-4 text-sm text-gray-600">Cargando métricas de email...</div>;
+    return (
+      <div className="p-4 text-sm text-gray-600">
+        Cargando métricas de email...
+      </div>
+    );
   }
 
   if (error) {
@@ -94,8 +106,21 @@ export default function EmailMetricsView() {
 
   return (
     <div className="rounded-lg bg-white p-6 shadow">
-      <h1 className="mb-6 text-2xl font-bold">Métricas de Email</h1>
+      <div className="mb-2 flex items-center justify-between gap-4">
+        <h1 className="text-2xl font-bold">Métricas de Email</h1>
+        <button
+          type="button"
+          onClick={fetchMetrics}
+          className="rounded border border-gray-300 px-3 py-1 text-xs text-gray-700 hover:bg-gray-50"
+        >
+          Actualizar
+        </button>
+      </div>
+      <p className="mb-6 text-sm text-gray-500">
+        Resumen de envíos y eventos recientes de correos salientes.
+      </p>
 
+      {/* KPIs principales */}
       <div className="mb-8 grid grid-cols-1 gap-4 md:grid-cols-2 xl:grid-cols-4">
         <div className="rounded bg-blue-50 p-4">
           <div className="text-sm text-gray-600">Emails Enviados</div>
@@ -126,6 +151,7 @@ export default function EmailMetricsView() {
         </div>
       </div>
 
+      {/* KPIs secundarios */}
       <div className="mb-8 grid grid-cols-1 gap-4 md:grid-cols-2 xl:grid-cols-3">
         <div className="rounded bg-gray-50 p-4">
           <div className="text-sm text-gray-600">Emails Abiertos</div>
@@ -170,6 +196,7 @@ export default function EmailMetricsView() {
         </div>
       </div>
 
+      {/* Tabla de eventos recientes */}
       <div className="rounded bg-gray-50 p-4">
         <h2 className="mb-4 text-lg font-bold">Eventos Recientes</h2>
 
@@ -191,8 +218,12 @@ export default function EmailMetricsView() {
               <tbody>
                 {recentEvents.map((event) => (
                   <tr key={event.id} className="border-b">
-                    <td className="px-4 py-2">{formatDateTime(event.created_at)}</td>
-                    <td className="px-4 py-2">{event.title || `Documento #${event.documento_id}`}</td>
+                    <td className="px-4 py-2">
+                      {formatDateTime(event.created_at)}
+                    </td>
+                    <td className="px-4 py-2">
+                      {event.title || `Documento #${event.documento_id}`}
+                    </td>
                     <td className="px-4 py-2">{event.email || "-"}</td>
                     <td className="px-4 py-2">
                       <span

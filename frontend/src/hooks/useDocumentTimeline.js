@@ -47,11 +47,12 @@ export function useDocumentTimeline(documentId) {
     return () => controller.abort();
   }, [documentId, fetchTimeline]);
 
-  const reload = () => {
+  const reload = useCallback(() => {
+    if (!documentId) return;
     const controller = new AbortController();
     fetchTimeline(controller);
     return () => controller.abort();
-  };
+  }, [documentId, fetchTimeline]);
 
   return { data, loading, error, reload };
 }
