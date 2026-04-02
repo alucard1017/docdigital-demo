@@ -249,8 +249,14 @@ export function DetailView({
     }
 
     await manejarAccionDocumento(id, accion, extraData);
-  };
 
+    setSelectedDoc(null);
+    setView("list");
+  };
+    // Siempre volver a la bandeja después de una acción
+    setSelectedDoc(null);
+    setView("list");
+  };
   return (
     <div className="detail-layout">
       <aside className="detail-sidebar">
