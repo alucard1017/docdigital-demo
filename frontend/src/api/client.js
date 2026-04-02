@@ -1,15 +1,33 @@
-// frontend/src/api/client.js
 import axios from "axios";
 import { getStoredToken } from "../utils/session";
+
+const DEFAULT_API_BASE_URL = "http://localhost:4000/api";
+
+const normalizeText = (value) => {
+  return typeof value === "string" ? value.trim() : "";
+};
+
+const normalizeLower = (value) => normalizeText(value).toLowerCase();
+const normalizeUpper = (value) => normalizeText(value).toUpperCase();
+
+const ensureLeadingSlash = (value = "") => {
+  const v = normalizeText(value);
+  if (!v) return "/";
+  return v.startsWith("/") ? v : `/${v}`;
+};
+
+const stripTrailingSlashes = (value = "") => {
+  return normalizeText(value).replace(/\/+$/, "");
+};
 
 export const getApiBaseUrl = () => {
   const raw = import.meta.env.VITE_API_URL;
 
   if (typeof raw === "string" && raw.trim()) {
-    return raw.trim().replace(/\/+$/, "");
+    return stripTrailingSlashes(raw);
   }
 
-  return "http://localhost:4000/api";
+  return DEFAULT_API_BASE_URL;
 };
 
 export const API_BASE_URL = getApiBaseUrl();
@@ -57,13 +75,6 @@ const PUBLIC_PATH_PREFIXES = [
   "/auth/reset-password",
 ];
 
-const normalizeText = (value) => {
-  return typeof value === "string" ? value.trim() : "";
-};
-
-const normalizeLower = (value) => normalizeText(value).toLowerCase();
-const normalizeUpper = (value) => normalizeText(value).toUpperCase();
-
 const normalizeUrlPath = (url = "") => {
   const value = normalizeText(url);
 
@@ -75,15 +86,14 @@ const normalizeUrlPath = (url = "") => {
       return parsed.pathname || "";
     }
 
-    return value.startsWith("/") ? value : `/${value}`;
+    return ensureLeadingSlash(value);
   } catch {
-    return value.startsWith("/") ? value : `/${value}`;
+    return ensureLeadingSlash(value);
   }
 };
 
 export const isPublicRequest = (url = "") => {
   const path = normalizeUrlPath(url);
-
   return PUBLIC_PATH_PREFIXES.some((prefix) => path.startsWith(prefix));
 };
 
@@ -93,13 +103,8 @@ export const isAuthFailure = (status, message, code) => {
   const normalizedCode = normalizeUpper(code);
   const normalizedMessage = normalizeLower(message);
 
-  if (AUTH_FAILURE_CODES.has(normalizedCode)) {
-    return true;
-  }
-
-  if (AUTH_FAILURE_MESSAGES.has(normalizedMessage)) {
-    return true;
-  }
+  if (AUTH_FAILURE_CODES.has(normalizedCode)) return true;
+  if (AUTH_FAILURE_MESSAGES.has(normalizedMessage)) return true;
 
   return status === 401;
 };
@@ -145,6 +150,8 @@ api.interceptors.request.use(
   (config) => {
     const token = getStoredToken();
 
+    config.url = ensureLeadingSlash(config.url || "");
+
     if (token && !isPublicRequest(config.url)) {
       config.headers = config.headers || {};
       config.headers.Authorization = `Bearer ${token}`;
@@ -155,6 +162,8 @@ api.interceptors.request.use(
         method: config.method?.toUpperCase(),
         url: config.url,
         baseURL: config.baseURL,
+        fullUrl: `${stripTrailingSlashes(config.baseURL || "")}${config.url}`,
+        params: config.params ?? null,
         hasToken: !!token,
         isPublic: isPublicRequest(config.url),
       });
@@ -201,6 +210,7 @@ api.interceptors.response.use(
         message,
         code: errorCode,
         isPublic: publicRequest,
+        responseData: data,
       });
     }
 
@@ -218,6 +228,32 @@ api.interceptors.response.use(
     return Promise.reject(error);
   }
 );
+
+export async function getDocuments(params = {}, config = {}) {
+  const res = await api.get("/docs", {
+    ...config,
+    params,
+  });
+  return res.data;
+}
+
+export async function getDocumentById(id, config = {}) {
+  const res = await api.get(`/documents/${id}`, config);
+  return res.data;
+}
+
+export async function getDocumentPreview(id, config = {}) {
+  const res = await api.get(`/documents/${id}/preview`, {
+    ...config,
+    responseType: "blob",
+  });
+  return res.data;
+}
+
+export async function getDocumentPdfUrl(id, config = {}) {
+  const res = await api.get(`/docs/${id}/pdf`, config);
+  return res.data;
+}
 
 export async function getDocumentTimeline(id, config = {}) {
   const res = await api.get(`/documents/${id}/timeline`, config);

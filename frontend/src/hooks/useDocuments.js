@@ -10,7 +10,7 @@ export function useDocuments(token) {
   const [errorDocs, setErrorDocs] = useState("");
   const [docs, setDocs] = useState([]);
 
-  const [sort, setSort] = useState("created_at");
+  const [sort, setSort] = useState("created_at_desc");
   const [statusFilter, setStatusFilter] = useState("ALL");
   const [search, setSearch] = useState("");
 
@@ -28,6 +28,8 @@ export function useDocuments(token) {
     hasNextPage: false,
     hasPrevPage: false,
   });
+
+  const [filtersKey, setFiltersKey] = useState("");
 
   const mapStatusFilterToApi = useCallback((value) => {
     if (value === "FIRMADOS") return DOC_STATUS.FIRMADO;
@@ -79,16 +81,18 @@ export function useDocuments(token) {
       try {
         const sortConfig = mapSortToApi(sortParam);
 
-        const res = await api.get("/docs", {
-          params: {
-            sort: sortConfig.sort,
-            order: sortConfig.order,
-            page: pageParam,
-            limit: pageSize,
-            status: mapStatusFilterToApi(statusFilter),
-            search: search.trim() || undefined,
-          },
-        });
+        const params = {
+          sort: sortConfig.sort,
+          order: sortConfig.order,
+          page: pageParam,
+          limit: pageSize,
+          status: mapStatusFilterToApi(statusFilter),
+          search: search.trim() || undefined,
+        };
+
+        console.log("[useDocuments] GET /docs params:", params);
+
+        const res = await api.get("/docs", { params });
 
         const payload = res.data;
         const rows = Array.isArray(payload?.data) ? payload.data : [];
@@ -125,8 +129,35 @@ export function useDocuments(token) {
         setLoadingDocs(false);
       }
     },
-    [sort, page, token, pageSize, statusFilter, search, mapStatusFilterToApi, mapSortToApi]
+    [
+      sort,
+      page,
+      token,
+      pageSize,
+      statusFilter,
+      search,
+      mapStatusFilterToApi,
+      mapSortToApi,
+    ]
   );
+
+  useEffect(() => {
+    const nextKey = JSON.stringify({
+      sort,
+      statusFilter,
+      search: search.trim(),
+    });
+
+    setFiltersKey((prevKey) => {
+      if (!prevKey) return nextKey;
+
+      if (prevKey !== nextKey) {
+        setPage(1);
+      }
+
+      return nextKey;
+    });
+  }, [sort, statusFilter, search]);
 
   useEffect(() => {
     if (!token) {
@@ -145,11 +176,7 @@ export function useDocuments(token) {
     }
 
     cargarDocs(sort, page);
-  }, [token, sort, page, statusFilter, search, cargarDocs]);
-
-  useEffect(() => {
-    setPage(1);
-  }, [statusFilter, search, sort]);
+  }, [token, page, filtersKey, cargarDocs, sort]);
 
   useEffect(() => {
     if (!selectedDoc?.id) {

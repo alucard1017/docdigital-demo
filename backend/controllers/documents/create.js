@@ -1228,7 +1228,19 @@ async function getUserDocuments(req, res) {
     const dataResult = await pool.query(dataSql, values);
 
     // Log de ayuda (puedes quitarlo en producción)
-    console.log("[getUserDocuments] page:", pageNum, "limit:", limitNum, "total:", total);
+    console.log("[getUserDocuments] QUERY PARAMS:", {
+      rawQuery: req.query,
+      page: pageNum,
+      limit: limitNum,
+      offset,
+      total,
+      sort,
+      order,
+      sortField,
+      sortDirection,
+      normalizedStatus,
+      search: search || null,
+    });
 
     return res.json({
       data: dataResult.rows,
@@ -1236,7 +1248,7 @@ async function getUserDocuments(req, res) {
         page: pageNum,
         limit: limitNum,
         total,
-        totalPages: Math.ceil(total / limitNum),
+        totalPages: Math.max(1, Math.ceil(total / limitNum)),
         hasNextPage: offset + limitNum < total,
         hasPrevPage: pageNum > 1,
       },

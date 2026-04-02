@@ -670,20 +670,26 @@ function App() {
                     Anterior
                   </button>
 
-                  <button
-                    type="button"
-                    className="btn-main"
-                    disabled={
-                      loadingDocs ||
-                      safeCurrentPage >= safeTotalPaginas ||
-                      !pagination?.hasNextPage
-                    }
-                    onClick={() =>
-                      setPage((prev) => Math.min(safeTotalPaginas, prev + 1))
-                    }
-                  >
-                    Siguiente
-                  </button>
+		<button
+		  type="button"		
+		  className="btn-main"
+		  disabled={
+		    loadingDocs ||
+		    safeCurrentPage >= safeTotalPaginas ||
+		    !pagination?.hasNextPage
+		  }
+		  onClick={() => {
+		    console.log("[App] ir a página siguiente", {
+		      actual: safeCurrentPage,
+		      total: safeTotalPaginas,
+		      hasNextPage: pagination?.hasNextPage,
+		    });
+
+		    setPage((prev) => Math.min(safeTotalPaginas, prev + 1));
+		  }}
+		>
+		  Siguiente
+		</button>
                 </div>
               </div>
             </>
