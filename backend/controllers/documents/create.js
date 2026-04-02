@@ -838,7 +838,7 @@ const { rows: documentRows } = await client.query(
   )
   VALUES (
     $1, $2, $3, $4, $5, $6, $7, $8, $9, $10,
-    $11, $12, $13, $14::jsonb, $15, $16, NOW(), NOW()
+    $11, $12, $13, $14, $15::jsonb, $16, $17, NOW(), NOW()
   )
   RETURNING *
   `,
@@ -852,10 +852,11 @@ const { rows: documentRows } = await client.query(
     storageUrl,
     storageKey,
     documentHash,
-    null,
-    verificationCode,
-    requiresVisado,
-    userId,
+    null,             // sealed_hash_sha256
+    verificationCode, // verification_code
+    verificationCode, // signature_token 
+    requiresVisado,   // requires_review
+    userId,           // created_by
     toJson(
       {
         autoSendFlow,
@@ -864,8 +865,8 @@ const { rows: documentRows } = await client.query(
       },
       "{}"
     ),
-    storageKey, // file_path → usamos la key en S3/R2
-    storageUrl, // pdf_original_url → URL firmable / pública si existe
+    storageKey, // file_path
+    storageUrl, // pdf_original_url
   ]
 );
 
