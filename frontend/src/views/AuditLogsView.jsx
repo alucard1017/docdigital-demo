@@ -1,4 +1,3 @@
-// src/views/AuditLogsView.jsx
 import { useEffect, useState } from "react";
 import api from "../api/client";
 
@@ -33,13 +32,14 @@ function formatDateTime(value) {
 
 function normalizePaginatedResponse(data, currentPage, pageSize) {
   if (Array.isArray(data)) {
-    const total = data.length;
+    const rows = data;
+
     return {
-      rows: data.slice((currentPage - 1) * pageSize, currentPage * pageSize),
-      total,
+      rows,
+      total: rows.length,
       page: currentPage,
-      totalPages: Math.max(1, Math.ceil(total / pageSize)),
-      mode: "client",
+      totalPages: rows.length < pageSize ? currentPage : currentPage + 1,
+      hasNextPage: rows.length === pageSize,
     };
   }
 
@@ -51,13 +51,17 @@ function normalizePaginatedResponse(data, currentPage, pageSize) {
     const totalPages =
       Number(data.totalPages ?? Math.ceil(total / pageSize)) ||
       Math.max(1, Math.ceil(total / pageSize));
+    const hasNextPage =
+      typeof data.hasNextPage === "boolean"
+        ? data.hasNextPage
+        : page < totalPages;
 
     return {
       rows: Array.isArray(rows) ? rows : [],
       total,
       page,
       totalPages: Math.max(1, totalPages),
-      mode: "server",
+      hasNextPage,
     };
   }
 
@@ -66,7 +70,7 @@ function normalizePaginatedResponse(data, currentPage, pageSize) {
     total: 0,
     page: 1,
     totalPages: 1,
-    mode: "client",
+    hasNextPage: false,
   };
 }
 
@@ -81,14 +85,15 @@ export function AuditLogsView() {
   const [companyId, setCompanyId] = useState("");
 
   const [page, setPage] = useState(1);
-  const [pageSize] = useState(50);
+  const pageSize = 50;
   const [total, setTotal] = useState(0);
   const [totalPaginas, setTotalPaginas] = useState(1);
+  const [hasNextPage, setHasNextPage] = useState(false);
 
   const [selectedLog, setSelectedLog] = useState(null);
   const [prettyMetadata, setPrettyMetadata] = useState("");
 
-  async function cargarLogs(targetPage = page) {
+  async function cargarLogs(targetPage = 1) {
     setLoading(true);
     setError("");
 
@@ -109,6 +114,7 @@ export function AuditLogsView() {
       setLogs(parsed.rows);
       setTotal(parsed.total);
       setTotalPaginas(parsed.totalPages);
+      setHasNextPage(Boolean(parsed.hasNextPage));
       setPage(parsed.page);
     } catch (err) {
       const msg =
@@ -125,17 +131,19 @@ export function AuditLogsView() {
     cargarLogs(1);
   }, []);
 
-  useEffect(() => {
-    cargarLogs(page);
-  }, [page]);
-
   function handleFilterSubmit(e) {
     e.preventDefault();
-    if (page !== 1) {
-      setPage(1);
-      return;
-    }
     cargarLogs(1);
+  }
+
+  function handlePrevPage() {
+    if (loading || page <= 1) return;
+    cargarLogs(page - 1);
+  }
+
+  function handleNextPage() {
+    if (loading || !hasNextPage) return;
+    cargarLogs(page + 1);
   }
 
   function abrirMetadata(log) {
@@ -163,8 +171,6 @@ export function AuditLogsView() {
   const safePage = Number.isFinite(page) && page > 0 ? page : 1;
   const safeTotalPaginas =
     Number.isFinite(totalPaginas) && totalPaginas > 0 ? totalPaginas : 1;
-  const canGoPrev = safePage > 1 && !loading;
-  const canGoNext = safePage < safeTotalPaginas && !loading;
 
   if (loading) {
     return (
@@ -193,7 +199,10 @@ export function AuditLogsView() {
         <p style={{ marginBottom: 16, fontSize: "0.9rem", color: "#7f1d1d" }}>
           {error}
         </p>
-        <button className="btn-main btn-primary" onClick={() => cargarLogs(safePage)}>
+        <button
+          className="btn-main btn-primary"
+          onClick={() => cargarLogs(safePage)}
+        >
           Reintentar
         </button>
       </div>
@@ -408,23 +417,23 @@ export function AuditLogsView() {
             }}
           >
             <span>
-              Mostrando {logs.length} de {total} eventos · Página {safePage} de{" "}
+              Mostrando {logs.length} eventos · Página {safePage} de{" "}
               {safeTotalPaginas}
             </span>
             <div style={{ display: "flex", gap: 8 }}>
               <button
                 type="button"
                 className="btn-main"
-                disabled={!canGoPrev}
-                onClick={() => setPage((p) => Math.max(1, p - 1))}
+                disabled={loading || safePage <= 1}
+                onClick={handlePrevPage}
               >
                 Anterior
               </button>
               <button
                 type="button"
                 className="btn-main"
-                disabled={!canGoNext}
-                onClick={() => setPage((p) => Math.min(safeTotalPaginas, p + 1))}
+                disabled={loading || !hasNextPage}
+                onClick={handleNextPage}
               >
                 Siguiente
               </button>

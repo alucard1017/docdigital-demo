@@ -673,11 +673,7 @@ function App() {
 		<button
 		  type="button"		
 		  className="btn-main"
-		  disabled={
-		    loadingDocs ||
-		    safeCurrentPage >= safeTotalPaginas ||
-		    !pagination?.hasNextPage
-		  }
+		  disabled={loadingDocs || safeCurrentPage >= safeTotalPaginas}
 		  onClick={() => {
 		    console.log("[App] ir a página siguiente", {
 		      actual: safeCurrentPage,
