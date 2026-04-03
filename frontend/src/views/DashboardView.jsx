@@ -1,25 +1,41 @@
 // frontend/src/views/DashboardView.jsx
-import React, { useEffect, useState } from "react";
+import React, { useEffect, useMemo, useState } from "react";
+import { Bar, Line, Doughnut } from "react-chartjs-2";
 import {
-  BarChart,
-  Bar,
-  PieChart,
-  Pie,
-  Cell,
-  LineChart,
-  Line,
-  XAxis,
-  YAxis,
-  CartesianGrid,
+  Chart as ChartJS,
+  BarElement,
+  ArcElement,
+  LineElement,
+  CategoryScale,
+  LinearScale,
+  PointElement,
   Tooltip,
   Legend,
-  ResponsiveContainer,
-} from "recharts";
+  Filler,
+} from "chart.js";
 import api from "../api/client";
+
+ChartJS.register(
+  BarElement,
+  ArcElement,
+  LineElement,
+  CategoryScale,
+  LinearScale,
+  PointElement,
+  Tooltip,
+  Legend,
+  Filler
+);
 
 const COLORS = ["#4f46e5", "#22c55e", "#f97316", "#ef4444", "#0ea5e9", "#a855f7"];
 const SAFE_COLORS =
   Array.isArray(COLORS) && COLORS.length > 0 ? COLORS : ["#4b5563"];
+
+const CHART_TEXT = "#cbd5e1";
+const CHART_MUTED = "#94a3b8";
+const CHART_GRID = "rgba(148, 163, 184, 0.14)";
+const CHART_BORDER = "#1f2937";
+const CHART_BG = "#020617";
 
 export function DashboardView({ user }) {
   const [loading, setLoading] = useState(true);
@@ -41,62 +57,69 @@ export function DashboardView({ user }) {
   const displayName = isJean ? "Alucard" : rawName;
 
   useEffect(() => {
+    const controller = new AbortController();
+
     async function fetchStats() {
       try {
         setLoading(true);
         setError("");
 
-        const res = await api.get("/docs/stats");
-        const data = res.data || {};
+        const res = await api.get("/docs/stats", {
+          signal: controller.signal,
+        });
 
-        const safeKpis = data.kpis || {};
+        const data = res?.data || {};
+        const safeKpis = data?.kpis || {};
 
         setKpis({
-          total: safeKpis.total ?? 0,
-          pendientes: safeKpis.pendientes ?? 0,
-          firmados: safeKpis.firmados ?? 0,
-          rechazados: safeKpis.rechazados ?? 0,
+          total: Number(safeKpis.total ?? 0),
+          pendientes: Number(safeKpis.pendientes ?? 0),
+          firmados: Number(safeKpis.firmados ?? 0),
+          rechazados: Number(safeKpis.rechazados ?? 0),
         });
 
-        const status = [];
-        if (safeKpis.pendientes) {
-          status.push({ status: "PENDIENTES", count: safeKpis.pendientes });
+        const nextStatus = [];
+        if (Number(safeKpis.pendientes ?? 0) > 0) {
+          nextStatus.push({ status: "Pendientes", count: Number(safeKpis.pendientes) });
         }
-        if (safeKpis.firmados) {
-          status.push({ status: "FIRMADO", count: safeKpis.firmados });
+        if (Number(safeKpis.firmados ?? 0) > 0) {
+          nextStatus.push({ status: "Firmados", count: Number(safeKpis.firmados) });
         }
-        if (safeKpis.rechazados) {
-          status.push({ status: "RECHAZADO", count: safeKpis.rechazados });
+        if (Number(safeKpis.rechazados ?? 0) > 0) {
+          nextStatus.push({ status: "Rechazados", count: Number(safeKpis.rechazados) });
         }
-        status.sort((a, b) => {
-          const order = ["PENDIENTES", "FIRMADO", "RECHAZADO"];
-          return order.indexOf(a.status) - order.indexOf(b.status);
-        });
-        setStatusData(Array.isArray(status) ? status : []);
+
+        setStatusData(nextStatus);
 
         setPerDayData(
-          Array.isArray(data.perDay)
+          Array.isArray(data?.perDay)
             ? data.perDay.map((d) => ({
-                date: d.date,
-                count: Number(d.count || 0),
+                date: d?.date || "",
+                count: Number(d?.count || 0),
               }))
             : []
         );
 
         setTipoTramiteData(
-          Array.isArray(data.porTipoTramite)
+          Array.isArray(data?.porTipoTramite)
             ? data.porTipoTramite.map((t) => ({
-                name: t.tipo_tramite || "Sin tipo",
-                value: Number(t.count || 0),
+                name: t?.tipo_tramite || "Sin tipo",
+                value: Number(t?.count || 0),
               }))
             : []
         );
       } catch (err) {
+        if (err?.name === "CanceledError" || err?.code === "ERR_CANCELED") {
+          return;
+        }
+
         console.error("Error cargando stats:", err);
+
         const msg =
-          err.response?.data?.message ||
-          err.message ||
+          err?.response?.data?.message ||
+          err?.message ||
           "Error al cargar estadísticas";
+
         setError(msg);
       } finally {
         setLoading(false);
@@ -104,7 +127,154 @@ export function DashboardView({ user }) {
     }
 
     fetchStats();
+
+    return () => controller.abort();
   }, []);
+
+  const baseChartOptions = useMemo(
+    () => ({
+      responsive: true,
+      maintainAspectRatio: false,
+      animation: {
+        duration: 350,
+      },
+      plugins: {
+        legend: {
+          labels: {
+            color: CHART_MUTED,
+            font: {
+              size: 12,
+            },
+            boxWidth: 12,
+            boxHeight: 12,
+          },
+        },
+        tooltip: {
+          backgroundColor: "#0f172a",
+          borderColor: CHART_BORDER,
+          borderWidth: 1,
+          titleColor: "#e5e7eb",
+          bodyColor: "#cbd5e1",
+          padding: 10,
+          displayColors: true,
+        },
+      },
+      scales: {
+        x: {
+          ticks: {
+            color: CHART_MUTED,
+            font: { size: 11 },
+          },
+          grid: {
+            color: CHART_GRID,
+            drawBorder: false,
+          },
+          border: {
+            display: false,
+          },
+        },
+        y: {
+          beginAtZero: true,
+          ticks: {
+            color: CHART_MUTED,
+            font: { size: 11 },
+            precision: 0,
+          },
+          grid: {
+            color: CHART_GRID,
+            drawBorder: false,
+          },
+          border: {
+            display: false,
+          },
+        },
+      },
+    }),
+    []
+  );
+
+  const statusChartData = useMemo(
+    () => ({
+      labels: statusData.map((item) => item.status),
+      datasets: [
+        {
+          label: "Cantidad",
+          data: statusData.map((item) => item.count),
+          backgroundColor: ["#4f46e5", "#22c55e", "#ef4444"],
+          borderRadius: 8,
+          maxBarThickness: 56,
+        },
+      ],
+    }),
+    [statusData]
+  );
+
+  const perDayChartData = useMemo(
+    () => ({
+      labels: perDayData.map((item) => item.date),
+      datasets: [
+        {
+          label: "Documentos",
+          data: perDayData.map((item) => item.count),
+          borderColor: "#0ea5e9",
+          backgroundColor: "rgba(14, 165, 233, 0.16)",
+          fill: true,
+          tension: 0.35,
+          pointRadius: 3,
+          pointHoverRadius: 5,
+          pointBackgroundColor: "#38bdf8",
+          pointBorderColor: "#0ea5e9",
+        },
+      ],
+    }),
+    [perDayData]
+  );
+
+  const tipoTramiteChartData = useMemo(
+    () => ({
+      labels: tipoTramiteData.map((item) => item.name),
+      datasets: [
+        {
+          label: "Cantidad",
+          data: tipoTramiteData.map((item) => item.value),
+          backgroundColor: tipoTramiteData.map(
+            (_, index) => SAFE_COLORS[index % SAFE_COLORS.length]
+          ),
+          borderColor: CHART_BG,
+          borderWidth: 2,
+          hoverOffset: 6,
+        },
+      ],
+    }),
+    [tipoTramiteData]
+  );
+
+  const doughnutOptions = useMemo(
+    () => ({
+      responsive: true,
+      maintainAspectRatio: false,
+      cutout: "52%",
+      plugins: {
+        legend: {
+          position: "bottom",
+          labels: {
+            color: CHART_MUTED,
+            font: { size: 12 },
+            padding: 16,
+          },
+        },
+        tooltip: {
+          backgroundColor: "#0f172a",
+          borderColor: CHART_BORDER,
+          borderWidth: 1,
+          titleColor: "#e5e7eb",
+          bodyColor: "#cbd5e1",
+          padding: 10,
+        },
+      },
+    }),
+    []
+  );
 
   return (
     <div
@@ -128,7 +298,7 @@ export function DashboardView({ user }) {
             letterSpacing: "-0.02em",
           }}
         >
-          📊 Dashboard de actividad
+          Dashboard de actividad
         </h1>
         <p
           style={{
@@ -201,7 +371,7 @@ export function DashboardView({ user }) {
           <div
             style={{
               display: "grid",
-              gridTemplateColumns: "minmax(0, 1.1fr) minmax(0, 1fr)",
+              gridTemplateColumns: "repeat(auto-fit, minmax(320px, 1fr))",
               gap: 24,
             }}
           >
@@ -209,88 +379,25 @@ export function DashboardView({ user }) {
               title="Documentos por estado"
               description="Distribución según el estado actual del trámite."
             >
-              <ResponsiveContainer width="100%" height={260}>
-                <BarChart
-                  data={statusData}
-                  margin={{ top: 10, right: 20, left: 0, bottom: 0 }}
-                >
-                  <CartesianGrid strokeDasharray="3 3" stroke="#1f2937" />
-                  <XAxis
-                    dataKey="status"
-                    tick={{ fontSize: 12, fill: "#9ca3af" }}
-                  />
-                  <YAxis
-                    allowDecimals={false}
-                    tick={{ fontSize: 12, fill: "#9ca3af" }}
-                  />
-                  <Tooltip
-                    contentStyle={{
-                      backgroundColor: "#020617",
-                      border: "1px solid #1f2937",
-                      color: "#e5e7eb",
-                      fontSize: 12,
-                    }}
-                  />
-                  <Legend
-                    wrapperStyle={{ color: "#9ca3af", fontSize: 12 }}
-                  />
-                  <Bar
-                    dataKey="count"
-                    name="Cantidad"
-                    fill="#4f46e5"
-                    radius={[6, 6, 0, 0]}
-                  />
-                </BarChart>
-              </ResponsiveContainer>
+              <div style={{ height: 260 }}>
+                <Bar data={statusChartData} options={baseChartOptions} />
+              </div>
             </ChartCard>
 
             <ChartCard
               title="Documentos creados por día"
-              description="Actividad según fecha de creación (últimos movimientos)."
+              description="Actividad según fecha de creación en los últimos movimientos."
             >
-              <ResponsiveContainer width="100%" height={260}>
-                <LineChart
-                  data={perDayData}
-                  margin={{ top: 10, right: 20, left: 0, bottom: 0 }}
-                >
-                  <CartesianGrid strokeDasharray="3 3" stroke="#1f2937" />
-                  <XAxis
-                    dataKey="date"
-                    tick={{ fontSize: 11, fill: "#9ca3af" }}
-                  />
-                  <YAxis
-                    allowDecimals={false}
-                    tick={{ fontSize: 11, fill: "#9ca3af" }}
-                  />
-                  <Tooltip
-                    contentStyle={{
-                      backgroundColor: "#020617",
-                      border: "1px solid #1f2937",
-                      color: "#e5e7eb",
-                      fontSize: 12,
-                    }}
-                  />
-                  <Legend
-                    wrapperStyle={{ color: "#9ca3af", fontSize: 12 }}
-                  />
-                  <Line
-                    type="monotone"
-                    dataKey="count"
-                    name="Documentos"
-                    stroke="#0ea5e9"
-                    strokeWidth={2}
-                    dot={{ r: 3 }}
-                    activeDot={{ r: 5 }}
-                  />
-                </LineChart>
-              </ResponsiveContainer>
+              <div style={{ height: 260 }}>
+                <Line data={perDayChartData} options={baseChartOptions} />
+              </div>
             </ChartCard>
           </div>
 
           <div
             style={{
               display: "grid",
-              gridTemplateColumns: "minmax(0, 1.2fr) minmax(0, 0.8fr)",
+              gridTemplateColumns: "minmax(0, 1.2fr) minmax(280px, 0.8fr)",
               gap: 24,
             }}
           >
@@ -298,49 +405,9 @@ export function DashboardView({ user }) {
               title="Tipos de trámite"
               description="Proporción de documentos según el tipo de trámite."
             >
-              <ResponsiveContainer width="100%" height={260}>
-                <PieChart>
-                  <Tooltip
-                    contentStyle={{
-                      backgroundColor: "#020617",
-                      border: "1px solid #1f2937",
-                      color: "#e5e7eb",
-                      fontSize: 12,
-                    }}
-                  />
-                  <Legend
-                    wrapperStyle={{ color: "#9ca3af", fontSize: 12 }}
-                  />
-                  <Pie
-                    data={tipoTramiteData}
-                    dataKey="value"
-                    nameKey="name"
-                    cx="50%"
-                    cy="50%"
-                    outerRadius={80}
-                    label={({ name, percent }) =>
-                      `${name} ${(percent * 100).toFixed(0)}%`
-                    }
-                  >
-                    {(Array.isArray(tipoTramiteData)
-                      ? tipoTramiteData
-                      : []
-                    ).map((entry, index) => {
-                      const palette = SAFE_COLORS;
-                      const color =
-                        palette.length > 0
-                          ? palette[index % palette.length]
-                          : "#4b5563";
-                      return (
-                        <Cell
-                          key={`cell-${entry?.name ?? "tipo"}-${index}`}
-                          fill={color}
-                        />
-                      );
-                    })}
-                  </Pie>
-                </PieChart>
-              </ResponsiveContainer>
+              <div style={{ height: 260 }}>
+                <Doughnut data={tipoTramiteChartData} options={doughnutOptions} />
+              </div>
             </ChartCard>
 
             <div
@@ -368,22 +435,22 @@ export function DashboardView({ user }) {
                   fontSize: "0.85rem",
                   color: "#cbd5f5",
                   marginBottom: 8,
+                  lineHeight: 1.6,
                 }}
               >
-                Usa este panel para detectar cuellos de botella: muchos{" "}
-                <strong>PENDIENTE_VISADO</strong> o{" "}
-                <strong>PENDIENTE_FIRMA</strong> indican trámites detenidos
-                antes de la firma final.
+                Usa este panel para detectar cuellos de botella. Si aumentan los
+                documentos pendientes, probablemente tienes trámites detenidos antes
+                de la firma final.
               </p>
               <p
                 style={{
                   fontSize: "0.85rem",
                   color: "#9ca3af",
+                  lineHeight: 1.6,
                 }}
               >
-                Si ves poca creación en los últimos días, prueba un flujo
-                completo con un cliente real para validar la experiencia de
-                punta a punta.
+                Si ves poca creación en los últimos días, prueba un flujo completo
+                con un cliente real para validar la experiencia de punta a punta.
               </p>
             </div>
           </div>
@@ -460,6 +527,7 @@ function ChartCard({ title, description, children }) {
               margin: 0,
               fontSize: "0.8rem",
               color: "#9ca3af",
+              lineHeight: 1.5,
             }}
           >
             {description}
@@ -470,3 +538,5 @@ function ChartCard({ title, description, children }) {
     </div>
   );
 }
+
+export default DashboardView;
