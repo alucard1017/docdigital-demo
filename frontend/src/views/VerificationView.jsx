@@ -1,144 +1,170 @@
-// src/views/VerificationView.jsx
-import React, { useState, useEffect } from "react";
+import React, { useCallback, useEffect, useMemo, useState } from "react";
 import { PublicHeader } from "../components/PublicHeader";
 import { PublicFooter } from "../components/PublicFooter";
 
+function normalizeApiBase(API_URL) {
+  const baseFromProp = API_URL || import.meta.env.VITE_API_URL || "";
+  let trimmed = String(baseFromProp).trim().replace(/\/+$/, "");
+  trimmed = trimmed.replace(/\/api\/api$/, "/api");
+  if (!trimmed) return "";
+  return trimmed.endsWith("/api") ? trimmed : `${trimmed}/api`;
+}
+
+function getStatusLabel(status) {
+  if (!status) return "DESCONOCIDO";
+
+  const map = {
+    PENDIENTE: "Pendiente de firma",
+    PENDIENTE_VISADO: "Pendiente de visado",
+    PENDIENTE_FIRMA: "Pendiente de firma",
+    VISADO: "Visado",
+    FIRMADO: "Firmado",
+    RECHAZADO: "Rechazado",
+  };
+
+  return map[status] || status;
+}
+
+function parseMetadata(value) {
+  if (!value) return null;
+  if (typeof value === "object") return value;
+
+  try {
+    return JSON.parse(value);
+  } catch {
+    return null;
+  }
+}
+
+function getRejectInfo(events = []) {
+  const rejects = events.filter(
+    (ev) =>
+      ev?.event_type === "REJECTED" ||
+      ev?.event_type === "RECHAZO_PUBLICO" ||
+      ev?.descripcion === "RECHAZO_PUBLICO"
+  );
+
+  if (rejects.length === 0) {
+    return { lastRejectEvent: null, rejectReason: "" };
+  }
+
+  const lastRejectEvent = rejects[rejects.length - 1];
+  const meta = parseMetadata(lastRejectEvent?.metadata);
+
+  return {
+    lastRejectEvent,
+    rejectReason:
+      meta?.motivo || meta?.reason || lastRejectEvent?.reject_reason || "",
+  };
+}
+
 export function VerificationView({ API_URL }) {
+  const API_BASE = useMemo(() => normalizeApiBase(API_URL), [API_URL]);
+
   const [code, setCode] = useState("");
   const [loading, setLoading] = useState(false);
   const [result, setResult] = useState(null);
   const [error, setError] = useState("");
 
-  const getApiBase = () => {
-    const baseFromProp = API_URL || import.meta.env.VITE_API_URL || "";
-    let trimmed = baseFromProp.replace(/\/+$/, "");
-    trimmed = trimmed.replace(/\/api\/api$/, "/api");
-    if (trimmed.endsWith("/api")) return trimmed;
-    return `${trimmed}/api`;
-  };
+  const verifyCode = useCallback(
+    async (rawCode) => {
+      const cleanCode = String(rawCode || "").trim();
 
-  const API_BASE = getApiBase();
+      if (!cleanCode) {
+        setError("Ingresa un código de verificación.");
+        setResult(null);
+        return;
+      }
+
+      if (!API_BASE) {
+        setError("La URL del servicio de verificación no está configurada.");
+        setResult(null);
+        return;
+      }
+
+      setLoading(true);
+      setError("");
+      setResult(null);
+
+      try {
+        const url = `${API_BASE}/public/verificar/${encodeURIComponent(
+          cleanCode
+        )}`;
+
+        const res = await fetch(url);
+
+        if (!res.ok) {
+          let message = "No se pudo verificar el documento.";
+
+          if (res.status === 404) {
+            message = "Código de verificación no válido o inexistente.";
+          } else if (res.status === 410) {
+            message =
+              "El código de verificación ha expirado, solicita uno nuevo al emisor.";
+          }
+
+          try {
+            const data = await res.json();
+            if (data?.message) message = data.message;
+          } catch {
+            // noop
+          }
+
+          throw new Error(message);
+        }
+
+        const data = await res.json();
+
+        if (!data?.document) {
+          throw new Error(
+            "No se encontraron datos del documento asociados a este código."
+          );
+        }
+
+        setResult(data);
+      } catch (err) {
+        console.error("Error al verificar documento:", err);
+        setError(err?.message || "Error al verificar el documento.");
+        setResult(null);
+      } finally {
+        setLoading(false);
+      }
+    },
+    [API_BASE]
+  );
 
   useEffect(() => {
     try {
       const params = new URLSearchParams(window.location.search);
       const urlCode = params.get("code");
-      if (urlCode) setCode(urlCode);
+
+      if (urlCode) {
+        setCode(urlCode);
+        verifyCode(urlCode);
+      }
     } catch {
-      // ignorar
+      // noop
     }
-  }, []);
+  }, [verifyCode]);
 
   const handleSubmit = async (e) => {
     e.preventDefault();
-
-    const cleanCode = code.trim();
-    if (!cleanCode) {
-      setError("Ingresa un código de verificación.");
-      return;
-    }
-
-    if (!API_BASE) {
-      setError("La URL del servicio de verificación no está configurada.");
-      return;
-    }
-
-    setLoading(true);
-    setError("");
-    setResult(null);
-
-    try {
-      const url = `${API_BASE}/public/verificar/${encodeURIComponent(
-        cleanCode
-      )}`;
-
-      const res = await fetch(url);
-
-      if (!res.ok) {
-        let message = "No se pudo verificar el documento.";
-        if (res.status === 404) {
-          message = "Código de verificación no válido o inexistente.";
-        } else if (res.status === 410) {
-          message =
-            "El código de verificación ha expirado, solicita uno nuevo al emisor.";
-        }
-
-        try {
-          const data = await res.json();
-          if (data && data.message) message = data.message;
-        } catch {
-          // respuesta sin JSON
-        }
-
-        throw new Error(message);
-      }
-
-      const data = await res.json();
-
-      if (!data || !data.document) {
-        throw new Error(
-          "No se encontraron datos del documento asociados a este código."
-        );
-      }
-
-      setResult(data);
-    } catch (err) {
-      console.error("Error al verificar documento:", err);
-      setError(err.message || "Error al verificar el documento.");
-      setResult(null);
-    } finally {
-      setLoading(false);
-    }
-  };
-
-  const statusLabel = (status) => {
-    if (!status) return "DESCONOCIDO";
-    const map = {
-      PENDIENTE: "Pendiente de firma",
-      PENDIENTE_VISADO: "Pendiente de visado",
-      PENDIENTE_FIRMA: "Pendiente de firma",
-      VISADO: "Visado",
-      FIRMADO: "Firmado",
-      RECHAZADO: "Rechazado",
-    };
-    return map[status] || status;
+    await verifyCode(code);
   };
 
   const doc = result?.document || null;
   const signers = Array.isArray(result?.signers) ? result.signers : [];
   const events = Array.isArray(result?.events) ? result.events : [];
 
-  let lastRejectEvent = null;
-  if (events.length > 0) {
-    const rejects = events.filter(
-      (ev) =>
-        ev.event_type === "RECHAZO_PUBLICO" ||
-        ev.descripcion === "RECHAZO_PUBLICO"
-    );
-    if (rejects.length > 0) {
-      lastRejectEvent = rejects[rejects.length - 1];
-    }
-  }
+  const { lastRejectEvent, rejectReason } = useMemo(
+    () => getRejectInfo(events),
+    [events]
+  );
 
-  let rejectReason = "";
-  if (lastRejectEvent && lastRejectEvent.metadata) {
-    try {
-      const meta =
-        typeof lastRejectEvent.metadata === "string"
-          ? JSON.parse(lastRejectEvent.metadata)
-          : lastRejectEvent.metadata;
-      if (meta && meta.motivo) rejectReason = meta.motivo;
-    } catch {
-      // metadata no JSON
-    }
-  }
-
-  // URL de PDF priorizando final sellado, luego URL firmada temporalmente
   const pdfToShow =
     doc?.pdf_final_url || doc?.pdf_url || result?.pdfUrl || null;
 
-  // Paleta más oscura y con buen contraste
-  const bgOuter = "#020617"; // slate-950
+  const bgOuter = "#020617";
   const bgCard =
     "radial-gradient(circle at top left, rgba(37,99,235,0.18), #020617 55%, #020617 100%)";
   const borderCard = "#1f2937";
@@ -149,18 +175,20 @@ export function VerificationView({ API_URL }) {
     <div
       style={{
         minHeight: "100vh",
-        padding: 32,
+        minHeight: "100dvh",
+        padding: "24px 16px",
         display: "flex",
         justifyContent: "center",
         alignItems: "flex-start",
         background: bgOuter,
         color: textMain,
+        boxSizing: "border-box",
       }}
     >
       <div
         style={{
           width: "100%",
-          maxWidth: 900,
+          maxWidth: 980,
           borderRadius: 18,
           padding: 24,
           border: `1px solid ${borderCard}`,
@@ -174,7 +202,7 @@ export function VerificationView({ API_URL }) {
         <div style={{ marginTop: 8, marginBottom: 20 }}>
           <h1
             style={{
-              fontSize: "1.7rem",
+              fontSize: "clamp(1.35rem, 2vw, 1.7rem)",
               margin: 0,
               marginBottom: 6,
               color: "#f9fafb",
@@ -182,12 +210,14 @@ export function VerificationView({ API_URL }) {
           >
             Verificación pública de documento
           </h1>
+
           <p
             style={{
               color: textSubtle,
               margin: 0,
               fontSize: "0.95rem",
               maxWidth: 620,
+              lineHeight: 1.55,
             }}
           >
             Ingresa el código de verificación que aparece en el PDF o en el
@@ -213,20 +243,22 @@ export function VerificationView({ API_URL }) {
             style={{
               flex: 1,
               minWidth: 220,
-              padding: "10px 12px",
+              padding: "12px 14px",
               borderRadius: 999,
               border: "1px solid #1f2937",
               fontSize: "0.95rem",
               background: "#020617",
               color: textMain,
               boxShadow: "0 0 0 1px rgba(15,23,42,0.8)",
+              outline: "none",
             }}
           />
+
           <button
             type="submit"
             disabled={loading}
             style={{
-              padding: "10px 18px",
+              padding: "12px 18px",
               borderRadius: 999,
               border: "none",
               background: loading
@@ -309,17 +341,19 @@ export function VerificationView({ API_URL }) {
                 >
                   Documento rechazado.
                 </div>
+
                 {rejectReason && (
                   <div>
                     Motivo: <strong>{rejectReason}</strong>
                   </div>
                 )}
+
                 {lastRejectEvent?.created_at && (
                   <div style={{ fontSize: "0.8rem", marginTop: 4 }}>
                     Fecha de rechazo:{" "}
-                    {new Date(
-                      lastRejectEvent.created_at
-                    ).toLocaleString("es-CL")}
+                    {new Date(lastRejectEvent.created_at).toLocaleString(
+                      "es-CL"
+                    )}
                   </div>
                 )}
               </div>
@@ -328,7 +362,7 @@ export function VerificationView({ API_URL }) {
             <h2
               style={{
                 fontSize: "1.15rem",
-                marginBottom: 10,
+                marginBottom: 14,
                 color: "#e5e7eb",
               }}
             >
@@ -338,8 +372,8 @@ export function VerificationView({ API_URL }) {
             <div
               style={{
                 display: "grid",
-                gridTemplateColumns: "minmax(0,1fr) minmax(0,1fr)",
-                gap: 12,
+                gridTemplateColumns: "repeat(auto-fit, minmax(240px, 1fr))",
+                gap: 14,
                 fontSize: "0.9rem",
               }}
             >
@@ -367,7 +401,7 @@ export function VerificationView({ API_URL }) {
                         : "#38bdf8",
                   }}
                 >
-                  {statusLabel(doc.status)}
+                  {getStatusLabel(doc.status)}
                 </div>
               </div>
 
@@ -393,25 +427,29 @@ export function VerificationView({ API_URL }) {
                 </div>
               </div>
 
-              <div style={{ gridColumn: "1 / -1", marginTop: 8 }}>
+              <div style={{ gridColumn: "1 / -1", marginTop: 6 }}>
                 <div style={{ fontSize: "0.75rem", color: textSubtle }}>
                   Firmantes
                 </div>
+
                 {signers.length > 0 ? (
                   <ul
                     style={{
                       marginTop: 6,
                       paddingLeft: 18,
                       color: "#e5e7eb",
+                      lineHeight: 1.6,
                     }}
                   >
                     {signers.map((s) => (
                       <li key={s.id || s.email}>
-                        {s.name || s.email}{" "}
+                        {s.name || s.email || "Firmante"}{" "}
                         {s.signed_at
-                          ? `✔ firmó el ${new Date(
-                              s.signed_at
-                            ).toLocaleString("es-CL")}`
+                          ? `✔ firmó el ${new Date(s.signed_at).toLocaleString(
+                              "es-CL"
+                            )}`
+                          : s.status === "RECHAZADO"
+                          ? "✗ rechazó el documento"
                           : "⏳ pendiente"}
                       </li>
                     ))}
@@ -424,21 +462,23 @@ export function VerificationView({ API_URL }) {
               </div>
 
               {events.length > 0 && (
-                <div style={{ gridColumn: "1 / -1", marginTop: 8 }}>
+                <div style={{ gridColumn: "1 / -1", marginTop: 6 }}>
                   <div style={{ fontSize: "0.75rem", color: textSubtle }}>
                     Historial de eventos
                   </div>
+
                   <ul
                     style={{
                       marginTop: 6,
                       paddingLeft: 18,
                       color: "#e5e7eb",
+                      lineHeight: 1.6,
                     }}
                   >
                     {events.map((ev, idx) => (
-                      <li key={idx}>
+                      <li key={ev.id || idx}>
                         [{new Date(ev.created_at).toLocaleString("es-CL")}]{" "}
-                        {ev.descripcion || ev.event_type}
+                        {ev.descripcion || ev.event_type || "Evento"}
                       </li>
                     ))}
                   </ul>
@@ -451,7 +491,7 @@ export function VerificationView({ API_URL }) {
                 <a
                   href={pdfToShow}
                   target="_blank"
-                  rel="noreferrer"
+                  rel="noopener noreferrer"
                   style={{
                     display: "inline-flex",
                     alignItems: "center",

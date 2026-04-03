@@ -21,21 +21,12 @@ const {
   retryReminder,
 } = require("../controllers/documents/remindersAdmin");
 
-const {
-  logAudit,
-  buildDocumentAuditMetadata,
-} = require("../utils/auditLog");
-const {
-  createRedisRateLimitMiddleware,
-} = require("../utils/rateLimiter");
-
+const { logAudit, buildDocumentAuditMetadata } = require("../utils/auditLog");
+const { createRedisRateLimitMiddleware } = require("../utils/rateLimiter");
 const remindersQueue = require("../queues/remindersQueue");
-const {
-  validateCreateDocumentBody,
-} = require("../validators/createDocumentSchema");
+const { validateCreateDocumentBody } = require("../validators/createDocumentSchema");
 const { generateVerificationCode } = require("../utils/randomCode");
 const emailQueue = require("../queues/emailQueue");
-
 const {
   getReminderSchedulerStatus,
   ejecutarRecordatorios,
@@ -232,15 +223,6 @@ function withDocumentAudit(action) {
    RUTAS GET - ESPECÍFICAS (SIN ID)
    ================================ */
 
-console.log(
-  ">>> documentsController.getDocumentStats type:",
-  typeof documentsController.getDocumentStats
-);
-console.log(
-  ">>> getDocumentAnalytics type:",
-  typeof getDocumentAnalytics
-);
-
 if (typeof documentsController.getDocumentStats === "function") {
   router.get("/stats", requireAuth, documentsController.getDocumentStats);
 } else {
@@ -340,13 +322,6 @@ router.post(
   withDocumentAudit("DOCUMENT_CREATED"),
   async (req, res, next) => {
     try {
-      console.log("📥 [POST /documents] body:", req.body);
-      console.log("📎 [POST /documents] file:", {
-        originalname: req.file?.originalname,
-        mimetype: req.file?.mimetype,
-        size: req.file?.size,
-      });
-
       return await documentsController.createDocument(req, res, next);
     } catch (err) {
       console.error("❌ Error en createDocument:", err);
@@ -588,13 +563,6 @@ router.post(
 
 // Firma pública legacy (por firmanteId)
 router.post("/firmar-flujo/:firmanteId", documentsController.signFlow);
-
-console.log(">>> getDocumentPdf type:", typeof documentsController.getDocumentPdf);
-console.log(">>> getTimeline type:", typeof documentsController.getTimeline);
-console.log(">>> getLegalTimeline type:", typeof documentsController.getLegalTimeline);
-console.log(">>> getSigners type:", typeof documentsController.getSigners);
-console.log(">>> previewDocument type:", typeof previewDocument);
-console.log(">>> downloadDocument type:", typeof downloadDocument);
 
 /* ================================
    RUTAS GET - CON :id
@@ -886,7 +854,7 @@ router.post(
         )
         RETURNING id, token, expires_at, sent_at;
         `,
-        [signer.id, token, expiresAt.toISOString()]
+        [signer.id, expiresAt.toISOString(), token]
       );
 
       const invitation = inviteRes.rows[0];

@@ -1,10 +1,13 @@
 // backend/controllers/documents/publicDocuments.js
 const db = require("../../db");
-const { getSignedUrl } = require("../../services/s3");
+const { getSignedUrl } = require("../../services/storageR2");
 const { sellarPdfConQr } = require("../../services/pdfSeal");
 const { logAudit } = require("../../utils/auditLog");
 
-
+/**
+ * Helper: busca documento + firmante asociado usando signature_token del DOCUMENTO.
+ * Opcionalmente filtra por email (para amarrar firmante concreto).
+ */
 async function getDocumentAndSignerByDocumentToken(documentToken, emailFromQuery = null) {
   const docRes = await db.query(
     `
@@ -24,10 +27,7 @@ async function getDocumentAndSignerByDocumentToken(documentToken, emailFromQuery
     [documentToken, emailFromQuery]
   );
 
-  if (docRes.rowCount === 0) {
-    return null;
-  }
-
+  if (docRes.rowCount === 0) return null;
   return docRes.rows[0];
 }
 
@@ -39,28 +39,31 @@ async function getPublicDocBySignerToken(req, res) {
     const { token } = req.params;
 
     const result = await db.query(
-      `SELECT 
-         d.id,
-         d.title,
-         d.status,
-         d.file_path,
-         d.pdf_final_url,
-         d.destinatario_nombre,
-         d.empresa_rut,
-         d.requires_visado,
-         d.signature_status,
-         d.signature_token_expires_at,
-         d.firmante_nombre,
-         d.firmante_run,
-         d.numero_contrato_interno,
-         s.id     AS signer_id,
-         s.name   AS signer_name,
-         s.email  AS signer_email,
-         s.status AS signer_status,
-         s.role   AS signer_role
-       FROM document_signers s
-       JOIN documents d ON d.id = s.document_id
-       WHERE s.sign_token = $1`,
+      `
+      SELECT 
+        d.id,
+        d.title,
+        d.status,
+        d.file_path,
+        d.pdf_final_url,
+        d.pdf_original_url,
+        d.destinatario_nombre,
+        d.empresa_rut,
+        d.requires_visado,
+        d.signature_status,
+        d.signature_token_expires_at,
+        d.firmante_nombre,
+        d.firmante_run,
+        d.numero_contrato_interno,
+        s.id     AS signer_id,
+        s.name   AS signer_name,
+        s.email  AS signer_email,
+        s.status AS signer_status,
+        s.role   AS signer_role
+      FROM document_signers s
+      JOIN documents d ON d.id = s.document_id
+      WHERE s.sign_token = $1
+      `,
       [token]
     );
 
@@ -81,7 +84,9 @@ async function getPublicDocBySignerToken(req, res) {
       });
     }
 
-    const basePath = row.pdf_final_url || row.file_path;
+    const basePath =
+      row.pdf_final_url || row.pdf_original_url || row.file_path || null;
+
     if (!basePath) {
       return res
         .status(404)
@@ -102,6 +107,8 @@ async function getPublicDocBySignerToken(req, res) {
         firmante_nombre: row.firmante_nombre,
         firmante_run: row.firmante_run,
         numero_contrato_interno: row.numero_contrato_interno,
+        pdf_final_url: row.pdf_final_url || null,
+        pdf_original_url: row.pdf_original_url || null,
       },
       currentSigner: {
         id: row.signer_id,
@@ -120,29 +127,33 @@ async function getPublicDocBySignerToken(req, res) {
 
 /* ================================
    GET: Datos + PDF usando signature_token del DOCUMENTO
+   (enlace genérico, sin firmante concreto)
    ================================ */
 async function getPublicDocByDocumentToken(req, res) {
   try {
     const { token } = req.params;
 
     const result = await db.query(
-      `SELECT 
-         id,
-         title,
-         status,
-         file_path,
-         pdf_final_url,
-         destinatario_nombre,
-         empresa_rut,
-         requires_visado,
-         signature_status,
-         signature_token_expires_at,
-         firmante_nombre,
-         firmante_run,
-         numero_contrato_interno,
-         visador_nombre
-       FROM documents
-       WHERE signature_token = $1`,
+      `
+      SELECT 
+        id,
+        title,
+        status,
+        file_path,
+        pdf_final_url,
+        pdf_original_url,
+        destinatario_nombre,
+        empresa_rut,
+        requires_visado,
+        signature_status,
+        signature_token_expires_at,
+        firmante_nombre,
+        firmante_run,
+        numero_contrato_interno,
+        visador_nombre
+      FROM documents
+      WHERE signature_token = $1
+      `,
       [token]
     );
 
@@ -163,7 +174,9 @@ async function getPublicDocByDocumentToken(req, res) {
       });
     }
 
-    const basePath = doc.pdf_final_url || doc.file_path;
+    const basePath =
+      doc.pdf_final_url || doc.pdf_original_url || doc.file_path || null;
+
     if (!basePath) {
       return res
         .status(404)
@@ -172,7 +185,7 @@ async function getPublicDocByDocumentToken(req, res) {
 
     const pdfUrl = await getSignedUrl(basePath, 3600);
 
-    // Registrar evento de apertura de enlace público en document_events
+    // Registrar apertura de invitación (sin firmante concreto)
     try {
       await db.query(
         `
@@ -192,7 +205,7 @@ async function getPublicDocByDocumentToken(req, res) {
           req.ip,
           req.headers["user-agent"] || null,
           JSON.stringify({
-            source: "public_signer_link",
+            source: "public_document_link",
           }),
         ]
       );
@@ -204,7 +217,10 @@ async function getPublicDocByDocumentToken(req, res) {
     }
 
     return res.json({
-      document: doc,
+      document: {
+        ...doc,
+        pdfUrl,
+      },
       pdfUrl,
     });
   } catch (err) {
@@ -214,27 +230,28 @@ async function getPublicDocByDocumentToken(req, res) {
 }
 
 /* ================================
-   POST: Firmar documento por token (firmante externo, por sign_token)
+   POST: Firmar documento por token (firmante externo)
+   Prioridad: 1) sign_token (document_signers) 2) signature_token (documents)
    ================================ */
 async function publicSignDocument(req, res) {
   try {
     const { token } = req.params;
 
-    // 1) Intentar por sign_token (compatibilidad antigua)
     let current = await db.query(
-      `SELECT 
-         s.id     AS signer_id,
-         s.status AS signer_status,
-         s.name   AS signer_name,
-         s.email  AS signer_email,
-         d.*
-       FROM document_signers s
-       JOIN documents d ON d.id = s.document_id
-       WHERE s.sign_token = $1`,
+      `
+      SELECT 
+        s.id     AS signer_id,
+        s.status AS signer_status,
+        s.name   AS signer_name,
+        s.email  AS signer_email,
+        d.*
+      FROM document_signers s
+      JOIN documents d ON d.id = s.document_id
+      WHERE s.sign_token = $1
+      `,
       [token]
     );
 
-    // 2) Si no existe, intentar por signature_token del documento
     if (current.rowCount === 0) {
       const rowByDoc = await getDocumentAndSignerByDocumentToken(token);
       if (!rowByDoc) {
@@ -246,6 +263,7 @@ async function publicSignDocument(req, res) {
     }
 
     const row = current.rows[0];
+
     if (
       row.signature_token_expires_at &&
       row.signature_token_expires_at < new Date()
@@ -274,14 +292,16 @@ async function publicSignDocument(req, res) {
     }
 
     await db.query(
-      `UPDATE document_signers
-       SET status = 'FIRMADO',
-           signed_at = NOW()
-       WHERE id = $1`,
+      `
+      UPDATE document_signers
+      SET status = 'FIRMADO',
+          signed_at = NOW()
+      WHERE id = $1
+      `,
       [row.signer_id]
     );
 
-    // Sincronizar también document_participants
+    // Sincronizar con document_participants (si existe)
     try {
       await db.query(
         `
@@ -301,19 +321,22 @@ async function publicSignDocument(req, res) {
       );
     }
 
+    // Contar firmantes
     const countRes = await db.query(
-      `SELECT 
-         COUNT(*) FILTER (WHERE status = 'FIRMADO') AS signed_count,
-         COUNT(*) AS total_signers
-       FROM document_signers
-       WHERE document_id = $1`,
+      `
+      SELECT 
+        COUNT(*) FILTER (WHERE status = 'FIRMADO') AS signed_count,
+        COUNT(*) AS total_signers
+      FROM document_signers
+      WHERE document_id = $1
+      `,
       [row.id]
     );
 
     const { signed_count, total_signers } = countRes.rows[0];
     const allSigned = Number(signed_count) >= Number(total_signers);
 
-    // Debug paralelo en document_participants
+    // Debug paralelo con document_participants
     try {
       const dpCountRes = await db.query(
         `
@@ -348,34 +371,41 @@ async function publicSignDocument(req, res) {
     }
 
     const docUpdateRes = await db.query(
-      `UPDATE documents
-       SET status = $1,
-           signature_status = $2,
-           updated_at = NOW()
-       WHERE id = $3
-       RETURNING *`,
+      `
+      UPDATE documents
+      SET status = $1,
+          signature_status = $2,
+          updated_at = NOW()
+      WHERE id = $3
+      RETURNING *
+      `,
       [newDocStatus, newSignatureStatus, row.id]
     );
     const doc = docUpdateRes.rows[0];
 
+    // Sincronizar con tabla legacy "documentos" + "firmantes"
     if (doc.nuevo_documento_id) {
       try {
         await db.query(
-          `UPDATE documentos
-           SET estado = $1,
-               updated_at = NOW()
-           WHERE id = $2`,
+          `
+          UPDATE documentos
+          SET estado = $1,
+              updated_at = NOW()
+          WHERE id = $2
+          `,
           [allSigned ? "FIRMADO" : "PENDIENTE_FIRMA", doc.nuevo_documento_id]
         );
 
         await db.query(
-          `UPDATE firmantes
-           SET estado = 'FIRMADO',
-               fecha_firma = NOW(),
-               tipo_firma = 'SIMPLE',
-               updated_at = NOW()
-           WHERE documento_id = $1
-             AND email = $2`,
+          `
+          UPDATE firmantes
+          SET estado = 'FIRMADO',
+              fecha_firma = NOW(),
+              tipo_firma = 'SIMPLE',
+              updated_at = NOW()
+          WHERE documento_id = $1
+            AND email = $2
+          `,
           [doc.nuevo_documento_id, row.signer_email]
         );
       } catch (syncErr) {
@@ -386,11 +416,14 @@ async function publicSignDocument(req, res) {
       }
     }
 
+    // Evento resumen en document_events (modelo nuevo)
     await db.query(
-      `INSERT INTO document_events (
-         document_id, actor, action, details, from_status, to_status
-       )
-       VALUES ($1, $2, $3, $4, $5, $6)`,
+      `
+      INSERT INTO document_events (
+        document_id, actor, action, details, from_status, to_status
+      )
+      VALUES ($1, $2, $3, $4, $5, $6)
+      `,
       [
         doc.id,
         row.signer_name || "Firmante externo",
@@ -403,7 +436,7 @@ async function publicSignDocument(req, res) {
       ]
     );
 
-    // Evidencia en document_events (timeline legal)
+    // Eventos detallados (SIGNED / STATUS_CHANGED)
     try {
       await db.query(
         `
@@ -477,13 +510,15 @@ async function publicSignDocument(req, res) {
       req,
     });
 
-    // Sellar SOLO cuando todos firmaron, delegando todo a pdfSeal.js
+    // Sellado PDF con QR cuando todos firmaron
     if (allSigned && doc.nuevo_documento_id) {
       try {
         const docNuevoRes = await db.query(
-          `SELECT id, codigo_verificacion, categoria_firma
-           FROM documentos
-           WHERE id = $1`,
+          `
+          SELECT id, codigo_verificacion, categoria_firma
+          FROM documentos
+          WHERE id = $1
+          `,
           [doc.nuevo_documento_id]
         );
 
@@ -491,25 +526,35 @@ async function publicSignDocument(req, res) {
           const docNuevo = docNuevoRes.rows[0];
           const baseKey = doc.pdf_original_url || doc.file_path;
 
-          // sellarPdfConQr debe devolver la key del PDF final en S3
-          const finalKey = await sellarPdfConQr({
+          const sealResult = await sellarPdfConQr({
             s3Key: baseKey,
-            documentoId: docNuevo.id,
+            documentoId: doc.id,
             codigoVerificacion: docNuevo.codigo_verificacion,
             categoriaFirma: docNuevo.categoria_firma || "SIMPLE",
             numeroContratoInterno: doc.numero_contrato_interno,
           });
 
-          // Guardar la ruta final en documents.pdf_final_url
-          if (finalKey) {
-            await db.query(
-              `UPDATE documents
-               SET pdf_final_url = $1,
-                   updated_at = NOW()
-               WHERE id = $2`,
-              [finalKey, doc.id]
-            );
-            doc.pdf_final_url = finalKey; // para que la respuesta ya lo traiga
+          // Refrescar doc.pdf_final_url desde BD
+          const updatedDocRes = await db.query(
+            `
+            SELECT
+              pdf_final_url,
+              final_storage_key,
+              final_file_url
+            FROM documents
+            WHERE id = $1
+            `,
+            [doc.id]
+          );
+
+          if (updatedDocRes.rowCount > 0) {
+            const updatedDoc = updatedDocRes.rows[0];
+            doc.pdf_final_url =
+              updatedDoc.pdf_final_url ||
+              updatedDoc.final_storage_key ||
+              updatedDoc.final_file_url ||
+              sealResult?.finalKey ||
+              null;
           }
         }
       } catch (sealError) {
@@ -522,7 +567,7 @@ async function publicSignDocument(req, res) {
 
     return res.json({
       ...doc,
-      file_url: doc.pdf_final_url || doc.file_path,
+      file_url: doc.pdf_final_url || doc.pdf_original_url || doc.file_path,
       documentStatus: newDocStatus,
       message: allSigned
         ? "Documento firmado correctamente por todos los firmantes"
@@ -535,7 +580,8 @@ async function publicSignDocument(req, res) {
 }
 
 /* ================================
-   POST: Rechazar documento por token (firmante externo, por sign_token)
+   POST: Rechazar documento por token (firmante externo)
+   Prioridad: 1) sign_token  2) signature_token
    ================================ */
 async function publicRejectDocument(req, res) {
   try {
@@ -548,21 +594,21 @@ async function publicRejectDocument(req, res) {
         .json({ message: "Debes indicar un motivo de rechazo." });
     }
 
-    // 1) Intentar por sign_token (compatibilidad)
     let current = await db.query(
-      `SELECT 
-         s.id     AS signer_id,
-         s.status AS signer_status,
-         s.name   AS signer_name,
-         s.email  AS signer_email,
-         d.*
-       FROM document_signers s
-       JOIN documents d ON d.id = s.document_id
-       WHERE s.sign_token = $1`,
+      `
+      SELECT 
+        s.id     AS signer_id,
+        s.status AS signer_status,
+        s.name   AS signer_name,
+        s.email  AS signer_email,
+        d.*
+      FROM document_signers s
+      JOIN documents d ON d.id = s.document_id
+      WHERE s.sign_token = $1
+      `,
       [token]
     );
 
-    // 2) Si no existe, intentar por signature_token del documento
     if (current.rowCount === 0) {
       const rowByDoc = await getDocumentAndSignerByDocumentToken(token);
       if (!rowByDoc) {
@@ -610,15 +656,16 @@ async function publicRejectDocument(req, res) {
     }
 
     await db.query(
-      `UPDATE document_signers
-       SET status = 'RECHAZADO',
-           rejected_at = NOW(),
-           rejection_reason = $2
-       WHERE id = $1`,
+      `
+      UPDATE document_signers
+      SET status = 'RECHAZADO',
+          rejected_at = NOW(),
+          rejection_reason = $2
+      WHERE id = $1
+      `,
       [row.signer_id, motivo]
     );
 
-    // Sincronizar también document_participants en rechazo
     try {
       await db.query(
         `
@@ -638,13 +685,15 @@ async function publicRejectDocument(req, res) {
     }
 
     const docUpdateRes = await db.query(
-      `UPDATE documents
-       SET status = 'RECHAZADO',
-           signature_status = 'RECHAZADO',
-           reject_reason = $2,
-           updated_at = NOW()
-       WHERE id = $1
-       RETURNING *`,
+      `
+      UPDATE documents
+      SET status = 'RECHAZADO',
+          signature_status = 'RECHAZADO',
+          reject_reason = $2,
+          updated_at = NOW()
+      WHERE id = $1
+      RETURNING *
+      `,
       [row.id, motivo]
     );
     const doc = docUpdateRes.rows[0];
@@ -652,19 +701,23 @@ async function publicRejectDocument(req, res) {
     if (doc.nuevo_documento_id) {
       try {
         await db.query(
-          `UPDATE documentos
-           SET estado = 'RECHAZADO',
-               updated_at = NOW()
-           WHERE id = $1`,
+          `
+          UPDATE documentos
+          SET estado = 'RECHAZADO',
+              updated_at = NOW()
+          WHERE id = $1
+          `,
           [doc.nuevo_documento_id]
         );
 
         await db.query(
-          `UPDATE firmantes
-           SET estado = 'RECHAZADO',
-               updated_at = NOW()
-           WHERE documento_id = $1
-             AND email = $2`,
+          `
+          UPDATE firmantes
+          SET estado = 'RECHAZADO',
+              updated_at = NOW()
+          WHERE documento_id = $1
+            AND email = $2
+          `,
           [doc.nuevo_documento_id, row.signer_email]
         );
       } catch (syncErr) {
@@ -676,10 +729,12 @@ async function publicRejectDocument(req, res) {
     }
 
     await db.query(
-      `INSERT INTO document_events (
-         document_id, actor, action, details, from_status, to_status
-       )
-       VALUES ($1, $2, $3, $4, $5, $6)`,
+      `
+      INSERT INTO document_events (
+        document_id, actor, action, details, from_status, to_status
+      )
+      VALUES ($1, $2, $3, $4, $5, $6)
+      `,
       [
         doc.id,
         row.signer_name || "Firmante externo",
@@ -690,7 +745,6 @@ async function publicRejectDocument(req, res) {
       ]
     );
 
-    // Evidencia de rechazo en document_events
     try {
       await db.query(
         `
@@ -763,7 +817,7 @@ async function publicRejectDocument(req, res) {
 
     return res.json({
       ...doc,
-      file_url: doc.pdf_final_url || doc.file_path,
+      file_url: doc.pdf_final_url || doc.pdf_original_url || doc.file_path,
       documentStatus: "RECHAZADO",
       message: "Documento rechazado correctamente",
     });
@@ -774,16 +828,18 @@ async function publicRejectDocument(req, res) {
 }
 
 /* ================================
-   POST: Visar documento por token (visador externo)
+   POST: Visar documento por token (visador externo, signature_token del DOCUMENTO)
    ================================ */
 async function publicVisarDocument(req, res) {
   try {
     const { token } = req.params;
 
     const current = await db.query(
-      `SELECT * 
-       FROM documents 
-       WHERE signature_token = $1`,
+      `
+      SELECT * 
+      FROM documents 
+      WHERE signature_token = $1
+      `,
       [token]
     );
 
@@ -823,20 +879,24 @@ async function publicVisarDocument(req, res) {
     }
 
     const result = await db.query(
-      `UPDATE documents
-       SET status = $1,
-           updated_at = NOW()
-       WHERE id = $2
-       RETURNING *`,
+      `
+      UPDATE documents
+      SET status = $1,
+          updated_at = NOW()
+      WHERE id = $2
+      RETURNING *
+      `,
       ["PENDIENTE_FIRMA", docActual.id]
     );
     const doc = result.rows[0];
 
     await db.query(
-      `INSERT INTO document_events (
-         document_id, actor, action, details, from_status, to_status
-       )
-       VALUES ($1, $2, $3, $4, $5, $6)`,
+      `
+      INSERT INTO document_events (
+        document_id, actor, action, details, from_status, to_status
+      )
+      VALUES ($1, $2, $3, $4, $5, $6)
+      `,
       [
         doc.id,
         doc.visador_nombre || "Visador externo",
@@ -847,7 +907,6 @@ async function publicVisarDocument(req, res) {
       ]
     );
 
-    // Evidencia de visado en document_events
     try {
       await db.query(
         `
@@ -916,7 +975,7 @@ async function publicVisarDocument(req, res) {
 
     return res.json({
       ...doc,
-      file_url: doc.pdf_final_url || doc.file_path,
+      file_url: doc.pdf_final_url || doc.pdf_original_url || doc.file_path,
       documentStatus: "PENDIENTE_FIRMA",
       message: "Documento visado correctamente desde enlace público",
     });
@@ -927,16 +986,19 @@ async function publicVisarDocument(req, res) {
 }
 
 /* ================================
-   GET: Verificación por código (QR/código verificación)
+   GET: Verificación por código (QR / código verificación)
+   Devuelve siempre pdf_final_url (si existe) y pdf_url firmado.
    ================================ */
 async function verifyByCode(req, res) {
   try {
     const { codigo } = req.params;
 
     const docResult = await db.query(
-      `SELECT *
-       FROM documentos
-       WHERE codigo_verificacion = $1`,
+      `
+      SELECT *
+      FROM documentos
+      WHERE codigo_verificacion = $1
+      `,
       [codigo]
     );
 
@@ -949,18 +1011,22 @@ async function verifyByCode(req, res) {
     const documento = docResult.rows[0];
 
     const signersResult = await db.query(
-      `SELECT id, nombre, email, rut, rol, orden_firma, estado, fecha_firma, tipo_firma
-       FROM firmantes
-       WHERE documento_id = $1
-       ORDER BY orden_firma ASC`,
+      `
+      SELECT id, nombre, email, rut, rol, orden_firma, estado, fecha_firma, tipo_firma
+      FROM firmantes
+      WHERE documento_id = $1
+      ORDER BY orden_firma ASC
+      `,
       [documento.id]
     );
 
     const eventosResult = await db.query(
-      `SELECT id, tipo_evento, ip, user_agent, metadata, created_at
-       FROM eventos_firma
-       WHERE documento_id = $1
-       ORDER BY created_at ASC`,
+      `
+      SELECT id, tipo_evento, ip, user_agent, metadata, created_at
+      FROM eventos_firma
+      WHERE documento_id = $1
+      ORDER BY created_at ASC
+      `,
       [documento.id]
     );
 
