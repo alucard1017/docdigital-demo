@@ -1,319 +1,483 @@
-// frontend/src/views/ProfileView.jsx
-import { useState, useEffect } from "react";
-import axios from "axios";
+import React, { useMemo, useState } from "react";
+import "./PublicSignView.css";
+import { PublicHeader } from "../components/PublicHeader";
+import { PublicFooter } from "../components/PublicFooter";
+import { ElectronicSignatureNotice } from "../components/Legal/ElectronicSignatureNotice";
 
-export default function ProfileView() {
-  const [profile, setProfile] = useState(null);
-  const [loading, setLoading] = useState(true);
-  const [error, setError] = useState(null);
+export function PublicSignView({
+  publicSignLoading,
+  publicSignError,
+  publicSignDoc,
+  publicSignPdfUrl,
+  publicSignToken,
+  publicSignMode,
+  API_URL,
+  cargarFirmaPublica,
+}) {
+  const isVisado = publicSignMode === "visado";
 
-  const [editing, setEditing] = useState(false);
-  const [formData, setFormData] = useState({});
+  const document = publicSignDoc?.document || publicSignDoc || null;
 
-  const [changingPassword, setChangingPassword] = useState(false);
-  const [passwordData, setPasswordData] = useState({
-    currentPassword: "",
-    newPassword: "",
-    confirmPassword: "",
-  });
-  const [passwordError, setPasswordError] = useState("");
+  const signer =
+    publicSignDoc?.signer ||
+    publicSignDoc?.currentSigner ||
+    (Array.isArray(publicSignDoc?.signers) ? publicSignDoc.signers[0] : null) ||
+    null;
 
-  useEffect(() => {
-    fetchProfile();
-  }, []);
+  const pdfUrl =
+    publicSignPdfUrl ||
+    publicSignDoc?.pdfUrl ||
+    publicSignDoc?.document?.pdf_url ||
+    publicSignDoc?.document?.pdfUrl ||
+    "";
 
-  const fetchProfile = async () => {
+  const [showReject, setShowReject] = useState(false);
+  const [rejectReason, setRejectReason] = useState("");
+  const [rejecting, setRejecting] = useState(false);
+  const [rejectError, setRejectError] = useState("");
+
+  const [acceptedLegal, setAcceptedLegal] = useState(false);
+  const [legalError, setLegalError] = useState("");
+  const [signing, setSigning] = useState(false);
+
+  const alreadySignedByThisSigner =
+    !isVisado &&
+    signer &&
+    (signer.status === "FIRMADO" || signer.signer_status === "FIRMADO");
+
+  const docFullySigned =
+    !isVisado && document && document.status === "FIRMADO";
+
+  const docRejected = document && document.status === "RECHAZADO";
+
+  const canActOnDocument =
+    document &&
+    !publicSignLoading &&
+    !publicSignError &&
+    !docFullySigned &&
+    !alreadySignedByThisSigner &&
+    !docRejected;
+
+  const showSkeleton = publicSignLoading && !document && !publicSignError;
+
+  const titleText = isVisado ? "Visado de documento" : "Firma electrónica";
+
+  const statusBadge = useMemo(() => {
+    if (docRejected) {
+      return {
+        label: "Rechazado",
+        className: "public-sign-status public-sign-status--danger",
+      };
+    }
+
+    if (docFullySigned) {
+      return {
+        label: "Completado",
+        className: "public-sign-status public-sign-status--success",
+      };
+    }
+
+    if (alreadySignedByThisSigner) {
+      return {
+        label: "Ya firmado",
+        className: "public-sign-status public-sign-status--success",
+      };
+    }
+
+    return {
+      label: isVisado ? "Pendiente de visado" : "Pendiente de firma",
+      className: isVisado
+        ? "public-sign-status public-sign-status--warning"
+        : "public-sign-status public-sign-status--info",
+    };
+  }, [alreadySignedByThisSigner, docFullySigned, docRejected, isVisado]);
+
+  function getDefaultErrorMessage() {
+    return isVisado
+      ? "No se pudo registrar el visado."
+      : "No se pudo registrar la firma.";
+  }
+
+  async function handleConfirm() {
     try {
-      const token = localStorage.getItem("token");
-      const res = await axios.get("/api/users/profile", {
-        headers: { Authorization: `Bearer ${token}` },
+      if (!acceptedLegal) {
+        setLegalError(
+          isVisado
+            ? "Debes aceptar el aviso legal de visado antes de continuar."
+            : "Debes aceptar el aviso legal de firma electrónica antes de continuar."
+        );
+        return;
+      }
+
+      setLegalError("");
+      setSigning(true);
+
+      const actionPath = isVisado ? "visar" : "firmar";
+      const endpoint = `${API_URL}/public/docs/document/${publicSignToken}/${actionPath}`;
+
+      const res = await fetch(endpoint, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
       });
-      setProfile(res.data);
-      setFormData(res.data);
-      setError(null);
+
+      const data = await res.json();
+
+      if (!res.ok) {
+        throw new Error(data.message || getDefaultErrorMessage());
+      }
+
+      alert(
+        isVisado
+          ? "✅ Visado registrado correctamente."
+          : "✅ Firma registrada correctamente."
+      );
+
+      await cargarFirmaPublica(publicSignToken);
     } catch (err) {
-      setError(err.response?.data?.message || "Error cargando perfil");
+      alert(
+        "❌ " +
+          (err?.message ||
+            "Ocurrió un error al procesar la acción. Intenta nuevamente.")
+      );
     } finally {
-      setLoading(false);
+      setSigning(false);
     }
-  };
+  }
 
-  const handleChange = (e) => {
-    const { name, value } = e.target;
-    setFormData((prev) => ({ ...prev, [name]: value }));
-  };
-
-  const handleSubmit = async (e) => {
-    e.preventDefault();
+  async function handleReject() {
     try {
-      const token = localStorage.getItem("token");
-      const res = await axios.put("/api/users/profile", formData, {
-        headers: { Authorization: `Bearer ${token}` },
-      });
-      setProfile(res.data.user);
-      setEditing(false);
-      alert("✅ Perfil actualizado exitosamente");
-    } catch (err) {
-      setError(err.response?.data?.message || "Error actualizando perfil");
-    }
-  };
+      setRejectError("");
 
-  const handleChangePassword = async (e) => {
-    e.preventDefault();
-    setPasswordError("");
+      const motivo = (rejectReason || "").trim();
+      if (!motivo) {
+        setRejectError("Debes ingresar un motivo de rechazo.");
+        return;
+      }
 
-    if (passwordData.newPassword !== passwordData.confirmPassword) {
-      setPasswordError("Las contraseñas no coinciden");
-      return;
-    }
+      setRejecting(true);
 
-    if (passwordData.newPassword.length < 6) {
-      setPasswordError("La nueva contraseña debe tener al menos 6 caracteres");
-      return;
-    }
-
-    try {
-      const token = localStorage.getItem("token");
-      await axios.post(
-        "/api/users/change-password",
+      const res = await fetch(
+        `${API_URL}/public/docs/document/${publicSignToken}/rechazar`,
         {
-          currentPassword: passwordData.currentPassword,
-          newPassword: passwordData.newPassword,
-        },
-        {
-          headers: { Authorization: `Bearer ${token}` },
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ motivo }),
         }
       );
-      alert("✅ Contraseña actualizada exitosamente");
-      setChangingPassword(false);
-      setPasswordData({
-        currentPassword: "",
-        newPassword: "",
-        confirmPassword: "",
-      });
-    } catch (err) {
-      setPasswordError(
-        err.response?.data?.message || "Error cambiando contraseña"
-      );
-    }
-  };
 
-  if (loading) {
-    return <div className="p-4">Cargando perfil...</div>;
+      const data = await res.json();
+
+      if (!res.ok) {
+        throw new Error(
+          data.message || "No se pudo registrar el rechazo del documento."
+        );
+      }
+
+      alert("✅ Documento rechazado correctamente.");
+
+      await cargarFirmaPublica(publicSignToken);
+      setShowReject(false);
+      setRejectReason("");
+      setRejectError("");
+    } catch (err) {
+      setRejectError(
+        err?.message ||
+          "Error al registrar el rechazo. Intenta nuevamente."
+      );
+    } finally {
+      setRejecting(false);
+    }
   }
 
   return (
-    <div className="p-6 bg-white rounded-lg shadow max-w-2xl mx-auto">
-      <h1 className="text-2xl font-bold mb-6">Mi Perfil</h1>
+    <div className="login-bg public-sign-page">
+      <div className="public-sign-shell">
+        <PublicHeader />
 
-      {error && (
-        <div className="bg-red-100 border border-red-400 text-red-700 px-4 py-3 rounded mb-4">
-          {error}
+        <div className="public-sign-heading">
+          <div>
+            <div className="public-sign-eyebrow">VeriFirma · Portal público</div>
+            <h1 className="public-sign-title">{titleText}</h1>
+          </div>
+
+          <div className={statusBadge.className}>{statusBadge.label}</div>
         </div>
-      )}
 
-      {profile && !editing && (
-        <div className="bg-gray-50 p-6 rounded mb-6">
-          <div className="grid grid-cols-2 gap-4 mb-4">
-            <div>
-              <label className="text-sm font-semibold text-gray-600">
-                Nombre
-              </label>
-              <p className="text-lg font-bold text-gray-800">
-                {profile.name}
-              </p>
-            </div>
-
-            <div>
-              <label className="text-sm font-semibold text-gray-600">
-                Email
-              </label>
-              <p className="text-lg font-bold text-gray-800">
-                {profile.email}
-              </p>
-              {profile.email_verified ? (
-                <span className="text-xs text-green-600">✓ Verificado</span>
-              ) : (
-                <span className="text-xs text-yellow-600">
-                  ⚠ No verificado
-                </span>
-              )}
-            </div>
-
-            <div>
-              <label className="text-sm font-semibold text-gray-600">
-                RUN
-              </label>
-              <p className="text-lg font-bold text-gray-800">
-                {profile.run}
-              </p>
-            </div>
-
-            <div>
-              <label className="text-sm font-semibold text-gray-600">
-                Rol
-              </label>
-              <p className="text-lg font-bold text-gray-800">
-                {profile.role}
-              </p>
-            </div>
-          </div>
-
-          <div className="flex gap-4">
-            <button
-              onClick={() => setEditing(true)}
-              className="bg-blue-600 text-white px-4 py-2 rounded hover:bg-blue-700"
-            >
-              Editar Perfil
-            </button>
-            <button
-              onClick={() => setChangingPassword(true)}
-              className="bg-gray-600 text-white px-4 py-2 rounded hover:bg-gray-700"
-            >
-              Cambiar Contraseña
-            </button>
-          </div>
-        </div>
-      )}
-
-      {editing && (
-        <form onSubmit={handleSubmit} className="bg-gray-50 p-6 rounded mb-6">
-          <div className="mb-4">
-            <label className="block text-sm font-semibold text-gray-700 mb-2">
-              Nombre
-            </label>
-            <input
-              type="text"
-              name="name"
-              value={formData.name || ""}
-              onChange={handleChange}
-              className="w-full px-3 py-2 border border-gray-300 rounded"
-            />
-          </div>
-
-          <div className="mb-4">
-            <label className="block text-sm font-semibold text-gray-700 mb-2">
-              Email
-            </label>
-            <input
-              type="email"
-              name="email"
-              value={formData.email || ""}
-              onChange={handleChange}
-              className="w-full px-3 py-2 border border-gray-300 rounded"
-            />
-          </div>
-
-          <div className="flex gap-2">
-            <button
-              type="submit"
-              className="bg-green-600 text-white px-4 py-2 rounded hover:bg-green-700"
-            >
-              Guardar
-            </button>
-            <button
-              type="button"
-              onClick={() => {
-                setEditing(false);
-                setFormData(profile);
-              }}
-              className="bg-gray-600 text-white px-4 py-2 rounded hover:bg-gray-700"
-            >
-              Cancelar
-            </button>
-          </div>
-        </form>
-      )}
-
-      {changingPassword && (
-        <form
-          onSubmit={handleChangePassword}
-          className="bg-gray-50 p-6 rounded mt-6"
+        <div
+          className={`public-sign-intro ${
+            isVisado ? "public-sign-intro--warning" : "public-sign-intro--info"
+          }`}
         >
-          <h3 className="text-lg font-bold mb-4">Cambiar Contraseña</h3>
+          <div
+            className={`public-sign-intro__title ${
+              isVisado
+                ? "public-sign-intro__title--warning"
+                : "public-sign-intro__title--info"
+            }`}
+          >
+            {isVisado
+              ? "Estás revisando y visado este documento"
+              : "Estás firmando electrónicamente este documento"}
+          </div>
 
-          {passwordError && (
-            <div className="bg-red-100 border border-red-400 text-red-700 px-4 py-3 rounded mb-4">
-              {passwordError}
+          <div className="public-sign-intro__text">
+            {isVisado
+              ? "Tu visado deja constancia de que revisaste el contenido y autorizas la continuidad del flujo. No reemplaza la firma final del representante."
+              : "Esta acción representa la aceptación definitiva del contenido del documento mediante firma electrónica simple, con trazabilidad del proceso."}
+          </div>
+        </div>
+
+        {showSkeleton && (
+          <div className="public-sign-message-card">
+            <div className="spinner public-sign-spinner" />
+            <div className="public-sign-message-card__title">
+              Cargando documento…
             </div>
-          )}
-
-          <div className="mb-4">
-            <label className="block text-sm font-semibold text-gray-700 mb-2">
-              Contraseña Actual
-            </label>
-            <input
-              type="password"
-              value={passwordData.currentPassword}
-              onChange={(e) =>
-                setPasswordData((prev) => ({
-                  ...prev,
-                  currentPassword: e.target.value,
-                }))
-              }
-              className="w-full px-3 py-2 border border-gray-300 rounded"
-            />
+            <div className="public-sign-message-card__text">
+              Estamos preparando la vista pública de firma.
+            </div>
           </div>
+        )}
 
-          <div className="mb-4">
-            <label className="block text-sm font-semibold text-gray-700 mb-2">
-              Nueva Contraseña
-            </label>
-            <input
-              type="password"
-              value={passwordData.newPassword}
-              onChange={(e) =>
-                setPasswordData((prev) => ({
-                  ...prev,
-                  newPassword: e.target.value,
-                }))
-              }
-              className="w-full px-3 py-2 border border-gray-300 rounded"
-            />
-          </div>
-
-          <div className="mb-6">
-            <label className="block text-sm font-semibold text-gray-700 mb-2">
-              Confirmar Nueva Contraseña
-            </label>
-            <input
-              type="password"
-              value={passwordData.confirmPassword}
-              onChange={(e) =>
-                setPasswordData((prev) => ({
-                  ...prev,
-                  confirmPassword: e.target.value,
-                }))
-              }
-              className="w-full px-3 py-2 border border-gray-300 rounded"
-            />
-          </div>
-
-          <div className="flex gap-2">
-            <button
-              type="submit"
-              className="bg-green-600 text-white px-4 py-2 rounded hover:bg-green-700"
-            >
-              Guardar contraseña
-            </button>
+        {publicSignError && (
+          <div className="public-sign-message-card public-sign-message-card--error">
+            <div className="public-sign-message-card__title">
+              No se pudo cargar el documento
+            </div>
+            <div className="public-sign-message-card__text">
+              {publicSignError}
+            </div>
             <button
               type="button"
-              onClick={() => {
-                setChangingPassword(false);
-                setPasswordData({
-                  currentPassword: "",
-                  newPassword: "",
-                  confirmPassword: "",
-                });
-                setPasswordError("");
-              }}
-              className="bg-gray-600 text-white px-4 py-2 rounded hover:bg-gray-700"
+              className="public-sign-button public-sign-button--secondary public-sign-button--auto"
+              onClick={() => cargarFirmaPublica(publicSignToken)}
+              disabled={publicSignLoading}
             >
-              Cancelar
+              Reintentar carga
             </button>
           </div>
-        </form>
-      )}
+        )}
+
+        {document && !publicSignLoading && !publicSignError && (
+          <div className="public-sign-layout">
+            <section className="public-sign-document-panel">
+              <div className="public-sign-document-panel__header">
+                <div>
+                  <div className="public-sign-section-label">Documento</div>
+                  <div className="public-sign-document-title">
+                    {document.title || "Documento"}
+                  </div>
+                </div>
+
+                {pdfUrl && (
+                  <a
+                    href={pdfUrl}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="public-sign-open-pdf"
+                  >
+                    Abrir PDF en nueva pestaña
+                  </a>
+                )}
+              </div>
+
+              <div className="public-sign-pdf-stage">
+                {pdfUrl ? (
+                  <iframe
+                    title="Vista previa del documento"
+                    src={`${pdfUrl}#toolbar=1&navpanes=0&scrollbar=1`}
+                    className="public-sign-pdf-frame"
+                  />
+                ) : (
+                  <div className="public-sign-pdf-empty">
+                    No se pudo mostrar la vista previa del PDF.
+                  </div>
+                )}
+              </div>
+            </section>
+
+            <aside className="public-sign-sidebar">
+              <div className="public-sign-summary">
+                <div className="public-sign-section-label">Resumen</div>
+                <div className="public-sign-summary__title">
+                  {document.title}
+                </div>
+                <div className="public-sign-summary__text">
+                  Revisa el documento completo antes de continuar. El detalle
+                  legal y las acciones quedan en este panel para mantener todo
+                  en una sola experiencia.
+                </div>
+              </div>
+
+              <div className="public-sign-meta-grid">
+                <div className="public-sign-meta-card">
+                  <div className="public-sign-meta-card__label">Empresa</div>
+                  <div className="public-sign-meta-card__value">
+                    {document.destinatario_nombre || "No informado"}
+                  </div>
+                  <div className="public-sign-meta-card__subvalue">
+                    RUT: {document.empresa_rut || "No informado"}
+                  </div>
+                </div>
+
+                {!isVisado && signer && (
+                  <div className="public-sign-meta-card">
+                    <div className="public-sign-meta-card__label">
+                      Firmando como
+                    </div>
+                    <div className="public-sign-meta-card__value">
+                      {signer?.name ||
+                        signer?.nombre ||
+                        signer?.signer_name ||
+                        "Firmante"}
+                    </div>
+                    <div className="public-sign-meta-card__subvalue">
+                      {signer?.email ||
+                        signer?.signer_email ||
+                        "Sin correo disponible"}
+                    </div>
+                  </div>
+                )}
+              </div>
+
+              {canActOnDocument && (
+                <>
+                  <ElectronicSignatureNotice
+                    mode={isVisado ? "visado" : "firma"}
+                    checked={acceptedLegal}
+                    onChange={setAcceptedLegal}
+                  />
+
+                  {legalError && (
+                    <div className="public-sign-inline-error">
+                      {legalError}
+                    </div>
+                  )}
+                </>
+              )}
+
+              {docRejected && (
+                <div className="public-sign-state-box public-sign-state-box--danger">
+                  <div className="public-sign-state-box__title">
+                    Este documento fue rechazado
+                  </div>
+                  <div className="public-sign-state-box__text">
+                    Ya no es posible firmarlo ni cambiar su estado desde este
+                    enlace.
+                  </div>
+                </div>
+              )}
+
+              {docFullySigned && !docRejected && (
+                <div className="public-sign-state-box public-sign-state-box--success">
+                  <div className="public-sign-state-box__title">
+                    Documento firmado completamente
+                  </div>
+                  <div className="public-sign-state-box__text">
+                    Todos los participantes completaron el proceso.
+                  </div>
+                </div>
+              )}
+
+              {alreadySignedByThisSigner && !docRejected && !docFullySigned && (
+                <div className="public-sign-state-box public-sign-state-box--success">
+                  <div className="public-sign-state-box__title">
+                    Ya registraste tu firma en este documento
+                  </div>
+                </div>
+              )}
+
+              {canActOnDocument && !showReject && (
+                <div className="public-sign-actions">
+                  <button
+                    className={`public-sign-button public-sign-button--primary ${
+                      isVisado
+                        ? "public-sign-button--warning"
+                        : "public-sign-button--info"
+                    }`}
+                    onClick={handleConfirm}
+                    disabled={signing || !acceptedLegal}
+                  >
+                    {signing
+                      ? "Procesando..."
+                      : isVisado
+                      ? "Visar documento"
+                      : "Firmar documento"}
+                  </button>
+
+                  {!isVisado && (
+                    <button
+                      type="button"
+                      className="public-sign-button public-sign-button--danger"
+                      onClick={() => {
+                        setShowReject(true);
+                        setRejectError("");
+                      }}
+                    >
+                      Rechazar documento
+                    </button>
+                  )}
+                </div>
+              )}
+
+              {showReject && (
+                <div className="public-sign-reject-card">
+                  <h2 className="public-sign-reject-card__title">
+                    Rechazar documento
+                  </h2>
+
+                  <p className="public-sign-reject-card__text">
+                    Indica el motivo del rechazo. Esta observación quedará
+                    registrada y será informada al emisor.
+                  </p>
+
+                  <textarea
+                    rows={5}
+                    value={rejectReason}
+                    onChange={(e) => setRejectReason(e.target.value)}
+                    className="public-sign-textarea"
+                    placeholder="Escribe aquí el motivo del rechazo..."
+                  />
+
+                  {rejectError && (
+                    <div className="public-sign-inline-error">
+                      {rejectError}
+                    </div>
+                  )}
+
+                  <div className="public-sign-reject-actions">
+                    <button
+                      type="button"
+                      className="public-sign-button public-sign-button--secondary"
+                      onClick={() => {
+                        setShowReject(false);
+                        setRejectReason("");
+                        setRejectError("");
+                      }}
+                      disabled={rejecting}
+                    >
+                      Cancelar
+                    </button>
+
+                      <button
+                      type="button"
+                      className="public-sign-button public-sign-button--danger-solid"
+                      onClick={handleReject}
+                      disabled={rejecting}
+                    >
+                      {rejecting ? "Enviando..." : "Confirmar rechazo"}
+                    </button>
+                  </div>
+                </div>
+              )}
+            </aside>
+          </div>
+        )}
+
+        <div className="public-sign-footer-wrap">
+          <PublicFooter />
+        </div>
+      </div>
     </div>
   );
 }

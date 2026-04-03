@@ -458,15 +458,16 @@
     padding: 14px 14px;
   }
 
-  .public-sign-pdf-stage {
-    padding: 10px;
-  }
+.public-sign-pdf-stage {
+  padding: 12px;
+  justify-content: center;
+}
 
-  .public-sign-pdf-frame {
-    height: 56vh;
-    min-height: 420px;
-    border-radius: 14px;
-  }
+.public-sign-pdf-frame {
+  height: 60vh;
+  min-height: 420px;
+  border-radius: 14px;
+}
 
   .public-sign-sidebar {
     padding: 16px;

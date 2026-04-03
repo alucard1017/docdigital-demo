@@ -98,51 +98,54 @@ export function PublicSignView({
       : "No se pudo registrar la firma.";
   }
 
-  async function handleConfirm() {
-    try {
-      if (!acceptedLegal) {
-        setLegalError(
-          isVisado
-            ? "Debes aceptar el aviso legal de visado antes de continuar."
-            : "Debes aceptar el aviso legal de firma electrónica antes de continuar."
-        );
-        return;
-      }
-
-      setLegalError("");
-      setSigning(true);
-
-      const actionPath = isVisado ? "visar" : "firmar";
-      const endpoint = `${API_URL}/public/docs/document/${publicSignToken}/${actionPath}`;
-
-      const res = await fetch(endpoint, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-      });
-
-      const data = await res.json();
-
-      if (!res.ok) {
-        throw new Error(data.message || getDefaultErrorMessage());
-      }
-
-      alert(
+async function handleConfirm() {
+  try {
+    if (!acceptedLegal) {
+      setLegalError(
         isVisado
-          ? "✅ Visado registrado correctamente."
-          : "✅ Firma registrada correctamente."
+          ? "Debes aceptar el aviso legal de visado antes de continuar."
+          : "Debes aceptar el aviso legal de firma electrónica antes de continuar."
       );
-
-      await cargarFirmaPublica(publicSignToken);
-    } catch (err) {
-      alert(
-        "❌ " +
-          (err?.message ||
-            "Ocurrió un error al procesar la acción. Intenta nuevamente.")
-      );
-    } finally {
-      setSigning(false);
+      return;
     }
+
+    setLegalError("");
+    setSigning(true);
+
+    const actionPath = isVisado ? "visar" : "firmar";
+    // Rutas reales del backend:
+    // POST /api/public/docs/:token/firmar
+    // POST /api/public/docs/:token/visar
+    const endpoint = `${API_URL}/public/docs/${publicSignToken}/${actionPath}`;
+
+    const res = await fetch(endpoint, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+    });
+
+    const data = await res.json();
+
+    if (!res.ok) {
+      throw new Error(data.message || getDefaultErrorMessage());
+    }
+
+    alert(
+      isVisado
+        ? "✅ Visado registrado correctamente."
+        : "✅ Firma registrada correctamente."
+    );
+
+    await cargarFirmaPublica(publicSignToken);
+  } catch (err) {
+    alert(
+      "❌ " +
+        (err?.message ||
+          "Ocurrió un error al procesar la acción. Intenta nuevamente.")
+    );
+  } finally {
+    setSigning(false);
   }
+}
 
   async function handleReject() {
     try {
