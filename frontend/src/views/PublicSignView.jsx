@@ -46,19 +46,24 @@ export function PublicSignView({
     (signer.status === "FIRMADO" || signer.signer_status === "FIRMADO");
 
   const docFullySigned =
-    !isVisado && document && document.status === "FIRMADO";
+    !isVisado &&
+    document &&
+    document.status === "FIRMADO";
 
-  const docRejected = document && document.status === "RECHAZADO";
+  const docRejected =
+    document &&
+    document.status === "RECHAZADO";
 
   const canActOnDocument =
-    document &&
+    !!document &&
     !publicSignLoading &&
     !publicSignError &&
     !docFullySigned &&
     !alreadySignedByThisSigner &&
     !docRejected;
 
-  const showSkeleton = publicSignLoading && !document && !publicSignError;
+  const showSkeleton =
+    publicSignLoading && !document && !publicSignError;
 
   const titleText = isVisado ? "Visado de documento" : "Firma electrónica";
 
@@ -98,60 +103,67 @@ export function PublicSignView({
       : "No se pudo registrar la firma.";
   }
 
-async function handleConfirm() {
-  try {
-    if (!acceptedLegal) {
-      setLegalError(
+  async function handleConfirm() {
+    if (signing || !canActOnDocument) return;
+
+    try {
+      if (!acceptedLegal) {
+        setLegalError(
+          isVisado
+            ? "Debes aceptar el aviso legal de visado antes de continuar."
+            : "Debes aceptar el aviso legal de firma electrónica antes de continuar."
+        );
+        return;
+      }
+
+      setLegalError("");
+      setSigning(true);
+
+      const actionPath = isVisado ? "visar" : "firmar";
+      const endpoint = `${API_URL}/public/docs/${publicSignToken}/${actionPath}`;
+
+      const res = await fetch(endpoint, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+      });
+
+      let data = {};
+      try {
+        data = await res.json();
+      } catch {
+        data = {};
+      }
+
+      if (!res.ok) {
+        throw new Error(data?.message || getDefaultErrorMessage());
+      }
+
+      alert(
         isVisado
-          ? "Debes aceptar el aviso legal de visado antes de continuar."
-          : "Debes aceptar el aviso legal de firma electrónica antes de continuar."
+          ? "✅ Visado registrado correctamente."
+          : "✅ Firma registrada correctamente."
       );
-      return;
+
+      await cargarFirmaPublica(publicSignToken);
+    } catch (err) {
+      alert(
+        "❌ " +
+          (err?.message ||
+            "Ocurrió un error al procesar la acción. Intenta nuevamente.")
+      );
+    } finally {
+      setSigning(false);
     }
-
-    setLegalError("");
-    setSigning(true);
-
-    const actionPath = isVisado ? "visar" : "firmar";
-    // Rutas reales del backend:
-    // POST /api/public/docs/:token/firmar
-    // POST /api/public/docs/:token/visar
-    const endpoint = `${API_URL}/public/docs/${publicSignToken}/${actionPath}`;
-
-    const res = await fetch(endpoint, {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-    });
-
-    const data = await res.json();
-
-    if (!res.ok) {
-      throw new Error(data.message || getDefaultErrorMessage());
-    }
-
-    alert(
-      isVisado
-        ? "✅ Visado registrado correctamente."
-        : "✅ Firma registrada correctamente."
-    );
-
-    await cargarFirmaPublica(publicSignToken);
-  } catch (err) {
-    alert(
-      "❌ " +
-        (err?.message ||
-          "Ocurrió un error al procesar la acción. Intenta nuevamente.")
-    );
-  } finally {
-    setSigning(false);
   }
-}
 
   async function handleReject() {
+    if (rejecting || !canActOnDocument) return;
+
     try {
       setRejectError("");
 
       const motivo = (rejectReason || "").trim();
+
       if (!motivo) {
         setRejectError("Debes ingresar un motivo de rechazo.");
         return;
@@ -160,7 +172,7 @@ async function handleConfirm() {
       setRejecting(true);
 
       const res = await fetch(
-        `${API_URL}/public/docs/document/${publicSignToken}/rechazar`,
+        `${API_URL}/public/docs/${publicSignToken}/rechazar`,
         {
           method: "POST",
           headers: { "Content-Type": "application/json" },
@@ -168,11 +180,16 @@ async function handleConfirm() {
         }
       );
 
-      const data = await res.json();
+      let data = {};
+      try {
+        data = await res.json();
+      } catch {
+        data = {};
+      }
 
       if (!res.ok) {
         throw new Error(
-          data.message || "No se pudo registrar el rechazo del documento."
+          data?.message || "No se pudo registrar el rechazo del documento."
         );
       }
 
@@ -190,6 +207,12 @@ async function handleConfirm() {
     } finally {
       setRejecting(false);
     }
+  }
+
+  function handleToggleReject() {
+    setShowReject((prev) => !prev);
+    setRejectReason("");
+    setRejectError("");
   }
 
   return (
@@ -219,7 +242,7 @@ async function handleConfirm() {
             }`}
           >
             {isVisado
-              ? "Estás revisando y visado este documento"
+              ? "Estás revisando y visando este documento"
               : "Estás firmando electrónicamente este documento"}
           </div>
 
@@ -237,7 +260,7 @@ async function handleConfirm() {
               Cargando documento…
             </div>
             <div className="public-sign-message-card__text">
-              Estamos preparando la vista pública de firma.
+              Estamos preparando la vista pública del documento.
             </div>
           </div>
         )}
@@ -247,9 +270,11 @@ async function handleConfirm() {
             <div className="public-sign-message-card__title">
               No se pudo cargar el documento
             </div>
+
             <div className="public-sign-message-card__text">
               {publicSignError}
             </div>
+
             <button
               type="button"
               className="public-sign-button public-sign-button--secondary public-sign-button--auto"
@@ -262,7 +287,7 @@ async function handleConfirm() {
         )}
 
         {document && !publicSignLoading && !publicSignError && (
-          <div className="public-sign-mobile-stack public-sign-layout">
+          <div className="public-sign-layout">
             <section className="public-sign-document-panel">
               <div className="public-sign-document-panel__header">
                 <div>
@@ -288,7 +313,7 @@ async function handleConfirm() {
                 {pdfUrl ? (
                   <iframe
                     title="Vista previa del documento"
-                    src={`${pdfUrl}#toolbar=1&navpanes=0&scrollbar=1`}
+                    src={`${pdfUrl}#toolbar=1&navpanes=0&scrollbar=1&view=FitH&zoom=page-width`}
                     className="public-sign-pdf-frame"
                   />
                 ) : (
@@ -303,12 +328,12 @@ async function handleConfirm() {
               <div className="public-sign-summary">
                 <div className="public-sign-section-label">Resumen</div>
                 <div className="public-sign-summary__title">
-                  {document.title}
+                  {document.title || "Documento"}
                 </div>
                 <div className="public-sign-summary__text">
                   Revisa el documento completo antes de continuar. El detalle
-                  legal y las acciones quedan en este panel para mantener todo
-                  en una sola experiencia.
+                  legal y las acciones se mantienen en este panel para ofrecer
+                  una experiencia clara y ordenada.
                 </div>
               </div>
 
@@ -348,7 +373,12 @@ async function handleConfirm() {
                   <ElectronicSignatureNotice
                     mode={isVisado ? "visado" : "firma"}
                     checked={acceptedLegal}
-                    onChange={setAcceptedLegal}
+                    onChange={(value) => {
+                      setAcceptedLegal(value);
+                      if (value) {
+                        setLegalError("");
+                      }
+                    }}
                   />
 
                   {legalError && (
@@ -387,19 +417,24 @@ async function handleConfirm() {
                   <div className="public-sign-state-box__title">
                     Ya registraste tu firma en este documento
                   </div>
+                  <div className="public-sign-state-box__text">
+                    Este enlace ya fue utilizado correctamente para tu
+                    participación.
+                  </div>
                 </div>
               )}
 
               {canActOnDocument && !showReject && (
                 <div className="public-sign-actions">
                   <button
+                    type="button"
                     className={`public-sign-button public-sign-button--primary ${
                       isVisado
                         ? "public-sign-button--warning"
                         : "public-sign-button--info"
                     }`}
                     onClick={handleConfirm}
-                    disabled={signing || !acceptedLegal}
+                    disabled={signing || rejecting || !acceptedLegal}
                   >
                     {signing
                       ? "Procesando..."
@@ -412,10 +447,8 @@ async function handleConfirm() {
                     <button
                       type="button"
                       className="public-sign-button public-sign-button--danger"
-                      onClick={() => {
-                        setShowReject(true);
-                        setRejectError("");
-                      }}
+                      onClick={handleToggleReject}
+                      disabled={signing || rejecting}
                     >
                       Rechazar documento
                     </button>
@@ -440,6 +473,7 @@ async function handleConfirm() {
                     onChange={(e) => setRejectReason(e.target.value)}
                     className="public-sign-textarea"
                     placeholder="Escribe aquí el motivo del rechazo..."
+                    disabled={rejecting}
                   />
 
                   {rejectError && (
@@ -452,11 +486,7 @@ async function handleConfirm() {
                     <button
                       type="button"
                       className="public-sign-button public-sign-button--secondary"
-                      onClick={() => {
-                        setShowReject(false);
-                        setRejectReason("");
-                        setRejectError("");
-                      }}
+                      onClick={handleToggleReject}
                       disabled={rejecting}
                     >
                       Cancelar
@@ -466,7 +496,7 @@ async function handleConfirm() {
                       type="button"
                       className="public-sign-button public-sign-button--danger-solid"
                       onClick={handleReject}
-                      disabled={rejecting}
+                      disabled={rejecting || signing}
                     >
                       {rejecting ? "Enviando..." : "Confirmar rechazo"}
                     </button>

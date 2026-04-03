@@ -429,14 +429,16 @@
   }
 
   .public-sign-pdf-frame {
-    height: 62vh;
-    min-height: 560px;
+    height: 60vh;
+    min-height: 420px;
+    border-radius: 14px;
   }
 }
 
 @media (max-width: 768px) {
-  .public-sign-page {
-    padding: 16px 12px 22px;
+  .public-sign-pdf-stage {
+    padding: 12px;
+    justify-content: center;
   }
 
   .public-sign-heading {
@@ -459,19 +461,34 @@
   }
 
 .public-sign-pdf-stage {
-  padding: 12px;
+  padding: 24px 24px 28px;
+  background:
+    linear-gradient(180deg, rgba(15, 23, 42, 0.96) 0%, rgba(2, 6, 23, 0.96) 100%);
+  display: flex;
   justify-content: center;
+  align-items: flex-start;
 }
 
 .public-sign-pdf-frame {
-  height: 60vh;
-  min-height: 420px;
-  border-radius: 14px;
+  width: 100%;
+  max-width: 980px;
+  height: 72vh;
+  min-height: 640px;
+  border: 1px solid rgba(148, 163, 184, 0.12);
+  border-radius: 18px;
+  background: #ffffff;
 }
 
-  .public-sign-sidebar {
-    padding: 16px;
-  }
+.public-sign-sidebar {
+  min-width: 0;
+  position: sticky;
+  top: 32px;
+  border-radius: 24px;
+  border: 1px solid rgba(148, 163, 184, 0.16);
+  background: rgba(2, 6, 23, 0.88);
+  box-shadow: 0 20px 50px rgba(2, 6, 23, 0.4);
+  padding: 22px;
+}
 
   .public-sign-reject-actions {
     grid-template-columns: 1fr;

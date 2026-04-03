@@ -1,4 +1,3 @@
-// backend/routes/companies.js
 const express = require("express");
 const db = require("../db");
 const { requireAuth, requireRole } = require("./auth");
@@ -23,6 +22,34 @@ router.get("/", requireAuth, requireRole("ADMIN"), async (req, res) => {
     return res
       .status(500)
       .json({ message: "Error obteniendo listado de empresas" });
+  }
+});
+
+/**
+ * GET /api/companies/:id
+ * Obtener empresa por id (solo admins)
+ */
+router.get("/:id", requireAuth, requireRole("ADMIN"), async (req, res) => {
+  try {
+    const { id } = req.params;
+
+    const result = await db.query(
+      `SELECT id, name
+       FROM public.companies
+       WHERE id = $1`,
+      [id]
+    );
+
+    if (result.rowCount === 0) {
+      return res.status(404).json({ message: "Empresa no encontrada" });
+    }
+
+    return res.json(result.rows[0]);
+  } catch (err) {
+    console.error("❌ Error en GET /api/companies/:id:", err);
+    return res
+      .status(500)
+      .json({ message: "Error obteniendo empresa" });
   }
 });
 

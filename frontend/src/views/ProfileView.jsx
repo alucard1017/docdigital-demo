@@ -1,483 +1,829 @@
-import React, { useMemo, useState } from "react";
-import "./PublicSignView.css";
-import { PublicHeader } from "../components/PublicHeader";
-import { PublicFooter } from "../components/PublicFooter";
-import { ElectronicSignatureNotice } from "../components/Legal/ElectronicSignatureNotice";
+// frontend/src/views/ProfileView.jsx
+import { useEffect, useMemo, useState } from "react";
+import api from "../api/client";
 
-export function PublicSignView({
-  publicSignLoading,
-  publicSignError,
-  publicSignDoc,
-  publicSignPdfUrl,
-  publicSignToken,
-  publicSignMode,
-  API_URL,
-  cargarFirmaPublica,
-}) {
-  const isVisado = publicSignMode === "visado";
+const initialProfileState = {
+  id: null,
+  run: "",
+  email: "",
+  name: "",
+  role: "",
+  company_id: null,
+  email_verified: false,
+  email_verified_at: null,
+  created_at: null,
+};
 
-  const document = publicSignDoc?.document || publicSignDoc || null;
+const initialProfileForm = {
+  name: "",
+  email: "",
+};
 
-  const signer =
-    publicSignDoc?.signer ||
-    publicSignDoc?.currentSigner ||
-    (Array.isArray(publicSignDoc?.signers) ? publicSignDoc.signers[0] : null) ||
-    null;
+const initialPasswordForm = {
+  currentPassword: "",
+  newPassword: "",
+  confirmPassword: "",
+};
 
-  const pdfUrl =
-    publicSignPdfUrl ||
-    publicSignDoc?.pdfUrl ||
-    publicSignDoc?.document?.pdf_url ||
-    publicSignDoc?.document?.pdfUrl ||
-    "";
+export default function ProfileView() {
+  const [profile, setProfile] = useState(initialProfileState);
+  const [companyName, setCompanyName] = useState("");
+  const [profileForm, setProfileForm] = useState(initialProfileForm);
+  const [passwordForm, setPasswordForm] = useState(initialPasswordForm);
 
-  const [showReject, setShowReject] = useState(false);
-  const [rejectReason, setRejectReason] = useState("");
-  const [rejecting, setRejecting] = useState(false);
-  const [rejectError, setRejectError] = useState("");
+  const [loadingProfile, setLoadingProfile] = useState(true);
+  const [loadingCompany, setLoadingCompany] = useState(false);
+  const [savingProfile, setSavingProfile] = useState(false);
+  const [changingPassword, setChangingPassword] = useState(false);
 
-  const [acceptedLegal, setAcceptedLegal] = useState(false);
-  const [legalError, setLegalError] = useState("");
-  const [signing, setSigning] = useState(false);
+  const [profileError, setProfileError] = useState("");
+  const [profileSuccess, setProfileSuccess] = useState("");
+  const [passwordError, setPasswordError] = useState("");
+  const [passwordSuccess, setPasswordSuccess] = useState("");
 
-  const alreadySignedByThisSigner =
-    !isVisado &&
-    signer &&
-    (signer.status === "FIRMADO" || signer.signer_status === "FIRMADO");
+  const [profileFieldErrors, setProfileFieldErrors] = useState({});
+  const [passwordFieldErrors, setPasswordFieldErrors] = useState({});
 
-  const docFullySigned =
-    !isVisado && document && document.status === "FIRMADO";
+  const [showPasswordForm, setShowPasswordForm] = useState(false);
+  const [showCurrentPassword, setShowCurrentPassword] = useState(false);
+  const [showNewPassword, setShowNewPassword] = useState(false);
+  const [showConfirmPassword, setShowConfirmPassword] = useState(false);
 
-  const docRejected = document && document.status === "RECHAZADO";
+  useEffect(() => {
+    const controller = new AbortController();
 
-  const canActOnDocument =
-    document &&
-    !publicSignLoading &&
-    !publicSignError &&
-    !docFullySigned &&
-    !alreadySignedByThisSigner &&
-    !docRejected;
+    async function loadProfile() {
+      try {
+        setLoadingProfile(true);
+        setProfileError("");
+        setProfileSuccess("");
 
-  const showSkeleton = publicSignLoading && !document && !publicSignError;
+        const res = await api.get("/users/profile", {
+          signal: controller.signal,
+        });
 
-  const titleText = isVisado ? "Visado de documento" : "Firma electrónica";
+        const data = res?.data || {};
+        const nextProfile = {
+          id: data.id ?? null,
+          run: data.run ?? "",
+          email: data.email ?? "",
+          name: data.name ?? "",
+          role: data.role ?? "",
+          company_id: data.company_id ?? null,
+          email_verified: data.email_verified ?? false,
+          email_verified_at: data.email_verified_at ?? null,
+          created_at: data.created_at ?? null,
+        };
 
-  const statusBadge = useMemo(() => {
-    if (docRejected) {
-      return {
-        label: "Rechazado",
-        className: "public-sign-status public-sign-status--danger",
-      };
+        setProfile(nextProfile);
+        setProfileForm({
+          name: nextProfile.name || "",
+          email: nextProfile.email || "",
+        });
+      } catch (err) {
+        if (err?.name === "CanceledError" || err?.code === "ERR_CANCELED") return;
+
+        const msg =
+          err?.response?.data?.message ||
+          err?.message ||
+          "No se pudo cargar tu perfil.";
+        setProfileError(msg);
+      } finally {
+        setLoadingProfile(false);
+      }
     }
 
-    if (docFullySigned) {
-      return {
-        label: "Completado",
-        className: "public-sign-status public-sign-status--success",
-      };
+    loadProfile();
+
+    return () => controller.abort();
+  }, []);
+
+  useEffect(() => {
+    if (!profile.company_id) {
+      setCompanyName("");
+      setLoadingCompany(false);
+      return;
     }
 
-    if (alreadySignedByThisSigner) {
-      return {
-        label: "Ya firmado",
-        className: "public-sign-status public-sign-status--success",
-      };
+    const controller = new AbortController();
+
+    async function loadCompanyName() {
+      try {
+        setLoadingCompany(true);
+
+        const res = await api.get(`/companies/${profile.company_id}`, {
+          signal: controller.signal,
+        });
+
+        setCompanyName(res?.data?.name || `ID ${profile.company_id}`);
+      } catch (err) {
+        if (err?.name === "CanceledError" || err?.code === "ERR_CANCELED") return;
+        setCompanyName(`ID ${profile.company_id}`);
+      } finally {
+        setLoadingCompany(false);
+      }
     }
 
-    return {
-      label: isVisado ? "Pendiente de visado" : "Pendiente de firma",
-      className: isVisado
-        ? "public-sign-status public-sign-status--warning"
-        : "public-sign-status public-sign-status--info",
-    };
-  }, [alreadySignedByThisSigner, docFullySigned, docRejected, isVisado]);
+    loadCompanyName();
 
-  function getDefaultErrorMessage() {
-    return isVisado
-      ? "No se pudo registrar el visado."
-      : "No se pudo registrar la firma.";
+    return () => controller.abort();
+  }, [profile.company_id]);
+
+  const emailStatus = useMemo(() => {
+    return profile.email_verified
+      ? { label: "Correo verificado", color: "#15803d", bg: "#f0fdf4", border: "#bbf7d0" }
+      : { label: "Correo no verificado", color: "#b91c1c", bg: "#fef2f2", border: "#fecaca" };
+  }, [profile.email_verified]);
+
+  const passwordStrength = useMemo(() => {
+    const value = passwordForm.newPassword || "";
+    let score = 0;
+    if (value.length >= 6) score += 1;
+    if (value.length >= 8) score += 1;
+    if (/[A-Z]/.test(value) && /[a-z]/.test(value)) score += 1;
+    if (/\d/.test(value)) score += 1;
+    if (/[^A-Za-z0-9]/.test(value)) score += 1;
+
+    if (!value) return { label: "Sin definir", color: "#94a3b8", width: "0%" };
+    if (score <= 1) return { label: "Débil", color: "#dc2626", width: "25%" };
+    if (score <= 3) return { label: "Media", color: "#d97706", width: "60%" };
+    return { label: "Fuerte", color: "#16a34a", width: "100%" };
+  }, [passwordForm.newPassword]);
+
+  function validateEmail(email) {
+    return /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email);
   }
 
-  async function handleConfirm() {
+  function validateProfileForm() {
+    const errors = {};
+    const name = profileForm.name.trim();
+    const email = profileForm.email.trim().toLowerCase();
+
+    if (!name) errors.name = "El nombre no puede estar vacío.";
+    if (!email) errors.email = "El correo electrónico es obligatorio.";
+    else if (!validateEmail(email)) errors.email = "Ingresa un correo válido.";
+
+    return errors;
+  }
+
+  function validatePasswordForm() {
+    const errors = {};
+    const { currentPassword, newPassword, confirmPassword } = passwordForm;
+
+    if (!currentPassword) errors.currentPassword = "Ingresa tu contraseña actual.";
+    if (!newPassword) errors.newPassword = "Ingresa una nueva contraseña.";
+    else if (newPassword.length < 6) {
+      errors.newPassword = "La nueva contraseña debe tener al menos 6 caracteres.";
+    }
+
+    if (!confirmPassword) {
+      errors.confirmPassword = "Confirma la nueva contraseña.";
+    } else if (newPassword !== confirmPassword) {
+      errors.confirmPassword = "La confirmación no coincide.";
+    }
+
+    if (currentPassword && newPassword && currentPassword === newPassword) {
+      errors.newPassword = "La nueva contraseña no debe ser igual a la actual.";
+    }
+
+    return errors;
+  }
+
+  function resetProfileMessages() {
+    setProfileError("");
+    setProfileSuccess("");
+  }
+
+  function resetPasswordMessages() {
+    setPasswordError("");
+    setPasswordSuccess("");
+  }
+
+  function handleProfileFieldChange(field, value) {
+    setProfileForm((prev) => ({
+      ...prev,
+      [field]: value,
+    }));
+
+    setProfileFieldErrors((prev) => ({
+      ...prev,
+      [field]: "",
+    }));
+
+    resetProfileMessages();
+  }
+
+  function handlePasswordFieldChange(field, value) {
+    setPasswordForm((prev) => ({
+      ...prev,
+      [field]: value,
+    }));
+
+    setPasswordFieldErrors((prev) => ({
+      ...prev,
+      [field]: "",
+    }));
+
+    resetPasswordMessages();
+  }
+
+  async function handleSaveProfile(e) {
+    e.preventDefault();
+
+    const errors = validateProfileForm();
+    setProfileFieldErrors(errors);
+
+    if (Object.keys(errors).length > 0) {
+      setProfileError("Revisa los campos marcados.");
+      setProfileSuccess("");
+      return;
+    }
+
+    const payload = {
+      name: profileForm.name.trim(),
+      email: profileForm.email.trim().toLowerCase(),
+    };
+
     try {
-      if (!acceptedLegal) {
-        setLegalError(
-          isVisado
-            ? "Debes aceptar el aviso legal de visado antes de continuar."
-            : "Debes aceptar el aviso legal de firma electrónica antes de continuar."
-        );
-        return;
-      }
+      setSavingProfile(true);
+      resetProfileMessages();
 
-      setLegalError("");
-      setSigning(true);
+      const res = await api.put("/users/profile", payload);
+      const updated = res?.data?.user || {};
 
-      const actionPath = isVisado ? "visar" : "firmar";
-      const endpoint = `${API_URL}/public/docs/document/${publicSignToken}/${actionPath}`;
+      setProfile((prev) => ({
+        ...prev,
+        name: updated.name ?? payload.name,
+        email: updated.email ?? payload.email,
+        email_verified: updated.email_verified ?? prev.email_verified,
+      }));
 
-      const res = await fetch(endpoint, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
+      setProfileForm({
+        name: updated.name ?? payload.name,
+        email: updated.email ?? payload.email,
       });
 
-      const data = await res.json();
-
-      if (!res.ok) {
-        throw new Error(data.message || getDefaultErrorMessage());
-      }
-
-      alert(
-        isVisado
-          ? "✅ Visado registrado correctamente."
-          : "✅ Firma registrada correctamente."
-      );
-
-      await cargarFirmaPublica(publicSignToken);
+      setProfileSuccess(res?.data?.message || "Perfil actualizado correctamente.");
     } catch (err) {
-      alert(
-        "❌ " +
-          (err?.message ||
-            "Ocurrió un error al procesar la acción. Intenta nuevamente.")
-      );
+      const msg =
+        err?.response?.data?.message ||
+        err?.message ||
+        "No se pudo actualizar el perfil.";
+      setProfileError(msg);
     } finally {
-      setSigning(false);
+      setSavingProfile(false);
     }
   }
 
-  async function handleReject() {
-    try {
-      setRejectError("");
+  async function handleChangePassword(e) {
+    e.preventDefault();
 
-      const motivo = (rejectReason || "").trim();
-      if (!motivo) {
-        setRejectError("Debes ingresar un motivo de rechazo.");
-        return;
-      }
+    const errors = validatePasswordForm();
+    setPasswordFieldErrors(errors);
 
-      setRejecting(true);
-
-      const res = await fetch(
-        `${API_URL}/public/docs/document/${publicSignToken}/rechazar`,
-        {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ motivo }),
-        }
-      );
-
-      const data = await res.json();
-
-      if (!res.ok) {
-        throw new Error(
-          data.message || "No se pudo registrar el rechazo del documento."
-        );
-      }
-
-      alert("✅ Documento rechazado correctamente.");
-
-      await cargarFirmaPublica(publicSignToken);
-      setShowReject(false);
-      setRejectReason("");
-      setRejectError("");
-    } catch (err) {
-      setRejectError(
-        err?.message ||
-          "Error al registrar el rechazo. Intenta nuevamente."
-      );
-    } finally {
-      setRejecting(false);
+    if (Object.keys(errors).length > 0) {
+      setPasswordError("Revisa los campos de contraseña.");
+      setPasswordSuccess("");
+      return;
     }
+
+    try {
+      setChangingPassword(true);
+      resetPasswordMessages();
+
+      await api.post("/users/change-password", {
+        currentPassword: passwordForm.currentPassword,
+        newPassword: passwordForm.newPassword,
+      });
+
+      setPasswordSuccess("Contraseña actualizada correctamente.");
+      setPasswordForm(initialPasswordForm);
+      setPasswordFieldErrors({});
+    } catch (err) {
+      const msg =
+        err?.response?.data?.message ||
+        err?.message ||
+        "No se pudo cambiar la contraseña.";
+      setPasswordError(msg);
+    } finally {
+      setChangingPassword(false);
+    }
+  }
+
+  function handleResetProfile() {
+    setProfileForm({
+      name: profile.name || "",
+      email: profile.email || "",
+    });
+    setProfileFieldErrors({});
+    resetProfileMessages();
+  }
+
+  if (loadingProfile) {
+    return (
+      <div className="dashboard-section">
+        <div className="dashboard-page-header">
+          <div>
+            <h1>Mi perfil</h1>
+            <p>Cargando tu información…</p>
+          </div>
+        </div>
+
+        <div style={loadingCardStyle}>
+          <div className="spinner" style={{ marginBottom: 12 }} />
+          <div>Conectando con el servidor seguro…</div>
+        </div>
+      </div>
+    );
   }
 
   return (
-    <div className="login-bg public-sign-page">
-      <div className="public-sign-shell">
-        <PublicHeader />
-
-        <div className="public-sign-heading">
-          <div>
-            <div className="public-sign-eyebrow">VeriFirma · Portal público</div>
-            <h1 className="public-sign-title">{titleText}</h1>
-          </div>
-
-          <div className={statusBadge.className}>{statusBadge.label}</div>
+    <div className="dashboard-section">
+      <div className="dashboard-page-header">
+        <div>
+          <h1>Mi perfil</h1>
+          <p>
+            Administra tus datos de acceso, el correo de la cuenta y la seguridad de tu usuario.
+          </p>
         </div>
+      </div>
 
-        <div
-          className={`public-sign-intro ${
-            isVisado ? "public-sign-intro--warning" : "public-sign-intro--info"
-          }`}
-        >
-          <div
-            className={`public-sign-intro__title ${
-              isVisado
-                ? "public-sign-intro__title--warning"
-                : "public-sign-intro__title--info"
-            }`}
-          >
-            {isVisado
-              ? "Estás revisando y visado este documento"
-              : "Estás firmando electrónicamente este documento"}
-          </div>
-
-          <div className="public-sign-intro__text">
-            {isVisado
-              ? "Tu visado deja constancia de que revisaste el contenido y autorizas la continuidad del flujo. No reemplaza la firma final del representante."
-              : "Esta acción representa la aceptación definitiva del contenido del documento mediante firma electrónica simple, con trazabilidad del proceso."}
-          </div>
-        </div>
-
-        {showSkeleton && (
-          <div className="public-sign-message-card">
-            <div className="spinner public-sign-spinner" />
-            <div className="public-sign-message-card__title">
-              Cargando documento…
+      <div style={layoutGridStyle}>
+        <section style={mainCardStyle}>
+          <div style={sectionHeaderStyle}>
+            <div>
+              <h2 style={sectionTitleStyle}>Datos de la cuenta</h2>
+              <p style={sectionTextStyle}>
+                Estos datos identifican tu usuario dentro de la plataforma.
+              </p>
             </div>
-            <div className="public-sign-message-card__text">
-              Estamos preparando la vista pública de firma.
+
+            <div style={pillStyle(emailStatus.bg, emailStatus.border, emailStatus.color)}>
+              {emailStatus.label}
             </div>
           </div>
-        )}
 
-        {publicSignError && (
-          <div className="public-sign-message-card public-sign-message-card--error">
-            <div className="public-sign-message-card__title">
-              No se pudo cargar el documento
-            </div>
-            <div className="public-sign-message-card__text">
-              {publicSignError}
-            </div>
-            <button
-              type="button"
-              className="public-sign-button public-sign-button--secondary public-sign-button--auto"
-              onClick={() => cargarFirmaPublica(publicSignToken)}
-              disabled={publicSignLoading}
+          {profileError ? (
+            <AlertBox type="error">{profileError}</AlertBox>
+          ) : null}
+
+          {profileSuccess ? (
+            <AlertBox type="success">{profileSuccess}</AlertBox>
+          ) : null}
+
+          <form onSubmit={handleSaveProfile}>
+            <Field
+              id="profile-run"
+              label="RUN"
+              helpText="Este identificador no se puede modificar desde esta vista."
             >
-              Reintentar carga
-            </button>
+              <input
+                id="profile-run"
+                type="text"
+                value={profile.run || ""}
+                readOnly
+                style={inputStyle({ readOnly: true })}
+              />
+            </Field>
+
+            <Field
+              id="profile-email"
+              label="Correo electrónico"
+              error={profileFieldErrors.email}
+              helpText={
+                profile.email_verified
+                  ? "Tu correo actual está verificado."
+                  : "Si cambias el correo, quedará pendiente de verificación."
+              }
+            >
+              <input
+                id="profile-email"
+                type="email"
+                value={profileForm.email}
+                onChange={(e) => handleProfileFieldChange("email", e.target.value)}
+                style={inputStyle({ hasError: !!profileFieldErrors.email })}
+                aria-invalid={!!profileFieldErrors.email}
+              />
+            </Field>
+
+            <Field
+              id="profile-name"
+              label="Nombre para mostrar"
+              error={profileFieldErrors.name}
+              helpText="Este nombre se usa en la interfaz y en registros internos."
+            >
+              <input
+                id="profile-name"
+                type="text"
+                value={profileForm.name}
+                onChange={(e) => handleProfileFieldChange("name", e.target.value)}
+                style={inputStyle({ hasError: !!profileFieldErrors.name })}
+                aria-invalid={!!profileFieldErrors.name}
+              />
+            </Field>
+
+            <div style={buttonRowStyle}>
+              <button
+                type="submit"
+                disabled={savingProfile}
+                className="btn-main btn-primary"
+              >
+                {savingProfile ? "Guardando..." : "Guardar cambios"}
+              </button>
+
+              <button
+                type="button"
+                disabled={savingProfile}
+                className="btn-main btn-ghost"
+                onClick={handleResetProfile}
+              >
+                Deshacer cambios
+              </button>
+            </div>
+          </form>
+        </section>
+
+        <section style={sideColumnStyle}>
+          <div style={sideCardStyle}>
+            <h3 style={sideTitleStyle}>Información adicional</h3>
+
+            <InfoRow label="Rol actual" value={profile.role || "No asignado"} />
+            <InfoRow
+              label="Empresa asociada"
+              value={
+                profile.company_id
+                  ? loadingCompany
+                    ? "Cargando empresa…"
+                    : companyName || `ID ${profile.company_id}`
+                  : "Sin empresa asociada"
+              }
+            />
+            <InfoRow
+              label="Correo verificado"
+              value={profile.email_verified ? "Sí" : "No"}
+            />
+            <InfoRow
+              label="Miembro desde"
+              value={formatDate(profile.created_at)}
+            />
+
+            <p style={mutedParagraphStyle}>
+              Los cambios de rol, empresa y asignaciones se gestionan desde el panel de administración.
+            </p>
           </div>
-        )}
 
-        {document && !publicSignLoading && !publicSignError && (
-          <div className="public-sign-layout">
-            <section className="public-sign-document-panel">
-              <div className="public-sign-document-panel__header">
-                <div>
-                  <div className="public-sign-section-label">Documento</div>
-                  <div className="public-sign-document-title">
-                    {document.title || "Documento"}
-                  </div>
-                </div>
+          <div style={sideCardStyle}>
+            <div style={securityHeaderStyle}>
+              <h3 style={sideTitleStyle}>Seguridad</h3>
+              <button
+                type="button"
+                className="btn-main btn-ghost"
+                onClick={() => {
+                  setShowPasswordForm((prev) => !prev);
+                  setPasswordFieldErrors({});
+                  resetPasswordMessages();
+                }}
+              >
+                {showPasswordForm ? "Ocultar" : "Cambiar contraseña"}
+              </button>
+            </div>
 
-                {pdfUrl && (
-                  <a
-                    href={pdfUrl}
-                    target="_blank"
-                    rel="noopener noreferrer"
-                    className="public-sign-open-pdf"
+            {showPasswordForm ? (
+              <form onSubmit={handleChangePassword}>
+                {passwordError ? <AlertBox type="error">{passwordError}</AlertBox> : null}
+                {passwordSuccess ? <AlertBox type="success">{passwordSuccess}</AlertBox> : null}
+
+                <PasswordField
+                  id="current-password"
+                  label="Contraseña actual"
+                  value={passwordForm.currentPassword}
+                  onChange={(value) => handlePasswordFieldChange("currentPassword", value)}
+                  error={passwordFieldErrors.currentPassword}
+                  visible={showCurrentPassword}
+                  onToggleVisibility={() => setShowCurrentPassword((v) => !v)}
+                  autoComplete="current-password"
+                />
+
+                <PasswordField
+                  id="new-password"
+                  label="Nueva contraseña"
+                  value={passwordForm.newPassword}
+                  onChange={(value) => handlePasswordFieldChange("newPassword", value)}
+                  error={passwordFieldErrors.newPassword}
+                  visible={showNewPassword}
+                  onToggleVisibility={() => setShowNewPassword((v) => !v)}
+                  autoComplete="new-password"
+                  helpText="Usa letras, números y símbolos para una contraseña más fuerte."
+                />
+
+                <div style={{ marginTop: -6, marginBottom: 14 }}>
+                  <div
+                    style={{
+                      height: 8,
+                      borderRadius: 999,
+                      background: "#e5e7eb",
+                      overflow: "hidden",
+                    }}
                   >
-                    Abrir PDF en nueva pestaña
-                  </a>
-                )}
-              </div>
-
-              <div className="public-sign-pdf-stage">
-                {pdfUrl ? (
-                  <iframe
-                    title="Vista previa del documento"
-                    src={`${pdfUrl}#toolbar=1&navpanes=0&scrollbar=1`}
-                    className="public-sign-pdf-frame"
-                  />
-                ) : (
-                  <div className="public-sign-pdf-empty">
-                    No se pudo mostrar la vista previa del PDF.
-                  </div>
-                )}
-              </div>
-            </section>
-
-            <aside className="public-sign-sidebar">
-              <div className="public-sign-summary">
-                <div className="public-sign-section-label">Resumen</div>
-                <div className="public-sign-summary__title">
-                  {document.title}
-                </div>
-                <div className="public-sign-summary__text">
-                  Revisa el documento completo antes de continuar. El detalle
-                  legal y las acciones quedan en este panel para mantener todo
-                  en una sola experiencia.
-                </div>
-              </div>
-
-              <div className="public-sign-meta-grid">
-                <div className="public-sign-meta-card">
-                  <div className="public-sign-meta-card__label">Empresa</div>
-                  <div className="public-sign-meta-card__value">
-                    {document.destinatario_nombre || "No informado"}
-                  </div>
-                  <div className="public-sign-meta-card__subvalue">
-                    RUT: {document.empresa_rut || "No informado"}
-                  </div>
-                </div>
-
-                {!isVisado && signer && (
-                  <div className="public-sign-meta-card">
-                    <div className="public-sign-meta-card__label">
-                      Firmando como
-                    </div>
-                    <div className="public-sign-meta-card__value">
-                      {signer?.name ||
-                        signer?.nombre ||
-                        signer?.signer_name ||
-                        "Firmante"}
-                    </div>
-                    <div className="public-sign-meta-card__subvalue">
-                      {signer?.email ||
-                        signer?.signer_email ||
-                        "Sin correo disponible"}
-                    </div>
-                  </div>
-                )}
-              </div>
-
-              {canActOnDocument && (
-                <>
-                  <ElectronicSignatureNotice
-                    mode={isVisado ? "visado" : "firma"}
-                    checked={acceptedLegal}
-                    onChange={setAcceptedLegal}
-                  />
-
-                  {legalError && (
-                    <div className="public-sign-inline-error">
-                      {legalError}
-                    </div>
-                  )}
-                </>
-              )}
-
-              {docRejected && (
-                <div className="public-sign-state-box public-sign-state-box--danger">
-                  <div className="public-sign-state-box__title">
-                    Este documento fue rechazado
-                  </div>
-                  <div className="public-sign-state-box__text">
-                    Ya no es posible firmarlo ni cambiar su estado desde este
-                    enlace.
-                  </div>
-                </div>
-              )}
-
-              {docFullySigned && !docRejected && (
-                <div className="public-sign-state-box public-sign-state-box--success">
-                  <div className="public-sign-state-box__title">
-                    Documento firmado completamente
-                  </div>
-                  <div className="public-sign-state-box__text">
-                    Todos los participantes completaron el proceso.
-                  </div>
-                </div>
-              )}
-
-              {alreadySignedByThisSigner && !docRejected && !docFullySigned && (
-                <div className="public-sign-state-box public-sign-state-box--success">
-                  <div className="public-sign-state-box__title">
-                    Ya registraste tu firma en este documento
-                  </div>
-                </div>
-              )}
-
-              {canActOnDocument && !showReject && (
-                <div className="public-sign-actions">
-                  <button
-                    className={`public-sign-button public-sign-button--primary ${
-                      isVisado
-                        ? "public-sign-button--warning"
-                        : "public-sign-button--info"
-                    }`}
-                    onClick={handleConfirm}
-                    disabled={signing || !acceptedLegal}
-                  >
-                    {signing
-                      ? "Procesando..."
-                      : isVisado
-                      ? "Visar documento"
-                      : "Firmar documento"}
-                  </button>
-
-                  {!isVisado && (
-                    <button
-                      type="button"
-                      className="public-sign-button public-sign-button--danger"
-                      onClick={() => {
-                        setShowReject(true);
-                        setRejectError("");
+                    <div
+                      style={{
+                        height: "100%",
+                        width: passwordStrength.width,
+                        background: passwordStrength.color,
+                        transition: "width 180ms ease",
                       }}
-                    >
-                      Rechazar documento
-                    </button>
-                  )}
-                </div>
-              )}
-
-              {showReject && (
-                <div className="public-sign-reject-card">
-                  <h2 className="public-sign-reject-card__title">
-                    Rechazar documento
-                  </h2>
-
-                  <p className="public-sign-reject-card__text">
-                    Indica el motivo del rechazo. Esta observación quedará
-                    registrada y será informada al emisor.
+                    />
+                  </div>
+                  <p
+                    style={{
+                      margin: "6px 0 0",
+                      fontSize: "0.8rem",
+                      color: passwordStrength.color,
+                      fontWeight: 600,
+                    }}
+                  >
+                    Seguridad de contraseña: {passwordStrength.label}
                   </p>
-
-                  <textarea
-                    rows={5}
-                    value={rejectReason}
-                    onChange={(e) => setRejectReason(e.target.value)}
-                    className="public-sign-textarea"
-                    placeholder="Escribe aquí el motivo del rechazo..."
-                  />
-
-                  {rejectError && (
-                    <div className="public-sign-inline-error">
-                      {rejectError}
-                    </div>
-                  )}
-
-                  <div className="public-sign-reject-actions">
-                    <button
-                      type="button"
-                      className="public-sign-button public-sign-button--secondary"
-                      onClick={() => {
-                        setShowReject(false);
-                        setRejectReason("");
-                        setRejectError("");
-                      }}
-                      disabled={rejecting}
-                    >
-                      Cancelar
-                    </button>
-
-                      <button
-                      type="button"
-                      className="public-sign-button public-sign-button--danger-solid"
-                      onClick={handleReject}
-                      disabled={rejecting}
-                    >
-                      {rejecting ? "Enviando..." : "Confirmar rechazo"}
-                    </button>
-                  </div>
                 </div>
-              )}
-            </aside>
-          </div>
-        )}
 
-        <div className="public-sign-footer-wrap">
-          <PublicFooter />
-        </div>
+                <PasswordField
+                  id="confirm-password"
+                  label="Confirmar nueva contraseña"
+                  value={passwordForm.confirmPassword}
+                  onChange={(value) => handlePasswordFieldChange("confirmPassword", value)}
+                  error={passwordFieldErrors.confirmPassword}
+                  visible={showConfirmPassword}
+                  onToggleVisibility={() => setShowConfirmPassword((v) => !v)}
+                  autoComplete="new-password"
+                />
+
+                <button
+                  type="submit"
+                  disabled={changingPassword}
+                  className="btn-main btn-primary"
+                >
+                  {changingPassword ? "Actualizando..." : "Actualizar contraseña"}
+                </button>
+              </form>
+            ) : (
+              <p style={mutedParagraphStyle}>
+                Te recomendamos actualizar tu contraseña periódicamente y no reutilizarla en otros servicios.
+              </p>
+            )}
+          </div>
+        </section>
       </div>
     </div>
   );
 }
+
+function Field({ id, label, error, helpText, children }) {
+  return (
+    <div style={{ marginBottom: 16 }}>
+      <label
+        htmlFor={id}
+        style={{
+          display: "block",
+          fontWeight: 700,
+          marginBottom: 6,
+          fontSize: "0.92rem",
+          color: "#0f172a",
+        }}
+      >
+        {label}
+      </label>
+
+      {children}
+
+      {error ? (
+        <p style={fieldErrorStyle} role="alert">
+          {error}
+        </p>
+      ) : helpText ? (
+        <p style={fieldHelpStyle}>{helpText}</p>
+      ) : null}
+    </div>
+  );
+}
+
+function PasswordField({
+  id,
+  label,
+  value,
+  onChange,
+  error,
+  visible,
+  onToggleVisibility,
+  autoComplete,
+  helpText,
+}) {
+  return (
+    <Field id={id} label={label} error={error} helpText={helpText}>
+      <div style={{ display: "flex", gap: 8 }}>
+        <input
+          id={id}
+          type={visible ? "text" : "password"}
+          value={value}
+          onChange={(e) => onChange(e.target.value)}
+          style={inputStyle({ hasError: !!error })}
+          aria-invalid={!!error}
+          autoComplete={autoComplete}
+        />
+        <button
+          type="button"
+          onClick={onToggleVisibility}
+          className="btn-main btn-ghost"
+          style={{ whiteSpace: "nowrap" }}
+          aria-label={visible ? "Ocultar contraseña" : "Mostrar contraseña"}
+          aria-pressed={visible}
+        >
+          {visible ? "Ocultar" : "Ver"}
+        </button>
+      </div>
+    </Field>
+  );
+}
+
+function InfoRow({ label, value }) {
+  return (
+    <div
+      style={{
+        display: "flex",
+        justifyContent: "space-between",
+        gap: 12,
+        padding: "10px 0",
+        borderBottom: "1px solid #eef2f7",
+        fontSize: "0.92rem",
+      }}
+    >
+      <span style={{ color: "#64748b", fontWeight: 600 }}>{label}</span>
+      <span style={{ color: "#0f172a", textAlign: "right" }}>{value}</span>
+    </div>
+  );
+}
+
+function AlertBox({ type = "error", children }) {
+  const map = {
+    error: { bg: "#fef2f2", border: "#fecaca", color: "#b91c1c" },
+    success: { bg: "#ecfdf5", border: "#bbf7d0", color: "#166534" },
+  };
+
+  const tone = map[type] || map.error;
+
+  return (
+    <div
+      style={{
+        marginBottom: 16,
+        padding: "10px 12px",
+        borderRadius: 12,
+        background: tone.bg,
+        border: `1px solid ${tone.border}`,
+        color: tone.color,
+        fontSize: "0.9rem",
+      }}
+      role="alert"
+    >
+      {children}
+    </div>
+  );
+}
+
+function formatDate(value) {
+  if (!value) return "Sin fecha";
+
+  try {
+    return new Date(value).toLocaleDateString("es-CO", {
+      year: "numeric",
+      month: "long",
+      day: "numeric",
+    });
+  } catch {
+    return "Sin fecha";
+  }
+}
+
+function inputStyle({ readOnly = false, hasError = false } = {}) {
+  return {
+    width: "100%",
+    padding: "11px 12px",
+    borderRadius: 12,
+    border: `1px solid ${hasError ? "#fca5a5" : "#d1d5db"}`,
+    background: readOnly ? "#f8fafc" : "#ffffff",
+    color: "#111827",
+    outline: "none",
+    fontSize: "0.95rem",
+    transition: "border-color 160ms ease, box-shadow 160ms ease",
+    boxShadow: hasError ? "0 0 0 3px rgba(248, 113, 113, 0.12)" : "none",
+  };
+}
+
+function pillStyle(bg, border, color) {
+  return {
+    padding: "8px 10px",
+    borderRadius: 999,
+    background: bg,
+    border: `1px solid ${border}`,
+    color,
+    fontSize: "0.8rem",
+    fontWeight: 700,
+    whiteSpace: "nowrap",
+  };
+}
+
+const layoutGridStyle = {
+  display: "grid",
+  gap: 16,
+  alignItems: "flex-start",
+  gridTemplateColumns: "minmax(0, 2fr) minmax(300px, 1fr)",
+};
+
+const mainCardStyle = {
+  background: "#ffffff",
+  border: "1px solid #e5e7eb",
+  borderRadius: 18,
+  padding: 24,
+  boxShadow: "0 12px 32px rgba(15, 23, 42, 0.06)",
+};
+
+const sideCardStyle = {
+  background: "#ffffff",
+  border: "1px solid #e5e7eb",
+  borderRadius: 18,
+  padding: 20,
+  boxShadow: "0 10px 24px rgba(15, 23, 42, 0.05)",
+};
+
+const sideColumnStyle = {
+  display: "grid",
+  gap: 16,
+};
+
+const sectionHeaderStyle = {
+  display: "flex",
+  justifyContent: "space-between",
+  alignItems: "flex-start",
+  gap: 12,
+  marginBottom: 18,
+};
+
+const sectionTitleStyle = {
+  margin: 0,
+  fontSize: "1.1rem",
+  color: "#0f172a",
+};
+
+const sectionTextStyle = {
+  margin: "6px 0 0",
+  color: "#6b7280",
+  fontSize: "0.92rem",
+};
+
+const sideTitleStyle = {
+  margin: "0 0 10px",
+  fontSize: "1rem",
+  color: "#0f172a",
+};
+
+const securityHeaderStyle = {
+  display: "flex",
+  justifyContent: "space-between",
+  alignItems: "center",
+  gap: 12,
+  marginBottom: 10,
+};
+
+const buttonRowStyle = {
+  display: "flex",
+  gap: 10,
+  flexWrap: "wrap",
+  marginTop: 4,
+};
+
+const mutedParagraphStyle = {
+  margin: "12px 0 0",
+  fontSize: "0.88rem",
+  color: "#6b7280",
+  lineHeight: 1.5,
+};
+
+const loadingCardStyle = {
+  padding: 24,
+  textAlign: "center",
+  color: "#64748b",
+  background: "#ffffff",
+  border: "1px solid #e5e7eb",
+  borderRadius: 18,
+};
+
+const fieldHelpStyle = {
+  margin: "6px 0 0",
+  fontSize: "0.8rem",
+  color: "#94a3b8",
+};
+
+const fieldErrorStyle = {
+  margin: "6px 0 0",
+  fontSize: "0.8rem",
+  color: "#b91c1c",
+  fontWeight: 600,
+};
