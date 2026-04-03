@@ -143,6 +143,7 @@
   margin: 0 auto 16px;
 }
 
+/* Layout principal: panel documento + sidebar */
 .public-sign-layout {
   display: grid;
   grid-template-columns: minmax(0, 1.7fr) minmax(320px, 400px);
@@ -200,15 +201,20 @@
   white-space: nowrap;
 }
 
+/* Contenedor scrollable del PDF */
 .public-sign-pdf-stage {
   padding: 20px;
-  background: linear-gradient(180deg, rgba(15, 23, 42, 0.96) 0%, rgba(2, 6, 23, 0.96) 100%);
+  background: linear-gradient(
+    180deg,
+    rgba(15, 23, 42, 0.96) 0%,
+    rgba(2, 6, 23, 0.96) 100%
+  );
   display: flex;
   justify-content: center;
   align-items: stretch;
-  flex: 1;
+  flex: 1 1 auto;
   min-height: 0;
-  overflow: hidden;
+  overflow: auto; /* clave: deja scrollear si el PDF es más alto que el viewport */
 }
 
 .public-sign-pdf-frame {
@@ -447,6 +453,8 @@
 .public-sign-footer-wrap {
   margin-top: 18px;
 }
+
+/* Responsivo */
 
 @media (max-width: 1080px) {
   .public-sign-layout {

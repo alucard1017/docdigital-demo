@@ -5,7 +5,7 @@ import { PublicFooter } from "../components/PublicFooter";
 import { ElectronicSignatureNotice } from "../components/Legal/ElectronicSignatureNotice";
 
 function stripTrailingSlashes(value = "") {
-  return String(value || "").trim().replace(/\/+$/, "");
+  return String(value || "").trim().replace(/\\/+$/, "");
 }
 
 function normalizePublicApiBase(API_URL) {
@@ -234,20 +234,8 @@ export function PublicSignView({
   }
 
   return (
-    <div
-      className="login-bg public-sign-page"
-      style={{
-        minHeight: "100vh",
-      }}
-    >
-      <div
-        className="public-sign-shell"
-        style={{
-          minHeight: "100vh",
-          display: "flex",
-          flexDirection: "column",
-        }}
-      >
+    <div className="login-bg public-sign-page">
+      <div className="public-sign-shell">
         <PublicHeader />
 
         <div className="public-sign-heading">
@@ -326,22 +314,8 @@ export function PublicSignView({
         )}
 
         {document && !publicSignLoading && !publicSignError && (
-          <div
-            className="public-sign-layout"
-            style={{
-              flex: 1,
-              minHeight: 0,
-              alignItems: "stretch",
-            }}
-          >
-            <section
-              className="public-sign-document-panel"
-              style={{
-                display: "flex",
-                flexDirection: "column",
-                minHeight: 0,
-              }}
-            >
+          <div className="public-sign-layout">
+            <section className="public-sign-document-panel">
               <div className="public-sign-document-panel__header">
                 <div>
                   <div className="public-sign-section-label">Documento</div>
@@ -362,27 +336,12 @@ export function PublicSignView({
                 )}
               </div>
 
-              <div
-                className="public-sign-pdf-stage"
-                style={{
-                  flex: 1,
-                  minHeight: 0,
-                  height: "100%",
-                  overflow: "hidden",
-                }}
-              >
+              <div className="public-sign-pdf-stage">
                 {pdfUrl ? (
                   <iframe
                     title="Vista previa del documento"
                     src={`${pdfUrl}#toolbar=1&navpanes=0&scrollbar=1&view=FitH&zoom=page-width`}
                     className="public-sign-pdf-frame"
-                    style={{
-                      width: "100%",
-                      height: "100%",
-                      minHeight: "65vh",
-                      border: "0",
-                      display: "block",
-                    }}
                   />
                 ) : (
                   <div className="public-sign-pdf-empty">
@@ -393,12 +352,7 @@ export function PublicSignView({
               </div>
             </section>
 
-            <aside
-              className="public-sign-sidebar"
-              style={{
-                minHeight: 0,
-              }}
-            >
+            <aside className="public-sign-sidebar">
               <div className="public-sign-summary">
                 <div className="public-sign-section-label">Resumen</div>
                 <div className="public-sign-summary__title">
