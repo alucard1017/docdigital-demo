@@ -73,13 +73,12 @@ export function useDocuments(token) {
   const [errorDocs, setErrorDocs] = useState("");
   const [docs, setDocs] = useState([]);
 
-  const [sort, setSort] = useState("created_at_desc");
-  const [statusFilter, setStatusFilter] = useState("TODOS");
-  const [search, setSearch] = useState("");
-
+  const [sort, setSortState] = useState("created_at_desc");
+  const [statusFilter, setStatusFilterState] = useState("TODOS");
+  const [search, setSearchState] = useState("");
   const debouncedSearch = useDebouncedValue(search, SEARCH_DEBOUNCE_MS);
 
-  const [page, setPage] = useState(1);
+  const [page, setPageState] = useState(1);
 
   const [selectedDoc, setSelectedDoc] = useState(null);
   const [pdfUrl, setPdfUrl] = useState(null);
@@ -94,6 +93,7 @@ export function useDocuments(token) {
   });
 
   const latestRequestRef = useRef(0);
+  const lastQueryKeyRef = useRef("");
 
   const resetState = useCallback(() => {
     setDocs([]);
@@ -111,39 +111,46 @@ export function useDocuments(token) {
 
   const cargarDocs = useCallback(
     async ({
-      page: pageArg,
-      sort: sortArg,
-      statusFilter: statusArg,
-      search: searchArg,
+      page: pageArg = 1,
+      sort: sortArg = "created_at_desc",
+      statusFilter: statusArg = "TODOS",
+      search: searchArg = "",
+      force = false,
     } = {}) => {
       if (!token) {
         resetState();
         return;
       }
 
-      const currentPage = pageArg ?? page;
-      const currentSort = sortArg ?? sort;
-      const currentStatus = statusArg ?? statusFilter;
-      const currentSearch = searchArg ?? debouncedSearch;
+      const sortConfig = mapSortToApi(sortArg);
+      const apiStatus = mapStatusFilterToApi(statusArg);
 
-      const sortConfig = mapSortToApi(currentSort);
-      const apiStatus = mapStatusFilterToApi(currentStatus);
-      const trimmedSearch = (currentSearch || "").trim();
+      const normalizedSearch =
+        typeof searchArg === "string"
+          ? searchArg
+          : searchArg == null
+            ? ""
+            : String(searchArg);
+
+      const trimmedSearch = normalizedSearch.trim();
 
       const params = {
         sort: sortConfig.sort,
         order: sortConfig.order,
-        page: currentPage,
+        page: pageArg,
         limit: PAGE_SIZE,
       };
 
-      if (apiStatus) {
-        params.status = apiStatus;
+      if (apiStatus) params.status = apiStatus;
+      if (trimmedSearch) params.search = trimmedSearch;
+
+      const queryKey = JSON.stringify(params);
+
+      if (!force && lastQueryKeyRef.current === queryKey) {
+        return;
       }
 
-      if (trimmedSearch) {
-        params.search = trimmedSearch;
-      }
+      lastQueryKeyRef.current = queryKey;
 
       const requestId = Date.now();
       latestRequestRef.current = requestId;
@@ -156,15 +163,13 @@ export function useDocuments(token) {
 
         const res = await api.get("/docs", { params });
 
-        if (latestRequestRef.current !== requestId) {
-          return;
-        }
+        if (latestRequestRef.current !== requestId) return;
 
         const payload = res?.data || {};
-        const rows = Array.isArray(payload.data) ? payload.data : [];
-        const meta = payload.pagination || {};
+        const rows = Array.isArray(payload?.data) ? payload.data : [];
+        const meta = payload?.pagination || {};
 
-        const safePage = Number(meta.page) || currentPage;
+        const safePage = Number(meta.page) || pageArg;
         const safeLimit = Number(meta.limit) || PAGE_SIZE;
         const safeTotal = Number(meta.total) || rows.length;
         const safeTotalPages = Number(meta.totalPages) || 1;
@@ -185,9 +190,7 @@ export function useDocuments(token) {
               : safePage > 1,
         });
       } catch (err) {
-        if (latestRequestRef.current !== requestId) {
-          return;
-        }
+        if (latestRequestRef.current !== requestId) return;
 
         console.error("Fallo al cargar documentos:", err);
 
@@ -204,7 +207,7 @@ export function useDocuments(token) {
         }
       }
     },
-    [token, page, sort, statusFilter, debouncedSearch, resetState]
+    [token, resetState]
   );
 
   useEffect(() => {
@@ -221,19 +224,23 @@ export function useDocuments(token) {
     });
   }, [token, page, sort, statusFilter, debouncedSearch, cargarDocs, resetState]);
 
-  const updateSort = useCallback((value) => {
-    setPage(1);
-    setSort(value);
+  const setSort = useCallback((value) => {
+    setPageState(1);
+    setSortState(value);
   }, []);
 
-  const updateStatusFilter = useCallback((value) => {
-    setPage(1);
-    setStatusFilter(value);
+  const setStatusFilter = useCallback((value) => {
+    setPageState(1);
+    setStatusFilterState(value);
   }, []);
 
-  const updateSearch = useCallback((value) => {
-    setPage(1);
-    setSearch(value);
+  const setSearch = useCallback((value) => {
+    setPageState(1);
+    setSearchState(typeof value === "string" ? value : "");
+  }, []);
+
+  const setPage = useCallback((value) => {
+    setPageState(value);
   }, []);
 
   useEffect(() => {
@@ -349,6 +356,7 @@ export function useDocuments(token) {
           sort,
           statusFilter,
           search: debouncedSearch,
+          force: true,
         });
 
         setSelectedDoc(null);
@@ -379,7 +387,6 @@ export function useDocuments(token) {
 
   const pendientes = useMemo(() => {
     const safeDocs = Array.isArray(docs) ? docs : [];
-
     return safeDocs.filter((d) => {
       const status = d?.status;
       return (
@@ -419,11 +426,11 @@ export function useDocuments(token) {
     errorDocs,
     docs,
     sort,
-    setSort: updateSort,
+    setSort,
     statusFilter,
-    setStatusFilter: updateStatusFilter,
+    setStatusFilter,
     search,
-    setSearch: updateSearch,
+    setSearch,
     page,
     setPage,
     pageSize: PAGE_SIZE,
