@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import api from "../api/client";
 
 const ACTION_OPTIONS = [
@@ -74,7 +74,7 @@ function normalizePaginatedResponse(data, currentPage, pageSize) {
   };
 }
 
-export function AuditLogsView() {
+function AuditLogsView() {
   const [logs, setLogs] = useState([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
@@ -93,43 +93,55 @@ export function AuditLogsView() {
   const [selectedLog, setSelectedLog] = useState(null);
   const [prettyMetadata, setPrettyMetadata] = useState("");
 
-  async function cargarLogs(targetPage = 1) {
-    setLoading(true);
-    setError("");
+  const safePage = Number.isFinite(page) && page > 0 ? page : 1;
+  const safeTotalPaginas =
+    Number.isFinite(totalPaginas) && totalPaginas > 0 ? totalPaginas : 1;
 
-    const params = {
-      page: targetPage,
-      limit: pageSize,
-    };
+  const cargarLogs = useCallback(
+    async (targetPage = 1) => {
+      setLoading(true);
+      setError("");
 
-    if (action) params.action = action;
-    if (entityType) params.entity_type = entityType;
-    if (userId.trim()) params.user_id = userId.trim();
-    if (companyId.trim()) params.company_id = companyId.trim();
+      const params = {
+        page: targetPage,
+        limit: pageSize,
+      };
 
-    try {
-      const res = await api.get("/logs/audit", { params });
-      const parsed = normalizePaginatedResponse(res.data, targetPage, pageSize);
+      if (action) params.action = action;
+      if (entityType) params.entity_type = entityType;
+      if (userId.trim()) params.user_id = userId.trim();
+      if (companyId.trim()) params.company_id = companyId.trim();
 
-      setLogs(parsed.rows);
-      setTotal(parsed.total);
-      setTotalPaginas(parsed.totalPages);
-      setHasNextPage(Boolean(parsed.hasNextPage));
-      setPage(parsed.page);
-    } catch (err) {
-      const msg =
-        err.response?.data?.message ||
-        err.message ||
-        "No se pudieron cargar los logs de auditoría";
-      setError(msg);
-    } finally {
-      setLoading(false);
-    }
-  }
+      try {
+        const res = await api.get("/logs/audit", { params });
+        const parsed = normalizePaginatedResponse(res?.data, targetPage, pageSize);
+
+        setLogs(parsed.rows);
+        setTotal(parsed.total);
+        setTotalPaginas(parsed.totalPages);
+        setHasNextPage(Boolean(parsed.hasNextPage));
+        setPage(parsed.page);
+      } catch (err) {
+        const msg =
+          err.response?.data?.message ||
+          err.message ||
+          "No se pudieron cargar los logs de auditoría";
+
+        setError(msg);
+        setLogs([]);
+        setTotal(0);
+        setTotalPaginas(1);
+        setHasNextPage(false);
+      } finally {
+        setLoading(false);
+      }
+    },
+    [action, entityType, userId, companyId]
+  );
 
   useEffect(() => {
     cargarLogs(1);
-  }, []);
+  }, [cargarLogs]);
 
   function handleFilterSubmit(e) {
     e.preventDefault();
@@ -137,19 +149,20 @@ export function AuditLogsView() {
   }
 
   function handlePrevPage() {
-    if (loading || page <= 1) return;
-    cargarLogs(page - 1);
+    if (loading || safePage <= 1) return;
+    cargarLogs(safePage - 1);
   }
 
   function handleNextPage() {
     if (loading || !hasNextPage) return;
-    cargarLogs(page + 1);
+    cargarLogs(safePage + 1);
   }
 
   function abrirMetadata(log) {
     setSelectedLog(log);
+
     try {
-      if (log && log.metadata) {
+      if (log?.metadata) {
         const obj =
           typeof log.metadata === "string"
             ? JSON.parse(log.metadata)
@@ -168,9 +181,10 @@ export function AuditLogsView() {
     setPrettyMetadata("");
   }
 
-  const safePage = Number.isFinite(page) && page > 0 ? page : 1;
-  const safeTotalPaginas =
-    Number.isFinite(totalPaginas) && totalPaginas > 0 ? totalPaginas : 1;
+  const summaryText = useMemo(() => {
+    if (!logs.length) return "Sin resultados";
+    return `Mostrando ${logs.length} eventos · Página ${safePage} de ${safeTotalPaginas} · Total ${total}`;
+  }, [logs.length, safePage, safeTotalPaginas, total]);
 
   if (loading) {
     return (
@@ -297,9 +311,8 @@ export function AuditLogsView() {
         </form>
       </div>
 
-      {logs.length === 0 ? (
-        <div
-          style={{
+      {logs.leeron cargar las empresas";
+      setE style={{
             padding: 24,
             borderRadius: 8,
             border: "1px dashed #cbd5f5",
@@ -331,12 +344,8 @@ export function AuditLogsView() {
                   <th>Fecha</th>
                   <th>Acción</th>
                   <th>Entidad</th>
-                  <th style={{ textAlign: "center", width: 120 }}>
-                    Usuario ID
-                  </th>
-                  <th style={{ textAlign: "center", width: 120 }}>
-                    Empresa ID
-                  </th>
+                  <th style={{ textAlign: "center", width: 120 }}>Usuario ID</th>
+                  <th style={{ textAlign: "center", width: 120 }}>Empresa ID</th>
                   <th style={{ textAlign: "right", width: 140 }}>Metadata</th>
                 </tr>
               </thead>
@@ -416,10 +425,7 @@ export function AuditLogsView() {
               flexWrap: "wrap",
             }}
           >
-            <span>
-              Mostrando {logs.length} eventos · Página {safePage} de{" "}
-              {safeTotalPaginas}
-            </span>
+            <span>{summaryText}</span>
             <div style={{ display: "flex", gap: 8 }}>
               <button
                 type="button"
@@ -471,6 +477,7 @@ export function AuditLogsView() {
                 Cerrar
               </button>
             </div>
+
             <p
               style={{
                 marginTop: 0,
@@ -482,6 +489,7 @@ export function AuditLogsView() {
               ID log: {selectedLog.id} · Acción: {selectedLog.action} · Entidad:{" "}
               {selectedLog.entity_type}#{selectedLog.entity_id}
             </p>
+
             <div
               style={{
                 maxHeight: "400px",
@@ -510,3 +518,5 @@ export function AuditLogsView() {
     </div>
   );
 }
+
+export default AuditLogsView;

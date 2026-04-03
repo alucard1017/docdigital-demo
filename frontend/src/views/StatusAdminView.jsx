@@ -1,23 +1,22 @@
-// src/views/StatusAdminView.jsx
-import { useEffect, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import api from "../api/client";
 
-const badgeColor = (status) => {
+function badgeColor(status) {
   if (!status) return "#6b7280";
   const v = String(status).toLowerCase();
   if (v === "ok" || v === "healthy" || v === "up") return "#16a34a";
   if (v === "degraded") return "#ea580c";
   if (v === "down" || v === "error") return "#b91c1c";
   return "#6b7280";
-};
+}
 
-export function StatusAdminView() {
+function StatusAdminView() {
   const [health, setHealth] = useState(null);
   const [metrics, setMetrics] = useState(null);
   const [error, setError] = useState("");
   const [loading, setLoading] = useState(false);
 
-  async function fetchAll() {
+  const fetchAll = useCallback(async () => {
     try {
       setLoading(true);
       setError("");
@@ -27,33 +26,36 @@ export function StatusAdminView() {
         api.get("/status/metrics"),
       ]);
 
-      setHealth(healthRes.data || null);
-      setMetrics(metricsRes.data || null);
+      setHealth(healthRes?.data || null);
+      setMetrics(metricsRes?.data || null);
     } catch (err) {
       const msg =
         err.response?.data?.message ||
         err.message ||
         "Error interno obteniendo métricas";
+
       setError(msg);
       setHealth(null);
       setMetrics(null);
     } finally {
       setLoading(false);
     }
-  }
+  }, []);
 
   useEffect(() => {
     fetchAll();
-  }, []);
+  }, [fetchAll]);
 
   const cardBorder = "#1f2937";
   const subtleText = "#94a3b8";
   const strongText = "#e5e7eb";
 
-  // helpers seguros para arrays
-  const docActions = Array.isArray(metrics?.documents?.actions_last_60m)
-    ? metrics.documents.actions_last_60m
-    : [];
+  const docActions = useMemo(() => {
+    return Array.isArray(metrics?.documents?.actions_last_60m)
+      ? metrics.documents.actions_last_60m
+      : [];
+  }, [metrics]);
+
   const hasDocActivity = docActions.length > 0;
 
   return (
@@ -168,10 +170,8 @@ export function StatusAdminView() {
             display: "grid",
             gridTemplateColumns: "repeat(auto-fit, minmax(260px, 1fr))",
             gap: 16,
-          }}
-        >
-          {health && (
-            <div
+          eron cargar las empresas";
+      setE           <div
               className="card"
               style={{
                 padding: 18,
@@ -201,6 +201,7 @@ export function StatusAdminView() {
                 >
                   API & Infra
                 </h3>
+
                 <span
                   style={{
                     display: "inline-flex",
@@ -240,9 +241,10 @@ export function StatusAdminView() {
                 <div>
                   <div style={{ color: subtleText }}>Uptime</div>
                   <div style={{ fontWeight: 500, color: strongText }}>
-                    {health.uptime_seconds}s
+                    {health.uptime_seconds ?? "N/A"}s
                   </div>
                 </div>
+
                 <div>
                   <div style={{ color: subtleText }}>Hora servidor</div>
                   <div style={{ fontWeight: 500, color: strongText }}>
@@ -251,18 +253,19 @@ export function StatusAdminView() {
                       : "N/A"}
                   </div>
                 </div>
+
                 <div>
                   <div style={{ color: subtleText }}>Base de datos</div>
                   <div style={{ fontWeight: 500, color: strongText }}>
                     {health.checks?.database || "N/A"}
                   </div>
                 </div>
+
                 <div>
                   <div style={{ color: subtleText }}>Storage</div>
                   <div style={{ fontWeight: 500, color: strongText }}>
-                    {health.checks?.storage || "N/A"}
-                  </div>
-                </div>
+                    {health.checks?.storageron cargar las empresas";
+      setE                </div>
               </div>
             </div>
           )}
@@ -358,8 +361,8 @@ export function StatusAdminView() {
                       color: strongText,
                     }}
                   >
-                    {docActions.map((row) => (
-                      <li key={row.action}>
+                    {docActions.map((row, index) => (
+                      <li key={`${row.action}-${index}`}>
                         <span
                           style={{
                             color: subtleText,
@@ -427,3 +430,5 @@ export function StatusAdminView() {
     </div>
   );
 }
+
+export default StatusAdminView;

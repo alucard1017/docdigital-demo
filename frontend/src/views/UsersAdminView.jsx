@@ -38,7 +38,7 @@ const initialConfirmState = {
   loading: false,
 };
 
-export function UsersAdminView() {
+function UsersAdminView() {
   const { user: currentUser } = useAuth();
   const { addToast } = useToast();
 
@@ -674,3 +674,5 @@ export function UsersAdminView() {
     </div>
   );
 }
+
+export default UsersAdminView;

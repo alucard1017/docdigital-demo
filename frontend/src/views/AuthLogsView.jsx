@@ -1,5 +1,4 @@
-// src/views/AuthLogsView.jsx
-import { useEffect, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import api from "../api/client";
 
 const ACTION_OPTIONS = [
@@ -29,7 +28,19 @@ function formatDateTime(value) {
   });
 }
 
-export function AuthLogsView() {
+function normalizeMetadata(metadata) {
+  if (!metadata) return {};
+  if (typeof metadata === "string") {
+    try {
+      return JSON.parse(metadata);
+    } catch {
+      return {};
+    }
+  }
+  return typeof metadata === "object" ? metadata : {};
+}
+
+function AuthLogsView() {
   const [logs, setLogs] = useState([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
@@ -40,23 +51,25 @@ export function AuthLogsView() {
   const [companyId, setCompanyId] = useState("");
 
   const [page, setPage] = useState(1);
-  const [pageSize] = useState(50);
+  const pageSize = 50;
 
   const [selectedLog, setSelectedLog] = useState(null);
   const [prettyMetadata, setPrettyMetadata] = useState("");
 
-  async function cargarLogs() {
+  const cargarLogs = useCallback(async () => {
     setLoading(true);
     setError("");
 
-    const params = {};
+    const params = {
+      limit: pageSize,
+    };
+
     if (action) params.action = action;
     if (run.trim()) params.run = run.trim();
-    params.limit = pageSize;
 
     try {
       const res = await api.get("/logs/auth", { params });
-      const data = res.data;
+      const data = res?.data;
       const rows = Array.isArray(data) ? data : [];
       setLogs(rows);
     } catch (err) {
@@ -65,14 +78,15 @@ export function AuthLogsView() {
         err.message ||
         "No se pudieron cargar los auth logs";
       setError(msg);
+      setLogs([]);
     } finally {
       setLoading(false);
     }
-  }
+  }, [action, run]);
 
   useEffect(() => {
     cargarLogs();
-  }, []);
+  }, [cargarLogs]);
 
   function handleFilterSubmit(e) {
     e.preventDefault();
@@ -80,34 +94,43 @@ export function AuthLogsView() {
     cargarLogs();
   }
 
-  const logsFiltrados = logs.filter((log) => {
-    const meta = log.metadata || {};
-    const metaRole =
-      typeof meta.role === "string" ? meta.role.toUpperCase() : "";
-    const metaCompanyId =
-      typeof meta.company_id === "number" ? meta.company_id : null;
+  const logsFiltrados = useMemo(() => {
+    return logs.filter((log) => {
+      const meta = normalizeMetadata(log.metadata);
+      const metaRole =
+        typeof meta.role === "string" ? meta.role.toUpperCase() : "";
+      const metaCompanyId =
+        typeof meta.company_id === "number"
+          ? meta.company_id
+          : Number(meta.company_id) || null;
 
-    if (role && metaRole !== role.toUpperCase()) return false;
+      if (role && metaRole !== role.toUpperCase()) return false;
 
-    if (companyId.trim()) {
-      const wanted = Number(companyId.trim());
-      if (!metaCompanyId || metaCompanyId !== wanted) return false;
-    }
+      if (companyId.trim()) {
+        const wanted = Number(companyId.trim());
+        if (!wanted || metaCompanyId !== wanted) return false;
+      }
 
-    return true;
-  });
+      return true;
+    });
+  }, [logs, role, companyId]);
 
   const total = logsFiltrados.length;
-  const totalPaginas = Math.ceil(total / pageSize) || 1;
-  const logsPaginados = logsFiltrados.slice(
-    (page - 1) * pageSize,
-    page * pageSize
-  );
+  const totalPaginas = Math.max(1, Math.ceil(total / pageSize));
+  const safePage = Math.min(Math.max(page, 1), totalPaginas);
+
+  const logsPaginados = useMemo(() => {
+    return logsFiltrados.slice(
+      (safePage - 1) * pageSize,
+      safePage * pageSize
+    );
+  }, [logsFiltrados, safePage]);
 
   function abrirMetadata(log) {
     setSelectedLog(log);
+
     try {
-      if (log && log.metadata) {
+      if (log?.metadata) {
         const obj =
           typeof log.metadata === "string"
             ? JSON.parse(log.metadata)
@@ -223,7 +246,10 @@ export function AuthLogsView() {
           <select
             className="form-input"
             value={role}
-            onChange={(e) => setRole(e.target.value)}
+            onChange={(e) => {
+              setRole(e.target.value);
+              setPage(1);
+            }}
             style={{ maxWidth: 170 }}
           >
             {ROLE_OPTIONS.map((opt) => (
@@ -238,7 +264,10 @@ export function AuthLogsView() {
             className="form-input"
             placeholder="Empresa ID"
             value={companyId}
-            onChange={(e) => setCompanyId(e.target.value)}
+            onChange={(e) => {
+              setCompanyId(e.target.value);
+              setPage(1);
+            }}
             style={{ width: 120 }}
           />
 
@@ -288,7 +317,7 @@ export function AuthLogsView() {
               </thead>
               <tbody>
                 {logsPaginados.map((log) => {
-                  const meta = log.metadata || {};
+                  const meta = normalizeMetadata(log.metadata);
                   const roleMeta = meta.role;
                   const companyIdMeta = meta.company_id;
 
@@ -318,8 +347,8 @@ export function AuthLogsView() {
                               color: "#64748b",
                             }}
                           >
-                            Usuario ID: {log.user_id}
-                            {typeof companyIdMeta === "number"
+                            Usuario ID: {log.user_id ?? "—"}
+                            {companyIdMeta != null
                               ? ` · Empresa ID: ${companyIdMeta}`
                               : ""}
                             {roleMeta ? ` · Rol: ${roleMeta}` : ""}
@@ -361,16 +390,20 @@ export function AuthLogsView() {
               alignItems: "center",
               marginTop: 16,
               fontSize: "0.85rem",
+              gap: 12,
+              flexWrap: "wrap",
             }}
           >
             <span>
-              Mostrando {logsPaginados.length} de {total} eventos
+              Mostrando {logsPaginados.length} de {total} eventos · Página{" "}
+              {safePage} de {totalPaginas}
             </span>
+
             <div style={{ display: "flex", gap: 8 }}>
               <button
                 type="button"
                 className="btn-main"
-                disabled={page === 1}
+                disabled={safePage === 1}
                 onClick={() => setPage((p) => Math.max(1, p - 1))}
               >
                 Anterior
@@ -378,10 +411,8 @@ export function AuthLogsView() {
               <button
                 type="button"
                 className="btn-main"
-                disabled={page === totalPaginas || totalPaginas === 0}
-                onClick={() =>
-                  setPage((p) => Math.min(totalPaginas, p + 1))
-                }
+                disabled={safePage === totalPaginas || totalPaginas === 0}
+                onClick={() => setPage((p) => Math.min(totalPaginas, p + 1))}
               >
                 Siguiente
               </button>
@@ -419,6 +450,7 @@ export function AuthLogsView() {
                 Cerrar
               </button>
             </div>
+
             <p
               style={{
                 marginTop: 0,
@@ -430,6 +462,7 @@ export function AuthLogsView() {
               ID log: {selectedLog.id} · Acción: {selectedLog.action} · RUN:{" "}
               {selectedLog.run || "—"}
             </p>
+
             <div
               style={{
                 maxHeight: "400px",
@@ -458,3 +491,5 @@ export function AuthLogsView() {
     </div>
   );
 }
+
+export default AuthLogsView;

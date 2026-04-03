@@ -1,61 +1,104 @@
-// frontend/src/views/RemindersConfigView.jsx
-import { useState, useEffect } from "react";
-import axios from "axios";
+import { useCallback, useEffect, useState } from "react";
+import api from "../api/client";
 
-export default function RemindersConfigView() {
+function normalizeConfigPayload(data) {
+  return {
+    interval_days: Number(data?.interval_days) || 1,
+    max_attempts: Number(data?.max_attempts) || 1,
+    enabled: Boolean(data?.enabled),
+  };
+}
+
+function RemindersConfigView() {
   const [config, setConfig] = useState(null);
   const [loading, setLoading] = useState(true);
-  const [error, setError] = useState(null);
+  const [saving, setSaving] = useState(false);
+  const [error, setError] = useState("");
   const [editing, setEditing] = useState(false);
-  const [formData, setFormData] = useState({});
+  const [formData, setFormData] = useState({
+    interval_days: 1,
+    max_attempts: 1,
+    enabled: false,
+  });
 
-  useEffect(() => {
-    fetchConfig();
-  }, []);
-
-  const fetchConfig = async () => {
+  const fetchConfig = useCallback(async () => {
     try {
-      const token = localStorage.getItem("token");
-      const res = await axios.get("/api/reminders/config", {
-        headers: { Authorization: `Bearer ${token}` },
-      });
-      setConfig(res.data);
-      setFormData(res.data);
-      setError(null);
+      setLoading(true);
+      setError("");
+
+      const res = await api.get("/reminders/config");
+      const normalized = normalizeConfigPayload(res?.data);
+
+      setConfig(normalized);
+      setFormData(normalized);
     } catch (err) {
       setError(
         err.response?.data?.message || "Error cargando configuración"
       );
-      console.error("Error:", err);
+      setConfig(null);
     } finally {
       setLoading(false);
     }
-  };
+  }, []);
 
-  const handleChange = (e) => {
+  useEffect(() => {
+    fetchConfig();
+  }, [fetchConfig]);
+
+  function handleChange(e) {
     const { name, value, type, checked } = e.target;
+
     setFormData((prev) => ({
       ...prev,
-      [name]: type === "checkbox" ? checked : parseInt(value) || value,
+      [name]:
+        type === "checkbox"
+          ? checked
+          : value === ""
+          ? ""
+          : Number(value),
     }));
-  };
+  }
 
-  const handleSubmit = async (e) => {
+  async function handleSubmit(e) {
     e.preventDefault();
+
     try {
-      const token = localStorage.getItem("token");
-      const res = await axios.put("/api/reminders/config", formData, {
-        headers: { Authorization: `Bearer ${token}` },
-      });
-      setConfig(res.data.config);
+      setSaving(true);
+      setError("");
+
+      const payload = {
+        interval_days: Number(formData.interval_days) || 1,
+        max_attempts: Number(formData.max_attempts) || 1,
+        enabled: Boolean(formData.enabled),
+      };
+
+      const res = await api.put("/reminders/config", payload);
+      const nextConfig = normalizeConfigPayload(res?.data?.config || payload);
+
+      setConfig(nextConfig);
+      setFormData(nextConfig);
       setEditing(false);
-      alert("Configuración actualizada exitosamente");
+      window.alert("Configuración actualizada exitosamente");
     } catch (err) {
       setError(
         err.response?.data?.message || "Error actualizando configuración"
       );
+    } finally {
+      setSaving(false);
     }
-  };
+  }
+
+  function handleCancel() {
+    setEditing(false);
+    setFormData(
+      config || {
+        interval_days: 1,
+        max_attempts: 1,
+        enabled: false,
+      }
+    );
+    setError("");
+  }
 
   if (loading) {
     return <div className="p-4">Cargando configuración...</div>;
@@ -108,12 +151,21 @@ export default function RemindersConfigView() {
             </p>
           </div>
 
-          <button
-            onClick={() => setEditing(true)}
-            className="mt-4 bg-blue-600 text-white px-4 py-2 rounded hover:bg-blue-700"
-          >
-            Editar Configuración
-          </button>
+          <div className="mt-4 flex gap-2">
+            <button
+              onClick={() => setEditing(true)}
+              className="bg-blue-600 text-white px-4 py-2 rounded hover:bg-blue-700"
+            >
+              Editar Configuración
+            </button>
+
+            <button
+              onClick={fetchConfig}
+              className="bg-gray-200 text-gray-800 px-4 py-2 rounded hover:bg-gray-300"
+            >
+              Recargar
+            </button>
+          </div>
         </div>
       )}
 
@@ -131,6 +183,7 @@ export default function RemindersConfigView() {
               value={formData.interval_days}
               onChange={handleChange}
               className="w-full px-3 py-2 border border-gray-300 rounded"
+              disabled={saving}
             />
           </div>
 
@@ -146,6 +199,7 @@ export default function RemindersConfigView() {
               value={formData.max_attempts}
               onChange={handleChange}
               className="w-full px-3 py-2 border border-gray-300 rounded"
+              disabled={saving}
             />
           </div>
 
@@ -154,9 +208,10 @@ export default function RemindersConfigView() {
               <input
                 type="checkbox"
                 name="enabled"
-                checked={formData.enabled}
+                checked={Boolean(formData.enabled)}
                 onChange={handleChange}
                 className="w-4 h-4 text-blue-600"
+                disabled={saving}
               />
               <span className="ml-2 text-sm font-semibold text-gray-700">
                 Habilitar recordatorios automáticos
@@ -168,16 +223,16 @@ export default function RemindersConfigView() {
             <button
               type="submit"
               className="bg-green-600 text-white px-4 py-2 rounded hover:bg-green-700"
+              disabled={saving}
             >
-              Guardar
+              {saving ? "Guardando..." : "Guardar"}
             </button>
+
             <button
               type="button"
-              onClick={() => {
-                setEditing(false);
-                setFormData(config);
-              }}
+              onClick={handleCancel}
               className="bg-gray-600 text-white px-4 py-2 rounded hover:bg-gray-700"
+              disabled={saving}
             >
               Cancelar
             </button>
@@ -187,3 +242,5 @@ export default function RemindersConfigView() {
     </div>
   );
 }
+
+export default RemindersConfigView;

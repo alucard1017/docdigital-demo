@@ -1,5 +1,4 @@
-// src/views/CompaniesAdminView.jsx
-import { useEffect, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import api from "../api/client";
 
 function formatDate(value) {
@@ -27,19 +26,20 @@ function getPlanClassName(plan) {
   return "badge-plan badge-plan-basic";
 }
 
-export function CompaniesAdminView() {
+function CompaniesAdminView() {
   const [companies, setCompanies] = useState([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
   const [name, setName] = useState("");
   const [saving, setSaving] = useState(false);
 
-  async function cargarCompanies() {
+  const cargarCompanies = useCallback(async () => {
     setLoading(true);
     setError("");
+
     try {
       const res = await api.get("/companies");
-      const data = res.data;
+      const data = res?.data;
       setCompanies(Array.isArray(data) ? data : []);
     } catch (err) {
       const msg =
@@ -47,14 +47,15 @@ export function CompaniesAdminView() {
         err.message ||
         "No se pudieron cargar las empresas";
       setError(msg);
+      setCompanies([]);
     } finally {
       setLoading(false);
     }
-  }
+  }, []);
 
   useEffect(() => {
     cargarCompanies();
-  }, []);
+  }, [cargarCompanies]);
 
   async function handleCreate(e) {
     e.preventDefault();
@@ -62,10 +63,15 @@ export function CompaniesAdminView() {
 
     try {
       setSaving(true);
-      const res = await api.post("/companies", { name });
-      if (!res || !res.data) {
+
+      const res = await api.post("/companies", {
+        name: name.trim(),
+      });
+
+      if (!res?.data) {
         throw new Error("No se pudo crear la empresa");
       }
+
       setName("");
       await cargarCompanies();
       window.alert("Empresa creada correctamente");
@@ -85,15 +91,20 @@ export function CompaniesAdminView() {
       "Nuevo nombre para la empresa:",
       currentName || ""
     );
+
     if (!nuevoNombre || !nuevoNombre.trim()) return;
 
     try {
+      setSaving(true);
+
       const res = await api.put(`/companies/${id}`, {
         name: nuevoNombre.trim(),
       });
-      if (!res || !res.data) {
+
+      if (!res?.data) {
         throw new Error("No se pudo actualizar la empresa");
       }
+
       await cargarCompanies();
       window.alert("Empresa actualizada correctamente");
     } catch (err) {
@@ -102,6 +113,8 @@ export function CompaniesAdminView() {
         err.message ||
         "Error al actualizar empresa";
       window.alert(msg);
+    } finally {
+      setSaving(false);
     }
   }
 
@@ -109,13 +122,18 @@ export function CompaniesAdminView() {
     const ok = window.confirm(
       `¿Seguro que deseas eliminar la empresa "${companyName}"?\nSolo se puede si no tiene usuarios asociados.`
     );
+
     if (!ok) return;
 
     try {
+      setSaving(true);
+
       const res = await api.delete(`/companies/${id}`);
-      if (!res || !res.data) {
+
+      if (!res?.data) {
         throw new Error("No se pudo eliminar la empresa");
       }
+
       await cargarCompanies();
       window.alert("Empresa eliminada correctamente");
     } catch (err) {
@@ -124,8 +142,30 @@ export function CompaniesAdminView() {
         err.message ||
         "Error al eliminar empresa";
       window.alert(msg);
+    } finally {
+      setSaving(false);
     }
   }
+
+  const muestraPlan = useMemo(
+    () => companies.some((c) => c.plan),
+    [companies]
+  );
+
+  ceron cargar las empresas";
+      setE> companies.some((c) => typeof c.users_count === "number"),
+    [companies]
+  );
+
+  const muestraFecha = useMemo(
+    () => companies.some((c) => c.created_at),
+    [companies]
+  );
+
+  const muestraDomain = useMemo(
+    () => companies.some((c) => c.domain),
+    [companies]
+  );
 
   if (loading) {
     return (
@@ -156,13 +196,6 @@ export function CompaniesAdminView() {
     );
   }
 
-  const muestraPlan = companies.some((c) => c.plan);
-  const muestraUsers = companies.some(
-    (c) => typeof c.users_count === "number"
-  );
-  const muestraFecha = companies.some((c) => c.created_at);
-  const muestraDomain = companies.some((c) => c.domain);
-
   return (
     <div className="companies-admin-page">
       <div className="card-premium companies-admin-card">
@@ -185,6 +218,7 @@ export function CompaniesAdminView() {
               placeholder="Nombre de la nueva empresa"
               value={name}
               onChange={(e) => setName(e.target.value)}
+              disabled={saving}
             />
             <button
               type="submit"
@@ -214,19 +248,9 @@ export function CompaniesAdminView() {
                   <tr className="companies-admin-head-row">
                     <th className="col-company-id">ID</th>
                     <th className="col-company-name">Nombre</th>
-
-                    {muestraUsers && (
-                      <th className="col-company-users">Usuarios</th>
-                    )}
-
-                    {muestraPlan && (
-                      <th className="col-company-plan">Plan</th>
-                    )}
-
-                    {muestraFecha && (
-                      <th className="col-company-date">Creada</th>
-                    )}
-
+                    {muestraUsers && <th className="col-company-users">Usuarios</th>}
+                    {muestraPlan && <th className="col-company-plan">Plan</th>}
+                    {muestraFecha && <th className="col-company-date">Creada</th>}
                     <th className="col-company-actions">Acciones</th>
                   </tr>
                 </thead>
@@ -310,3 +334,5 @@ export function CompaniesAdminView() {
     </div>
   );
 }
+
+export default CompaniesAdminView;
