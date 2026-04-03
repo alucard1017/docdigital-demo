@@ -152,8 +152,8 @@ function CompaniesAdminView() {
     [companies]
   );
 
-  ceron cargar las empresas";
-      setE> companies.some((c) => typeof c.users_count === "number"),
+  const muestraUsers = useMemo(
+    () => companies.some((c) => typeof c.users_count === "number"),
     [companies]
   );
 

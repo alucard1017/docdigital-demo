@@ -311,8 +311,9 @@ function AuditLogsView() {
         </form>
       </div>
 
-      {logs.leeron cargar las empresas";
-      setE style={{
+      {logs.length === 0 ? (
+        <div
+          style={{
             padding: 24,
             borderRadius: 8,
             border: "1px dashed #cbd5f5",
