@@ -103,58 +103,63 @@ export function PublicSignView({
       : "No se pudo registrar la firma.";
   }
 
-  async function handleConfirm() {
-    if (signing || !canActOnDocument) return;
+async function handleConfirm() {
+  if (signing || !canActOnDocument) return;
 
-    try {
-      if (!acceptedLegal) {
-        setLegalError(
-          isVisado
-            ? "Debes aceptar el aviso legal de visado antes de continuar."
-            : "Debes aceptar el aviso legal de firma electrónica antes de continuar."
-        );
-        return;
-      }
-
-      setLegalError("");
-      setSigning(true);
-
-      const actionPath = isVisado ? "visar" : "firmar";
-      const endpoint = `${API_URL}/public/docs/${publicSignToken}/${actionPath}`;
-
-      const res = await fetch(endpoint, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-      });
-
-      let data = {};
-      try {
-        data = await res.json();
-      } catch {
-        data = {};
-      }
-
-      if (!res.ok) {
-        throw new Error(data?.message || getDefaultErrorMessage());
-      }
-
-      alert(
+  try {
+    if (!acceptedLegal) {
+      setLegalError(
         isVisado
-          ? "✅ Visado registrado correctamente."
-          : "✅ Firma registrada correctamente."
+          ? "Debes aceptar el aviso legal de visado antes de continuar."
+          : "Debes aceptar el aviso legal de firma electrónica antes de continuar."
       );
-
-      await cargarFirmaPublica(publicSignToken);
-    } catch (err) {
-      alert(
-        "❌ " +
-          (err?.message ||
-            "Ocurrió un error al procesar la acción. Intenta nuevamente.")
-      );
-    } finally {
-      setSigning(false);
+      return;
     }
+
+    setLegalError("");
+    setSigning(true);
+
+    const actionPath = isVisado ? "visar" : "firmar";
+    const endpoint = `${API_URL}/public/docs/${publicSignToken}/${actionPath}`;
+
+    const res = await fetch(endpoint, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+    });
+
+    let data = {};
+    try {
+      data = await res.json();
+    } catch {
+      data = {};
+    }
+
+    if (!res.ok) {
+      throw new Error(data?.message || getDefaultErrorMessage());
+    }
+
+    await cargarFirmaPublica(publicSignToken);
+
+    window.scrollTo({
+      top: 0,
+      behavior: "smooth",
+    });
+
+    alert(
+      isVisado
+        ? "✅ Visado registrado correctamente."
+        : "✅ Firma registrada correctamente."
+    );
+  } catch (err) {
+    alert(
+      "❌ " +
+        (err?.message ||
+          "Ocurrió un error al procesar la acción. Intenta nuevamente.")
+    );
+  } finally {
+    setSigning(false);
   }
+}
 
   async function handleReject() {
     if (rejecting || !canActOnDocument) return;
@@ -311,11 +316,12 @@ export function PublicSignView({
 
               <div className="public-sign-pdf-stage">
                 {pdfUrl ? (
-                  <iframe
-                    title="Vista previa del documento"
-                    src={`${pdfUrl}#toolbar=1&navpanes=0&scrollbar=1&view=FitH&zoom=page-width`}
-                    className="public-sign-pdf-frame"
-                  />
+		   <iframe
+   		     title="Vista previa del documento"
+		     src={`${pdfUrl}#toolbar=1&navpanes=0&scrollbar=1&view=FitH&zoom=page-width`}
+		     className="public-sign-pdf-frame"
+		     style={{ width: "100%", minHeight: "78vh", border: "0" }}
+		   />
                 ) : (
                   <div className="public-sign-pdf-empty">
                     No se pudo mostrar la vista previa del PDF.

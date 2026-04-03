@@ -335,40 +335,63 @@ function App() {
     }
   }, [view, isAuthenticated, setSelectedDoc]);
 
-  useEffect(() => {
-    if (!token) return;
-    if (typeof socketOn !== "function" || typeof socketOff !== "function") return;
+useEffect(() => {
+  if (!token) return;
+  if (typeof socketOn !== "function" || typeof socketOff !== "function") return;
 
-    const handleSent = (data) => {
-      addToast({
-        type: "success",
-        title: "Documento enviado",
-        message: data?.titulo
-          ? `"${data.titulo}" se envió correctamente`
-          : "El documento se envió correctamente",
-      });
-      cargarDocs();
-    };
+  const handleSent = (data) => {
+    addToast({
+      type: "success",
+      title: "Documento enviado",
+      message: data?.titulo
+        ? `"${data.titulo}" se envió correctamente`
+        : "El documento se envió correctamente",
+    });
 
-    const handleSigned = (data) => {
-      addToast({
-        type: "success",
-        title: "Documento firmado",
-        message: data?.titulo
-          ? `"${data.titulo}" se firmó correctamente`
-          : "El documento se firmó correctamente",
-      });
-      cargarDocs();
-    };
+    cargarDocs({
+      page: 1,
+      sort,
+      statusFilter,
+      search,
+      force: true,
+    });
+  };
 
-    socketOn("document:sent", handleSent);
-    socketOn("document:signed", handleSigned);
+  const handleSigned = (data) => {
+    addToast({
+      type: "success",
+      title: "Documento firmado",
+      message: data?.titulo
+        ? `"${data.titulo}" se firmó correctamente`
+        : "El documento se firmó correctamente",
+    });
 
-    return () => {
-      socketOff("document:sent", handleSent);
-      socketOff("document:signed", handleSigned);
-    };
-  }, [token, socketOn, socketOff, cargarDocs, addToast]);
+    cargarDocs({
+      page: 1,
+      sort,
+      statusFilter,
+      search,
+      force: true,
+    });
+  };
+
+  socketOn("document:sent", handleSent);
+  socketOn("document:signed", handleSigned);
+
+  return () => {
+    socketOff("document:sent", handleSent);
+    socketOff("document:signed", handleSigned);
+  };
+}, [
+  token,
+  socketOn,
+  socketOff,
+  cargarDocs,
+  addToast,
+  sort,
+  statusFilter,
+  search,
+]);
 
   const handleLogout = useMemo(
     () => () => {
@@ -401,11 +424,17 @@ function App() {
     handleNavigateProtected("list");
   };
 
-  const handleAfterCreateDocument = async () => {
-    setPage(1);
-    await cargarDocs(sort, 1);
-    handleNavigateProtected("list");
-  };
+const handleAfterCreateDocument = async () => {
+  setPage(1);
+  await cargarDocs({
+    page: 1,
+    sort,
+    statusFilter,
+    search,
+    force: true,
+  });
+  handleNavigateProtected("list");
+};
 
   const handleTestError = () => {
     throw new Error("Frontend test error");
@@ -570,29 +599,37 @@ function App() {
     if (view === "list") {
       return (
         <>
-          <ListHeader
-            sort={sort}
-            setSort={(value) => {
-              setSort(value);
-              setPage(1);
-            }}
-            statusFilter={statusFilter}
-            setStatusFilter={(value) => {
-              setStatusFilter(value);
-              setPage(1);
-            }}
-            search={search}
-            setSearch={(value) => {
-              setSearch(value);
-              setPage(1);
-            }}
-            totalFiltrado={safeTotalFiltrado}
-            pendientes={safePendientes}
-            visados={safeVisados}
-            firmados={safeFirmados}
-            rechazados={safeRechazados}
-            onSync={() => cargarDocs(sort, page)}
-          />
+<ListHeader
+  sort={sort}
+  setSort={(value) => {
+    setSort(value);
+    setPage(1);
+  }}
+  statusFilter={statusFilter}
+  setStatusFilter={(value) => {
+    setStatusFilter(value);
+    setPage(1);
+  }}
+  search={search}
+  setSearch={(value) => {
+    setSearch(value);
+    setPage(1);
+  }}
+  totalFiltrado={safeTotalFiltrado}
+  pendientes={safePendientes}
+  visados={safeVisados}
+  firmados={safeFirmados}
+  rechazados={safeRechazados}
+  onSync={() =>
+    cargarDocs({
+      page,
+      sort,
+      statusFilter,
+      search,
+      force: true,
+    })
+  }
+/>
 
           <div className="inbox-header-card">
             <div className="inbox-header-main">
@@ -612,13 +649,21 @@ function App() {
                 + Nuevo documento
               </button>
 
-              <button
-                type="button"
-                className="btn-main btn-ghost"
-                onClick={() => cargarDocs(sort, page)}
-              >
-                Actualizar bandeja
-              </button>
+<button
+  type="button"
+  className="btn-main btn-ghost"
+  onClick={() =>
+    cargarDocs({
+      page,
+      sort,
+      statusFilter,
+      search,
+      force: true,
+    })
+  }
+>
+  Actualizar bandeja
+</button>
             </div>
           </div>
 
@@ -665,10 +710,18 @@ function App() {
                 {errorDocs ||
                   "Por favor, revisa tu conexión e inténtalo nuevamente."}
               </p>
-              <button
-                className="btn-main btn-primary"
-                onClick={() => cargarDocs(sort, page)}
-              >
+<button
+  className="btn-main btn-primary"
+  onClick={() =>
+    cargarDocs({
+      page,
+      sort,
+      statusFilter,
+      search,
+      force: true,
+    })
+  }
+>
                 Reintentar carga
               </button>
             </div>

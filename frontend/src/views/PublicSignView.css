@@ -11,6 +11,8 @@
   color: #e5e7eb;
 }
 
+/* Heading */
+
 .public-sign-heading {
   margin-top: 18px;
   margin-bottom: 18px;
@@ -36,6 +38,8 @@
   font-weight: 800;
   color: #f8fafc;
 }
+
+/* Status badge */
 
 .public-sign-status {
   padding: 10px 14px;
@@ -69,6 +73,8 @@
   color: #fca5a5;
 }
 
+/* Intro */
+
 .public-sign-intro {
   margin-bottom: 18px;
   padding: 16px 18px;
@@ -90,6 +96,26 @@
   line-height: 1.65;
   color: #cbd5e1;
 }
+
+/* Intro modifiers */
+
+.public-sign-intro--info {
+  border-color: rgba(96, 165, 250, 0.35);
+}
+
+.public-sign-intro--warning {
+  border-color: rgba(245, 158, 11, 0.35);
+}
+
+.public-sign-intro__title--info {
+  color: #93c5fd;
+}
+
+.public-sign-intro__title--warning {
+  color: #fcd34d;
+}
+
+/* Messages */
 
 .public-sign-message-card {
   border-radius: 24px;
@@ -132,19 +158,21 @@
   margin: 0 auto 16px;
 }
 
+/* Layout principal */
+
 .public-sign-layout {
   display: grid;
-  grid-template-columns: minmax(0, 1.6fr) minmax(360px, 0.8fr);
-  gap: 20px;
+  grid-template-columns: minmax(0, 1.5fr) minmax(320px, 420px);
+  gap: 24px;
   align-items: start;
 }
 
+/* Panel documento */
+
 .public-sign-document-panel {
-  min-width: 0;
-  border-radius: 24px;
+  border-radius: 22px;
   border: 1px solid rgba(148, 163, 184, 0.16);
-  background: rgba(2, 6, 23, 0.84);
-  box-shadow: 0 20px 50px rgba(2, 6, 23, 0.45);
+  background: rgba(2, 6, 23, 0.9);
   overflow: hidden;
 }
 
@@ -184,17 +212,21 @@
   white-space: nowrap;
 }
 
+/* Stage PDF: sin doble scroll, centrado */
+
 .public-sign-pdf-stage {
-  padding: 16px;
+  padding: 24px 24px 28px;
   background:
     linear-gradient(180deg, rgba(15, 23, 42, 0.96) 0%, rgba(2, 6, 23, 0.96) 100%);
+  display: flex;
+  justify-content: center;
+  align-items: flex-start;
 }
 
 .public-sign-pdf-frame {
   width: 100%;
-  height: 78vh;
-  min-height: 720px;
-  border: 1px solid rgba(148, 163, 184, 0.12);
+  min-height: 78vh;
+  border: 0;
   border-radius: 18px;
   background: #ffffff;
 }
@@ -209,6 +241,8 @@
   padding: 32px;
   text-align: center;
 }
+
+/* Sidebar */
 
 .public-sign-sidebar {
   min-width: 0;
@@ -271,6 +305,8 @@
   margin-top: 4px;
 }
 
+/* Errores / estados */
+
 .public-sign-inline-error {
   margin-top: 12px;
   margin-bottom: 14px;
@@ -309,6 +345,8 @@
   font-size: 14px;
   line-height: 1.6;
 }
+
+/* Botones */
 
 .public-sign-actions {
   margin-top: 18px;
@@ -373,6 +411,15 @@
   font-weight: 700;
 }
 
+/* Botón auto‑ancho (tarjeta error) */
+
+.public-sign-button--auto {
+  width: auto;
+  margin-top: 4px;
+}
+
+/* Rechazo */
+
 .public-sign-reject-card {
   margin-top: 18px;
   padding: 18px;
@@ -415,115 +462,14 @@
   gap: 10px;
 }
 
+/* Footer */
+
 .public-sign-footer-wrap {
   margin-top: 18px;
 }
 
-@media (max-width: 1080px) {
-  .public-sign-layout {
-    grid-template-columns: 1fr;
-  }
-
-  .public-sign-sidebar {
-    position: static;
-  }
-
-  .public-sign-pdf-frame {
-    height: 60vh;
-    min-height: 420px;
-    border-radius: 14px;
-  }
-}
-
-@media (max-width: 768px) {
-  .public-sign-pdf-stage {
-    padding: 12px;
-    justify-content: center;
-  }
-
-  .public-sign-heading {
-    margin-top: 14px;
-    margin-bottom: 14px;
-  }
-
-  .public-sign-title {
-    font-size: clamp(1.5rem, 6vw, 2rem);
-  }
-
-  .public-sign-intro,
-  .public-sign-sidebar,
-  .public-sign-document-panel {
-    border-radius: 20px;
-  }
-
-  .public-sign-document-panel__header {
-    padding: 14px 14px;
-  }
-
-.public-sign-pdf-stage {
-  padding: 24px 24px 28px;
-  background:
-    linear-gradient(180deg, rgba(15, 23, 42, 0.96) 0%, rgba(2, 6, 23, 0.96) 100%);
-  display: flex;
-  justify-content: center;
-  align-items: flex-start;
-}
-
-.public-sign-pdf-frame {
-  width: 100%;
-  max-width: 980px;
-  height: 72vh;
-  min-height: 640px;
-  border: 1px solid rgba(148, 163, 184, 0.12);
-  border-radius: 18px;
-  background: #ffffff;
-}
-
-.public-sign-sidebar {
-  min-width: 0;
-  position: sticky;
-  top: 32px;
-  border-radius: 24px;
-  border: 1px solid rgba(148, 163, 184, 0.16);
-  background: rgba(2, 6, 23, 0.88);
-  box-shadow: 0 20px 50px rgba(2, 6, 23, 0.4);
-  padding: 22px;
-}
-
-  .public-sign-reject-actions {
-    grid-template-columns: 1fr;
-  }
-
-  .public-sign-open-pdf {
-    width: 100%;
-    text-align: center;
-  }
-}
-
-/* Modificadores de intro según modo */
-.public-sign-intro--info {
-  border-color: rgba(96, 165, 250, 0.35);
-}
-
-.public-sign-intro--warning {
-  border-color: rgba(245, 158, 11, 0.35);
-}
-
-.public-sign-intro__title--info {
-  color: #93c5fd;
-}
-
-.public-sign-intro__title--warning {
-  color: #fcd34d;
-}
-
-/* Botón auto‑ancho para el mensaje de error */
-.public-sign-button--auto {
-  width: auto;
-  margin-top: 4px;
-}
-
 /* Aviso legal (ElectronicSignatureNotice) */
+
 .public-legal-card {
   margin-top: 6px;
   border-radius: 18px;
@@ -615,4 +561,55 @@
   font-size: 14px;
   line-height: 1.65;
   color: #f8fafc;
+}
+
+/* Responsive */
+
+@media (max-width: 1080px) {
+  .public-sign-layout {
+    grid-template-columns: 1fr;
+  }
+
+  .public-sign-sidebar {
+    position: static;
+  }
+
+  .public-sign-pdf-frame {
+    min-height: 60vh;
+    border-radius: 14px;
+  }
+}
+
+@media (max-width: 768px) {
+  .public-sign-heading {
+    margin-top: 14px;
+    margin-bottom: 14px;
+  }
+
+  .public-sign-title {
+    font-size: clamp(1.5rem, 6vw, 2rem);
+  }
+
+  .public-sign-intro,
+  .public-sign-sidebar,
+  .public-sign-document-panel {
+    border-radius: 20px;
+  }
+
+  .public-sign-document-panel__header {
+    padding: 14px;
+  }
+
+  .public-sign-pdf-stage {
+    padding: 12px;
+  }
+
+  .public-sign-reject-actions {
+    grid-template-columns: 1fr;
+  }
+
+  .public-sign-open-pdf {
+    width: 100%;
+    text-align: center;
+  }
 }
