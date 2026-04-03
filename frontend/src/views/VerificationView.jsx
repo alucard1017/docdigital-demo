@@ -175,7 +175,6 @@ export function VerificationView({ API_URL }) {
     <div
       style={{
         minHeight: "100vh",
-        minHeight: "100dvh",
         padding: "24px 16px",
         display: "flex",
         justifyContent: "center",

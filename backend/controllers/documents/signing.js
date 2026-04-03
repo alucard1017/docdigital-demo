@@ -1,4 +1,3 @@
-// backend/controllers/documents/signing.js
 const { db, sellarPdfConQr, DOCUMENT_STATES } = require("./common");
 const { logAudit } = require("../../utils/auditLog");
 
@@ -8,12 +7,13 @@ const { logAudit } = require("../../utils/auditLog");
 async function signDocument(req, res) {
   try {
     const id = req.params.id;
+    const userId = req.user.id;
 
     const current = await db.query(
       `SELECT * 
        FROM documents 
        WHERE id = $1 AND owner_id = $2`,
-      [id, req.user.id]
+      [id, userId]
     );
 
     if (current.rowCount === 0) {
@@ -45,7 +45,7 @@ async function signDocument(req, res) {
            updated_at = NOW()
        WHERE id = $2 AND owner_id = $3
        RETURNING *`,
-      [DOCUMENT_STATES.SIGNED, id, req.user.id]
+      [DOCUMENT_STATES.SIGNED, id, userId]
     );
     const doc = result.rows[0];
 
@@ -99,14 +99,13 @@ async function signDocument(req, res) {
               numeroContratoInterno: doc.numero_contrato_interno,
             });
 
-            // No actualizar pdf_final_url aquí: ya lo hace pdfSeal.js.
-            // Si quieres devolver el valor actualizado, recarga el documento.
             const updatedDocRes = await db.query(
               `SELECT pdf_final_url 
                FROM documents 
                WHERE id = $1`,
               [doc.id]
             );
+
             if (updatedDocRes.rowCount > 0) {
               doc.pdf_final_url = updatedDocRes.rows[0].pdf_final_url;
             }
@@ -206,8 +205,9 @@ async function viserDocumentInternalUpdate(id, userId) {
 async function visarDocument(req, res) {
   try {
     const id = req.params.id;
+    const userId = req.user.id;
 
-    const result = await viserDocumentInternalUpdate(id, req.user.id);
+    const result = await viserDocumentInternalUpdate(id, userId);
     if (result.error) {
       return res.status(result.error.status).json(result.error.body);
     }
@@ -244,12 +244,13 @@ async function rejectDocument(req, res) {
   try {
     const id = req.params.id;
     const { motivo } = req.body;
+    const userId = req.user.id;
 
     const current = await db.query(
       `SELECT * 
        FROM documents 
        WHERE id = $1 AND owner_id = $2`,
-      [id, req.user.id]
+      [id, userId]
     );
 
     if (current.rowCount === 0) {
@@ -273,7 +274,7 @@ async function rejectDocument(req, res) {
        SET status = $1, reject_reason = $2, updated_at = NOW()
        WHERE id = $3 AND owner_id = $4 
        RETURNING *`,
-      [DOCUMENT_STATES.REJECTED, motivo || "Sin especificar", id, req.user.id]
+      [DOCUMENT_STATES.REJECTED, motivo || "Sin especificar", id, userId]
     );
 
     const doc = result.rows[0];
@@ -302,7 +303,7 @@ async function rejectDocument(req, res) {
       req,
     });
 
-    // Notificar al creador por email
+    // Notificación por email al creador
     const creadorRes = await db.query(
       `SELECT u.email, u.name
        FROM users u

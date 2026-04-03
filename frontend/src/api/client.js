@@ -1,3 +1,4 @@
+// src/api/client.js
 import axios from "axios";
 import { getStoredToken } from "../utils/session";
 
@@ -20,17 +21,28 @@ const stripTrailingSlashes = (value = "") => {
   return normalizeText(value).replace(/\/+$/, "");
 };
 
+const ensureApiSuffix = (value = "") => {
+  const clean = stripTrailingSlashes(value);
+  if (!clean) return DEFAULT_API_BASE_URL;
+  return clean.endsWith("/api") ? clean : `${clean}/api`;
+};
+
 export const getApiBaseUrl = () => {
   const raw = import.meta.env.VITE_API_URL;
 
   if (typeof raw === "string" && raw.trim()) {
-    return stripTrailingSlashes(raw);
+    return ensureApiSuffix(raw);
   }
 
   return DEFAULT_API_BASE_URL;
 };
 
 export const API_BASE_URL = getApiBaseUrl();
+
+export const buildApiUrl = (path = "") => {
+  const cleanPath = ensureLeadingSlash(path);
+  return `${stripTrailingSlashes(API_BASE_URL)}${cleanPath}`;
+};
 
 if (import.meta.env.DEV) {
   console.log("[API] Base URL:", API_BASE_URL);
@@ -257,6 +269,43 @@ export async function getDocumentPdfUrl(id, config = {}) {
 
 export async function getDocumentTimeline(id, config = {}) {
   const res = await api.get(`/documents/${id}/timeline`, config);
+  return res.data;
+}
+
+export async function getPublicVerificationByCode(code, config = {}) {
+  const res = await api.get(`/public/verificar/${encodeURIComponent(code)}`, config);
+  return res.data;
+}
+
+export async function getPublicDocumentByToken(token, config = {}) {
+  const res = await api.get(`/public/docs/${encodeURIComponent(token)}`, config);
+  return res.data;
+}
+
+export async function publicSignDocument(token, config = {}) {
+  const res = await api.post(
+    `/public/docs/${encodeURIComponent(token)}/firmar`,
+    {},
+    config
+  );
+  return res.data;
+}
+
+export async function publicVisarDocument(token, config = {}) {
+  const res = await api.post(
+    `/public/docs/${encodeURIComponent(token)}/visar`,
+    {},
+    config
+  );
+  return res.data;
+}
+
+export async function publicRejectDocument(token, motivo, config = {}) {
+  const res = await api.post(
+    `/public/docs/${encodeURIComponent(token)}/rechazar`,
+    { motivo },
+    config
+  );
   return res.data;
 }
 

@@ -81,7 +81,10 @@ export function useDocuments(token) {
   const [page, setPageState] = useState(1);
 
   const [selectedDoc, setSelectedDoc] = useState(null);
+
   const [pdfUrl, setPdfUrl] = useState(null);
+  const [loadingPdf, setLoadingPdf] = useState(false);
+  const [pdfError, setPdfError] = useState("");
 
   const [pagination, setPagination] = useState({
     page: 1,
@@ -94,11 +97,22 @@ export function useDocuments(token) {
 
   const latestRequestRef = useRef(0);
   const lastQueryKeyRef = useRef("");
+  const latestPreviewRequestRef = useRef(0);
+  const currentObjectUrlRef = useRef(null);
+
+  const cleanupPdfUrl = useCallback(() => {
+    if (currentObjectUrlRef.current) {
+      URL.revokeObjectURL(currentObjectUrlRef.current);
+      currentObjectUrlRef.current = null;
+    }
+    setPdfUrl(null);
+  }, []);
 
   const resetState = useCallback(() => {
     setDocs([]);
     setSelectedDoc(null);
-    setPdfUrl(null);
+    cleanupPdfUrl();
+    setPdfError("");
     setPagination({
       page: 1,
       limit: PAGE_SIZE,
@@ -107,7 +121,7 @@ export function useDocuments(token) {
       hasNextPage: false,
       hasPrevPage: false,
     });
-  }, []);
+  }, [cleanupPdfUrl]);
 
   const cargarDocs = useCallback(
     async ({
@@ -159,8 +173,6 @@ export function useDocuments(token) {
       setErrorDocs("");
 
       try {
-        console.log("[useDocuments] GET /docs params:", params);
-
         const res = await api.get("/docs", { params });
 
         if (latestRequestRef.current !== requestId) return;
@@ -210,6 +222,54 @@ export function useDocuments(token) {
     [token, resetState]
   );
 
+  const cargarPreviewPdf = useCallback(
+    async (documentId) => {
+      if (!documentId) {
+        cleanupPdfUrl();
+        setPdfError("");
+        setLoadingPdf(false);
+        return;
+      }
+
+      const requestId = Date.now();
+      latestPreviewRequestRef.current = requestId;
+
+      setLoadingPdf(true);
+      setPdfError("");
+      cleanupPdfUrl();
+
+      try {
+        const res = await api.get(`/documents/${documentId}/preview`, {
+          responseType: "blob",
+        });
+
+        if (latestPreviewRequestRef.current !== requestId) return;
+
+        const blob = new Blob([res.data], { type: "application/pdf" });
+        const objectUrl = URL.createObjectURL(blob);
+        currentObjectUrlRef.current = objectUrl;
+        setPdfUrl(objectUrl);
+      } catch (err) {
+        if (latestPreviewRequestRef.current !== requestId) return;
+
+        console.error("Error preparando URL de PDF:", err);
+
+        const msg =
+          err.response?.data?.message ||
+          err.message ||
+          "No se pudo cargar la vista previa del PDF.";
+
+        setPdfError(msg);
+        setPdfUrl(null);
+      } finally {
+        if (latestPreviewRequestRef.current === requestId) {
+          setLoadingPdf(false);
+        }
+      }
+    },
+    [cleanupPdfUrl]
+  );
+
   useEffect(() => {
     if (!token) {
       resetState();
@@ -223,6 +283,27 @@ export function useDocuments(token) {
       search: debouncedSearch,
     });
   }, [token, page, sort, statusFilter, debouncedSearch, cargarDocs, resetState]);
+
+  useEffect(() => {
+    if (!selectedDoc?.id) {
+      cleanupPdfUrl();
+      setPdfError("");
+      setLoadingPdf(false);
+      return;
+    }
+
+    cargarPreviewPdf(selectedDoc.id);
+
+    return () => {
+      latestPreviewRequestRef.current += 1;
+    };
+  }, [selectedDoc?.id, cargarPreviewPdf, cleanupPdfUrl]);
+
+  useEffect(() => {
+    return () => {
+      cleanupPdfUrl();
+    };
+  }, [cleanupPdfUrl]);
 
   const setSort = useCallback((value) => {
     setPageState(1);
@@ -242,34 +323,6 @@ export function useDocuments(token) {
   const setPage = useCallback((value) => {
     setPageState(value);
   }, []);
-
-  useEffect(() => {
-    if (!selectedDoc?.id) {
-      setPdfUrl(null);
-      return;
-    }
-
-    let objectUrl;
-
-    (async () => {
-      try {
-        const res = await api.get(`/documents/${selectedDoc.id}/preview`, {
-          responseType: "blob",
-        });
-
-        const blob = new Blob([res.data], { type: "application/pdf" });
-        objectUrl = URL.createObjectURL(blob);
-        setPdfUrl(objectUrl);
-      } catch (err) {
-        console.error("Error preparando URL de PDF:", err);
-        setPdfUrl(null);
-      }
-    })();
-
-    return () => {
-      if (objectUrl) URL.revokeObjectURL(objectUrl);
-    };
-  }, [selectedDoc?.id]);
 
   const manejarAccionDocumento = useCallback(
     async (id, accion, extraData = {}) => {
@@ -359,7 +412,10 @@ export function useDocuments(token) {
           force: true,
         });
 
-        setSelectedDoc(null);
+        if (selectedDoc?.id === id) {
+          await cargarPreviewPdf(id);
+        }
+
         return true;
       } catch (err) {
         const msg =
@@ -376,7 +432,17 @@ export function useDocuments(token) {
         return false;
       }
     },
-    [docs, addToast, cargarDocs, page, sort, statusFilter, debouncedSearch]
+    [
+      docs,
+      addToast,
+      cargarDocs,
+      page,
+      sort,
+      statusFilter,
+      debouncedSearch,
+      selectedDoc?.id,
+      cargarPreviewPdf,
+    ]
   );
 
   const docsFiltrados = useMemo(() => {
@@ -437,7 +503,10 @@ export function useDocuments(token) {
     selectedDoc,
     setSelectedDoc,
     pdfUrl,
+    loadingPdf,
+    pdfError,
     cargarDocs,
+    cargarPreviewPdf,
     manejarAccionDocumento,
     docsFiltrados,
     docsPaginados,

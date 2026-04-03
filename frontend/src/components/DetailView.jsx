@@ -1,4 +1,3 @@
-// src/components/DetailView.jsx
 import React, { useState, useEffect } from "react";
 import { Timeline } from "./Timeline";
 import { EventList } from "./EventList";
@@ -6,8 +5,6 @@ import { DetailActions } from "./DetailActions";
 import { DOC_STATUS } from "../constants";
 import api, { getDocumentTimeline } from "../api/client";
 import { ElectronicSignatureNotice } from "./Legal/ElectronicSignatureNotice";
-
-/* ========= Helpers de labels ========= */
 
 function getTramiteLabel(value) {
   if (value === "notaria") return "Notaría";
@@ -23,7 +20,9 @@ function getDocumentoLabel(value) {
 
 export function DetailView({
   selectedDoc,
-  pdfUrl, // URL interna (blob) que viene desde el padre usando /documents/:id/preview
+  pdfUrl,
+  loadingPdf,
+  pdfError,
   puedeFirmar,
   puedeVisar,
   puedeRechazar,
@@ -58,10 +57,6 @@ export function DetailView({
     (currentUser.email === "tu-correo@loqueuses.com" ||
       currentUser.name === "Jean");
   const displayName = isJean ? "Alucard" : rawName;
-
-  /* ===============================
-     Carga de timeline + participantes + firmantes
-     =============================== */
 
   useEffect(() => {
     if (!selectedDoc?.id) return;
@@ -129,8 +124,6 @@ export function DetailView({
     selectedDoc.status === DOC_STATUS.PENDIENTE_VISADO ||
     selectedDoc.status === DOC_STATUS.PENDIENTE_FIRMA;
 
-  /* ========= Handlers de recordatorios ========= */
-
   async function handleReenviarVisado() {
     if (!selectedDoc) return;
     try {
@@ -138,8 +131,7 @@ export function DetailView({
       const res = await api.post(`/documents/${selectedDoc.id}/reenviar`, {
         tipo: "VISADO",
       });
-      const data = res.data;
-      alert(data?.message || "Recordatorio de visado reenviado correctamente");
+      alert(res.data?.message || "Recordatorio de visado reenviado correctamente");
     } catch (err) {
       console.error("Error reenviando visado:", err);
       const msg =
@@ -160,8 +152,7 @@ export function DetailView({
         tipo: "FIRMA",
         signerId,
       });
-      const data = res.data;
-      alert(data?.message || "Recordatorio de firma reenviado correctamente");
+      alert(res.data?.message || "Recordatorio de firma reenviado correctamente");
     } catch (err) {
       console.error("Error reenviando firma:", err);
       const msg =
@@ -179,8 +170,7 @@ export function DetailView({
     try {
       setRecordatorioLoading(true);
       const res = await api.post(`/documents/${selectedDoc.id}/recordatorio`);
-      const data = res.data;
-      alert(`✅ ${data?.message || "Recordorio enviado"}`);
+      alert(`✅ ${res.data?.message || "Recordatorio enviado"}`);
     } catch (err) {
       console.error("Error enviando recordatorio a todos:", err);
       const msg =
@@ -193,16 +183,10 @@ export function DetailView({
     }
   }
 
-  /* ========= URLs de descarga ========= */
-
   const baseUrl = api.defaults.baseURL || "";
   const downloadUrl = selectedDoc
     ? `${baseUrl}/documents/${selectedDoc.id}/download`
     : null;
-
-  if (import.meta.env.DEV) {
-    console.debug("DetailView pdfUrl:", pdfUrl);
-  }
 
   const numeroInterno =
     (timeline &&
@@ -220,39 +204,33 @@ export function DetailView({
   const isSigned = selectedDoc.status === DOC_STATUS.FIRMADO;
   const isRejected = selectedDoc.status === DOC_STATUS.RECHAZADO;
 
-  // Wrapper para insertar los avisos legales antes de firmar/visar
-const manejarAccionDocumentoConLegal = async (id, accion, extraData = {}) => {
-  if (accion === "firmar") {
-    if (!acceptedLegalSign) {
-      setSignError(
-        "Debes aceptar el aviso legal de firma electrónica antes de firmar."
-      );
-      alert(
-        "Debes aceptar el aviso legal de firma electrónica antes de firmar."
-      );
-      return;
+  const manejarAccionDocumentoConLegal = async (id, accion, extraData = {}) => {
+    if (accion === "firmar") {
+      if (!acceptedLegalSign) {
+        setSignError(
+          "Debes aceptar el aviso legal de firma electrónica antes de firmar."
+        );
+        return;
+      }
+      setSignError("");
     }
-    setSignError("");
-  }
 
-  if (accion === "visar") {
-    if (!acceptedLegalVisado) {
-      setVisadoError(
-        "Debes aceptar el aviso legal de visado antes de aprobar el documento."
-      );
-      alert(
-        "Debes aceptar el aviso legal de visado antes de aprobar el documento."
-      );
-      return;
+    if (accion === "visar") {
+      if (!acceptedLegalVisado) {
+        setVisadoError(
+          "Debes aceptar el aviso legal de visado antes de aprobar el documento."
+        );
+        return;
+      }
+      setVisadoError("");
     }
-    setVisadoError("");
-  }
 
-  await manejarAccionDocumento(id, accion, extraData);
-
-  setSelectedDoc(null);
-  setView("list");
-};
+    const ok = await manejarAccionDocumento(id, accion, extraData);
+    if (ok) {
+      setAcceptedLegalSign(false);
+      setAcceptedLegalVisado(false);
+    }
+  };
 
   return (
     <div className="detail-layout">
@@ -299,15 +277,11 @@ const manejarAccionDocumentoConLegal = async (id, accion, extraData = {}) => {
 
             <div className="detail-meta">
               <p>
-                N° interno:{" "}
-                <strong>{numeroInterno || `#${selectedDoc.id}`}</strong> ·
+                N° interno: <strong>{numeroInterno || `#${selectedDoc.id}`}</strong> ·
                 Estado: <strong>{selectedDoc.status}</strong>
               </p>
               <p>
-                Tipo de trámite:{" "}
-                <strong>
-                  {tramiteLabel} – {documentoLabel}
-                </strong>
+                Tipo de trámite: <strong>{tramiteLabel} – {documentoLabel}</strong>
               </p>
             </div>
 
@@ -320,8 +294,7 @@ const manejarAccionDocumentoConLegal = async (id, accion, extraData = {}) => {
             {selectedDoc.status === DOC_STATUS.RECHAZADO &&
               selectedDoc.reject_reason && (
                 <div className="detail-reject-box">
-                  <strong>Motivo de rechazo:</strong>{" "}
-                  {selectedDoc.reject_reason}
+                  <strong>Motivo de rechazo:</strong> {selectedDoc.reject_reason}
                 </div>
               )}
 
@@ -370,21 +343,25 @@ const manejarAccionDocumentoConLegal = async (id, accion, extraData = {}) => {
                   </a>
                 )}
 
-                {pdfUrl && (
+                {pdfUrl && !loadingPdf && (
                   <a
                     href={pdfUrl}
                     target="_blank"
                     rel="noopener noreferrer"
                     className="btn-main detail-btn-view"
                   >
-                    👁️ Ver PDF
+                    👁️ Abrir PDF en otra pestaña
                   </a>
                 )}
               </div>
             </div>
 
             <div className="detail-pdf-wrapper">
-              {pdfUrl ? (
+              {loadingPdf ? (
+                <div className="detail-pdf-empty">
+                  Cargando vista previa del PDF...
+                </div>
+              ) : pdfUrl ? (
                 <iframe
                   title={`PDF del documento ${selectedDoc.id}`}
                   src={pdfUrl}
@@ -392,13 +369,12 @@ const manejarAccionDocumentoConLegal = async (id, accion, extraData = {}) => {
                 />
               ) : (
                 <div className="detail-pdf-empty">
-                  No se pudo cargar la vista previa del PDF. Usa el botón
-                  "Descargar PDF" para ver el documento.
+                  {pdfError ||
+                    'No se pudo cargar la vista previa del PDF. Usa "Descargar PDF" para ver el documento.'}
                 </div>
               )}
             </div>
 
-            {/* Aviso legal interno: firmante propietario */}
             {puedeFirmar && !isSigned && !isRejected && (
               <ElectronicSignatureNotice
                 mode="firma"
@@ -419,7 +395,6 @@ const manejarAccionDocumentoConLegal = async (id, accion, extraData = {}) => {
               </p>
             )}
 
-            {/* Aviso legal interno: visador */}
             {puedeVisar && !isSigned && !isRejected && (
               <ElectronicSignatureNotice
                 mode="visado"
@@ -444,9 +419,7 @@ const manejarAccionDocumentoConLegal = async (id, accion, extraData = {}) => {
               <h3 className="detail-signers-title">Firmantes</h3>
 
               {loadingSigners ? (
-                <p className="detail-signers-loading">
-                  Cargando firmantes...
-                </p>
+                <p className="detail-signers-loading">Cargando firmantes...</p>
               ) : signers.length === 0 ? (
                 <p className="detail-signers-empty">
                   No hay firmantes registrados para este documento.
@@ -511,7 +484,6 @@ const manejarAccionDocumentoConLegal = async (id, accion, extraData = {}) => {
               )}
             </div>
 
-            {/* NUEVO: flujo multiparte desde document_participants */}
             <div className="detail-signers" style={{ marginTop: 24 }}>
               <h3 className="detail-signers-title">Flujo de participantes</h3>
 

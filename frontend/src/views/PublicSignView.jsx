@@ -238,14 +238,12 @@ export function PublicSignView({
       className="login-bg public-sign-page"
       style={{
         minHeight: "100vh",
-        minHeight: "100dvh",
       }}
     >
       <div
         className="public-sign-shell"
         style={{
           minHeight: "100vh",
-          minHeight: "100dvh",
           display: "flex",
           flexDirection: "column",
         }}
@@ -382,7 +380,6 @@ export function PublicSignView({
                       width: "100%",
                       height: "100%",
                       minHeight: "65vh",
-                      minHeight: "65dvh",
                       border: "0",
                       display: "block",
                     }}

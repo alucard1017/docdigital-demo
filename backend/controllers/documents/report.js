@@ -1,101 +1,14 @@
 // backend/controllers/documents/report.js
-const { db, getSignedUrl, computeHash } = require("./common");
+const {
+  db,
+  getSignedUrl,
+  computeHash,
+  resolvePdfSourceByDocumentId,
+  buildSafeFilename,
+} = require("./common");
 const { PDFDocument, rgb } = require("pdf-lib");
 const axios = require("axios");
 const { logAudit } = require("../../utils/auditLog");
-
-/* ================================
-   HELPERS
-   ================================ */
-
-function buildDocumentWhereClause({ id, user }) {
-  const params = [id];
-  let where = "id = $1";
-
-  if (user && user.company_id) {
-    params.push(user.company_id);
-    where += " AND company_id = $2";
-  }
-
-  return { where, params };
-}
-
-function buildSafeFilename(base, fallbackPrefix) {
-  const clean =
-    (base || fallbackPrefix).toString().replace(/[^a-zA-Z0-9-_]/g, "_") ||
-    fallbackPrefix;
-  return `${clean}.pdf`;
-}
-
-/**
- * Resuelve la URL real del PDF priorizando:
- * 1) documents.pdf_final_url (si existiera en el futuro)
- * 2) documents.file_url (directo a R2)
- * 3) documents.storage_key (via getSignedUrl)
- * 4) fallback legacy: documentos.url_archivo
- */
-async function resolvePdfSourceByDocumentId(id, user) {
-  const { where, params } = buildDocumentWhereClause({ id, user });
-
-  const docRes = await db.query(
-    `
-    SELECT
-      id,
-      title,
-      file_url,
-      storage_key,
-      pdf_final_url,
-      nuevo_documento_id
-    FROM documents
-    WHERE ${where}
-    `,
-    params
-  );
-
-  if (docRes.rowCount === 0) {
-    return { ok: false, status: 404, message: "Documento no encontrado" };
-  }
-
-  const doc = docRes.rows[0];
-
-  // 1) PDF final sellado (si lo tuvieras en esta columna a futuro)
-  if (doc.pdf_final_url) {
-    return { ok: true, doc, directUrl: doc.pdf_final_url };
-  }
-
-  // 2) URL directa a R2 guardada en documents.file_url
-  if (doc.file_url) {
-    return { ok: true, doc, directUrl: doc.file_url };
-  }
-
-  // 3) Clave de storage para firmar con getSignedUrl
-  if (doc.storage_key) {
-    const signedUrl = await getSignedUrl(doc.storage_key, 3600);
-    return { ok: true, doc, signedUrl, storageKey: doc.storage_key };
-  }
-
-  // 4) Fallback legacy: buscar en documentos.url_archivo usando nuevo_documento_id
-  if (doc.nuevo_documento_id) {
-    const legacyRes = await db.query(
-      `
-      SELECT url_archivo
-      FROM documentos
-      WHERE id = $1
-      `,
-      [doc.nuevo_documento_id]
-    );
-
-    if (legacyRes.rowCount > 0 && legacyRes.rows[0].url_archivo) {
-      return {
-        ok: true,
-        doc,
-        directUrl: legacyRes.rows[0].url_archivo,
-      };
-    }
-  }
-
-  return { ok: false, status: 404, message: "Documento sin archivo asociado" };
-}
 
 /* ================================
    GET: Descargar PDF (prioriza copia firmada)
@@ -108,13 +21,11 @@ async function downloadDocument(req, res) {
     }
 
     const resolved = await resolvePdfSourceByDocumentId(id, req.user);
-
     if (!resolved.ok) {
       return res.status(resolved.status).json({ message: resolved.message });
     }
 
-    const { doc, directUrl, signedUrl } = resolved;
-
+    const { doc, directUrl, signedUrl, storageKey } = resolved;
     const url = directUrl || signedUrl;
     if (!url) {
       return res
@@ -122,13 +33,11 @@ async function downloadDocument(req, res) {
         .json({ message: "No se pudo resolver la URL del documento" });
     }
 
-    const fileResponse = await axios.get(url, {
-      responseType: "arraybuffer",
-    });
+    const fileResponse = await axios.get(url, { responseType: "arraybuffer" });
     const buffer = Buffer.from(fileResponse.data);
 
-    // Aquí podrías validar el hash con computeHash(buffer) comparando con documents.hash_sha256.
-    // computeHash viene de ./common.
+    // TODO (opcional): validar hash vs. final_hash_sha256 o similar.
+    // const hash = computeHash(buffer);
 
     const filename = buildSafeFilename(doc.title, `documento-${doc.id}`);
 
@@ -137,6 +46,19 @@ async function downloadDocument(req, res) {
       "Content-Disposition",
       `attachment; filename="${filename}"`
     );
+
+    await logAudit({
+      user: req.user,
+      action: "DOWNLOAD_DOCUMENT",
+      entityType: "document",
+      entityId: doc.id,
+      metadata: {
+        sourceType: resolved.sourceType,
+        storageKey: storageKey || null,
+      },
+      req,
+    });
+
     return res.send(buffer);
   } catch (err) {
     console.error("❌ Error en descarga de documento:", err);
@@ -155,13 +77,11 @@ async function previewDocument(req, res) {
     }
 
     const resolved = await resolvePdfSourceByDocumentId(id, req.user);
-
     if (!resolved.ok) {
       return res.status(resolved.status).json({ message: resolved.message });
     }
 
     const { directUrl, signedUrl } = resolved;
-
     const url = directUrl || signedUrl;
     if (!url) {
       return res
@@ -169,13 +89,11 @@ async function previewDocument(req, res) {
         .json({ message: "No se pudo resolver la URL del documento" });
     }
 
-    const fileResponse = await axios.get(url, {
-      responseType: "arraybuffer",
-    });
+    const fileResponse = await axios.get(url, { responseType: "arraybuffer" });
     const buffer = Buffer.from(fileResponse.data);
 
     res.setHeader("Content-Type", "application/pdf");
-    // Sin Content-Disposition para que el navegador lo muestre en visor/iframe
+    // Sin Content-Disposition: se muestra inline en iframe/visor
     return res.send(buffer);
   } catch (err) {
     console.error("❌ Error en vista previa de documento:", err);
@@ -232,13 +150,11 @@ async function getDocumentAnalytics(req, res) {
         firmados,
         rechazados,
         pendientes,
-        tasa_firma_pct:
-          total > 0 ? ((firmados / total) * 100).toFixed(1) : 0,
-        tasa_rechazo_pct:
-          total > 0 ? ((rechazados / total) * 100).toFixed(1) : 0,
+        tasa_firma_pct: total > 0 ? Number(((firmados / total) * 100).toFixed(1)) : 0,
+        tasa_rechazo_pct: total > 0 ? Number(((rechazados / total) * 100).toFixed(1)) : 0,
         horas_promedio: stats.horas_promedio_firma
-          ? parseFloat(stats.horas_promedio_firma).toFixed(1)
-          : "N/A",
+          ? Number(parseFloat(stats.horas_promedio_firma).toFixed(1))
+          : null,
       },
       timeline,
     });
@@ -282,8 +198,7 @@ async function downloadReportPdf(req, res) {
 
     let yPos = height - 50;
 
-    // Título
-    page.drawText(`REPORTE: ${doc.title}`, {
+    page.drawText(`REPORTE: ${doc.title || "Documento sin título"}`, {
       x: 50,
       y: yPos,
       size: 18,
@@ -293,9 +208,7 @@ async function downloadReportPdf(req, res) {
     yPos -= 30;
 
     page.drawText(
-      `Contrato: ${doc.numero_contrato_interno || "N/A"} | Estado: ${
-        doc.status
-      }`,
+      `Contrato: ${doc.numero_contrato_interno || "N/A"} | Estado: ${doc.status}`,
       {
         x: 50,
         y: yPos,
@@ -306,17 +219,20 @@ async function downloadReportPdf(req, res) {
 
     yPos -= 20;
 
-    page.drawText(
-      `Creado: ${new Date(doc.created_at).toLocaleString("es-CL")}`,
-      {
-        x: 50,
-        y: yPos,
-        size: 10,
-        color: rgb(0.5, 0.5, 0.5),
-      }
-    );
-
-    yPos -= 25;
+    if (doc.created_at) {
+      page.drawText(
+        `Creado: ${new Date(doc.created_at).toLocaleString("es-CL")}`,
+        {
+          x: 50,
+          y: yPos,
+          size: 10,
+          color: rgb(0.5, 0.5, 0.5),
+        }
+      );
+      yPos -= 25;
+    } else {
+      yPos -= 15;
+    }
 
     // Firmantes
     page.drawText("FIRMANTES:", {
@@ -329,6 +245,8 @@ async function downloadReportPdf(req, res) {
     yPos -= 15;
 
     for (const signer of signersRes.rows) {
+      if (yPos < 80) break; // cortar, para no salirnos de la página
+
       const statusSymbol =
         signer.status === "FIRMADO"
           ? "✓"
@@ -343,12 +261,15 @@ async function downloadReportPdf(req, res) {
           ? rgb(0.8, 0.2, 0.2)
           : rgb(0.5, 0.5, 0.5);
 
-      page.drawText(`${statusSymbol} ${signer.name} (${signer.email})`, {
-        x: 70,
-        y: yPos,
-        size: 10,
-        color: statusColor,
-      });
+      page.drawText(
+        `${statusSymbol} ${signer.name || "Firmante"} (${signer.email || "sin email"})`,
+        {
+          x: 70,
+          y: yPos,
+          size: 10,
+          color: statusColor,
+        }
+      );
 
       if (signer.signed_at) {
         page.drawText(
@@ -374,15 +295,13 @@ async function downloadReportPdf(req, res) {
           }
         );
         if (signer.rejection_reason) {
-          page.drawText(
-            `   Motivo: ${signer.rejection_reason.substring(0, 50)}`,
-            {
-              x: 70,
-              y: yPos - 24,
-              size: 8,
-              color: rgb(0.6, 0.6, 0.6),
-            }
-          );
+          const motivo = signer.rejection_reason.substring(0, 80);
+          page.drawText(`   Motivo: ${motivo}`, {
+            x: 70,
+            y: yPos - 24,
+            size: 8,
+            color: rgb(0.6, 0.6, 0.6),
+          });
           yPos -= 36;
         } else {
           yPos -= 24;
@@ -394,7 +313,7 @@ async function downloadReportPdf(req, res) {
 
     yPos -= 20;
 
-    // Historial de eventos
+    // Historial de eventos (hasta 10 para que quepa)
     page.drawText("HISTORIAL DE EVENTOS:", {
       x: 50,
       y: yPos,
@@ -405,10 +324,14 @@ async function downloadReportPdf(req, res) {
     yPos -= 15;
 
     for (const event of eventsRes.rows.slice(0, 10)) {
+      if (yPos < 60) break;
+
+      const fecha = event.created_at
+        ? new Date(event.created_at).toLocaleString("es-CL")
+        : "-";
+
       page.drawText(
-        `[${new Date(event.created_at).toLocaleString("es-CL")}] ${
-          event.action
-        }`,
+        `[${fecha}] ${event.action || event.event_type || "EVENTO"}`,
         {
           x: 70,
           y: yPos,
@@ -418,9 +341,9 @@ async function downloadReportPdf(req, res) {
       );
 
       if (event.details) {
-        const detailText = event.details.substring(0, 60);
+        const detailText = event.details.substring(0, 90);
         page.drawText(
-          `    ${detailText}${event.details.length > 60 ? "..." : ""}`,
+          `    ${detailText}${event.details.length > 90 ? "..." : ""}`,
           {
             x: 70,
             y: yPos - 10,
@@ -435,7 +358,6 @@ async function downloadReportPdf(req, res) {
     }
 
     const pdfBytes = await pdfDoc.save();
-
     const filename = `reporte-${
       doc.numero_contrato_interno || doc.id
     }-${new Date().toISOString().slice(0, 10)}.pdf`;

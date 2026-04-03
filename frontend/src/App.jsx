@@ -1,5 +1,5 @@
 // src/App.jsx
-import { useEffect, useMemo, useState, lazy, Suspense } from "react";
+import { useCallback, useEffect, useMemo, useState, lazy, Suspense } from "react";
 import "./App.css";
 
 import { Sidebar } from "./components/Sidebar";
@@ -34,7 +34,6 @@ import { useDocuments } from "./hooks/useDocuments";
 import { useToast } from "./hooks/useToast";
 import { useAuth } from "./hooks/useAuth";
 
-// Lazy: onboarding / tour
 const OnboardingWizardLazy = lazy(
   () => import("./components/Onboarding/OnboardingWizard")
 );
@@ -42,7 +41,6 @@ const ProductTourLazy = lazy(
   () => import("./components/Onboarding/ProductTour")
 );
 
-// Lazy: vistas pesadas
 const UsersAdminView = lazy(() => import("./views/UsersAdminView"));
 const DashboardView = lazy(() => import("./views/DashboardView"));
 const CompaniesAdminView = lazy(() => import("./views/CompaniesAdminView"));
@@ -92,6 +90,30 @@ const VIEW_TO_PATH = {
   "company-analytics": "/company-analytics",
 };
 
+const VALID_PROTECTED_VIEWS = new Set([
+  "list",
+  "upload",
+  "users",
+  "dashboard",
+  "companies",
+  "status",
+  "audit-logs",
+  "auth-logs",
+  "reminders-config",
+  "email-metrics",
+  "pricing",
+  "profile",
+  "templates",
+  "company-analytics",
+]);
+
+const PUBLIC_AUTH_PATHS = [
+  "/login",
+  "/forgot-password",
+  "/reset-password",
+  "/register",
+];
+
 function getProtectedViewFromPath(path) {
   return ROUTE_MAP[path] || "list";
 }
@@ -125,6 +147,30 @@ function formatRunDoc(value) {
   return `${body.replace(/\B(?=(\d{3})+(?!\d))/g, ".")}-${dv}`;
 }
 
+function getPublicAccess({ pathname, search, isSigningPortal, isVerificationPortal }) {
+  const params = new URLSearchParams(search || "");
+  const token = params.get("token");
+
+  const isPublicSigningAccess =
+    !!token &&
+    (pathname === "/public/sign" ||
+      pathname === "/firma-publica" ||
+      pathname === "/consulta-publica" ||
+      (isSigningPortal && pathname === "/"));
+
+  const isPublicVerificationAccess =
+    pathname === "/verificar" ||
+    pathname === "/verificacion-publica" ||
+    (isVerificationPortal && pathname === "/");
+
+  return {
+    tokenFromUrl: token || "",
+    isPublicSigningAccess,
+    isPublicVerificationAccess,
+    isAnyPublicAccess: isPublicSigningAccess || isPublicVerificationAccess,
+  };
+}
+
 function App() {
   const subdomain = getSubdomain();
   const isVerificationPortal = subdomain === "verificar";
@@ -133,27 +179,32 @@ function App() {
   const [path, setPath] = useState(() => getPath());
   const [view, setView] = useState(() => getProtectedViewFromPath(getPath()));
 
-  const searchParams =
-    typeof window !== "undefined"
-      ? new URLSearchParams(window.location.search)
-      : new URLSearchParams();
+  const locationSnapshot = useMemo(() => {
+    if (typeof window === "undefined") {
+      return { pathname: "/", search: "" };
+    }
 
-  const tokenFromUrl = searchParams.get("token");
-  const currentPath =
-    typeof window !== "undefined" ? window.location.pathname : "/";
+    return {
+      pathname: window.location.pathname,
+      search: window.location.search,
+    };
+  }, [path]);
 
-  const isPublicSigningAccess =
-    !!tokenFromUrl &&
-    (currentPath === "/public/sign" ||
-      currentPath === "/firma-publica" ||
-      (isSigningPortal && currentPath === "/"));
-
-  const isPublicVerificationAccess =
-    currentPath === "/verificar" ||
-    (isVerificationPortal && currentPath === "/");
-
-  const isAnyPublicAccess =
-    isPublicSigningAccess || isPublicVerificationAccess;
+  const {
+    tokenFromUrl,
+    isPublicSigningAccess,
+    isPublicVerificationAccess,
+    isAnyPublicAccess,
+  } = useMemo(
+    () =>
+      getPublicAccess({
+        pathname: locationSnapshot.pathname,
+        search: locationSnapshot.search,
+        isSigningPortal,
+        isVerificationPortal,
+      }),
+    [locationSnapshot, isSigningPortal, isVerificationPortal]
+  );
 
   const [identifier, setIdentifier] = useState("");
   const [password, setPassword] = useState("");
@@ -260,6 +311,20 @@ function App() {
   const anyAdmin = isAnyAdmin(user);
   const canAudit = !!user && canViewAuditLogs(user);
 
+  const refreshDocs = useCallback(
+    async (overrides = {}) => {
+      return cargarDocs({
+        page,
+        sort,
+        statusFilter,
+        search,
+        force: true,
+        ...overrides,
+      });
+    },
+    [cargarDocs, page, sort, statusFilter, search]
+  );
+
   useEffect(() => {
     const syncPath = () => {
       const nextPath = getPath();
@@ -288,21 +353,14 @@ function App() {
     if (authLoading) return;
     if (isAnyPublicAccess) return;
 
-    const publicAuthPaths = [
-      "/login",
-      "/forgot-password",
-      "/reset-password",
-      "/register",
-    ];
-
-    if (!isAuthenticated && !publicAuthPaths.includes(path)) {
+    if (!isAuthenticated && !PUBLIC_AUTH_PATHS.includes(path)) {
       setView("list");
       setSelectedDoc(null);
       replaceTo("/login");
       return;
     }
 
-    if (isAuthenticated && publicAuthPaths.includes(path)) {
+    if (isAuthenticated && PUBLIC_AUTH_PATHS.includes(path)) {
       replaceTo("/documents");
     }
   }, [authLoading, isAuthenticated, path, isAnyPublicAccess, setSelectedDoc]);
@@ -311,134 +369,90 @@ function App() {
     if (!isAuthenticated) return;
     if (view === "detail") return;
 
-    const validViews = new Set([
-      "list",
-      "upload",
-      "users",
-      "dashboard",
-      "companies",
-      "status",
-      "audit-logs",
-      "auth-logs",
-      "reminders-config",
-      "email-metrics",
-      "pricing",
-      "profile",
-      "templates",
-      "company-analytics",
-    ]);
-
-    if (!validViews.has(view)) {
+    if (!VALID_PROTECTED_VIEWS.has(view)) {
       setSelectedDoc(null);
       setView("list");
       replaceTo("/documents");
     }
   }, [view, isAuthenticated, setSelectedDoc]);
 
-useEffect(() => {
-  if (!token) return;
-  if (typeof socketOn !== "function" || typeof socketOff !== "function") return;
+  useEffect(() => {
+    if (!token) return;
+    if (typeof socketOn !== "function" || typeof socketOff !== "function") return;
 
-  const handleSent = (data) => {
-    addToast({
-      type: "success",
-      title: "Documento enviado",
-      message: data?.titulo
-        ? `"${data.titulo}" se envió correctamente`
-        : "El documento se envió correctamente",
-    });
+    const handleSent = (data) => {
+      addToast({
+        type: "success",
+        title: "Documento enviado",
+        message: data?.titulo
+          ? `"${data.titulo}" se envió correctamente`
+          : "El documento se envió correctamente",
+      });
 
-    cargarDocs({
-      page: 1,
-      sort,
-      statusFilter,
-      search,
-      force: true,
-    });
-  };
+      refreshDocs({ page: 1 });
+    };
 
-  const handleSigned = (data) => {
-    addToast({
-      type: "success",
-      title: "Documento firmado",
-      message: data?.titulo
-        ? `"${data.titulo}" se firmó correctamente`
-        : "El documento se firmó correctamente",
-    });
+    const handleSigned = (data) => {
+      addToast({
+        type: "success",
+        title: "Documento firmado",
+        message: data?.titulo
+          ? `"${data.titulo}" se firmó correctamente`
+          : "El documento se firmó correctamente",
+      });
 
-    cargarDocs({
-      page: 1,
-      sort,
-      statusFilter,
-      search,
-      force: true,
-    });
-  };
+      refreshDocs({ page: 1 });
+    };
 
-  socketOn("document:sent", handleSent);
-  socketOn("document:signed", handleSigned);
+    socketOn("document:sent", handleSent);
+    socketOn("document:signed", handleSigned);
 
-  return () => {
-    socketOff("document:sent", handleSent);
-    socketOff("document:signed", handleSigned);
-  };
-}, [
-  token,
-  socketOn,
-  socketOff,
-  cargarDocs,
-  addToast,
-  sort,
-  statusFilter,
-  search,
-]);
+    return () => {
+      socketOff("document:sent", handleSent);
+      socketOff("document:signed", handleSigned);
+    };
+  }, [token, socketOn, socketOff, addToast, refreshDocs]);
 
-  const handleLogout = useMemo(
-    () => () => {
+  const handleLogout = useCallback(() => {
+    setSelectedDoc(null);
+    setView("list");
+    logout({ redirectTo: "/login", replace: true });
+  }, [logout, setSelectedDoc]);
+
+  const handleNavigateProtected = useCallback(
+    (nextView) => {
+      const nextPath = VIEW_TO_PATH[nextView] || "/documents";
+
+      if (nextView === "list") {
+        setPage(1);
+      }
+
       setSelectedDoc(null);
-      setView("list");
-      logout({ redirectTo: "/login", replace: true });
+      setView(nextView);
+      navigateTo(nextPath);
     },
-    [logout, setSelectedDoc]
+    [setPage, setSelectedDoc]
   );
 
-  const handleNavigateProtected = (nextView) => {
-    const nextPath = VIEW_TO_PATH[nextView] || "/documents";
-
-    if (nextView === "list") {
-      setPage(1);
-    }
-
-    setSelectedDoc(null);
-    setView(nextView);
-    navigateTo(nextPath);
-  };
-
-  const handleOpenDetail = (doc) => {
+  const handleOpenDetail = useCallback((doc) => {
     setSelectedDoc(doc);
     setView("detail");
-  };
+  }, [setSelectedDoc]);
 
-  const handleBackToList = () => {
+  const handleBackToList = useCallback(() => {
     setSelectedDoc(null);
     handleNavigateProtected("list");
-  };
+  }, [handleNavigateProtected, setSelectedDoc]);
 
-const handleAfterCreateDocument = async () => {
-  setPage(1);
-  await cargarDocs({
-    page: 1,
-    sort,
-    statusFilter,
-    search,
-    force: true,
-  });
-  handleNavigateProtected("list");
-};
+  const handleAfterCreateDocument = useCallback(async () => {
+    setPage(1);
+    await refreshDocs({ page: 1 });
+    handleNavigateProtected("list");
+  }, [refreshDocs, handleNavigateProtected, setPage]);
 
-  const handleTestError = () => {
+  const handleTestError = useCallback(() => {
     throw new Error("Frontend test error");
-  };
+  }, []);
 
   async function handleLogin(e) {
     e.preventDefault();
@@ -599,37 +613,29 @@ const handleAfterCreateDocument = async () => {
     if (view === "list") {
       return (
         <>
-<ListHeader
-  sort={sort}
-  setSort={(value) => {
-    setSort(value);
-    setPage(1);
-  }}
-  statusFilter={statusFilter}
-  setStatusFilter={(value) => {
-    setStatusFilter(value);
-    setPage(1);
-  }}
-  search={search}
-  setSearch={(value) => {
-    setSearch(value);
-    setPage(1);
-  }}
-  totalFiltrado={safeTotalFiltrado}
-  pendientes={safePendientes}
-  visados={safeVisados}
-  firmados={safeFirmados}
-  rechazados={safeRechazados}
-  onSync={() =>
-    cargarDocs({
-      page,
-      sort,
-      statusFilter,
-      search,
-      force: true,
-    })
-  }
-/>
+          <ListHeader
+            sort={sort}
+            setSort={(value) => {
+              setSort(value);
+              setPage(1);
+            }}
+            statusFilter={statusFilter}
+            setStatusFilter={(value) => {
+              setStatusFilter(value);
+              setPage(1);
+            }}
+            search={search}
+            setSearch={(value) => {
+              setSearch(value);
+              setPage(1);
+            }}
+            totalFiltrado={safeTotalFiltrado}
+            pendientes={safePendientes}
+            visados={safeVisados}
+            firmados={safeFirmados}
+            rechazados={safeRechazados}
+            onSync={() => refreshDocs()}
+          />
 
           <div className="inbox-header-card">
             <div className="inbox-header-main">
@@ -649,21 +655,13 @@ const handleAfterCreateDocument = async () => {
                 + Nuevo documento
               </button>
 
-<button
-  type="button"
-  className="btn-main btn-ghost"
-  onClick={() =>
-    cargarDocs({
-      page,
-      sort,
-      statusFilter,
-      search,
-      force: true,
-    })
-  }
->
-  Actualizar bandeja
-</button>
+              <button
+                type="button"
+                className="btn-main btn-ghost"
+                onClick={() => refreshDocs()}
+              >
+                Actualizar bandeja
+              </button>
             </div>
           </div>
 
@@ -710,18 +708,10 @@ const handleAfterCreateDocument = async () => {
                 {errorDocs ||
                   "Por favor, revisa tu conexión e inténtalo nuevamente."}
               </p>
-<button
-  className="btn-main btn-primary"
-  onClick={() =>
-    cargarDocs({
-      page,
-      sort,
-      statusFilter,
-      search,
-      force: true,
-    })
-  }
->
+              <button
+                className="btn-main btn-primary"
+                onClick={() => refreshDocs()}
+              >
                 Reintentar carga
               </button>
             </div>
@@ -773,17 +763,11 @@ const handleAfterCreateDocument = async () => {
                     <tr>
                       <th className="col-title">Contrato / Documento</th>
                       <th className="col-type">Tipo</th>
-                      <th
-                        className="col-status"
-                        style={{ textAlign: "center" }}
-                      >
+                      <th className="col-status" style={{ textAlign: "center" }}>
                         Estado
                       </th>
                       <th className="col-party">Firmante / Empresa</th>
-                      <th
-                        className="col-actions"
-                        style={{ textAlign: "center" }}
-                      >
+                      <th className="col-actions" style={{ textAlign: "center" }}>
                         Acciones
                       </th>
                     </tr>
@@ -828,15 +812,9 @@ const handleAfterCreateDocument = async () => {
                     type="button"
                     className="btn-main"
                     disabled={loadingDocs || safeCurrentPage >= safeTotalPaginas}
-                    onClick={() => {
-                      console.log("[App] ir a página siguiente", {
-                        actual: safeCurrentPage,
-                        total: safeTotalPaginas,
-                        hasNextPage: pagination?.hasNextPage,
-                      });
-
-                      setPage((prev) => Math.min(safeTotalPaginas, prev + 1));
-                    }}
+                    onClick={() =>
+                      setPage((prev) => Math.min(safeTotalPaginas, prev + 1))
+                    }
                   >
                     Siguiente
                   </button>
@@ -870,53 +848,18 @@ const handleAfterCreateDocument = async () => {
       );
     }
 
-    if (view === "users" && anyAdmin) {
-      return <UsersAdminView />;
-    }
-
-    if (view === "dashboard" && anyAdmin) {
-      return <DashboardView user={user} />;
-    }
-
-    if (view === "companies" && anyAdmin) {
-      return <CompaniesAdminView API_URL={apiRoot} />;
-    }
-
-    if (view === "status" && anyAdmin) {
-      return <StatusAdminView API_URL={apiRoot} />;
-    }
-
-    if (view === "audit-logs" && canAudit) {
-      return <AuditLogsView API_URL={apiRoot} />;
-    }
-
-    if (view === "auth-logs" && canAudit) {
-      return <AuthLogsView API_URL={apiRoot} />;
-    }
-
-    if (view === "reminders-config" && anyAdmin) {
-      return <RemindersConfigView />;
-    }
-
-    if (view === "email-metrics" && anyAdmin) {
-      return <EmailMetricsView />;
-    }
-
-    if (view === "pricing") {
-      return <PricingView />;
-    }
-
-    if (view === "profile") {
-      return <ProfileView />;
-    }
-
-    if (view === "templates" && anyAdmin) {
-      return <TemplatesView />;
-    }
-
-    if (view === "company-analytics" && anyAdmin) {
-      return <CompanyAnalyticsView />;
-    }
+    if (view === "users" && anyAdmin) return <UsersAdminView />;
+    if (view === "dashboard" && anyAdmin) return <DashboardView user={user} />;
+    if (view === "companies" && anyAdmin) return <CompaniesAdminView API_URL={apiRoot} />;
+    if (view === "status" && anyAdmin) return <StatusAdminView API_URL={apiRoot} />;
+    if (view === "audit-logs" && canAudit) return <AuditLogsView API_URL={apiRoot} />;
+    if (view === "auth-logs" && canAudit) return <AuthLogsView API_URL={apiRoot} />;
+    if (view === "reminders-config" && anyAdmin) return <RemindersConfigView />;
+    if (view === "email-metrics" && anyAdmin) return <EmailMetricsView />;
+    if (view === "pricing") return <PricingView />;
+    if (view === "profile") return <ProfileView />;
+    if (view === "templates" && anyAdmin) return <TemplatesView />;
+    if (view === "company-analytics" && anyAdmin) return <CompanyAnalyticsView />;
 
     return (
       <div style={{ padding: 40, textAlign: "center", color: "#64748b" }}>

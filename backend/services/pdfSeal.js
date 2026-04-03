@@ -4,18 +4,14 @@ const path = require("path");
 const QRCode = require("qrcode");
 const bwipjs = require("@bwip-js/node");
 const { PDFDocument, rgb, StandardFonts, degrees } = require("pdf-lib");
-const { getObjectBuffer, uploadBufferToS3, getSignedUrl } = require("./storageR2");
+const {
+  getObjectBuffer,
+  uploadBufferToS3,
+  getSignedUrl,
+} = require("./storageR2");
 const db = require("../db");
 const crypto = require("crypto");
 
-/**
- * Sella el PDF del documento con QR, evidencias y certificación,
- * sube la versión final y guarda su hash y ruta final en la tabla documents.
- *
- * IMPORTANTE:
- * - documentoId es el ID de la tabla `documents` (no de `documentos`).
- * - s3Key corresponde al storage_key original del PDF en R2.
- */
 async function sellarPdfConQr({
   s3Key,
   documentoId,
@@ -24,9 +20,7 @@ async function sellarPdfConQr({
   numeroContratoInterno,
 }) {
   if (!s3Key) throw new Error("s3Key es obligatorio para sellar el PDF");
-  if (!documentoId) {
-    throw new Error("documentoId es obligatorio para sellar el PDF");
-  }
+  if (!documentoId) throw new Error("documentoId es obligatorio para sellar el PDF");
   if (!codigoVerificacion) {
     throw new Error("codigoVerificacion es obligatorio para sellar el PDF");
   }
@@ -37,7 +31,6 @@ async function sellarPdfConQr({
     codigoVerificacion,
   });
 
-  // 1) Descargar PDF original desde R2 (sin tocar metadatos, para hash estable)
   const pdfBytes = await getObjectBuffer(s3Key);
   const pdfDoc = await PDFDocument.load(pdfBytes, { updateMetadata: false });
 
@@ -53,28 +46,9 @@ async function sellarPdfConQr({
   const numeroInternoTexto =
     numeroContratoInterno != null
       ? String(numeroContratoInterno)
-      : "N° interno: —";
+      : "—";
 
-  // 2) Obtener firmantes del documento (solo los que realmente firmaron)
-  const firmantesRes = await db.query(
-    `
-    SELECT 
-      nombre,
-      email,
-      fecha_firma,
-      ip_firma,
-      user_agent_firma,
-      geo_location,
-      tipo_firma
-    FROM firmantes
-    WHERE documento_id = $1 AND estado = 'FIRMADO'
-    ORDER BY fecha_firma ASC
-    `,
-    [documentoId]
-  );
-  const firmantes = firmantesRes.rows || [];
-
-  // 3) Footer en todas las páginas
+  /* ========= 1) Footer en todas las páginas ========= */
   const footerFontSize = 8;
   const footerMarginY = 30;
   const footerColor = rgb(0.4, 0.4, 0.4);
@@ -96,11 +70,11 @@ async function sellarPdfConQr({
     });
   });
 
-  // 4) Última página del documento original: logo, QR, barra lateral y bloque legal corto
+  /* ========= 2) Última página: logo, QR, barra lateral, bloque legal ========= */
   const lastPage = pages[pages.length - 1];
   const { width, height } = lastPage.getSize();
 
-  // 4.1 Logo
+  // Logo
   try {
     const logoPngBytes = await fs.promises.readFile(
       path.join(__dirname, "../assets/verifirma-logo.png")
@@ -130,7 +104,7 @@ async function sellarPdfConQr({
     console.error("⚠️ Error embebiendo logo en PDF sellado:", err);
   }
 
-  // 4.2 QR de verificación
+  // QR
   const urlVerificacion = `https://verifirma.cl/verificar/${codigoVerificacion}`;
   try {
     const qrDataUrl = await QRCode.toDataURL(urlVerificacion, {
@@ -164,7 +138,7 @@ async function sellarPdfConQr({
     console.error("⚠️ Error generando/embebiendo QR en PDF sellado:", err);
   }
 
-  // 4.3 Código de barras lateral
+  // Barra lateral
   try {
     const barcodePngBuffer = await bwipjs.toBuffer({
       bcid: "code128",
@@ -209,7 +183,7 @@ async function sellarPdfConQr({
     console.error("⚠️ Error generando/embebiendo código de barras:", err);
   }
 
-  // 4.4 Bloque legal breve en la última página
+  // Bloque legal breve
   const esAvanzada = categoriaFirma === "AVANZADA";
 
   const textoLegal = [
@@ -224,7 +198,7 @@ async function sellarPdfConQr({
       : "Este documento ha sido firmado mediante Firma Electrónica Simple conforme a la Ley N° 19.799.",
     "La validez del presente documento puede ser verificada en el sitio indicado.",
     "Proveedor de servicios de firma: VeriFirma SpA – RUT 77.777.777-7.",
-    "Zona horaria: America/Santiago (Chile/Continental).",
+    "Zona horaria de registro de evidencias: America/Santiago.",
   ].join("\n");
 
   lastPage.drawText(textoLegal, {
@@ -236,7 +210,25 @@ async function sellarPdfConQr({
     lineHeight: 10,
   });
 
-  // 5) Página(s) de certificado de evidencias
+  /* ========= 3) Páginas de certificado de evidencias ========= */
+  const firmantesRes = await db.query(
+    `
+    SELECT 
+      nombre,
+      email,
+      fecha_firma,
+      ip_firma,
+      user_agent_firma,
+      geo_location,
+      tipo_firma
+    FROM firmantes
+    WHERE documento_id = $1 AND estado = 'FIRMADO'
+    ORDER BY fecha_firma ASC
+    `,
+    [documentoId]
+  );
+  const firmantes = firmantesRes.rows || [];
+
   let evidencesPage = pdfDoc.addPage();
   let { width: evWidth, height: evHeight } = evidencesPage.getSize();
   let evY = evHeight - 60;
@@ -253,7 +245,7 @@ async function sellarPdfConQr({
 
   const resumenDocLines = [
     `Número interno: ${numeroInternoTexto}`,
-    `ID del documento (platform): ${documentoId}`,
+    `ID del documento (documents.id): ${documentoId}`,
     `Código de verificación: ${codigoVerificacion}`,
     `Verificación en línea: ${urlVerificacion}`,
   ];
@@ -319,8 +311,8 @@ async function sellarPdfConQr({
         : "N/A";
 
       const firmText = [
-        `Firmante ${idx + 1}: ${f.nombre}`,
-        `Email: ${f.email}`,
+        `Firmante ${idx + 1}: ${f.nombre || "Sin nombre"}`,
+        `Email: ${f.email || "N/A"}`,
         `Fecha y hora de firma: ${fecha}`,
         `IP: ${f.ip_firma || "N/A"}`,
         `Ubicación aproximada: ${location}`,
@@ -349,16 +341,14 @@ async function sellarPdfConQr({
         color: rgb(0.4, 0.4, 0.4),
       }
     );
-
     evY -= 20;
   }
 
-  // 6) Guardar versión final, subir y actualizar BD
+  /* ========= 4) Guardar y subir versión final ========= */
   const newPdfBytes = await pdfDoc.save();
   const newBuffer = Buffer.from(newPdfBytes);
 
   const finalHash = crypto.createHash("sha256").update(newBuffer).digest("hex");
-
   const finalKey = `documents/${documentoId}/final-${finalHash}.pdf`;
 
   await uploadBufferToS3(finalKey, newBuffer, "application/pdf");
@@ -369,28 +359,32 @@ async function sellarPdfConQr({
     finalHash,
   });
 
-  // URL final firmada larga duración (opcional)
   let finalUrl = null;
   try {
     finalUrl = await getSignedUrl(finalKey, 60 * 60 * 24 * 7); // 7 días
   } catch (err) {
-    console.warn("⚠️ No se pudo generar URL firmada larga para PDF final:", err.message);
+    console.warn(
+      "⚠️ No se pudo generar URL firmada larga para PDF final:",
+      err.message
+    );
   }
 
   await db.query(
     `
     UPDATE documents
-    SET final_storage_key = $1,
-        final_hash_sha256 = $2,
-        final_file_url = $3
-    WHERE id = $4
+    SET
+      final_storage_key = $1,
+      final_hash_sha256 = $2,
+      final_file_url    = $3,
+      pdf_final_url     = $4,
+      updated_at        = NOW()
+    WHERE id = $5
     `,
-    [finalKey, finalHash, finalUrl, documentoId]
+    [finalKey, finalHash, finalUrl, finalKey, documentoId]
   );
 
   console.log(`✅ PDF sellado con ${firmantes.length} evidencias: ${finalKey}`);
 
-  // Devolvemos info completa al caller
   return {
     finalKey,
     finalHash,
