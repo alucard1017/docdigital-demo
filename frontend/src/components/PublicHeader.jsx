@@ -1,4 +1,3 @@
-// src/components/PublicHeader.jsx
 import React from "react";
 
 export function PublicHeader() {
@@ -24,7 +23,7 @@ export function PublicHeader() {
           letterSpacing: "0.06em",
           fontSize: "0.9rem",
           textTransform: "uppercase",
-          color: "#0f172a",
+          color: "#e2e8f0",
         }}
       >
         VeriFirma · Plataforma de firma digital

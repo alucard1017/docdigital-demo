@@ -1,4 +1,3 @@
-// src/components/PublicFooter.jsx
 import React from "react";
 
 export function PublicFooter() {
@@ -7,9 +6,9 @@ export function PublicFooter() {
       style={{
         marginTop: 24,
         paddingTop: 12,
-        borderTop: "1px solid #e5e7eb",
+        borderTop: "1px solid rgba(148, 163, 184, 0.18)",
         fontSize: "0.75rem",
-        color: "#9ca3af",
+        color: "#94a3b8",
         textAlign: "center",
       }}
     >

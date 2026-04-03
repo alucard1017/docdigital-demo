@@ -46,13 +46,9 @@ export function PublicSignView({
     (signer.status === "FIRMADO" || signer.signer_status === "FIRMADO");
 
   const docFullySigned =
-    !isVisado &&
-    document &&
-    document.status === "FIRMADO";
+    !isVisado && document && document.status === "FIRMADO";
 
-  const docRejected =
-    document &&
-    document.status === "RECHAZADO";
+  const docRejected = document && document.status === "RECHAZADO";
 
   const canActOnDocument =
     !!document &&
@@ -62,8 +58,7 @@ export function PublicSignView({
     !alreadySignedByThisSigner &&
     !docRejected;
 
-  const showSkeleton =
-    publicSignLoading && !document && !publicSignError;
+  const showSkeleton = publicSignLoading && !document && !publicSignError;
 
   const titleText = isVisado ? "Visado de documento" : "Firma electrónica";
 
@@ -103,63 +98,63 @@ export function PublicSignView({
       : "No se pudo registrar la firma.";
   }
 
-async function handleConfirm() {
-  if (signing || !canActOnDocument) return;
+  async function handleConfirm() {
+    if (signing || !canActOnDocument) return;
 
-  try {
-    if (!acceptedLegal) {
-      setLegalError(
-        isVisado
-          ? "Debes aceptar el aviso legal de visado antes de continuar."
-          : "Debes aceptar el aviso legal de firma electrónica antes de continuar."
-      );
-      return;
-    }
-
-    setLegalError("");
-    setSigning(true);
-
-    const actionPath = isVisado ? "visar" : "firmar";
-    const endpoint = `${API_URL}/public/docs/${publicSignToken}/${actionPath}`;
-
-    const res = await fetch(endpoint, {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-    });
-
-    let data = {};
     try {
-      data = await res.json();
-    } catch {
-      data = {};
+      if (!acceptedLegal) {
+        setLegalError(
+          isVisado
+            ? "Debes aceptar el aviso legal de visado antes de continuar."
+            : "Debes aceptar el aviso legal de firma electrónica antes de continuar."
+        );
+        return;
+      }
+
+      setLegalError("");
+      setSigning(true);
+
+      const actionPath = isVisado ? "visar" : "firmar";
+      const endpoint = `${API_URL}/public/docs/${publicSignToken}/${actionPath}`;
+
+      const res = await fetch(endpoint, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+      });
+
+      let data = {};
+      try {
+        data = await res.json();
+      } catch {
+        data = {};
+      }
+
+      if (!res.ok) {
+        throw new Error(data?.message || getDefaultErrorMessage());
+      }
+
+      await cargarFirmaPublica(publicSignToken);
+
+      window.scrollTo({
+        top: 0,
+        behavior: "smooth",
+      });
+
+      alert(
+        isVisado
+          ? "✅ Visado registrado correctamente."
+          : "✅ Firma registrada correctamente."
+      );
+    } catch (err) {
+      alert(
+        "❌ " +
+          (err?.message ||
+            "Ocurrió un error al procesar la acción. Intenta nuevamente.")
+      );
+    } finally {
+      setSigning(false);
     }
-
-    if (!res.ok) {
-      throw new Error(data?.message || getDefaultErrorMessage());
-    }
-
-    await cargarFirmaPublica(publicSignToken);
-
-    window.scrollTo({
-      top: 0,
-      behavior: "smooth",
-    });
-
-    alert(
-      isVisado
-        ? "✅ Visado registrado correctamente."
-        : "✅ Firma registrada correctamente."
-    );
-  } catch (err) {
-    alert(
-      "❌ " +
-        (err?.message ||
-          "Ocurrió un error al procesar la acción. Intenta nuevamente.")
-    );
-  } finally {
-    setSigning(false);
   }
-}
 
   async function handleReject() {
     if (rejecting || !canActOnDocument) return;
@@ -293,6 +288,7 @@ async function handleConfirm() {
 
         {document && !publicSignLoading && !publicSignError && (
           <div className="public-sign-layout">
+            {/* Documento primero, a ancho completo */}
             <section className="public-sign-document-panel">
               <div className="public-sign-document-panel__header">
                 <div>
@@ -316,12 +312,11 @@ async function handleConfirm() {
 
               <div className="public-sign-pdf-stage">
                 {pdfUrl ? (
-		   <iframe
-   		     title="Vista previa del documento"
-		     src={`${pdfUrl}#toolbar=1&navpanes=0&scrollbar=1&view=FitH&zoom=page-width`}
-		     className="public-sign-pdf-frame"
-		     style={{ width: "100%", minHeight: "78vh", border: "0" }}
-		   />
+                  <iframe
+                    title="Vista previa del documento"
+                    src={`${pdfUrl}#toolbar=1&navpanes=0&scrollbar=1&view=FitH&zoom=page-width`}
+                    className="public-sign-pdf-frame"
+                  />
                 ) : (
                   <div className="public-sign-pdf-empty">
                     No se pudo mostrar la vista previa del PDF.
@@ -330,6 +325,7 @@ async function handleConfirm() {
               </div>
             </section>
 
+            {/* Panel lateral debajo en mobile, a la derecha en desktop grande */}
             <aside className="public-sign-sidebar">
               <div className="public-sign-summary">
                 <div className="public-sign-section-label">Resumen</div>
@@ -381,9 +377,7 @@ async function handleConfirm() {
                     checked={acceptedLegal}
                     onChange={(value) => {
                       setAcceptedLegal(value);
-                      if (value) {
-                        setLegalError("");
-                      }
+                      if (value) setLegalError("");
                     }}
                   />
 

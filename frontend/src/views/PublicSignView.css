@@ -158,11 +158,11 @@
   margin: 0 auto 16px;
 }
 
-/* Layout principal */
+/* Layout principal: 1 columna en mobile, 2 en desktop amplio */
 
 .public-sign-layout {
   display: grid;
-  grid-template-columns: minmax(0, 1.5fr) minmax(320px, 420px);
+  grid-template-columns: 1.6fr 0.9fr;
   gap: 24px;
   align-items: start;
 }
@@ -212,7 +212,7 @@
   white-space: nowrap;
 }
 
-/* Stage PDF: sin doble scroll, centrado */
+/* Stage PDF */
 
 .public-sign-pdf-stage {
   padding: 24px 24px 28px;
@@ -224,8 +224,10 @@
 }
 
 .public-sign-pdf-frame {
+  display: block;
   width: 100%;
-  min-height: 78vh;
+  height: 88vh;
+  min-height: 980px;
   border: 0;
   border-radius: 18px;
   background: #ffffff;
@@ -575,7 +577,8 @@
   }
 
   .public-sign-pdf-frame {
-    min-height: 60vh;
+    height: 72vh;
+    min-height: 700px;
     border-radius: 14px;
   }
 }
