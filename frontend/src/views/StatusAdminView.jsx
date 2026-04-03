@@ -170,8 +170,10 @@ function StatusAdminView() {
             display: "grid",
             gridTemplateColumns: "repeat(auto-fit, minmax(260px, 1fr))",
             gap: 16,
-          eron cargar las empresas";
-      setE           <div
+          }}
+        >
+          {health && (
+            <div
               className="card"
               style={{
                 padding: 18,
@@ -264,8 +266,9 @@ function StatusAdminView() {
                 <div>
                   <div style={{ color: subtleText }}>Storage</div>
                   <div style={{ fontWeight: 500, color: strongText }}>
-                    {health.checks?.storageron cargar las empresas";
-      setE                </div>
+                    {health.checks?.storage || "N/A"}
+                  </div>
+                </div>
               </div>
             </div>
           )}
