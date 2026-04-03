@@ -9,11 +9,11 @@ function apiUrl(path) {
 
 export function ListHeader({
   sort,
-  setSort,
+  setSort,              // ahora viene del hook ya con lógica de reset page
   statusFilter,
-  setStatusFilter,
+  setStatusFilter,       // idem
   search,
-  setSearch,
+  setSearch,             // maneja estado “en vivo”, el hook hace debounce
   totalFiltrado,
   pendientes,
   visados,
@@ -53,6 +53,10 @@ export function ListHeader({
       console.error("Error descargando reporte:", err);
       alert("Error de conexión al descargar reporte");
     }
+  };
+
+  const handleClearSearch = () => {
+    setSearch("");
   };
 
   const total = pendientes + visados + firmados + rechazados;
@@ -95,283 +99,291 @@ export function ListHeader({
   };
 
   return (
-    <>
-      <div style={sectionCard}>
-        {/* Línea superior */}
-        <div
-          style={{
-            display: "flex",
-            flexWrap: "wrap",
-            justifyContent: "space-between",
-            alignItems: "flex-start",
-            gap: 16,
-            marginBottom: 16,
-          }}
-        >
-          <div style={{ flex: "1 1 320px", minWidth: 240 }}>
-            <h1
-              style={{
-                margin: 0,
-                fontSize: "1.6rem",
-                fontWeight: 800,
-                color: "#f8fafc",
-                lineHeight: 1.1,
-                letterSpacing: "-0.02em",
-              }}
-            >
-              Bandeja de entrada
-            </h1>
-
-            <p
-              style={{
-                margin: "6px 0 0 0",
-                fontSize: "0.9rem",
-                color: "#94a3b8",
-              }}
-            >
-              Gestiona documentos, revisa estados y accede rápido a las acciones principales.
-            </p>
-
-            <p
-              style={{
-                margin: "8px 0 0 0",
-                fontSize: "0.82rem",
-                color: "#cbd5e1",
-              }}
-            >
-              {totalFiltrado} documentos encontrados con los filtros actuales
-            </p>
-          </div>
-
-          <div
+    <div style={sectionCard}>
+      {/* Línea superior */}
+      <div
+        style={{
+          display: "flex",
+          flexWrap: "wrap",
+          justifyContent: "space-between",
+          alignItems: "flex-start",
+          gap: 16,
+          marginBottom: 16,
+        }}
+      >
+        <div style={{ flex: "1 1 320px", minWidth: 240 }}>
+          <h1
             style={{
-              display: "flex",
-              flexWrap: "wrap",
-              gap: 10,
-              alignItems: "center",
-              justifyContent: "flex-end",
-              flex: "0 1 auto",
+              margin: 0,
+              fontSize: "1.6rem",
+              fontWeight: 800,
+              color: "#f8fafc",
+              lineHeight: 1.1,
+              letterSpacing: "-0.02em",
             }}
           >
-            <button
-              type="button"
-              onClick={handleDownloadReport}
-              className="btn-main"
-              style={{
-                background: "linear-gradient(135deg, #10b981, #059669)",
-                color: "#ffffff",
-                fontSize: "0.84rem",
-                padding: "0 16px",
-                borderRadius: 12,
-                fontWeight: 700,
-                border: "none",
-                height: 38,
-                whiteSpace: "nowrap",
-                boxShadow: "0 10px 24px rgba(5,150,105,0.28)",
-              }}
-            >
-              Descargar reporte
-            </button>
+            Bandeja de entrada
+          </h1>
 
-            <button
-              className="btn-main"
-              onClick={onSync}
-              type="button"
-              style={{
-                background: "#1e293b",
-                color: "#e2e8f0",
-                fontSize: "0.84rem",
-                padding: "0 16px",
-                borderRadius: 12,
-                fontWeight: 700,
-                border: "1px solid #334155",
-                height: 38,
-                whiteSpace: "nowrap",
-              }}
-            >
-              Sincronizar bandeja
-            </button>
-          </div>
+          <p
+            style={{
+              margin: "6px 0 0 0",
+              fontSize: "0.9rem",
+              color: "#94a3b8",
+            }}
+          >
+            Gestiona documentos, revisa estados y accede rápido a las acciones principales.
+          </p>
+
+          <p
+            style={{
+              margin: "8px 0 0 0",
+              fontSize: "0.82rem",
+              color: "#cbd5e1",
+            }}
+          >
+            {totalFiltrado} documentos encontrados con los filtros actuales
+          </p>
         </div>
 
-        {/* Chips de estado */}
-        <div
-          style={{
-            display: "flex",
-            flexWrap: "wrap",
-            gap: 10,
-            marginBottom: 16,
-          }}
-        >
-          <button
-            type="button"
-            onClick={() => setStatusFilter("TODOS")}
-            style={{
-              ...chipBase,
-              background:
-                statusFilter === "TODOS"
-                  ? "linear-gradient(135deg, #1e293b, #334155)"
-                  : "rgba(15,23,42,0.9)",
-              color: "#e5e7eb",
-              borderColor: statusFilter === "TODOS" ? "#64748b" : "#1f2937",
-            }}
-          >
-            Todos <strong>{total}</strong>
-          </button>
-
-          <button
-            type="button"
-            onClick={() => setStatusFilter("PENDIENTES")}
-            style={{
-              ...chipBase,
-              background:
-                statusFilter === "PENDIENTES"
-                  ? "linear-gradient(135deg, #3730a3, #4f46e5)"
-                  : "rgba(55,48,163,0.18)",
-              color: "#e5e7eb",
-              borderColor: "rgba(129,140,248,0.7)",
-            }}
-          >
-            Pendientes <strong>{pendientes}</strong>
-          </button>
-
-          <button
-            type="button"
-            onClick={() => setStatusFilter("VISADOS")}
-            style={{
-              ...chipBase,
-              background:
-                statusFilter === "VISADOS"
-                  ? "linear-gradient(135deg, #0f766e, #14b8a6)"
-                  : "rgba(15,118,110,0.18)",
-              color: "#ecfeff",
-              borderColor: "rgba(45,212,191,0.7)",
-            }}
-          >
-            Visados <strong>{visados}</strong>
-          </button>
-
-          <button
-            type="button"
-            onClick={() => setStatusFilter("FIRMADOS")}
-            style={{
-              ...chipBase,
-              background:
-                statusFilter === "FIRMADOS"
-                  ? "linear-gradient(135deg, #166534, #22c55e)"
-                  : "rgba(22,101,52,0.18)",
-              color: "#dcfce7",
-              borderColor: "rgba(34,197,94,0.7)",
-            }}
-          >
-            Firmados <strong>{firmados}</strong>
-          </button>
-
-          <button
-            type="button"
-            onClick={() => setStatusFilter("RECHAZADOS")}
-            style={{
-              ...chipBase,
-              background:
-                statusFilter === "RECHAZADOS"
-                  ? "linear-gradient(135deg, #b91c1c, #ef4444)"
-                  : "rgba(185,28,28,0.18)",
-              color: "#fee2e2",
-              borderColor: "rgba(248,113,113,0.7)",
-            }}
-          >
-            Rechazados <strong>{rechazados}</strong>
-          </button>
-        </div>
-
-        {/* Filtros */}
         <div
           style={{
             display: "flex",
             flexWrap: "wrap",
             gap: 10,
             alignItems: "center",
+            justifyContent: "flex-end",
+            flex: "0 1 auto",
           }}
         >
-          <div
+          <button
+            type="button"
+            onClick={handleDownloadReport}
+            className="btn-main"
             style={{
-              display: "flex",
-              alignItems: "center",
-              gap: 8,
-              flex: "0 1 auto",
+              background: "linear-gradient(135deg, #10b981, #059669)",
+              color: "#ffffff",
+              fontSize: "0.84rem",
+              padding: "0 16px",
+              borderRadius: 12,
+              fontWeight: 700,
+              border: "none",
+              height: 38,
+              whiteSpace: "nowrap",
+              boxShadow: "0 10px 24px rgba(5,150,105,0.28)",
             }}
           >
-            <span
-              style={{
-                fontSize: "0.8rem",
-                color: "#94a3b8",
-                minWidth: 64,
-              }}
-            >
-              Ordenar
-            </span>
-            <select
-              value={sort}
-              onChange={(e) => setSort(e.target.value)}
-              style={{ ...controlStyle, minWidth: 190 }}
-            >
-              <option value="title_asc">Título (A → Z)</option>
-              <option value="title_desc">Título (Z → A)</option>
-              <option value="fecha_desc">Fecha (más reciente)</option>
-              <option value="fecha_asc">Fecha (más antigua)</option>
-              <option value="numero_asc">N° interno (ascendente)</option>
-              <option value="numero_desc">N° interno (descendente)</option>
-            </select>
-          </div>
+            Descargar reporte
+          </button>
 
-          <div
+          <button
+            className="btn-main"
+            onClick={onSync}
+            type="button"
             style={{
-              display: "flex",
-              alignItems: "center",
-              gap: 8,
-              flex: "0 1 auto",
+              background: "#1e293b",
+              color: "#e2e8f0",
+              fontSize: "0.84rem",
+              padding: "0 16px",
+              borderRadius: 12,
+              fontWeight: 700,
+              border: "1px solid #334155",
+              height: 38,
+              whiteSpace: "nowrap",
             }}
           >
-            <span
-              style={{
-                fontSize: "0.8rem",
-                color: "#94a3b8",
-                minWidth: 52,
-              }}
-            >
-              Estado
-            </span>
-            <select
-              value={statusFilter}
-              onChange={(e) => setStatusFilter(e.target.value)}
-              style={{ ...controlStyle, minWidth: 160 }}
-            >
-              <option value="TODOS">Todos</option>
-              <option value="PENDIENTES">Pendientes</option>
-              <option value="VISADOS">Visados</option>
-              <option value="FIRMADOS">Firmados</option>
-              <option value="RECHAZADOS">Rechazados</option>
-            </select>
-          </div>
+            Sincronizar bandeja
+          </button>
+        </div>
+      </div>
 
-          <div
+      {/* Chips de estado */}
+      <div
+        style={{
+          display: "flex",
+          flexWrap: "wrap",
+          gap: 10,
+          marginBottom: 16,
+        }}
+      >
+        <button
+          type="button"
+          onClick={() => setStatusFilter("TODOS")}
+          style={{
+            ...chipBase,
+            background:
+              statusFilter === "TODOS"
+                ? "linear-gradient(135deg, #1e293b, #334155)"
+                : "rgba(15,23,42,0.9)",
+            color: "#e5e7eb",
+            borderColor: statusFilter === "TODOS" ? "#64748b" : "#1f2937",
+          }}
+        >
+          Todos <strong>{total}</strong>
+        </button>
+
+        <button
+          type="button"
+          onClick={() => setStatusFilter("PENDIENTES")}
+          style={{
+            ...chipBase,
+            background:
+              statusFilter === "PENDIENTES"
+                ? "linear-gradient(135deg, #3730a3, #4f46e5)"
+                : "rgba(55,48,163,0.18)",
+            color: "#e5e7eb",
+            borderColor: "rgba(129,140,248,0.7)",
+          }}
+        >
+          Pendientes <strong>{pendientes}</strong>
+        </button>
+
+        <button
+          type="button"
+          onClick={() => setStatusFilter("VISADOS")}
+          style={{
+            ...chipBase,
+            background:
+              statusFilter === "VISADOS"
+                ? "linear-gradient(135deg, #0f766e, #14b8a6)"
+                : "rgba(15,118,110,0.18)",
+            color: "#ecfeff",
+            borderColor: "rgba(45,212,191,0.7)",
+          }}
+        >
+          Visados <strong>{visados}</strong>
+        </button>
+
+        <button
+          type="button"
+          onClick={() => setStatusFilter("FIRMADOS")}
+          style={{
+            ...chipBase,
+            background:
+              statusFilter === "FIRMADOS"
+                ? "linear-gradient(135deg, #166534, #22c55e)"
+                : "rgba(22,101,52,0.18)",
+            color: "#dcfce7",
+            borderColor: "rgba(34,197,94,0.7)",
+          }}
+        >
+          Firmados <strong>{firmados}</strong>
+        </button>
+
+        <button
+          type="button"
+          onClick={() => setStatusFilter("RECHAZADOS")}
+          style={{
+            ...chipBase,
+            background:
+              statusFilter === "RECHAZADOS"
+                ? "linear-gradient(135deg, #b91c1c, #ef4444)"
+                : "rgba(185,28,28,0.18)",
+            color: "#fee2e2",
+            borderColor: "rgba(248,113,113,0.7)",
+          }}
+        >
+          Rechazados <strong>{rechazados}</strong>
+        </button>
+      </div>
+
+      {/* Filtros */}
+      <div
+        style={{
+          display: "flex",
+          flexWrap: "wrap",
+          gap: 10,
+          alignItems: "center",
+        }}
+      >
+        <div
+          style={{
+            display: "flex",
+            alignItems: "center",
+            gap: 8,
+            flex: "0 1 auto",
+          }}
+        >
+          <span
             style={{
-              display: "flex",
-              alignItems: "center",
-              gap: 8,
-              flex: "1 1 260px",
-              minWidth: 220,
+              fontSize: "0.8rem",
+              color: "#94a3b8",
+              minWidth: 64,
             }}
           >
-            <span
-              style={{
-                fontSize: "0.8rem",
-                color: "#94a3b8",
-                minWidth: 52,
-              }}
-            >
-              Buscar
-            </span>
+            Ordenar
+          </span>
+          <select
+            value={sort}
+            onChange={(e) => setSort(e.target.value)}
+            style={{ ...controlStyle, minWidth: 190 }}
+          >
+            <option value="title_asc">Título (A → Z)</option>
+            <option value="title_desc">Título (Z → A)</option>
+            <option value="fecha_desc">Fecha (más reciente)</option>
+            <option value="fecha_asc">Fecha (más antigua)</option>
+            <option value="numero_asc">N° interno (ascendente)</option>
+            <option value="numero_desc">N° interno (descendente)</option>
+          </select>
+        </div>
+
+        <div
+          style={{
+            display: "flex",
+            alignItems: "center",
+            gap: 8,
+            flex: "0 1 auto",
+          }}
+        >
+          <span
+            style={{
+              fontSize: "0.8rem",
+              color: "#94a3b8",
+              minWidth: 52,
+            }}
+          >
+            Estado
+          </span>
+          <select
+            value={statusFilter}
+            onChange={(e) => setStatusFilter(e.target.value)}
+            style={{ ...controlStyle, minWidth: 160 }}
+          >
+            <option value="TODOS">Todos</option>
+            <option value="PENDIENTES">Pendientes</option>
+            <option value="VISADOS">Visados</option>
+            <option value="FIRMADOS">Firmados</option>
+            <option value="RECHAZADOS">Rechazados</option>
+          </select>
+        </div>
+
+        <div
+          style={{
+            display: "flex",
+            alignItems: "center",
+            gap: 8,
+            flex: "1 1 260px",
+            minWidth: 220,
+          }}
+        >
+          <span
+            style={{
+              fontSize: "0.8rem",
+              color: "#94a3b8",
+              minWidth: 52,
+            }}
+          >
+            Buscar
+          </span>
+          <div
+            style={{
+              position: "relative",
+              flex: 1,
+              minWidth: 0,
+              display: "flex",
+              alignItems: "center",
+            }}
+          >
             <input
               type="text"
               value={search}
@@ -379,13 +391,37 @@ export function ListHeader({
               placeholder="Título, empresa o firmante..."
               style={{
                 ...controlStyle,
-                flex: 1,
-                minWidth: 0,
+                width: "100%",
+                paddingRight: search ? 32 : 12,
               }}
             />
+            {search && (
+              <button
+                type="button"
+                onClick={handleClearSearch}
+                aria-label="Limpiar búsqueda"
+                style={{
+                  position: "absolute",
+                  right: 8,
+                  width: 20,
+                  height: 20,
+                  borderRadius: 999,
+                  border: "none",
+                  background: "transparent",
+                  color: "#64748b",
+                  display: "flex",
+                  alignItems: "center",
+                  justifyContent: "center",
+                  fontSize: 14,
+                  cursor: "pointer",
+                }}
+              >
+                ×
+              </button>
+            )}
           </div>
         </div>
       </div>
-    </>
+    </div>
   );
 }
