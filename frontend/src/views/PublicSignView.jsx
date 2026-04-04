@@ -7,7 +7,7 @@ import { ElectronicSignatureNotice } from "../components/Legal/ElectronicSignatu
 import { PublicPdfViewer } from "../components/PublicPdfViewer";
 
 function stripTrailingSlashes(value = "") {
-  return String(value || "").trim().replace(/\\/+$/, "");
+  return String(value || "").trim().replace(/\/+$/, "");
 }
 
 function normalizePublicApiBase(API_URL) {
