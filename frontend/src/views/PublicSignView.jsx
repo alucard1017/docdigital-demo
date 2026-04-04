@@ -91,6 +91,36 @@ export function PublicSignView({
     publicSignDoc?.rut ||
     "No informado";
 
+  const internalNumberRaw =
+    document?.numero_interno ??
+    document?.numeroInterno ??
+    document?.nro_interno ??
+    document?.nroInterno ??
+    document?.internal_number ??
+    document?.internalNumber ??
+    document?.contract_number ??
+    document?.contractNumber ??
+    document?.numero_contrato ??
+    document?.numeroContrato ??
+    document?.codigo_contrato ??
+    document?.codigoContrato ??
+    publicSignDoc?.numero_interno ??
+    publicSignDoc?.numeroInterno ??
+    publicSignDoc?.nro_interno ??
+    publicSignDoc?.nroInterno ??
+    publicSignDoc?.internal_number ??
+    publicSignDoc?.internalNumber ??
+    publicSignDoc?.contract_number ??
+    publicSignDoc?.contractNumber ??
+    publicSignDoc?.numero_contrato ??
+    publicSignDoc?.numeroContrato ??
+    publicSignDoc?.codigo_contrato ??
+    publicSignDoc?.codigoContrato ??
+    null;
+
+  const internalNumber =
+    String(internalNumberRaw ?? "").trim() || "---------";
+
   const signerName =
     signer?.name ||
     signer?.nombre ||
@@ -436,6 +466,11 @@ export function PublicSignView({
                   <div className="public-sign-meta-card__subvalue">
                     RUT: {companyRut}
                   </div>
+                </div>
+
+                <div className="public-sign-meta-card">
+                  <div className="public-sign-meta-card__label">Número interno</div>
+                  <div className="public-sign-meta-card__value">{internalNumber}</div>
                 </div>
 
                 {!isVisado && signer && (
