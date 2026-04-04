@@ -7,7 +7,7 @@ import { ElectronicSignatureNotice } from "../components/Legal/ElectronicSignatu
 import { PublicPdfViewer } from "../components/PublicPdfViewer";
 
 function stripTrailingSlashes(value = "") {
-  return String(value || "").trim().replace(/\/+$/, "");
+  return String(value || "").trim().replace(/\\/+$/, "");
 }
 
 function normalizePublicApiBase(API_URL) {
@@ -236,19 +236,19 @@ export function PublicSignView({
   }
 
   return (
-    <div className="login-bg public-sign-page">
+    <div className="public-sign-page">
       <div className="public-sign-shell">
         <PublicHeader />
 
-        <div className="public-sign-heading">
+        <header className="public-sign-heading">
           <div>
             <div className="public-sign-eyebrow">VeriFirma · Portal público</div>
             <h1 className="public-sign-title">{titleText}</h1>
           </div>
           <div className={statusBadge.className}>{statusBadge.label}</div>
-        </div>
+        </header>
 
-        <div
+        <section
           className={`public-sign-intro ${
             isVisado ? "public-sign-intro--warning" : "public-sign-intro--info"
           }`}
@@ -270,7 +270,7 @@ export function PublicSignView({
               ? "Tu visado deja constancia de revisión y continuidad del flujo."
               : "Esta acción representa la aceptación del contenido mediante firma electrónica simple."}
           </div>
-        </div>
+        </section>
 
         {actionMessage && (
           <div
