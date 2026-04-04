@@ -1432,11 +1432,19 @@ body {
 ========================================================= */
 
 .login-bg {
-  height: 100vh;
+  min-height: 100vh;
+  display: block;
+  background: radial-gradient(circle at top right, #1e293b, #0f172a);
+}
+
+/* Si quieres un layout centrado solo para el formulario de login,
+   créale una clase específica, por ejemplo: */
+
+.login-centered {
+  min-height: 100vh;
   display: flex;
   align-items: center;
   justify-content: center;
-  background: radial-gradient(circle at top right, #1e293b, #0f172a);
 }
 
 .login-card {
