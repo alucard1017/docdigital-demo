@@ -47,8 +47,6 @@ export function PublicSignView({
     publicSignDoc?.document?.pdf_url ||
     "";
 
-  const iframePdfUrl = pdfUrl ? `${pdfUrl}#zoom=page-width` : "";
-
   const [showReject, setShowReject] = useState(false);
   const [rejectReason, setRejectReason] = useState("");
   const [rejecting, setRejecting] = useState(false);
@@ -280,7 +278,9 @@ export function PublicSignView({
                 : ""
             }`}
           >
-            <div className="public-sign-message-card__text">{actionMessage}</div>
+            <div className="public-sign-message-card__text">
+              {actionMessage}
+            </div>
           </div>
         )}
 
@@ -331,9 +331,9 @@ export function PublicSignView({
                     href={pdfUrl}
                     target="_blank"
                     rel="noopener noreferrer"
-                    className="public-sign-open-pdf"
+                    className="public-sign-open-pdf public-sign-open-pdf--fullwidth"
                   >
-                    Abrir PDF completo
+                    Abrir documento completo
                   </a>
                 )}
               </div>
@@ -342,7 +342,7 @@ export function PublicSignView({
                 {pdfUrl ? (
                   <iframe
                     title="Vista previa del documento"
-                    src={iframePdfUrl}
+                    src={pdfUrl}
                     className="public-sign-pdf-frame"
                   />
                 ) : (
@@ -361,8 +361,9 @@ export function PublicSignView({
                   {document.title || "Documento"}
                 </div>
                 <div className="public-sign-summary__text">
-                  Revisa el documento antes de continuar. Si la vista previa no
-                  aparece o se ve mal, usa el acceso directo al PDF completo.
+                  Abre el documento completo en una nueva pestaña, revisa todo
+                  su contenido (incluidos logotipos y encabezados) y luego
+                  vuelve a esta página para firmar o rechazar.
                 </div>
               </div>
 

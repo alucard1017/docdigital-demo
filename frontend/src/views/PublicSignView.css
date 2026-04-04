@@ -200,9 +200,19 @@
   white-space: nowrap;
 }
 
+.public-sign-open-pdf--fullwidth {
+  width: 100%;
+  text-align: center;
+}
+
+/* Panel scrollable del PDF */
 .public-sign-pdf-stage {
   padding: 20px;
-  background: linear-gradient(180deg, rgba(15, 23, 42, 0.96) 0%, rgba(2, 6, 23, 0.96) 100%);
+  background: linear-gradient(
+    180deg,
+    rgba(15, 23, 42, 0.96) 0%,
+    rgba(2, 6, 23, 0.96) 100%
+  );
   display: flex;
   justify-content: center;
   align-items: flex-start;
@@ -215,8 +225,6 @@
   display: block;
   width: 100%;
   min-height: 70vh;
-  height: 78vh;
-  height: 78dvh;
   border: 0;
   border-radius: 18px;
   background: #ffffff;
@@ -432,8 +440,6 @@
 
   .public-sign-pdf-frame {
     min-height: 64vh;
-    height: 72vh;
-    height: 72dvh;
     border-radius: 14px;
   }
 }
@@ -482,8 +488,6 @@
 
   .public-sign-pdf-frame {
     min-height: 52vh;
-    height: 68vh;
-    height: 68dvh;
   }
 
   .public-sign-message-card {
