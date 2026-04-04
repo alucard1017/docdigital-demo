@@ -143,12 +143,11 @@
   margin: 0 auto 16px;
 }
 
-/* Layout principal: panel documento + sidebar */
 .public-sign-layout {
   display: grid;
   grid-template-columns: minmax(0, 1.7fr) minmax(320px, 400px);
   gap: 24px;
-  align-items: stretch;
+  align-items: start;
   flex: 1;
   min-height: 0;
 }
@@ -201,27 +200,23 @@
   white-space: nowrap;
 }
 
-/* Contenedor scrollable del PDF */
 .public-sign-pdf-stage {
   padding: 20px;
-  background: linear-gradient(
-    180deg,
-    rgba(15, 23, 42, 0.96) 0%,
-    rgba(2, 6, 23, 0.96) 100%
-  );
+  background: linear-gradient(180deg, rgba(15, 23, 42, 0.96) 0%, rgba(2, 6, 23, 0.96) 100%);
   display: flex;
   justify-content: center;
-  align-items: stretch;
+  align-items: flex-start;
   flex: 1 1 auto;
   min-height: 0;
-  overflow: auto; /* clave: deja scrollear si el PDF es más alto que el viewport */
+  overflow: auto;
 }
 
 .public-sign-pdf-frame {
   display: block;
   width: 100%;
-  height: clamp(640px, 78vh, 1100px);
-  height: clamp(640px, 78dvh, 1100px);
+  min-height: 70vh;
+  height: 78vh;
+  height: 78dvh;
   border: 0;
   border-radius: 18px;
   background: #ffffff;
@@ -311,34 +306,6 @@
   border: 1px solid rgba(248, 113, 113, 0.35);
   color: #fecaca;
   font-size: 13px;
-}
-
-.public-sign-state-box {
-  margin-top: 10px;
-  padding: 16px;
-  border-radius: 16px;
-}
-
-.public-sign-state-box--danger {
-  background: rgba(127, 29, 29, 0.35);
-  border: 1px solid rgba(248, 113, 113, 0.35);
-  color: #fecaca;
-}
-
-.public-sign-state-box--success {
-  background: rgba(20, 83, 45, 0.35);
-  border: 1px solid rgba(74, 222, 128, 0.35);
-  color: #bbf7d0;
-}
-
-.public-sign-state-box__title {
-  font-weight: 800;
-  margin-bottom: 6px;
-}
-
-.public-sign-state-box__text {
-  font-size: 14px;
-  line-height: 1.6;
 }
 
 .public-sign-actions {
@@ -454,8 +421,6 @@
   margin-top: 18px;
 }
 
-/* Responsivo */
-
 @media (max-width: 1080px) {
   .public-sign-layout {
     grid-template-columns: 1fr;
@@ -466,8 +431,9 @@
   }
 
   .public-sign-pdf-frame {
-    height: clamp(560px, 72vh, 900px);
-    height: clamp(560px, 72dvh, 900px);
+    min-height: 64vh;
+    height: 72vh;
+    height: 72dvh;
     border-radius: 14px;
   }
 }
@@ -515,9 +481,9 @@
   }
 
   .public-sign-pdf-frame {
-    height: clamp(420px, 68vh, 760px);
-    height: clamp(420px, 68dvh, 760px);
-    min-height: 0;
+    min-height: 52vh;
+    height: 68vh;
+    height: 68dvh;
   }
 
   .public-sign-message-card {

@@ -5,7 +5,7 @@ import { PublicFooter } from "../components/PublicFooter";
 import { ElectronicSignatureNotice } from "../components/Legal/ElectronicSignatureNotice";
 
 function stripTrailingSlashes(value = "") {
-  return String(value || "").trim().replace(/\\/+$/, "");
+  return String(value || "").trim().replace(/\/+$/, "");
 }
 
 function normalizePublicApiBase(API_URL) {
@@ -46,6 +46,8 @@ export function PublicSignView({
     publicSignDoc?.document?.pdf_final_url ||
     publicSignDoc?.document?.pdf_url ||
     "";
+
+  const iframePdfUrl = pdfUrl ? `${pdfUrl}#zoom=page-width` : "";
 
   const [showReject, setShowReject] = useState(false);
   const [rejectReason, setRejectReason] = useState("");
@@ -340,7 +342,7 @@ export function PublicSignView({
                 {pdfUrl ? (
                   <iframe
                     title="Vista previa del documento"
-                    src={`${pdfUrl}#toolbar=1&navpanes=0&scrollbar=1&view=FitH&zoom=page-width`}
+                    src={iframePdfUrl}
                     className="public-sign-pdf-frame"
                   />
                 ) : (
@@ -360,7 +362,7 @@ export function PublicSignView({
                 </div>
                 <div className="public-sign-summary__text">
                   Revisa el documento antes de continuar. Si la vista previa no
-                  aparece, usa el acceso directo al PDF completo.
+                  aparece o se ve mal, usa el acceso directo al PDF completo.
                 </div>
               </div>
 
@@ -407,9 +409,7 @@ export function PublicSignView({
                   />
 
                   {legalError && (
-                    <div className="public-sign-inline-error">
-                      {legalError}
-                    </div>
+                    <div className="public-sign-inline-error">{legalError}</div>
                   )}
                 </>
               )}
@@ -466,9 +466,7 @@ export function PublicSignView({
                   />
 
                   {rejectError && (
-                    <div className="public-sign-inline-error">
-                      {rejectError}
-                    </div>
+                    <div className="public-sign-inline-error">{rejectError}</div>
                   )}
 
                   <div className="public-sign-reject-actions">
