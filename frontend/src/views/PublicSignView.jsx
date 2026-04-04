@@ -21,6 +21,15 @@ function normalizeStatus(value = "") {
   return String(value || "").trim().toUpperCase();
 }
 
+function pickFirstNonEmpty(...values) {
+  for (const value of values) {
+    if (value === null || value === undefined) continue;
+    const text = String(value).trim();
+    if (text) return text;
+  }
+  return "";
+}
+
 export function PublicSignView({
   publicSignLoading,
   publicSignError,
@@ -35,6 +44,19 @@ export function PublicSignView({
   const isVisado = publicSignMode === "visado";
 
   const document = publicSignDoc?.document || publicSignDoc || null;
+  const documentMeta =
+    document?.metadata ||
+    document?.meta ||
+    document?.document_metadata ||
+    publicSignDoc?.metadata ||
+    publicSignDoc?.meta ||
+    {};
+
+  const signedDocument =
+    publicSignDoc?.signedDocument ||
+    publicSignDoc?.signed_document ||
+    publicSignDoc?.documento_firmado ||
+    null;
 
   const signer =
     publicSignDoc?.signer ||
@@ -42,99 +64,143 @@ export function PublicSignView({
     (Array.isArray(publicSignDoc?.signers) ? publicSignDoc.signers[0] : null) ||
     null;
 
-  const pdfUrl =
-    publicSignPdfUrl ||
-    publicSignDoc?.pdfUrl ||
-    publicSignDoc?.previewUrl ||
-    publicSignDoc?.signedPdfUrl ||
-    publicSignDoc?.document?.signedPdfUrl ||
-    publicSignDoc?.document?.previewUrl ||
-    publicSignDoc?.document?.pdf_final_url ||
-    publicSignDoc?.document?.pdf_url ||
-    publicSignDoc?.document?.archivo_url ||
-    publicSignDoc?.document?.file_url ||
-    "";
+  const pdfUrl = pickFirstNonEmpty(
+    publicSignPdfUrl,
+    publicSignDoc?.pdfUrl,
+    publicSignDoc?.previewUrl,
+    publicSignDoc?.signedPdfUrl,
+    publicSignDoc?.document?.signedPdfUrl,
+    publicSignDoc?.document?.previewUrl,
+    publicSignDoc?.document?.pdf_final_url,
+    publicSignDoc?.document?.pdf_url,
+    publicSignDoc?.document?.archivo_url,
+    publicSignDoc?.document?.file_url,
+    signedDocument?.pdfUrl,
+    signedDocument?.pdf_url,
+    signedDocument?.archivo_url
+  );
 
-  const documentTitle =
-    document?.title ||
-    document?.titulo ||
-    document?.document_title ||
-    document?.nombre ||
-    document?.name ||
-    "Documento";
+  const documentTitle = pickFirstNonEmpty(
+    document?.title,
+    document?.titulo,
+    document?.document_title,
+    document?.nombre,
+    document?.name,
+    signedDocument?.title,
+    signedDocument?.titulo,
+    "Documento"
+  );
 
-  const companyName =
-    document?.destinatario_nombre ||
-    document?.empresa_nombre ||
-    document?.nombre_empresa ||
-    document?.company_name ||
-    document?.companyName ||
-    document?.razon_social ||
-    publicSignDoc?.destinatario_nombre ||
-    publicSignDoc?.empresa_nombre ||
-    publicSignDoc?.nombre_empresa ||
-    publicSignDoc?.company_name ||
-    publicSignDoc?.companyName ||
-    publicSignDoc?.razon_social ||
-    "No informado";
+  const companyName = pickFirstNonEmpty(
+    document?.destinatario_nombre,
+    document?.empresa_nombre,
+    document?.nombre_empresa,
+    document?.company_name,
+    document?.companyName,
+    document?.razon_social,
+    documentMeta?.destinatario_nombre,
+    documentMeta?.empresa_nombre,
+    documentMeta?.nombre_empresa,
+    documentMeta?.company_name,
+    documentMeta?.companyName,
+    documentMeta?.razon_social,
+    signedDocument?.destinatario_nombre,
+    signedDocument?.empresa_nombre,
+    signedDocument?.nombre_empresa,
+    publicSignDoc?.destinatario_nombre,
+    publicSignDoc?.empresa_nombre,
+    publicSignDoc?.nombre_empresa,
+    publicSignDoc?.company_name,
+    publicSignDoc?.companyName,
+    publicSignDoc?.razon_social,
+    "No informado"
+  );
 
-  const companyRut =
-    document?.empresa_rut ||
-    document?.rut_empresa ||
-    document?.company_rut ||
-    document?.companyRut ||
-    document?.rut ||
-    publicSignDoc?.empresa_rut ||
-    publicSignDoc?.rut_empresa ||
-    publicSignDoc?.company_rut ||
-    publicSignDoc?.companyRut ||
-    publicSignDoc?.rut ||
-    "No informado";
+  const companyRut = pickFirstNonEmpty(
+    document?.empresa_rut,
+    document?.rut_empresa,
+    document?.company_rut,
+    document?.companyRut,
+    document?.rut,
+    documentMeta?.empresa_rut,
+    documentMeta?.rut_empresa,
+    documentMeta?.company_rut,
+    documentMeta?.companyRut,
+    documentMeta?.rut,
+    signedDocument?.empresa_rut,
+    signedDocument?.rut_empresa,
+    signedDocument?.rut,
+    publicSignDoc?.empresa_rut,
+    publicSignDoc?.rut_empresa,
+    publicSignDoc?.company_rut,
+    publicSignDoc?.companyRut,
+    publicSignDoc?.rut,
+    "No informado"
+  );
 
-  const internalNumberRaw =
-    document?.numero_interno ??
-    document?.numeroInterno ??
-    document?.nro_interno ??
-    document?.nroInterno ??
-    document?.internal_number ??
-    document?.internalNumber ??
-    document?.contract_number ??
-    document?.contractNumber ??
-    document?.numero_contrato ??
-    document?.numeroContrato ??
-    document?.codigo_contrato ??
-    document?.codigoContrato ??
-    publicSignDoc?.numero_interno ??
-    publicSignDoc?.numeroInterno ??
-    publicSignDoc?.nro_interno ??
-    publicSignDoc?.nroInterno ??
-    publicSignDoc?.internal_number ??
-    publicSignDoc?.internalNumber ??
-    publicSignDoc?.contract_number ??
-    publicSignDoc?.contractNumber ??
-    publicSignDoc?.numero_contrato ??
-    publicSignDoc?.numeroContrato ??
-    publicSignDoc?.codigo_contrato ??
-    publicSignDoc?.codigoContrato ??
-    null;
+  const internalNumber = pickFirstNonEmpty(
+    document?.numero_interno,
+    document?.numeroInterno,
+    document?.nro_interno,
+    document?.nroInterno,
+    document?.internal_number,
+    document?.internalNumber,
+    document?.contract_number,
+    document?.contractNumber,
+    document?.numero_contrato,
+    document?.numeroContrato,
+    document?.codigo_contrato,
+    document?.codigoContrato,
+    document?.contract_code,
+    document?.codigo,
+    documentMeta?.numero_interno,
+    documentMeta?.numeroInterno,
+    documentMeta?.nro_interno,
+    documentMeta?.nroInterno,
+    documentMeta?.internal_number,
+    documentMeta?.internalNumber,
+    documentMeta?.contract_number,
+    documentMeta?.contractNumber,
+    documentMeta?.numero_contrato,
+    documentMeta?.numeroContrato,
+    documentMeta?.codigo_contrato,
+    documentMeta?.codigoContrato,
+    signedDocument?.numero_interno,
+    signedDocument?.numeroInterno,
+    signedDocument?.contract_number,
+    signedDocument?.numero_contrato,
+    signedDocument?.codigo_contrato,
+    publicSignDoc?.numero_interno,
+    publicSignDoc?.numeroInterno,
+    publicSignDoc?.nro_interno,
+    publicSignDoc?.nroInterno,
+    publicSignDoc?.internal_number,
+    publicSignDoc?.internalNumber,
+    publicSignDoc?.contract_number,
+    publicSignDoc?.contractNumber,
+    publicSignDoc?.numero_contrato,
+    publicSignDoc?.numeroContrato,
+    publicSignDoc?.codigo_contrato,
+    publicSignDoc?.codigoContrato,
+    "---------"
+  );
 
-  const internalNumber =
-    String(internalNumberRaw ?? "").trim() || "---------";
+  const signerName = pickFirstNonEmpty(
+    signer?.name,
+    signer?.nombre,
+    signer?.signer_name,
+    signer?.full_name,
+    signer?.fullname,
+    "Firmante"
+  );
 
-  const signerName =
-    signer?.name ||
-    signer?.nombre ||
-    signer?.signer_name ||
-    signer?.full_name ||
-    signer?.fullname ||
-    "Firmante";
-
-  const signerEmail =
-    signer?.email ||
-    signer?.signer_email ||
-    signer?.correo ||
-    signer?.mail ||
-    "Sin correo disponible";
+  const signerEmail = pickFirstNonEmpty(
+    signer?.email,
+    signer?.signer_email,
+    signer?.correo,
+    signer?.mail,
+    "Sin correo disponible"
+  );
 
   const [showReject, setShowReject] = useState(false);
   const [rejectReason, setRejectReason] = useState("");
@@ -150,7 +216,11 @@ export function PublicSignView({
   );
 
   const documentStatus = normalizeStatus(
-    document?.status || document?.document_status || document?.estado
+    document?.status ||
+      document?.document_status ||
+      document?.estado ||
+      signedDocument?.status ||
+      signedDocument?.estado
   );
 
   const alreadySignedByThisSigner = !isVisado && signerStatus === "FIRMADO";
@@ -419,9 +489,7 @@ export function PublicSignView({
               <div className="public-sign-document-panel__header">
                 <div>
                   <div className="public-sign-section-label">Documento</div>
-                  <div className="public-sign-document-title">
-                    {documentTitle}
-                  </div>
+                  <div className="public-sign-document-title">{documentTitle}</div>
                 </div>
 
                 {pdfUrl && (
@@ -454,8 +522,7 @@ export function PublicSignView({
                 <div className="public-sign-summary__title">{documentTitle}</div>
                 <div className="public-sign-summary__text">
                   Abre el documento completo en una nueva pestaña, revisa todo
-                  su contenido (incluidos logotipos y encabezados) y luego
-                  vuelve a esta página para firmar o rechazar.
+                  su contenido y luego vuelve a esta página para firmar o rechazar.
                 </div>
               </div>
 
@@ -475,15 +542,9 @@ export function PublicSignView({
 
                 {!isVisado && signer && (
                   <div className="public-sign-meta-card">
-                    <div className="public-sign-meta-card__label">
-                      Firmando como
-                    </div>
-                    <div className="public-sign-meta-card__value">
-                      {signerName}
-                    </div>
-                    <div className="public-sign-meta-card__subvalue">
-                      {signerEmail}
-                    </div>
+                    <div className="public-sign-meta-card__label">Firmando como</div>
+                    <div className="public-sign-meta-card__value">{signerName}</div>
+                    <div className="public-sign-meta-card__subvalue">{signerEmail}</div>
                   </div>
                 )}
               </div>
