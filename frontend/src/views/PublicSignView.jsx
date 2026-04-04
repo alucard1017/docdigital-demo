@@ -17,6 +17,10 @@ function normalizePublicApiBase(API_URL) {
   return trimmed.endsWith("/api") ? trimmed : `${trimmed}/api`;
 }
 
+function normalizeStatus(value = "") {
+  return String(value || "").trim().toUpperCase();
+}
+
 export function PublicSignView({
   publicSignLoading,
   publicSignError,
@@ -47,7 +51,60 @@ export function PublicSignView({
     publicSignDoc?.document?.previewUrl ||
     publicSignDoc?.document?.pdf_final_url ||
     publicSignDoc?.document?.pdf_url ||
+    publicSignDoc?.document?.archivo_url ||
+    publicSignDoc?.document?.file_url ||
     "";
+
+  const documentTitle =
+    document?.title ||
+    document?.titulo ||
+    document?.document_title ||
+    document?.nombre ||
+    document?.name ||
+    "Documento";
+
+  const companyName =
+    document?.destinatario_nombre ||
+    document?.empresa_nombre ||
+    document?.nombre_empresa ||
+    document?.company_name ||
+    document?.companyName ||
+    document?.razon_social ||
+    publicSignDoc?.destinatario_nombre ||
+    publicSignDoc?.empresa_nombre ||
+    publicSignDoc?.nombre_empresa ||
+    publicSignDoc?.company_name ||
+    publicSignDoc?.companyName ||
+    publicSignDoc?.razon_social ||
+    "No informado";
+
+  const companyRut =
+    document?.empresa_rut ||
+    document?.rut_empresa ||
+    document?.company_rut ||
+    document?.companyRut ||
+    document?.rut ||
+    publicSignDoc?.empresa_rut ||
+    publicSignDoc?.rut_empresa ||
+    publicSignDoc?.company_rut ||
+    publicSignDoc?.companyRut ||
+    publicSignDoc?.rut ||
+    "No informado";
+
+  const signerName =
+    signer?.name ||
+    signer?.nombre ||
+    signer?.signer_name ||
+    signer?.full_name ||
+    signer?.fullname ||
+    "Firmante";
+
+  const signerEmail =
+    signer?.email ||
+    signer?.signer_email ||
+    signer?.correo ||
+    signer?.mail ||
+    "Sin correo disponible";
 
   const [showReject, setShowReject] = useState(false);
   const [rejectReason, setRejectReason] = useState("");
@@ -58,14 +115,23 @@ export function PublicSignView({
   const [signing, setSigning] = useState(false);
   const [actionMessage, setActionMessage] = useState("");
 
-  const alreadySignedByThisSigner =
-    !isVisado &&
-    signer &&
-    (signer.status === "FIRMADO" || signer.signer_status === "FIRMADO");
+  const signerStatus = normalizeStatus(
+    signer?.status || signer?.signer_status || signer?.estado
+  );
 
-  const docFullySigned = !isVisado && document?.status === "FIRMADO";
-  const docRejected = document?.status === "RECHAZADO";
-  const visadoDone = isVisado && document?.status !== "PENDIENTE_VISADO";
+  const documentStatus = normalizeStatus(
+    document?.status || document?.document_status || document?.estado
+  );
+
+  const alreadySignedByThisSigner = !isVisado && signerStatus === "FIRMADO";
+  const docFullySigned = !isVisado && documentStatus === "FIRMADO";
+  const docRejected = documentStatus === "RECHAZADO";
+
+  const visadoDone =
+    isVisado &&
+    documentStatus &&
+    documentStatus !== "PENDIENTE_VISADO" &&
+    documentStatus !== "PENDIENTE";
 
   const canActOnDocument =
     !!document &&
@@ -324,7 +390,7 @@ export function PublicSignView({
                 <div>
                   <div className="public-sign-section-label">Documento</div>
                   <div className="public-sign-document-title">
-                    {document.title || "Documento"}
+                    {documentTitle}
                   </div>
                 </div>
 
@@ -355,9 +421,7 @@ export function PublicSignView({
             <aside className="public-sign-sidebar">
               <div className="public-sign-summary">
                 <div className="public-sign-section-label">Resumen</div>
-                <div className="public-sign-summary__title">
-                  {document.title || "Documento"}
-                </div>
+                <div className="public-sign-summary__title">{documentTitle}</div>
                 <div className="public-sign-summary__text">
                   Abre el documento completo en una nueva pestaña, revisa todo
                   su contenido (incluidos logotipos y encabezados) y luego
@@ -368,11 +432,9 @@ export function PublicSignView({
               <div className="public-sign-meta-grid">
                 <div className="public-sign-meta-card">
                   <div className="public-sign-meta-card__label">Empresa</div>
-                  <div className="public-sign-meta-card__value">
-                    {document.destinatario_nombre || "No informado"}
-                  </div>
+                  <div className="public-sign-meta-card__value">{companyName}</div>
                   <div className="public-sign-meta-card__subvalue">
-                    RUT: {document.empresa_rut || "No informado"}
+                    RUT: {companyRut}
                   </div>
                 </div>
 
@@ -382,15 +444,10 @@ export function PublicSignView({
                       Firmando como
                     </div>
                     <div className="public-sign-meta-card__value">
-                      {signer?.name ||
-                        signer?.nombre ||
-                        signer?.signer_name ||
-                        "Firmante"}
+                      {signerName}
                     </div>
                     <div className="public-sign-meta-card__subvalue">
-                      {signer?.email ||
-                        signer?.signer_email ||
-                        "Sin correo disponible"}
+                      {signerEmail}
                     </div>
                   </div>
                 )}

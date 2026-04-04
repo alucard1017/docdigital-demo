@@ -1,79 +1,81 @@
-import React, { useEffect, useMemo, useState } from "react";
+// frontend/src/components/PublicPdfViewer.jsx
+import React, { useMemo, useState } from "react";
 import { Document, Page, pdfjs } from "react-pdf";
-import "react-pdf/dist/Page/TextLayer.css";
+import pdfWorker from "pdfjs-dist/build/pdf.worker.min.mjs?url";
 import "react-pdf/dist/Page/AnnotationLayer.css";
+import "react-pdf/dist/Page/TextLayer.css";
 
-pdfjs.GlobalWorkerOptions.workerSrc = new URL(
-  "pdfjs-dist/build/pdf.worker.min.mjs",
-  import.meta.url
-).toString();
+pdfjs.GlobalWorkerOptions.workerSrc = pdfWorker;
 
 export function PublicPdfViewer({ fileUrl }) {
-  const [numPages, setNumPages] = useState(0);
-  const [containerWidth, setContainerWidth] = useState(900);
+  const [numPages, setNumPages] = useState(null);
   const [loadError, setLoadError] = useState("");
 
-  useEffect(() => {
-    const el = document.getElementById("public-pdf-viewer-container");
-    if (!el) return;
+  const file = useMemo(() => {
+    if (!fileUrl) return null;
+    return { url: fileUrl };
+  }, [fileUrl]);
 
-    const update = () => {
-      setContainerWidth(el.clientWidth || 900);
-    };
+  function handleLoadSuccess({ numPages }) {
+    setNumPages(numPages);
+    setLoadError("");
+  }
 
-    update();
+  function handleLoadError(error) {
+    console.error("❌ Error real cargando PDF:", error);
+    setLoadError(
+      error?.message ||
+        "No se pudo cargar la vista previa del PDF. Intenta abrir el documento completo."
+    );
+  }
 
-    const observer = new ResizeObserver(update);
-    observer.observe(el);
-
-    window.addEventListener("resize", update);
-
-    return () => {
-      observer.disconnect();
-      window.removeEventListener("resize", update);
-    };
-  }, []);
-
-  const pageWidth = useMemo(() => {
-    const safeWidth = Math.max(280, containerWidth - 24);
-    return safeWidth;
-  }, [containerWidth]);
+  if (!fileUrl) {
+    return (
+      <div className="public-sign-pdf-empty">
+        No hay una vista previa disponible para este documento.
+      </div>
+    );
+  }
 
   return (
-    <div id="public-pdf-viewer-container" className="public-pdf-viewer">
+    <div className="public-pdf-viewer">
+      {loadError ? (
+        <div className="public-sign-pdf-empty">
+          <div>{loadError}</div>
+        </div>
+      ) : null}
+
       <Document
-        file={fileUrl}
-        onLoadSuccess={({ numPages }) => {
-          setLoadError("");
-          setNumPages(numPages);
-        }}
-        onLoadError={(error) => {
-          console.error("❌ Error real cargando PDF:", error);
-          setLoadError(error?.message || "Error desconocido cargando PDF");
-        }}
-        loading={<div className="public-sign-pdf-empty">Cargando PDF...</div>}
+        file={file}
+        onLoadSuccess={handleLoadSuccess}
+        onLoadError={handleLoadError}
+        loading={
+          <div className="public-sign-pdf-empty">
+            Cargando vista previa del documento...
+          </div>
+        }
         error={
           <div className="public-sign-pdf-empty">
-            No se pudo cargar la vista del PDF.
-            {loadError ? <div style={{ marginTop: 8 }}>{loadError}</div> : null}
+            No se pudo renderizar el PDF. Usa “Abrir documento completo”.
           </div>
         }
         noData={
           <div className="public-sign-pdf-empty">
-            No hay PDF disponible para mostrar.
+            No hay archivo PDF disponible.
           </div>
         }
       >
-        {Array.from(new Array(numPages), (_, index) => (
-          <div key={`page_${index + 1}`} className="public-pdf-page-wrap">
-            <Page
-              pageNumber={index + 1}
-              width={pageWidth}
-              renderTextLayer={false}
-              renderAnnotationLayer={false}
-            />
-          </div>
-        ))}
+        {!loadError &&
+          Array.from(new Array(numPages || 0), (_, index) => (
+            <div className="public-pdf-page-wrap" key={`page_${index + 1}`}>
+              <Page
+                pageNumber={index + 1}
+                renderTextLayer={false}
+                renderAnnotationLayer={false}
+                width={900}
+              />
+            </div>
+          ))}
       </Document>
     </div>
   );
