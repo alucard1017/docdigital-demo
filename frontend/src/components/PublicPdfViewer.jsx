@@ -1,3 +1,4 @@
+// frontend/src/components/PublicPdfViewer.jsx
 import React, { useEffect, useMemo, useState } from "react";
 import { Document, Page, pdfjs } from "react-pdf";
 import "react-pdf/dist/Page/TextLayer.css";

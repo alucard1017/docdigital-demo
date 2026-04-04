@@ -1,8 +1,10 @@
+// frontend/src/views/PublicSignView.jsx
 import React, { useMemo, useState } from "react";
 import "./PublicSignView.css";
 import { PublicHeader } from "../components/PublicHeader";
 import { PublicFooter } from "../components/PublicFooter";
 import { ElectronicSignatureNotice } from "../components/Legal/ElectronicSignatureNotice";
+import { PublicPdfViewer } from "../components/PublicPdfViewer";
 
 function stripTrailingSlashes(value = "") {
   return String(value || "").trim().replace(/\/+$/, "");
@@ -340,11 +342,7 @@ export function PublicSignView({
 
               <div className="public-sign-pdf-stage">
                 {pdfUrl ? (
-                  <iframe
-                    title="Vista previa del documento"
-                    src={pdfUrl}
-                    className="public-sign-pdf-frame"
-                  />
+                  <PublicPdfViewer fileUrl={pdfUrl} />
                 ) : (
                   <div className="public-sign-pdf-empty">
                     No hay una vista previa disponible en este momento. Usa el
