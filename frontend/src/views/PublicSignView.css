@@ -6,12 +6,11 @@
   box-sizing: border-box;
 }
 
+/* Dejamos que crezca según contenido, sin forzar 100vh */
 .public-sign-shell {
   max-width: 1400px;
   margin: 0 auto;
   color: #e5e7eb;
-  min-height: calc(100vh - 48px);
-  min-height: calc(100dvh - 48px);
   display: flex;
   flex-direction: column;
 }
@@ -147,11 +146,10 @@
   display: grid;
   grid-template-columns: minmax(0, 1.7fr) minmax(320px, 400px);
   gap: 24px;
-  align-items: start;
-  flex: 1;
-  min-height: 0;
+  align-items: flex-start;
 }
 
+/* Panel del PDF: sin min-height forzada */
 .public-sign-document-panel {
   border-radius: 22px;
   border: 1px solid rgba(148, 163, 184, 0.16);
@@ -160,7 +158,6 @@
   display: flex;
   flex-direction: column;
   min-width: 0;
-  min-height: 0;
 }
 
 .public-sign-document-panel__header {
@@ -205,7 +202,7 @@
   text-align: center;
 }
 
-/* Panel scrollable del PDF */
+/* Panel scrollable del PDF: solo crece según contenido */
 .public-sign-pdf-stage {
   padding: 20px;
   background: linear-gradient(
@@ -216,8 +213,7 @@
   display: flex;
   justify-content: center;
   align-items: flex-start;
-  flex: 1 1 auto;
-  min-height: 0;
+  flex: 0 0 auto;
   overflow: auto;
 }
 
@@ -244,7 +240,6 @@
 
 .public-sign-sidebar {
   min-width: 0;
-  min-height: 0;
   position: sticky;
   top: 16px;
   align-self: start;
@@ -450,8 +445,7 @@
   }
 
   .public-sign-shell {
-    min-height: calc(100vh - 32px);
-    min-height: calc(100dvh - 32px);
+    /* en móvil también sin forzar min-height fija */
   }
 
   .public-sign-heading {
@@ -495,23 +489,8 @@
   }
 }
 
+/* ---- React PDF Viewer ---- */
 
-.public-sign-pdf-stage {
-  padding: 20px;
-  background: linear-gradient(
-    180deg,
-    rgba(15, 23, 42, 0.96) 0%,
-    rgba(2, 6, 23, 0.96) 100%
-  );
-  display: flex;
-  justify-content: center;
-  align-items: flex-start;
-  flex: 1 1 auto;
-  min-height: 0;
-  overflow: auto;
-}
-
-/* NUEVO: contenedor del visor react-pdf */
 .public-pdf-viewer {
   width: 100%;
   display: flex;
@@ -534,6 +513,3 @@
   box-shadow: 0 16px 40px rgba(15, 23, 42, 0.35);
   background: #ffffff;
 }
-
-
-
