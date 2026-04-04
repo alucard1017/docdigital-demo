@@ -1,4 +1,3 @@
-// frontend/src/components/PublicPdfViewer.jsx
 import React, { useEffect, useMemo, useState } from "react";
 import { Document, Page, pdfjs } from "react-pdf";
 import "react-pdf/dist/Page/TextLayer.css";
@@ -12,6 +11,7 @@ pdfjs.GlobalWorkerOptions.workerSrc = new URL(
 export function PublicPdfViewer({ fileUrl }) {
   const [numPages, setNumPages] = useState(0);
   const [containerWidth, setContainerWidth] = useState(900);
+  const [loadError, setLoadError] = useState("");
 
   useEffect(() => {
     const el = document.getElementById("public-pdf-viewer-container");
@@ -43,11 +43,19 @@ export function PublicPdfViewer({ fileUrl }) {
     <div id="public-pdf-viewer-container" className="public-pdf-viewer">
       <Document
         file={fileUrl}
-        onLoadSuccess={({ numPages }) => setNumPages(numPages)}
+        onLoadSuccess={({ numPages }) => {
+          setLoadError("");
+          setNumPages(numPages);
+        }}
+        onLoadError={(error) => {
+          console.error("❌ Error real cargando PDF:", error);
+          setLoadError(error?.message || "Error desconocido cargando PDF");
+        }}
         loading={<div className="public-sign-pdf-empty">Cargando PDF...</div>}
         error={
           <div className="public-sign-pdf-empty">
             No se pudo cargar la vista del PDF.
+            {loadError ? <div style={{ marginTop: 8 }}>{loadError}</div> : null}
           </div>
         }
         noData={
