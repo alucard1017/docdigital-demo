@@ -44,6 +44,7 @@ export function PublicSignView({
   const isVisado = publicSignMode === "visado";
 
   const document = publicSignDoc?.document || publicSignDoc || null;
+
   const documentMeta =
     document?.metadata ||
     document?.meta ||
@@ -69,12 +70,12 @@ export function PublicSignView({
     publicSignDoc?.pdfUrl,
     publicSignDoc?.previewUrl,
     publicSignDoc?.signedPdfUrl,
-    publicSignDoc?.document?.signedPdfUrl,
-    publicSignDoc?.document?.previewUrl,
-    publicSignDoc?.document?.pdf_final_url,
-    publicSignDoc?.document?.pdf_url,
-    publicSignDoc?.document?.archivo_url,
-    publicSignDoc?.document?.file_url,
+    document?.signedPdfUrl,
+    document?.previewUrl,
+    document?.pdf_final_url,
+    document?.pdf_url,
+    document?.archivo_url,
+    document?.file_url,
     signedDocument?.pdfUrl,
     signedDocument?.pdf_url,
     signedDocument?.archivo_url
@@ -139,6 +140,19 @@ export function PublicSignView({
   );
 
   const internalNumber = pickFirstNonEmpty(
+    document?.numero_contrato_interno,
+    document?.numero_contrato,
+    document?.numeroContrato,
+    documentMeta?.numeroContratoInterno,
+    documentMeta?.numero_contrato_interno,
+    documentMeta?.numero_contrato,
+    documentMeta?.numeroContrato,
+    signedDocument?.numero_contrato_interno,
+    signedDocument?.numero_contrato,
+    signedDocument?.numeroContrato,
+    publicSignDoc?.numero_contrato_interno,
+    publicSignDoc?.numero_contrato,
+    publicSignDoc?.numeroContrato,
     document?.numero_interno,
     document?.numeroInterno,
     document?.nro_interno,
@@ -147,8 +161,6 @@ export function PublicSignView({
     document?.internalNumber,
     document?.contract_number,
     document?.contractNumber,
-    document?.numero_contrato,
-    document?.numeroContrato,
     document?.codigo_contrato,
     document?.codigoContrato,
     document?.contract_code,
@@ -161,14 +173,11 @@ export function PublicSignView({
     documentMeta?.internalNumber,
     documentMeta?.contract_number,
     documentMeta?.contractNumber,
-    documentMeta?.numero_contrato,
-    documentMeta?.numeroContrato,
     documentMeta?.codigo_contrato,
     documentMeta?.codigoContrato,
     signedDocument?.numero_interno,
     signedDocument?.numeroInterno,
     signedDocument?.contract_number,
-    signedDocument?.numero_contrato,
     signedDocument?.codigo_contrato,
     publicSignDoc?.numero_interno,
     publicSignDoc?.numeroInterno,
@@ -178,8 +187,6 @@ export function PublicSignView({
     publicSignDoc?.internalNumber,
     publicSignDoc?.contract_number,
     publicSignDoc?.contractNumber,
-    publicSignDoc?.numero_contrato,
-    publicSignDoc?.numeroContrato,
     publicSignDoc?.codigo_contrato,
     publicSignDoc?.codigoContrato,
     "---------"
@@ -275,7 +282,13 @@ export function PublicSignView({
         ? "public-sign-status public-sign-status--warning"
         : "public-sign-status public-sign-status--info",
     };
-  }, [alreadySignedByThisSigner, docFullySigned, docRejected, isVisado, visadoDone]);
+  }, [
+    alreadySignedByThisSigner,
+    docFullySigned,
+    docRejected,
+    isVisado,
+    visadoDone,
+  ]);
 
   function getDefaultErrorMessage() {
     return isVisado
@@ -536,8 +549,12 @@ export function PublicSignView({
                 </div>
 
                 <div className="public-sign-meta-card">
-                  <div className="public-sign-meta-card__label">Número interno</div>
-                  <div className="public-sign-meta-card__value">{internalNumber}</div>
+                  <div className="public-sign-meta-card__label">
+                    Número de contrato
+                  </div>
+                  <div className="public-sign-meta-card__value">
+                    {internalNumber}
+                  </div>
                 </div>
 
                 {!isVisado && signer && (
