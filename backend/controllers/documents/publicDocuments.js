@@ -144,31 +144,31 @@ async function getPublicDocByDocumentToken(req, res) {
 
     const result = await db.query(
       `
-      SELECT 
-        d.id,
-        d.title,
-        d.status,
-        d.file_path,
-        d.pdf_final_url,
-        d.pdf_original_url,
-        d.destinatario_nombre,
-        d.empresa_rut,
-        d.requires_visado,
-        d.signature_status,
-        d.signature_token_expires_at,
-        d.firmante_nombre,
-        d.firmante_run,
-        d.numero_contrato_interno,
-        d.visador_nombre,
-        COALESCE(
-          d.numero_contrato_interno,
-          d.metadata->>'numero_contrato',
-          d.metadata->>'numero_interno',
-          d.metadata->>'contract_number',
-          d.metadata->>'codigo_contrato'
-        ) AS numero_contrato
-      FROM documents d
-      WHERE d.signature_token = $1
+SELECT 
+  d.id,
+  d.title,
+  d.status,
+  d.file_path,
+  d.pdf_final_url,
+  d.pdf_original_url,
+  d.destinatario_nombre,
+  d.empresa_rut,
+  d.requires_visado,
+  d.signature_status,
+  d.signature_token_expires_at,
+  d.firmante_nombre,
+  d.firmante_run,
+  d.numero_contrato_interno,
+  d.visador_nombre,
+  COALESCE(
+    d.numero_contrato_interno,
+    d.metadata->>'numero_contrato',
+    d.metadata->>'numero_interno',
+    d.metadata->>'contract_number',
+    d.metadata->>'codigo_contrato'
+  ) AS numero_contrato
+FROM documents d
+WHERE d.signature_token = $1
       `,
       [token]
     );

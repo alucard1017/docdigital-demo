@@ -43,171 +43,160 @@ export function PublicSignView({
   const API_BASE = useMemo(() => normalizePublicApiBase(API_URL), [API_URL]);
   const isVisado = publicSignMode === "visado";
 
-  const document = publicSignDoc?.document || publicSignDoc || null;
+  const document = useMemo(() => {
+    return publicSignDoc?.document || publicSignDoc || null;
+  }, [publicSignDoc]);
 
-  const documentMeta =
-    document?.metadata ||
-    document?.meta ||
-    document?.document_metadata ||
-    publicSignDoc?.metadata ||
-    publicSignDoc?.meta ||
-    {};
+  const documentMeta = useMemo(() => {
+    return (
+      document?.metadata ||
+      document?.meta ||
+      document?.document_metadata ||
+      publicSignDoc?.metadata ||
+      publicSignDoc?.meta ||
+      {}
+    );
+  }, [document, publicSignDoc]);
 
-  const signedDocument =
-    publicSignDoc?.signedDocument ||
-    publicSignDoc?.signed_document ||
-    publicSignDoc?.documento_firmado ||
-    null;
+  const signedDocument = useMemo(() => {
+    return (
+      publicSignDoc?.signedDocument ||
+      publicSignDoc?.signed_document ||
+      publicSignDoc?.documento_firmado ||
+      null
+    );
+  }, [publicSignDoc]);
 
-  const signer =
-    publicSignDoc?.signer ||
-    publicSignDoc?.currentSigner ||
-    (Array.isArray(publicSignDoc?.signers) ? publicSignDoc.signers[0] : null) ||
-    null;
+  const signer = useMemo(() => {
+    return (
+      publicSignDoc?.signer ||
+      publicSignDoc?.currentSigner ||
+      (Array.isArray(publicSignDoc?.signers) ? publicSignDoc.signers[0] : null) ||
+      null
+    );
+  }, [publicSignDoc]);
 
-  const pdfUrl = pickFirstNonEmpty(
-    publicSignPdfUrl,
-    publicSignDoc?.pdfUrl,
-    publicSignDoc?.previewUrl,
-    publicSignDoc?.signedPdfUrl,
-    document?.signedPdfUrl,
-    document?.previewUrl,
-    document?.pdf_final_url,
-    document?.pdf_url,
-    document?.archivo_url,
-    document?.file_url,
-    signedDocument?.pdfUrl,
-    signedDocument?.pdf_url,
-    signedDocument?.archivo_url
-  );
+  const pdfUrl = useMemo(() => {
+    return pickFirstNonEmpty(
+      publicSignPdfUrl,
+      publicSignDoc?.pdfUrl,
+      publicSignDoc?.previewUrl,
+      publicSignDoc?.signedPdfUrl,
+      document?.signedPdfUrl,
+      document?.previewUrl,
+      document?.pdf_final_url,
+      document?.pdf_url,
+      document?.archivo_url,
+      document?.file_url,
+      signedDocument?.pdfUrl,
+      signedDocument?.pdf_url,
+      signedDocument?.archivo_url
+    );
+  }, [publicSignPdfUrl, publicSignDoc, document, signedDocument]);
 
-  const documentTitle = pickFirstNonEmpty(
-    document?.title,
-    document?.titulo,
-    document?.document_title,
-    document?.nombre,
-    document?.name,
-    signedDocument?.title,
-    signedDocument?.titulo,
-    "Documento"
-  );
+  const documentTitle = useMemo(() => {
+    return pickFirstNonEmpty(
+      document?.title,
+      document?.titulo,
+      document?.document_title,
+      document?.nombre,
+      document?.name,
+      signedDocument?.title,
+      signedDocument?.titulo,
+      "Documento"
+    );
+  }, [document, signedDocument]);
 
-  const companyName = pickFirstNonEmpty(
-    document?.destinatario_nombre,
-    document?.empresa_nombre,
-    document?.nombre_empresa,
-    document?.company_name,
-    document?.companyName,
-    document?.razon_social,
-    documentMeta?.destinatario_nombre,
-    documentMeta?.empresa_nombre,
-    documentMeta?.nombre_empresa,
-    documentMeta?.company_name,
-    documentMeta?.companyName,
-    documentMeta?.razon_social,
-    signedDocument?.destinatario_nombre,
-    signedDocument?.empresa_nombre,
-    signedDocument?.nombre_empresa,
-    publicSignDoc?.destinatario_nombre,
-    publicSignDoc?.empresa_nombre,
-    publicSignDoc?.nombre_empresa,
-    publicSignDoc?.company_name,
-    publicSignDoc?.companyName,
-    publicSignDoc?.razon_social,
-    "No informado"
-  );
+  const companyName = useMemo(() => {
+    return pickFirstNonEmpty(
+      document?.destinatario_nombre,
+      document?.empresa_nombre,
+      document?.nombre_empresa,
+      document?.company_name,
+      document?.companyName,
+      document?.razon_social,
+      documentMeta?.destinatario_nombre,
+      documentMeta?.empresa_nombre,
+      documentMeta?.nombre_empresa,
+      documentMeta?.company_name,
+      documentMeta?.companyName,
+      documentMeta?.razon_social,
+      signedDocument?.destinatario_nombre,
+      signedDocument?.empresa_nombre,
+      signedDocument?.nombre_empresa,
+      publicSignDoc?.destinatario_nombre,
+      publicSignDoc?.empresa_nombre,
+      publicSignDoc?.nombre_empresa,
+      publicSignDoc?.company_name,
+      publicSignDoc?.companyName,
+      publicSignDoc?.razon_social,
+      "No informado"
+    );
+  }, [document, documentMeta, signedDocument, publicSignDoc]);
 
-  const companyRut = pickFirstNonEmpty(
-    document?.empresa_rut,
-    document?.rut_empresa,
-    document?.company_rut,
-    document?.companyRut,
-    document?.rut,
-    documentMeta?.empresa_rut,
-    documentMeta?.rut_empresa,
-    documentMeta?.company_rut,
-    documentMeta?.companyRut,
-    documentMeta?.rut,
-    signedDocument?.empresa_rut,
-    signedDocument?.rut_empresa,
-    signedDocument?.rut,
-    publicSignDoc?.empresa_rut,
-    publicSignDoc?.rut_empresa,
-    publicSignDoc?.company_rut,
-    publicSignDoc?.companyRut,
-    publicSignDoc?.rut,
-    "No informado"
-  );
+  const companyRut = useMemo(() => {
+    return pickFirstNonEmpty(
+      document?.empresa_rut,
+      document?.rut_empresa,
+      document?.company_rut,
+      document?.companyRut,
+      document?.rut,
+      documentMeta?.empresa_rut,
+      documentMeta?.rut_empresa,
+      documentMeta?.company_rut,
+      documentMeta?.companyRut,
+      documentMeta?.rut,
+      signedDocument?.empresa_rut,
+      signedDocument?.rut_empresa,
+      signedDocument?.rut,
+      publicSignDoc?.empresa_rut,
+      publicSignDoc?.rut_empresa,
+      publicSignDoc?.company_rut,
+      publicSignDoc?.companyRut,
+      publicSignDoc?.rut,
+      "No informado"
+    );
+  }, [document, documentMeta, signedDocument, publicSignDoc]);
 
-  const internalNumber = pickFirstNonEmpty(
-    document?.numero_contrato_interno,
-    document?.numero_contrato,
-    document?.numeroContrato,
-    documentMeta?.numeroContratoInterno,
-    documentMeta?.numero_contrato_interno,
-    documentMeta?.numero_contrato,
-    documentMeta?.numeroContrato,
-    signedDocument?.numero_contrato_interno,
-    signedDocument?.numero_contrato,
-    signedDocument?.numeroContrato,
-    publicSignDoc?.numero_contrato_interno,
-    publicSignDoc?.numero_contrato,
-    publicSignDoc?.numeroContrato,
-    document?.numero_interno,
-    document?.numeroInterno,
-    document?.nro_interno,
-    document?.nroInterno,
-    document?.internal_number,
-    document?.internalNumber,
-    document?.contract_number,
-    document?.contractNumber,
-    document?.codigo_contrato,
-    document?.codigoContrato,
-    document?.contract_code,
-    document?.codigo,
-    documentMeta?.numero_interno,
-    documentMeta?.numeroInterno,
-    documentMeta?.nro_interno,
-    documentMeta?.nroInterno,
-    documentMeta?.internal_number,
-    documentMeta?.internalNumber,
-    documentMeta?.contract_number,
-    documentMeta?.contractNumber,
-    documentMeta?.codigo_contrato,
-    documentMeta?.codigoContrato,
-    signedDocument?.numero_interno,
-    signedDocument?.numeroInterno,
-    signedDocument?.contract_number,
-    signedDocument?.codigo_contrato,
-    publicSignDoc?.numero_interno,
-    publicSignDoc?.numeroInterno,
-    publicSignDoc?.nro_interno,
-    publicSignDoc?.nroInterno,
-    publicSignDoc?.internal_number,
-    publicSignDoc?.internalNumber,
-    publicSignDoc?.contract_number,
-    publicSignDoc?.contractNumber,
-    publicSignDoc?.codigo_contrato,
-    publicSignDoc?.codigoContrato,
-    "---------"
-  );
+  const contractNumber = useMemo(() => {
+    return pickFirstNonEmpty(
+      document?.numero_contrato_interno,
+      document?.numero_contrato,
+      document?.numeroContrato,
+      documentMeta?.numeroContratoInterno,
+      documentMeta?.numero_contrato_interno,
+      documentMeta?.numero_contrato,
+      documentMeta?.numeroContrato,
+      signedDocument?.numero_contrato_interno,
+      signedDocument?.numero_contrato,
+      signedDocument?.numeroContrato,
+      publicSignDoc?.numero_contrato_interno,
+      publicSignDoc?.numero_contrato,
+      publicSignDoc?.numeroContrato,
+      "---------"
+    );
+  }, [document, documentMeta, signedDocument, publicSignDoc]);
 
-  const signerName = pickFirstNonEmpty(
-    signer?.name,
-    signer?.nombre,
-    signer?.signer_name,
-    signer?.full_name,
-    signer?.fullname,
-    "Firmante"
-  );
+  const signerName = useMemo(() => {
+    return pickFirstNonEmpty(
+      signer?.name,
+      signer?.nombre,
+      signer?.signer_name,
+      signer?.full_name,
+      signer?.fullname,
+      "Firmante"
+    );
+  }, [signer]);
 
-  const signerEmail = pickFirstNonEmpty(
-    signer?.email,
-    signer?.signer_email,
-    signer?.correo,
-    signer?.mail,
-    "Sin correo disponible"
-  );
+  const signerEmail = useMemo(() => {
+    return pickFirstNonEmpty(
+      signer?.email,
+      signer?.signer_email,
+      signer?.correo,
+      signer?.mail,
+      "Sin correo disponible"
+    );
+  }, [signer]);
 
   const [showReject, setShowReject] = useState(false);
   const [rejectReason, setRejectReason] = useState("");
@@ -553,7 +542,10 @@ export function PublicSignView({
                     Número de contrato
                   </div>
                   <div className="public-sign-meta-card__value">
-                    {internalNumber}
+                    {document?.numero_contrato_interno ||
+                      document?.numero_contrato ||
+                      contractNumber ||
+                      "---------"}
                   </div>
                 </div>
 
