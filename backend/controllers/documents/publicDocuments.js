@@ -55,6 +55,13 @@ async function getPublicDocBySignerToken(req, res) {
         d.firmante_nombre,
         d.firmante_run,
         d.numero_contrato_interno,
+        COALESCE(
+          d.numero_contrato_interno,
+          d.metadata->>'numero_contrato',
+          d.metadata->>'numero_interno',
+          d.metadata->>'contract_number',
+          d.metadata->>'codigo_contrato'
+        ) AS numero_contrato,
         s.id     AS signer_id,
         s.name   AS signer_name,
         s.email  AS signer_email,
@@ -107,6 +114,7 @@ async function getPublicDocBySignerToken(req, res) {
         firmante_nombre: row.firmante_nombre,
         firmante_run: row.firmante_run,
         numero_contrato_interno: row.numero_contrato_interno,
+        numero_contrato: row.numero_contrato || row.numero_contrato_interno || "",
         pdf_final_url: row.pdf_final_url || null,
         pdf_original_url: row.pdf_original_url || null,
       },
@@ -129,6 +137,7 @@ async function getPublicDocBySignerToken(req, res) {
    GET: Datos + PDF usando signature_token del DOCUMENTO
    (enlace genérico, sin firmante concreto)
    ================================ */
+// backend/controllers/documents/publicDocuments.js (solo esta función)
 async function getPublicDocByDocumentToken(req, res) {
   try {
     const { token } = req.params;
@@ -136,23 +145,30 @@ async function getPublicDocByDocumentToken(req, res) {
     const result = await db.query(
       `
       SELECT 
-        id,
-        title,
-        status,
-        file_path,
-        pdf_final_url,
-        pdf_original_url,
-        destinatario_nombre,
-        empresa_rut,
-        requires_visado,
-        signature_status,
-        signature_token_expires_at,
-        firmante_nombre,
-        firmante_run,
-        numero_contrato_interno,
-        visador_nombre
-      FROM documents
-      WHERE signature_token = $1
+        d.id,
+        d.title,
+        d.status,
+        d.file_path,
+        d.pdf_final_url,
+        d.pdf_original_url,
+        d.destinatario_nombre,
+        d.empresa_rut,
+        d.requires_visado,
+        d.signature_status,
+        d.signature_token_expires_at,
+        d.firmante_nombre,
+        d.firmante_run,
+        d.numero_contrato_interno,
+        d.visador_nombre,
+        COALESCE(
+          d.numero_contrato_interno,
+          d.metadata->>'numero_contrato',
+          d.metadata->>'numero_interno',
+          d.metadata->>'contract_number',
+          d.metadata->>'codigo_contrato'
+        ) AS numero_contrato
+      FROM documents d
+      WHERE d.signature_token = $1
       `,
       [token]
     );
@@ -185,7 +201,6 @@ async function getPublicDocByDocumentToken(req, res) {
 
     const pdfUrl = await getSignedUrl(basePath, 3600);
 
-    // Registrar apertura de invitación (sin firmante concreto)
     try {
       await db.query(
         `
@@ -218,7 +233,20 @@ async function getPublicDocByDocumentToken(req, res) {
 
     return res.json({
       document: {
-        ...doc,
+        id: doc.id,
+        title: doc.title,
+        status: doc.status,
+        destinatario_nombre: doc.destinatario_nombre,
+        empresa_rut: doc.empresa_rut,
+        requires_visado: doc.requires_visado,
+        signature_status: doc.signature_status,
+        firmante_nombre: doc.firmante_nombre,
+        firmante_run: doc.firmante_run,
+        numero_contrato_interno: doc.numero_contrato_interno,
+        numero_contrato: doc.numero_contrato || doc.numero_contrato_interno || "",
+        visador_nombre: doc.visador_nombre,
+        pdf_final_url: doc.pdf_final_url || null,
+        pdf_original_url: doc.pdf_original_url || null,
         pdfUrl,
       },
       pdfUrl,
@@ -565,14 +593,17 @@ async function publicSignDocument(req, res) {
       }
     }
 
-    return res.json({
-      ...doc,
-      file_url: doc.pdf_final_url || doc.pdf_original_url || doc.file_path,
-      documentStatus: newDocStatus,
-      message: allSigned
-        ? "Documento firmado correctamente por todos los firmantes"
-        : "Firma registrada. Aún faltan firmantes por completar la firma",
-    });
+return res.json({
+  ...doc,
+  numero_contrato_interno: doc.numero_contrato_interno,
+  numero_contrato: doc.numero_contrato_interno,
+  file_url: doc.pdf_final_url || doc.pdf_original_url || doc.file_path,
+  documentStatus: newDocStatus,
+  message: allSigned
+    ? "Documento firmado correctamente por todos los firmantes"
+    : "Firma registrada. Aún faltan firmantes por completar la firma",
+});
+
   } catch (err) {
     console.error("❌ Error firmando documento público:", err);
     return res.status(500).json({ message: "Error interno del servidor" });
