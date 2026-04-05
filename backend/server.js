@@ -18,6 +18,7 @@ const fs = require("fs");
 const rateLimit = require("express-rate-limit");
 const helmet = require("helmet");
 const Sentry = require("@sentry/node");
+const http = require("http");
 
 const requestMeta = require("./middlewares/requestMeta");
 const db = require("./db");
@@ -31,7 +32,6 @@ const { isNonExpiringUser } = require("./utils/billing");
    INICIALIZAR WORKERS / SCHEDULERS
    ================================ */
 try {
-  // require("./queues/remindersWorker");
   console.log("✓ Worker de recordatorios inicializado");
 } catch (err) {
   console.warn("⚠️ No se pudo iniciar worker de recordatorios:", err.message);
@@ -104,7 +104,7 @@ app.use(
   helmet({
     contentSecurityPolicy: false,
     crossOriginEmbedderPolicy: false,
-    frameguard: false, // permitir PDF embebido en iframe
+    frameguard: false,
   })
 );
 app.use(helmet.hidePoweredBy());
@@ -118,7 +118,7 @@ app.use(
 if (process.env.NODE_ENV === "production") {
   app.use(
     helmet.hsts({
-      maxAge: 15552000, // 180 días
+      maxAge: 15552000,
       includeSubDomains: true,
       preload: false,
     })
@@ -627,12 +627,14 @@ app.use((req, res) => {
 console.log("✓ Middleware 404 registrado");
 
 /* ================================
-   INICIAR SERVIDOR
+   INICIAR SERVIDOR HTTP + SOCKET.IO
    ================================ */
 const PORT = process.env.PORT || 4000;
 const { initializeSocketIO } = require("./services/socketService");
 
-const server = app.listen(PORT, () => {
+const server = http.createServer(app);
+
+server.listen(PORT, () => {
   console.log("=====================================");
   console.log(`✅ API ESCUCHANDO EN PUERTO ${PORT}`);
   console.log("=====================================");
@@ -657,7 +659,6 @@ const server = app.listen(PORT, () => {
   console.log("=====================================");
 });
 
-// Inicializar Socket.IO
 try {
   initializeSocketIO(server);
   console.log("✓ Socket.IO inicializado sobre servidor HTTP");

@@ -1,5 +1,12 @@
 // src/App.jsx
-import { useCallback, useEffect, useMemo, useState, lazy, Suspense } from "react";
+import {
+  useCallback,
+  useEffect,
+  useMemo,
+  useState,
+  lazy,
+  Suspense,
+} from "react";
 import "./App.css";
 
 import { Sidebar } from "./components/Sidebar";
@@ -107,12 +114,12 @@ const VALID_PROTECTED_VIEWS = new Set([
   "company-analytics",
 ]);
 
-const PUBLIC_AUTH_PATHS = [
+const PUBLIC_AUTH_PATHS = new Set([
   "/login",
   "/forgot-password",
   "/reset-password",
   "/register",
-];
+]);
 
 function getProtectedViewFromPath(path) {
   return ROUTE_MAP[path] || "list";
@@ -147,9 +154,25 @@ function formatRunDoc(value) {
   return `${body.replace(/\B(?=(\d{3})+(?!\d))/g, ".")}-${dv}`;
 }
 
-function getPublicAccess({ pathname, search, isSigningPortal, isVerificationPortal }) {
+function getLocationSnapshot() {
+  if (typeof window === "undefined") {
+    return { pathname: "/", search: "" };
+  }
+
+  return {
+    pathname: window.location.pathname || "/",
+    search: window.location.search || "",
+  };
+}
+
+function getPublicAccess({
+  pathname,
+  search,
+  isSigningPortal,
+  isVerificationPortal,
+}) {
   const params = new URLSearchParams(search || "");
-  const token = params.get("token");
+  const token = params.get("token") || "";
 
   const isPublicSigningAccess =
     !!token &&
@@ -164,11 +187,27 @@ function getPublicAccess({ pathname, search, isSigningPortal, isVerificationPort
     (isVerificationPortal && pathname === "/");
 
   return {
-    tokenFromUrl: token || "",
+    tokenFromUrl: token,
     isPublicSigningAccess,
     isPublicVerificationAccess,
     isAnyPublicAccess: isPublicSigningAccess || isPublicVerificationAccess,
   };
+}
+
+function ProtectedModuleFallback() {
+  return (
+    <div style={{ padding: 32, color: "#64748b" }}>
+      Cargando módulo…
+    </div>
+  );
+}
+
+function SessionLoadingFallback() {
+  return (
+    <div style={{ padding: 40, textAlign: "center" }}>
+      Cargando sesión...
+    </div>
+  );
 }
 
 function App() {
@@ -178,33 +217,6 @@ function App() {
 
   const [path, setPath] = useState(() => getPath());
   const [view, setView] = useState(() => getProtectedViewFromPath(getPath()));
-
-  const locationSnapshot = useMemo(() => {
-    if (typeof window === "undefined") {
-      return { pathname: "/", search: "" };
-    }
-
-    return {
-      pathname: window.location.pathname,
-      search: window.location.search,
-    };
-  }, [path]);
-
-  const {
-    tokenFromUrl,
-    isPublicSigningAccess,
-    isPublicVerificationAccess,
-    isAnyPublicAccess,
-  } = useMemo(
-    () =>
-      getPublicAccess({
-        pathname: locationSnapshot.pathname,
-        search: locationSnapshot.search,
-        isSigningPortal,
-        isVerificationPortal,
-      }),
-    [locationSnapshot, isSigningPortal, isVerificationPortal]
-  );
 
   const [identifier, setIdentifier] = useState("");
   const [password, setPassword] = useState("");
@@ -226,6 +238,24 @@ function App() {
 
   const { user, token, login, logout, authLoading, isAuthenticated } = useAuth();
   const { addToast } = useToast();
+
+  const locationSnapshot = useMemo(() => getLocationSnapshot(), [path]);
+
+  const {
+    tokenFromUrl,
+    isPublicSigningAccess,
+    isPublicVerificationAccess,
+    isAnyPublicAccess,
+  } = useMemo(
+    () =>
+      getPublicAccess({
+        pathname: locationSnapshot.pathname,
+        search: locationSnapshot.search,
+        isSigningPortal,
+        isVerificationPortal,
+      }),
+    [locationSnapshot, isSigningPortal, isVerificationPortal]
+  );
 
   const {
     loadingDocs,
@@ -353,14 +383,16 @@ function App() {
     if (authLoading) return;
     if (isAnyPublicAccess) return;
 
-    if (!isAuthenticated && !PUBLIC_AUTH_PATHS.includes(path)) {
-      setView("list");
-      setSelectedDoc(null);
-      replaceTo("/login");
+    if (!isAuthenticated) {
+      if (!PUBLIC_AUTH_PATHS.has(path)) {
+        setSelectedDoc(null);
+        setView("list");
+        replaceTo("/login");
+      }
       return;
     }
 
-    if (isAuthenticated && PUBLIC_AUTH_PATHS.includes(path)) {
+    if (PUBLIC_AUTH_PATHS.has(path)) {
       replaceTo("/documents");
     }
   }, [authLoading, isAuthenticated, path, isAnyPublicAccess, setSelectedDoc]);
@@ -369,12 +401,19 @@ function App() {
     if (!isAuthenticated) return;
     if (view === "detail") return;
 
+    const expectedView = getProtectedViewFromPath(path);
+
+    if (VALID_PROTECTED_VIEWS.has(expectedView) && view !== expectedView) {
+      setView(expectedView);
+      return;
+    }
+
     if (!VALID_PROTECTED_VIEWS.has(view)) {
       setSelectedDoc(null);
       setView("list");
       replaceTo("/documents");
     }
-  }, [view, isAuthenticated, setSelectedDoc]);
+  }, [view, path, isAuthenticated, setSelectedDoc]);
 
   useEffect(() => {
     if (!token) return;
@@ -434,10 +473,13 @@ function App() {
     [setPage, setSelectedDoc]
   );
 
-  const handleOpenDetail = useCallback((doc) => {
-    setSelectedDoc(doc);
-    setView("detail");
-  }, [setSelectedDoc]);
+  const handleOpenDetail = useCallback(
+    (doc) => {
+      setSelectedDoc(doc);
+      setView("detail");
+    },
+    [setSelectedDoc]
+  );
 
   const handleBackToList = useCallback(() => {
     setSelectedDoc(null);
@@ -454,162 +496,70 @@ function App() {
     throw new Error("Frontend test error");
   }, []);
 
-  async function handleLogin(e) {
-    e.preventDefault();
-    setIsLoggingIn(true);
-    setMessage("Conectando con el servidor seguro...");
+  const handleLogin = useCallback(
+    async (e) => {
+      e.preventDefault();
+      setIsLoggingIn(true);
+      setMessage("Conectando con el servidor seguro...");
 
-    const inputVal = identifier.trim();
-    const isEmail = inputVal.includes("@");
+      const inputVal = identifier.trim();
+      const isEmail = inputVal.includes("@");
 
-    const cleanValue = isEmail
-      ? inputVal.toLowerCase()
-      : inputVal.replace(/[^0-9kK]/g, "").toUpperCase();
+      const cleanValue = isEmail
+        ? inputVal.toLowerCase()
+        : inputVal.replace(/[^0-9kK]/g, "").toUpperCase();
 
-    if (!isEmail && cleanValue.length < 2) {
-      setMessage("❌ El RUT ingresado no es válido");
-      setIsLoggingIn(false);
-      return;
-    }
-
-    try {
-      await login({
-        identifier: cleanValue,
-        password,
-        rememberMe,
-      });
-
-      setMessage("Acceso concedido");
-      setPassword("");
-      setView("list");
-      setSelectedDoc(null);
-      replaceTo("/documents");
-
-      if (typeof checkOnboarding === "function") {
-        checkOnboarding();
+      if (!isEmail && cleanValue.length < 2) {
+        setMessage("❌ El RUT ingresado no es válido");
+        setIsLoggingIn(false);
+        return;
       }
-    } catch (err) {
-      const msg =
-        err?.response?.data?.message ||
-        err?.message ||
-        "Error de conexión, intenta nuevamente.";
 
-      setMessage(`❌ ${msg}`);
+      try {
+        await login({
+          identifier: cleanValue,
+          password,
+          rememberMe,
+        });
 
-      addToast({
-        type: "error",
-        title: "No se pudo iniciar sesión",
-        message: msg,
-      });
-    } finally {
-      setIsLoggingIn(false);
-    }
-  }
+        setMessage("Acceso concedido");
+        setPassword("");
+        setView("list");
+        setSelectedDoc(null);
+        replaceTo("/documents");
 
-  if (authLoading) {
-    return (
-      <div style={{ padding: 40, textAlign: "center" }}>
-        Cargando sesión...
-      </div>
-    );
-  }
+        if (typeof checkOnboarding === "function") {
+          checkOnboarding();
+        }
+      } catch (err) {
+        const msg =
+          err?.response?.data?.message ||
+          err?.message ||
+          "Error de conexión, intenta nuevamente.";
 
-  if (isPublicVerificationAccess || publicView === "verification") {
-    return <VerificationView API_URL={apiRoot} />;
-  }
+        setMessage(`❌ ${msg}`);
 
-  if (isPublicSigningAccess || publicView === "public-sign") {
-    return (
-      <PublicSignView
-        publicSignLoading={publicSignLoading}
-        publicSignError={publicSignError}
-        publicSignDoc={publicSignDoc}
-        publicSignPdfUrl={publicSignPdfUrl}
-        publicSignToken={publicSignToken || tokenFromUrl}
-        publicSignMode={publicSignMode}
-        API_URL={apiRoot}
-        cargarFirmaPublica={cargarFirmaPublica}
-      />
-    );
-  }
+        addToast({
+          type: "error",
+          title: "No se pudo iniciar sesión",
+          message: msg,
+        });
+      } finally {
+        setIsLoggingIn(false);
+      }
+    },
+    [
+      identifier,
+      password,
+      rememberMe,
+      login,
+      checkOnboarding,
+      addToast,
+      setSelectedDoc,
+    ]
+  );
 
-  if (!isAuthenticated && path === "/forgot-password") {
-    return <ForgotPasswordView />;
-  }
-
-  if (!isAuthenticated && path === "/reset-password") {
-    return <ResetPasswordView />;
-  }
-
-  if (!isAuthenticated && path === "/register") {
-    return <RegisterView />;
-  }
-
-  if (!isAuthenticated) {
-    const displayIdentifier =
-      isEmailMode || identifier.includes("@")
-        ? identifier
-        : formatRun(identifier);
-
-    return (
-      <LoginView
-        identifier={displayIdentifier}
-        setIdentifier={(value) => {
-          if (/[a-zA-Z]/.test(value) || value.includes("@")) {
-            setIsEmailMode(true);
-            setIdentifier(value);
-          } else {
-            setIsEmailMode(false);
-            setIdentifier(value.replace(/[^0-9kK]/g, ""));
-          }
-        }}
-        password={password}
-        setPassword={setPassword}
-        showPassword={showPassword}
-        setShowPassword={setShowPassword}
-        showHelp={showHelp}
-        setShowHelp={setShowHelp}
-        message={message}
-        isLoggingIn={isLoggingIn}
-        handleLogin={handleLogin}
-        rememberMe={rememberMe}
-        setRememberMe={setRememberMe}
-      />
-    );
-  }
-
-  if (view === "detail" && selectedDoc) {
-    const requiereVisado = selectedDoc.requires_visado === true;
-
-    const puedeVisar =
-      requiereVisado && selectedDoc.status === DOC_STATUS.PENDIENTE;
-
-    const puedeFirmar =
-      (!requiereVisado && selectedDoc.status === DOC_STATUS.PENDIENTE) ||
-      (requiereVisado && selectedDoc.status === DOC_STATUS.VISADO);
-
-    const puedeRechazar = ![
-      DOC_STATUS.FIRMADO,
-      DOC_STATUS.RECHAZADO,
-    ].includes(selectedDoc.status);
-
-    return (
-      <DetailView
-        selectedDoc={selectedDoc}
-        pdfUrl={pdfUrl}
-        puedeFirmar={puedeFirmar}
-        puedeVisar={puedeVisar}
-        puedeRechazar={puedeRechazar}
-        manejarAccionDocumento={manejarAccionDocumento}
-        setView={handleBackToList}
-        setSelectedDoc={setSelectedDoc}
-        logout={handleLogout}
-        currentUser={user}
-      />
-    );
-  }
-
-  const renderProtectedView = () => {
+  const renderProtectedView = useCallback(() => {
     if (view === "list") {
       return (
         <>
@@ -763,11 +713,17 @@ function App() {
                     <tr>
                       <th className="col-title">Contrato / Documento</th>
                       <th className="col-type">Tipo</th>
-                      <th className="col-status" style={{ textAlign: "center" }}>
+                      <th
+                        className="col-status"
+                        style={{ textAlign: "center" }}
+                      >
                         Estado
                       </th>
                       <th className="col-party">Firmante / Empresa</th>
-                      <th className="col-actions" style={{ textAlign: "center" }}>
+                      <th
+                        className="col-actions"
+                        style={{ textAlign: "center" }}
+                      >
                         Acciones
                       </th>
                     </tr>
@@ -850,23 +806,171 @@ function App() {
 
     if (view === "users" && anyAdmin) return <UsersAdminView />;
     if (view === "dashboard" && anyAdmin) return <DashboardView user={user} />;
-    if (view === "companies" && anyAdmin) return <CompaniesAdminView API_URL={apiRoot} />;
-    if (view === "status" && anyAdmin) return <StatusAdminView API_URL={apiRoot} />;
-    if (view === "audit-logs" && canAudit) return <AuditLogsView API_URL={apiRoot} />;
-    if (view === "auth-logs" && canAudit) return <AuthLogsView API_URL={apiRoot} />;
-    if (view === "reminders-config" && anyAdmin) return <RemindersConfigView />;
-    if (view === "email-metrics" && anyAdmin) return <EmailMetricsView />;
+    if (view === "companies" && anyAdmin) {
+      return <CompaniesAdminView API_URL={apiRoot} />;
+    }
+    if (view === "status" && anyAdmin) {
+      return <StatusAdminView API_URL={apiRoot} />;
+    }
+    if (view === "audit-logs" && canAudit) {
+      return <AuditLogsView API_URL={apiRoot} />;
+    }
+    if (view === "auth-logs" && canAudit) {
+      return <AuthLogsView API_URL={apiRoot} />;
+    }
+    if (view === "reminders-config" && anyAdmin) {
+      return <RemindersConfigView />;
+    }
+    if (view === "email-metrics" && anyAdmin) {
+      return <EmailMetricsView />;
+    }
     if (view === "pricing") return <PricingView />;
     if (view === "profile") return <ProfileView />;
     if (view === "templates" && anyAdmin) return <TemplatesView />;
-    if (view === "company-analytics" && anyAdmin) return <CompanyAnalyticsView />;
+    if (view === "company-analytics" && anyAdmin) {
+      return <CompanyAnalyticsView />;
+    }
 
     return (
       <div style={{ padding: 40, textAlign: "center", color: "#64748b" }}>
         Redirigiendo…
       </div>
     );
-  };
+  }, [
+    view,
+    sort,
+    setSort,
+    setPage,
+    statusFilter,
+    setStatusFilter,
+    search,
+    setSearch,
+    safeTotalFiltrado,
+    safePendientes,
+    safeVisados,
+    safeFirmados,
+    safeRechazados,
+    refreshDocs,
+    loadingDocs,
+    errorDocs,
+    safeDocsFiltrados.length,
+    safeDocsPaginados,
+    handleOpenDetail,
+    safeCurrentPage,
+    safeTotalPaginas,
+    handleNavigateProtected,
+    tipoTramite,
+    formErrors,
+    showVisador,
+    extraSigners,
+    firmanteRunValue,
+    empresaRutValue,
+    handleAfterCreateDocument,
+    cargarDocs,
+    anyAdmin,
+    canAudit,
+    user,
+    apiRoot,
+  ]);
+
+  if (authLoading) {
+    return <SessionLoadingFallback />;
+  }
+
+  if (isPublicVerificationAccess || publicView === "verification") {
+    return <VerificationView API_URL={apiRoot} />;
+  }
+
+  if (isPublicSigningAccess || publicView === "public-sign") {
+    return (
+      <PublicSignView
+        publicSignLoading={publicSignLoading}
+        publicSignError={publicSignError}
+        publicSignDoc={publicSignDoc}
+        publicSignPdfUrl={publicSignPdfUrl}
+        publicSignToken={publicSignToken || tokenFromUrl}
+        publicSignMode={publicSignMode}
+        API_URL={apiRoot}
+        cargarFirmaPublica={cargarFirmaPublica}
+      />
+    );
+  }
+
+  if (!isAuthenticated && path === "/forgot-password") {
+    return <ForgotPasswordView />;
+  }
+
+  if (!isAuthenticated && path === "/reset-password") {
+    return <ResetPasswordView />;
+  }
+
+  if (!isAuthenticated && path === "/register") {
+    return <RegisterView />;
+  }
+
+  if (!isAuthenticated) {
+    const displayIdentifier =
+      isEmailMode || identifier.includes("@")
+        ? identifier
+        : formatRun(identifier);
+
+    return (
+      <LoginView
+        identifier={displayIdentifier}
+        setIdentifier={(value) => {
+          if (/[a-zA-Z]/.test(value) || value.includes("@")) {
+            setIsEmailMode(true);
+            setIdentifier(value);
+          } else {
+            setIsEmailMode(false);
+            setIdentifier(value.replace(/[^0-9kK]/g, ""));
+          }
+        }}
+        password={password}
+        setPassword={setPassword}
+        showPassword={showPassword}
+        setShowPassword={setShowPassword}
+        showHelp={showHelp}
+        setShowHelp={setShowHelp}
+        message={message}
+        isLoggingIn={isLoggingIn}
+        handleLogin={handleLogin}
+        rememberMe={rememberMe}
+        setRememberMe={setRememberMe}
+      />
+    );
+  }
+
+  if (view === "detail" && selectedDoc) {
+    const requiereVisado = selectedDoc.requires_visado === true;
+
+    const puedeVisar =
+      requiereVisado && selectedDoc.status === DOC_STATUS.PENDIENTE;
+
+    const puedeFirmar =
+      (!requiereVisado && selectedDoc.status === DOC_STATUS.PENDIENTE) ||
+      (requiereVisado && selectedDoc.status === DOC_STATUS.VISADO);
+
+    const puedeRechazar = ![
+      DOC_STATUS.FIRMADO,
+      DOC_STATUS.RECHAZADO,
+    ].includes(selectedDoc.status);
+
+    return (
+      <DetailView
+        selectedDoc={selectedDoc}
+        pdfUrl={pdfUrl}
+        puedeFirmar={puedeFirmar}
+        puedeVisar={puedeVisar}
+        puedeRechazar={puedeRechazar}
+        manejarAccionDocumento={manejarAccionDocumento}
+        setView={handleBackToList}
+        setSelectedDoc={setSelectedDoc}
+        logout={handleLogout}
+        currentUser={user}
+      />
+    );
+  }
 
   return (
     <div className="dashboard-root">
@@ -934,13 +1038,7 @@ function App() {
             />
           </Suspense>
 
-          <Suspense
-            fallback={
-              <div style={{ padding: 32, color: "#64748b" }}>
-                Cargando módulo…
-              </div>
-            }
-          >
+          <Suspense fallback={<ProtectedModuleFallback />}>
             {renderProtectedView()}
           </Suspense>
 

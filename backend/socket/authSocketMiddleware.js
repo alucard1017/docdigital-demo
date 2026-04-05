@@ -2,15 +2,24 @@
 const jwt = require("jsonwebtoken");
 const { query } = require("../db");
 
+function buildAuthError(message, code, detail) {
+  const err = new Error(message || "No autorizado");
+  err.data = {
+    code: code || "WS_AUTH_ERROR",
+    detail: detail || null,
+  };
+  return err;
+}
+
 async function authSocketMiddleware(socket, next) {
   try {
     const rawToken = socket.handshake?.auth?.token;
 
     if (!rawToken || typeof rawToken !== "string") {
       console.warn("⚠️ Conexión WS sin token");
-      const err = new Error("No autorizado");
-      err.data = { code: "WS_AUTH_MISSING_TOKEN" };
-      return next(err);
+      return next(
+        buildAuthError("No autorizado", "WS_AUTH_MISSING_TOKEN", "Missing token")
+      );
     }
 
     const token = rawToken.startsWith("Bearer ")
@@ -22,12 +31,27 @@ async function authSocketMiddleware(socket, next) {
 
     if (!JWT_ACCESS_SECRET) {
       console.error("❌ JWT_ACCESS_SECRET / JWT_SECRET no definido para WS");
-      const err = new Error("Error de configuración");
-      err.data = { code: "WS_AUTH_CONFIG_ERROR" };
-      return next(err);
+      return next(
+        buildAuthError(
+          "Error de configuración",
+          "WS_AUTH_CONFIG_ERROR",
+          "Missing JWT secret"
+        )
+      );
     }
 
     const payload = jwt.verify(token, JWT_ACCESS_SECRET);
+
+    if (!payload || !payload.id) {
+      console.warn("⚠️ Payload JWT inválido en WS:", payload);
+      return next(
+        buildAuthError(
+          "Token inválido",
+          "WS_AUTH_INVALID_PAYLOAD",
+          "Missing id in token payload"
+        )
+      );
+    }
 
     const result = await query(
       `
@@ -44,9 +68,13 @@ async function authSocketMiddleware(socket, next) {
 
     if (!user) {
       console.warn("⚠️ Usuario WS no encontrado o eliminado:", payload.id);
-      const err = new Error("Usuario no válido");
-      err.data = { code: "WS_AUTH_INVALID_USER" };
-      return next(err);
+      return next(
+        buildAuthError(
+          "Usuario no válido",
+          "WS_AUTH_INVALID_USER",
+          `User ${payload.id} not found or deleted`
+        )
+      );
     }
 
     socket.user = {
@@ -62,17 +90,20 @@ async function authSocketMiddleware(socket, next) {
   } catch (err) {
     if (err.name === "TokenExpiredError") {
       console.error("❌ Error en autenticación WS: jwt expired");
-      const authErr = new Error("jwt expired");
-      authErr.data = { code: "WS_AUTH_TOKEN_EXPIRED" };
+      const authErr = buildAuthError(
+        "jwt expired",
+        "WS_AUTH_TOKEN_EXPIRED",
+        err.message
+      );
       return next(authErr);
     }
 
     console.error("❌ Error en autenticación WS:", err.message);
-    const authErr = new Error("Token inválido");
-    authErr.data = {
-      code: "WS_AUTH_INVALID_TOKEN",
-      detail: err.message,
-    };
+    const authErr = buildAuthError(
+      "Token inválido",
+      "WS_AUTH_INVALID_TOKEN",
+      err.message
+    );
     return next(authErr);
   }
 }

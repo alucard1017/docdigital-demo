@@ -1,3 +1,4 @@
+// frontend/src/utils/router.js
 const APP_NAVIGATION_EVENT = "app:navigation";
 
 export function normalizePath(path) {
@@ -48,7 +49,9 @@ function notifyNavigation(detail = {}) {
     })
   );
 
-  window.dispatchEvent(new PopStateEvent("popstate", { state: eventDetail.state }));
+  window.dispatchEvent(
+    new PopStateEvent("popstate", { state: eventDetail.state })
+  );
 }
 
 export function navigateTo(path, options = {}) {

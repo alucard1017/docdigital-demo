@@ -1,3 +1,4 @@
+// frontend/src/context/AuthContext.jsx
 import {
   createContext,
   useCallback,
@@ -54,36 +55,39 @@ export function AuthProvider({ children }) {
 
   const isAuthenticated = !!token && !!user;
 
-  const login = useCallback(async ({ identifier, password, rememberMe = false }) => {
-    const res = await api.post(
-      "/auth/login",
-      { identifier, password, rememberMe },
-      { withCredentials: true }
-    );
+  const login = useCallback(
+    async ({ identifier, password, rememberMe = false }) => {
+      const res = await api.post(
+        "/auth/login",
+        { identifier, password, rememberMe },
+        { withCredentials: true }
+      );
 
-    const data = res.data;
+      const data = res.data;
 
-    if (!data?.user || !data?.accessToken) {
-      throw new Error("Respuesta inesperada del servidor de autenticación");
-    }
+      if (!data?.user || !data?.accessToken) {
+        throw new Error("Respuesta inesperada del servidor de autenticación");
+      }
 
-    const nextUser = normalizeUser(data.user);
-    const nextToken = normalizeToken(data.accessToken);
+      const nextUser = normalizeUser(data.user);
+      const nextToken = normalizeToken(data.accessToken);
 
-    if (!nextUser || !nextToken) {
-      throw new Error("Datos de sesión inválidos");
-    }
+      if (!nextUser || !nextToken) {
+        throw new Error("Datos de sesión inválidos");
+      }
 
-    setSession(nextUser, nextToken, { rememberMe });
-    setUserState(nextUser);
-    setTokenState(nextToken);
+      setSession(nextUser, nextToken, { rememberMe });
+      setUserState(nextUser);
+      setTokenState(nextToken);
 
-    authEventHandledRef.current = false;
-    logoutInProgressRef.current = false;
-    resetAuthExpiredDispatch();
+      authEventHandledRef.current = false;
+      logoutInProgressRef.current = false;
+      resetAuthExpiredDispatch();
 
-    return data;
-  }, []);
+      return data;
+    },
+    []
+  );
 
   const logout = useCallback((options = {}) => {
     if (logoutInProgressRef.current) return;

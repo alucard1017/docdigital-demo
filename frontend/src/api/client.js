@@ -63,6 +63,8 @@ const AUTH_FAILURE_CODES = new Set([
   "AUTH_REQUIRED",
   "INVALID_TOKEN",
   "SESSION_EXPIRED",
+  "JWT_EXPIRED",
+  "INVALID_JWT",
 ]);
 
 const AUTH_FAILURE_MESSAGES = new Set([
@@ -76,7 +78,18 @@ const AUTH_FAILURE_MESSAGES = new Set([
   "unauthorized",
   "invalid token",
   "session expired",
+  "authentication required",
+  "auth required",
+]);
+
+const FORBIDDEN_MESSAGES = new Set([
   "forbidden",
+  "prohibido",
+  "acceso denegado",
+  "permiso denegado",
+  "insufficient permissions",
+  "insufficient permission",
+  "not enough permissions",
 ]);
 
 const PUBLIC_PATH_PREFIXES = [
@@ -104,21 +117,47 @@ const normalizeUrlPath = (url = "") => {
   }
 };
 
+const getRequestMethod = (configOrError) => {
+  return (
+    configOrError?.method?.toUpperCase?.() ||
+    configOrError?.config?.method?.toUpperCase?.() ||
+    null
+  );
+};
+
+const getRequestUrl = (configOrError) => {
+  return configOrError?.url || configOrError?.config?.url || null;
+};
+
+const getFullRequestUrl = (configOrError) => {
+  const baseURL = configOrError?.baseURL || configOrError?.config?.baseURL || "";
+  const url = getRequestUrl(configOrError) || "";
+  return `${stripTrailingSlashes(baseURL)}${ensureLeadingSlash(url)}`;
+};
+
 export const isPublicRequest = (url = "") => {
   const path = normalizeUrlPath(url);
   return PUBLIC_PATH_PREFIXES.some((prefix) => path.startsWith(prefix));
 };
 
 export const isAuthFailure = (status, message, code) => {
-  if (status !== 401 && status !== 403) return false;
-
   const normalizedCode = normalizeUpper(code);
   const normalizedMessage = normalizeLower(message);
 
-  if (AUTH_FAILURE_CODES.has(normalizedCode)) return true;
-  if (AUTH_FAILURE_MESSAGES.has(normalizedMessage)) return true;
+  if (status === 401) {
+    if (AUTH_FAILURE_CODES.has(normalizedCode)) return true;
+    if (AUTH_FAILURE_MESSAGES.has(normalizedMessage)) return true;
+    return true;
+  }
 
-  return status === 401;
+  if (status === 403) {
+    if (AUTH_FAILURE_CODES.has(normalizedCode)) return true;
+    if (AUTH_FAILURE_MESSAGES.has(normalizedMessage)) return true;
+    if (FORBIDDEN_MESSAGES.has(normalizedMessage)) return false;
+    return false;
+  }
+
+  return false;
 };
 
 export const isRequestCanceled = (error) => {
@@ -133,25 +172,37 @@ export const isRequestCanceled = (error) => {
 
 export const dispatchAuthExpired = (detail = {}) => {
   if (authExpiredDispatched) return false;
+  if (typeof window === "undefined") return false;
 
   authExpiredDispatched = true;
 
-  window.dispatchEvent(
-    new CustomEvent("auth:expired", {
-      detail: {
-        source: detail.source ?? "http",
-        status: detail.status ?? 401,
-        code: detail.code ?? null,
-        message:
-          detail.message ||
-          "Tu sesión expiró o ya no es válida. Debes iniciar sesión nuevamente.",
-        url: detail.url ?? null,
-        method: detail.method ?? null,
-      },
-    })
-  );
+  try {
+    window.dispatchEvent(
+      new CustomEvent("auth:expired", {
+        detail: {
+          source: detail.source ?? "http",
+          status: detail.status ?? 401,
+          code: detail.code ?? null,
+          message:
+            detail.message ||
+            "Tu sesión expiró o ya no es válida. Debes iniciar sesión nuevamente.",
+          url: detail.url ?? null,
+          fullUrl: detail.fullUrl ?? null,
+          method: detail.method ?? null,
+        },
+      })
+    );
 
-  return true;
+    return true;
+  } catch (err) {
+    authExpiredDispatched = false;
+
+    if (import.meta.env.DEV) {
+      console.error("[API AUTH] error disparando auth:expired:", err);
+    }
+
+    return false;
+  }
 };
 
 export const resetAuthExpiredDispatch = () => {
@@ -171,10 +222,10 @@ api.interceptors.request.use(
 
     if (import.meta.env.DEV) {
       console.debug("[API REQ]", {
-        method: config.method?.toUpperCase(),
+        method: getRequestMethod(config),
         url: config.url,
         baseURL: config.baseURL,
-        fullUrl: `${stripTrailingSlashes(config.baseURL || "")}${config.url}`,
+        fullUrl: getFullRequestUrl(config),
         params: config.params ?? null,
         hasToken: !!token,
         isPublic: isPublicRequest(config.url),
@@ -198,8 +249,8 @@ api.interceptors.response.use(
     if (isRequestCanceled(error)) {
       if (import.meta.env.DEV) {
         console.debug("[API RES CANCELED]", {
-          method: error?.config?.method?.toUpperCase() ?? null,
-          url: error?.config?.url ?? null,
+          method: getRequestMethod(error),
+          url: getRequestUrl(error),
         });
       }
 
@@ -210,14 +261,16 @@ api.interceptors.response.use(
     const data = error?.response?.data ?? null;
     const message = data?.message || error?.message || "";
     const errorCode = data?.code || null;
-    const method = error?.config?.method?.toUpperCase() ?? null;
-    const url = error?.config?.url ?? null;
+    const method = getRequestMethod(error);
+    const url = getRequestUrl(error);
+    const fullUrl = getFullRequestUrl(error);
     const publicRequest = isPublicRequest(url);
 
     if (import.meta.env.DEV) {
       console.error("[API RES ERROR]", {
         method,
         url,
+        fullUrl,
         status,
         message,
         code: errorCode,
@@ -234,6 +287,7 @@ api.interceptors.response.use(
         message,
         method,
         url,
+        fullUrl,
       });
     }
 
@@ -273,12 +327,18 @@ export async function getDocumentTimeline(id, config = {}) {
 }
 
 export async function getPublicVerificationByCode(code, config = {}) {
-  const res = await api.get(`/public/verificar/${encodeURIComponent(code)}`, config);
+  const res = await api.get(
+    `/public/verificar/${encodeURIComponent(code)}`,
+    config
+  );
   return res.data;
 }
 
 export async function getPublicDocumentByToken(token, config = {}) {
-  const res = await api.get(`/public/docs/${encodeURIComponent(token)}`, config);
+  const res = await api.get(
+    `/public/docs/${encodeURIComponent(token)}`,
+    config
+  );
   return res.data;
 }
 

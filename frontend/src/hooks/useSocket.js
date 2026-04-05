@@ -11,10 +11,7 @@ function buildSocketUrl() {
   }
 
   if (typeof rawApi === "string" && rawApi.trim()) {
-    return rawApi
-      .trim()
-      .replace(/\/api\/?$/i, "")
-      .replace(/\/+$/, "");
+    return rawApi.trim().replace(/\/api\/?$/i, "").replace(/\/+$/, "");
   }
 
   return "http://localhost:4000";
@@ -53,23 +50,36 @@ export function useSocket(accessToken, options = {}) {
     listenersRef.current = {};
   }, []);
 
+  const hardDisconnect = useCallback((socketInstance) => {
+    if (!socketInstance) return;
+
+    clearAllListeners(socketInstance);
+
+    try {
+      socketInstance.off("connect");
+      socketInstance.off("disconnect");
+      socketInstance.off("connect_error");
+      socketInstance.off("error");
+      socketInstance.off("auth_error");
+    } catch (_) {}
+
+    try {
+      socketInstance.removeAllListeners?.();
+    } catch (_) {}
+
+    try {
+      socketInstance.disconnect();
+    } catch (_) {}
+  }, [clearAllListeners]);
+
   const disconnect = useCallback(() => {
     const socket = socketRef.current;
     if (!socket) return;
 
-    clearAllListeners(socket);
-
-    try {
-      socket.removeAllListeners?.();
-    } catch (_) {}
-
-    try {
-      socket.disconnect();
-    } catch (_) {}
-
+    hardDisconnect(socket);
     socketRef.current = null;
     setConnected(false);
-  }, [clearAllListeners]);
+  }, [hardDisconnect]);
 
   useEffect(() => {
     authExpiredHandledRef.current = false;
@@ -89,8 +99,14 @@ export function useSocket(accessToken, options = {}) {
       withCredentials: true,
       autoConnect: true,
       reconnection: true,
-      reconnectionAttempts: 5,
-      reconnectionDelay: 1500,
+      reconnectionAttempts:
+        typeof options.reconnectionAttempts === "number"
+          ? options.reconnectionAttempts
+          : 5,
+      reconnectionDelay:
+        typeof options.reconnectionDelay === "number"
+          ? options.reconnectionDelay
+          : 1500,
     });
 
     const handleConnect = () => {
@@ -108,6 +124,25 @@ export function useSocket(accessToken, options = {}) {
       }
     };
 
+    const maybeDispatchAuthExpired = (detail = {}) => {
+      if (authExpiredHandledRef.current) return;
+
+      authExpiredHandledRef.current = true;
+
+      try {
+        window.dispatchEvent(
+          new CustomEvent("auth:expired", {
+            detail: {
+              source: "ws",
+              ...detail,
+            },
+          })
+        );
+      } catch (eventErr) {
+        console.error("[WS AUTH] error disparando auth:expired:", eventErr);
+      }
+    };
+
     const handleConnectError = (err) => {
       setConnected(false);
 
@@ -115,7 +150,7 @@ export function useSocket(accessToken, options = {}) {
         err?.message || err?.data?.message || "Error de conexión WS";
 
       if (import.meta.env.DEV) {
-        console.error("[WS] connect_error:", message);
+        console.error("[WS] connect_error:", message, err);
       }
 
       const isAuthError =
@@ -124,51 +159,44 @@ export function useSocket(accessToken, options = {}) {
         );
 
       if (isAuthError) {
-        try {
-          socket.disconnect();
-        } catch (_) {}
+        hardDisconnect(socket);
+        socketRef.current = null;
 
-        if (!authExpiredHandledRef.current) {
-          authExpiredHandledRef.current = true;
-
-          try {
-            window.dispatchEvent(
-              new CustomEvent("auth:expired", {
-                detail: {
-                  message,
-                  source: "ws",
-                },
-              })
-            );
-          } catch (eventErr) {
-            console.error("[WS AUTH] error disparando auth:expired:", eventErr);
-          }
-        }
+        maybeDispatchAuthExpired({
+          message,
+          code: err?.code || null,
+          status: err?.data?.status || null,
+        });
       }
+    };
+
+    const handleAuthErrorEvent = (payload) => {
+      if (import.meta.env.DEV) {
+        console.warn("[WS] auth_error recibido:", payload);
+      }
+
+      hardDisconnect(socket);
+      socketRef.current = null;
+
+      const message =
+        payload?.message || "Error de autenticación en WebSocket";
+
+      maybeDispatchAuthExpired({
+        message,
+        code: payload?.code || "AUTH_ERROR",
+        status: payload?.status || null,
+      });
     };
 
     socket.on("connect", handleConnect);
     socket.on("disconnect", handleDisconnect);
     socket.on("connect_error", handleConnectError);
+    socket.on("auth_error", handleAuthErrorEvent);
 
     socketRef.current = socket;
 
     return () => {
-      try {
-        socket.off("connect", handleConnect);
-        socket.off("disconnect", handleDisconnect);
-        socket.off("connect_error", handleConnectError);
-      } catch (_) {}
-
-      clearAllListeners(socket);
-
-      try {
-        socket.removeAllListeners?.();
-      } catch (_) {}
-
-      try {
-        socket.disconnect();
-      } catch (_) {}
+      hardDisconnect(socket);
 
       if (socketRef.current === socket) {
         socketRef.current = null;
@@ -176,7 +204,7 @@ export function useSocket(accessToken, options = {}) {
 
       setConnected(false);
     };
-  }, [normalizedToken, socketUrl, clearAllListeners, disconnect]);
+  }, [normalizedToken, socketUrl, options.reconnectionAttempts, options.reconnectionDelay, disconnect, hardDisconnect]);
 
   const on = useCallback((event, callback) => {
     const socket = socketRef.current;
