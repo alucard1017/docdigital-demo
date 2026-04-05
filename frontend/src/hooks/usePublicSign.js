@@ -11,6 +11,15 @@ function ensureApiBase(value = "") {
   return clean.endsWith("/api") ? clean : `${clean}/api`;
 }
 
+function firstNonEmpty(...values) {
+  for (const value of values) {
+    if (value === null || value === undefined) continue;
+    const text = String(value).trim();
+    if (text) return text;
+  }
+  return "";
+}
+
 function getLocationSnapshot({ isSigningPortal, isVerificationPortal }) {
   const params = new URLSearchParams(window.location.search);
   const pathname = window.location.pathname;
@@ -47,30 +56,126 @@ function getLocationSnapshot({ isSigningPortal, isVerificationPortal }) {
 }
 
 function normalizePublicDocumentResponse(data, mode = null) {
-  const normalizedDocument = data?.document || data || null;
-
-  const normalizedSigner =
-    data?.signer ||
-    data?.currentSigner ||
-    (Array.isArray(data?.signers) ? data.signers[0] : null) ||
+  const rawDocument =
+    data?.document ||
+    data?.doc ||
+    data?.documento ||
+    data?.signedDocument ||
+    data?.signed_document ||
+    data ||
     null;
 
-  const normalizedPdfUrl =
-    data?.pdfUrl ||
-    data?.signedPdfUrl ||
-    data?.previewUrl ||
-    data?.document?.pdf_final_url ||
-    data?.document?.pdfUrl ||
-    data?.document?.signedPdfUrl ||
-    data?.document?.previewUrl ||
-    data?.document?.pdf_url ||
-    data?.pdf_url ||
-    "";
+  const signer =
+    data?.signer ||
+    data?.currentSigner ||
+    rawDocument?.signer ||
+    rawDocument?.currentSigner ||
+    (Array.isArray(data?.signers) ? data.signers[0] : null) ||
+    (Array.isArray(rawDocument?.signers) ? rawDocument.signers[0] : null) ||
+    null;
+
+  const metadata =
+    rawDocument?.metadata ||
+    rawDocument?.meta ||
+    data?.metadata ||
+    data?.meta ||
+    {};
+
+  const numeroContrato = firstNonEmpty(
+    rawDocument?.numero_contrato,
+    rawDocument?.numeroContrato,
+    rawDocument?.numero_contrato_interno,
+    rawDocument?.numeroInterno,
+    rawDocument?.numero_interno,
+    rawDocument?.nro_interno,
+    rawDocument?.contract_number,
+    rawDocument?.internal_number,
+    rawDocument?.codigo_contrato,
+    rawDocument?.codigoContrato,
+    metadata?.numero_contrato,
+    metadata?.numeroContrato,
+    metadata?.numero_contrato_interno,
+    metadata?.numero_interno,
+    metadata?.contract_number,
+    metadata?.codigo_contrato,
+    data?.numero_contrato,
+    data?.numeroContrato,
+    data?.numero_contrato_interno,
+    data?.numero_interno,
+    data?.contract_number,
+    data?.codigo_contrato
+  );
+
+  const companyName = firstNonEmpty(
+    rawDocument?.empresa_nombre,
+    rawDocument?.nombre_empresa,
+    rawDocument?.destinatario_nombre,
+    rawDocument?.company_name,
+    rawDocument?.companyName,
+    rawDocument?.razon_social,
+    metadata?.empresa_nombre,
+    metadata?.nombre_empresa,
+    metadata?.destinatario_nombre,
+    metadata?.company_name,
+    metadata?.companyName,
+    metadata?.razon_social,
+    data?.empresa_nombre,
+    data?.nombre_empresa,
+    data?.destinatario_nombre,
+    data?.company_name,
+    data?.companyName
+  );
+
+  const companyRut = firstNonEmpty(
+    rawDocument?.empresa_rut,
+    rawDocument?.rut_empresa,
+    rawDocument?.rut,
+    rawDocument?.company_rut,
+    rawDocument?.companyRut,
+    metadata?.empresa_rut,
+    metadata?.rut_empresa,
+    metadata?.rut,
+    metadata?.company_rut,
+    metadata?.companyRut,
+    data?.empresa_rut,
+    data?.rut_empresa,
+    data?.rut,
+    data?.company_rut,
+    data?.companyRut
+  );
+
+  const normalizedPdfUrl = firstNonEmpty(
+    data?.pdfUrl,
+    data?.signedPdfUrl,
+    data?.previewUrl,
+    rawDocument?.pdf_final_url,
+    rawDocument?.final_file_url,
+    rawDocument?.pdfUrl,
+    rawDocument?.signedPdfUrl,
+    rawDocument?.previewUrl,
+    rawDocument?.pdf_url,
+    rawDocument?.file_url,
+    data?.pdf_url
+  );
+
+  const normalizedDocument = rawDocument
+    ? {
+        ...rawDocument,
+        metadata,
+        numero_contrato: numeroContrato || rawDocument?.numero_contrato || "",
+        numeroContrato: numeroContrato || rawDocument?.numeroContrato || "",
+        numero_contrato_interno:
+          numeroContrato || rawDocument?.numero_contrato_interno || "",
+        empresa_nombre: companyName || rawDocument?.empresa_nombre || "",
+        company_name: companyName || rawDocument?.company_name || "",
+        empresa_rut: companyRut || rawDocument?.empresa_rut || "",
+      }
+    : null;
 
   return {
     raw: data,
     document: normalizedDocument,
-    signer: normalizedSigner,
+    signer,
     pdfUrl: normalizedPdfUrl,
     mode,
   };
@@ -153,10 +258,17 @@ export function usePublicSign({
           ...normalized.raw,
           document: normalized.document,
           signer: normalized.signer,
+          numero_contrato:
+            normalized.document?.numero_contrato ||
+            normalized.raw?.numero_contrato ||
+            "",
         });
+
         setPublicSignPdfUrl(normalized.pdfUrl || "");
         setPublicSignToken(token);
         setPublicSignMode(mode);
+
+        console.log("📄 Public sign payload normalizado:", normalized);
 
         return normalized;
       } catch (err) {
@@ -164,7 +276,7 @@ export function usePublicSign({
           return null;
         }
 
-        console.error("Error cargando firma pública:", err);
+        console.error("❌ Error cargando firma pública:", err);
         setPublicSignError(err?.message || "No se pudo cargar el documento");
         setPublicSignDoc(null);
         setPublicSignPdfUrl("");
