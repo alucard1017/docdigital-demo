@@ -20,23 +20,6 @@ const router = express.Router();
  *     responses:
  *       200:
  *         description: Configuración de recordatorios
- *         content:
- *           application/json:
- *             schema:
- *               type: object
- *               properties:
- *                 id:
- *                   type: integer
- *                 company_id:
- *                   type: integer
- *                 interval_days:
- *                   type: integer
- *                   description: Días entre recordatorios (1-30)
- *                 max_attempts:
- *                   type: integer
- *                   description: Máximo número de intentos (1-10)
- *                 enabled:
- *                   type: boolean
  */
 router.get("/config", requireAuth, getConfig);
 
@@ -49,24 +32,6 @@ router.get("/config", requireAuth, getConfig);
  *       - Recordatorios
  *     security:
  *       - bearerAuth: []
- *     requestBody:
- *       required: true
- *       content:
- *         application/json:
- *           schema:
- *             type: object
- *             properties:
- *               interval_days:
- *                 type: integer
- *                 description: Días entre recordatorios (1-30)
- *               max_attempts:
- *                 type: integer
- *                 description: Máximo número de intentos (1-10)
- *               enabled:
- *                 type: boolean
- *     responses:
- *       200:
- *         description: Configuración actualizada
  */
 router.put(
   "/config",

@@ -14,11 +14,17 @@ const REVIEW_PORTAL_URL =
   process.env.REVIEW_PORTAL_URL || "https://firmar.verifirma.cl";
 
 function buildPublicSignUrl(token) {
-  return `${SIGNING_PORTAL_URL}/?token=${token}`;
+  return `${SIGNING_PORTAL_URL}/?token=${encodeURIComponent(token)}`;
 }
 
 function buildVisadoUrl(token) {
-  return `${REVIEW_PORTAL_URL}/?token=${token}&mode=visado`;
+  return `${REVIEW_PORTAL_URL}/?token=${encodeURIComponent(
+    token
+  )}&mode=visado`;
+}
+
+function getActorName(req) {
+  return (req && req.user && (req.user.name || req.user.email)) || "Sistema";
 }
 
 /* ================================
@@ -41,9 +47,11 @@ async function resendReminder(req, res) {
        WHERE id = $1 AND owner_id = $2`,
       [id, req.user.id]
     );
+
     if (docRes.rowCount === 0) {
       return res.status(404).json({ message: "Documento no encontrado" });
     }
+
     const doc = docRes.rows[0];
 
     if (!isActiveDocumentStatus(doc.status)) {
@@ -76,7 +84,7 @@ async function resendReminder(req, res) {
          VALUES ($1, $2, $3, $4, $5, $6)`,
         [
           doc.id,
-          req.user.name || "Sistema",
+          getActorName(req),
           "REENVIO_VISADO",
           "Recordatorio enviado al visador",
           doc.status,
@@ -113,9 +121,11 @@ async function resendReminder(req, res) {
          WHERE id = $1 AND document_id = $2`,
         [signerId, id]
       );
+
       if (signerRes.rowCount === 0) {
         return res.status(404).json({ message: "Firmante no encontrado" });
       }
+
       const signer = signerRes.rows[0];
 
       if (["FIRMADO", "RECHAZADO"].includes(signer.status)) {
@@ -140,7 +150,7 @@ async function resendReminder(req, res) {
          VALUES ($1, $2, $3, $4, $5, $6)`,
         [
           doc.id,
-          req.user.name || "Sistema",
+          getActorName(req),
           "REENVIO_FIRMA",
           `Recordatorio de firma reenviado a ${signer.email}`,
           doc.status,
@@ -174,11 +184,22 @@ async function resendReminder(req, res) {
 
 /* ================================
    POST: Enviar recordatorios automáticos
-   (ej. job diario; intervalos configurables a futuro)
    ================================ */
 async function sendAutomaticReminders(req, res) {
   try {
-    const userId = req.user.id;
+    const userId = req.user && req.user.id;
+
+    if (!userId) {
+      console.warn(
+        "⚠️ sendAutomaticReminders llamado sin userId. Abortando."
+      );
+      if (res && typeof res.status === "function") {
+        return res
+          .status(400)
+          .json({ message: "Usuario no especificado para recordatorios" });
+      }
+      return;
+    }
 
     const docsRes = await db.query(
       `SELECT d.id,
@@ -299,13 +320,21 @@ async function sendAutomaticReminders(req, res) {
       req,
     });
 
-    return res.json({
-      message: `${remindersCount} recordatorio(s) automático(s) enviado(s)`,
-      documentsProcessed: docs.length,
-    });
+    if (res && typeof res.json === "function") {
+      return res.json({
+        message: `${remindersCount} recordatorio(s) automático(s) enviado(s)`,
+        documentsProcessed: docs.length,
+      });
+    }
+
+    console.log(
+      `✅ sendAutomaticReminders ejecutado: ${remindersCount} recordatorio(s), ${docs.length} documentos`
+    );
   } catch (err) {
     console.error("❌ Error enviando recordatorios automáticos:", err);
-    return res.status(500).json({ message: "Error interno del servidor" });
+    if (res && typeof res.status === "function") {
+      return res.status(500).json({ message: "Error interno del servidor" });
+    }
   }
 }
 

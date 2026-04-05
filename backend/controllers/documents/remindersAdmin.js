@@ -1,8 +1,6 @@
 // backend/controllers/documents/remindersAdmin.js
 const { db } = require("./common");
-const {
-  logAudit,
-} = require("../../utils/auditLog");
+const { logAudit } = require("../../utils/auditLog");
 
 function normalizeEstadoCanon(value) {
   const v = String(value || "").trim().toLowerCase();
@@ -17,7 +15,6 @@ function normalizeEstadoCanon(value) {
 
 /**
  * GET /api/recordatorios/status
- * Ver estado de todos los recordatorios de un documento o globales (admin)
  */
 async function getReminderStatus(req, res) {
   try {
@@ -43,10 +40,10 @@ async function getReminderStatus(req, res) {
         r.error_message,
         r.created_at,
         r.updated_at,
-        d.titulo,
+        d.title AS titulo,
         d.estado AS documento_estado
       FROM recordatorios r
-      JOIN documentos d ON d.id = r.documento_id
+      JOIN documents d ON d.id = r.documento_id
     `;
 
     const params = [];
@@ -102,10 +99,6 @@ async function getReminderStatus(req, res) {
   }
 }
 
-/**
- * POST /api/recordatorios/reintentar/:recordatorioId
- * Reintentar envío de un recordatorio fallido
- */
 async function retryReminder(req, res) {
   try {
     const { recordatorioId } = req.params;

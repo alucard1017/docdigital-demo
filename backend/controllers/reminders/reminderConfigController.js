@@ -1,6 +1,39 @@
 // backend/controllers/reminders/reminderConfigController.js
-const { db } = require("../../db");
+const dbModule = require("../../db");
 const { logAudit } = require("../../utils/auditLog");
+
+const db = dbModule?.db || dbModule;
+
+function ensureDb() {
+  if (!db || typeof db.query !== "function") {
+    throw new Error(
+      "Conexión DB no disponible en reminderConfigController. Verifica ../../db"
+    );
+  }
+}
+
+function getCompanyId(req) {
+  return (
+    req?.user?.company_id ||
+    req?.user?.companyId ||
+    req?.user?.company?.id ||
+    null
+  );
+}
+
+function parseOptionalInteger(value) {
+  if (value === undefined || value === null || value === "") return undefined;
+  const parsed = Number(value);
+  return Number.isInteger(parsed) ? parsed : NaN;
+}
+
+function parseOptionalBoolean(value) {
+  if (value === undefined) return undefined;
+  if (typeof value === "boolean") return value;
+  if (value === "true") return true;
+  if (value === "false") return false;
+  return undefined;
+}
 
 /**
  * GET /api/reminders/config
@@ -8,29 +41,69 @@ const { logAudit } = require("../../utils/auditLog");
  */
 async function getConfig(req, res) {
   try {
-    const companyId = req.user.company_id;
+    ensureDb();
+
+    const companyId = getCompanyId(req);
+
+    if (!companyId) {
+      return res.status(400).json({
+        message: "No se pudo determinar la empresa del usuario autenticado",
+      });
+    }
 
     const result = await db.query(
-      `SELECT * FROM reminder_config WHERE company_id = $1`,
+      `
+      SELECT
+        id,
+        company_id,
+        interval_days,
+        max_attempts,
+        COALESCE(enabled, true) AS enabled,
+        created_at,
+        updated_at
+      FROM reminder_config
+      WHERE company_id = $1
+      LIMIT 1
+      `,
       [companyId]
     );
 
-    if (result.rowCount === 0) {
-      // Crear configuración por defecto
-      const defaultRes = await db.query(
-        `INSERT INTO reminder_config (company_id, interval_days, max_attempts)
-         VALUES ($1, 3, 3)
-         RETURNING *`,
-        [companyId]
-      );
-      return res.json(defaultRes.rows[0]);
+    if (result.rowCount > 0) {
+      return res.json(result.rows[0]);
     }
 
-    return res.json(result.rows[0]);
+    const defaultRes = await db.query(
+      `
+      INSERT INTO reminder_config (
+        company_id,
+        interval_days,
+        max_attempts,
+        enabled,
+        created_at,
+        updated_at
+      )
+      VALUES ($1, 3, 3, true, NOW(), NOW())
+      ON CONFLICT (company_id)
+      DO UPDATE SET updated_at = NOW()
+      RETURNING
+        id,
+        company_id,
+        interval_days,
+        max_attempts,
+        COALESCE(enabled, true) AS enabled,
+        created_at,
+        updated_at
+      `,
+      [companyId]
+    );
+
+    return res.json(defaultRes.rows[0]);
   } catch (err) {
     console.error("❌ Error obteniendo configuración de recordatorios:", err);
     return res.status(500).json({
       message: "Error obteniendo configuración",
+      detail:
+        process.env.NODE_ENV !== "production" ? err.message : undefined,
     });
   }
 }
@@ -41,67 +114,89 @@ async function getConfig(req, res) {
  */
 async function updateConfig(req, res) {
   try {
-    const { interval_days, max_attempts, enabled } = req.body;
-    const companyId = req.user.company_id;
+    ensureDb();
 
-    // Validaciones
-    if (interval_days && (interval_days < 1 || interval_days > 30)) {
+    const companyId = getCompanyId(req);
+
+    if (!companyId) {
+      return res.status(400).json({
+        message: "No se pudo determinar la empresa del usuario autenticado",
+      });
+    }
+
+    const intervalDays = parseOptionalInteger(req.body?.interval_days);
+    const maxAttempts = parseOptionalInteger(req.body?.max_attempts);
+    const enabled = parseOptionalBoolean(req.body?.enabled);
+
+    if (Number.isNaN(intervalDays)) {
+      return res.status(400).json({
+        message: "interval_days debe ser un número entero",
+      });
+    }
+
+    if (Number.isNaN(maxAttempts)) {
+      return res.status(400).json({
+        message: "max_attempts debe ser un número entero",
+      });
+    }
+
+    if (intervalDays !== undefined && (intervalDays < 1 || intervalDays > 30)) {
       return res.status(400).json({
         message: "interval_days debe estar entre 1 y 30 días",
       });
     }
 
-    if (max_attempts && (max_attempts < 1 || max_attempts > 10)) {
+    if (maxAttempts !== undefined && (maxAttempts < 1 || maxAttempts > 10)) {
       return res.status(400).json({
         message: "max_attempts debe estar entre 1 y 10",
       });
     }
 
-    const updates = [];
-    const params = [];
-    let paramIndex = 1;
-
-    if (interval_days !== undefined) {
-      updates.push(`interval_days = $${paramIndex}`);
-      params.push(interval_days);
-      paramIndex++;
-    }
-
-    if (max_attempts !== undefined) {
-      updates.push(`max_attempts = $${paramIndex}`);
-      params.push(max_attempts);
-      paramIndex++;
-    }
-
-    if (enabled !== undefined) {
-      updates.push(`enabled = $${paramIndex}`);
-      params.push(enabled);
-      paramIndex++;
-    }
-
-    updates.push(`updated_at = NOW()`);
-    params.push(companyId);
-
-    if (updates.length === 1) {
-      // Solo updated_at, sin cambios reales
+    if (
+      intervalDays === undefined &&
+      maxAttempts === undefined &&
+      enabled === undefined
+    ) {
       return res.status(400).json({
-        message: "No hay campos para actualizar",
+        message: "No hay campos válidos para actualizar",
       });
     }
 
     const result = await db.query(
-      `UPDATE reminder_config
-       SET ${updates.join(", ")}
-       WHERE company_id = $${paramIndex}
-       RETURNING *`,
-      params
+      `
+      INSERT INTO reminder_config (
+        company_id,
+        interval_days,
+        max_attempts,
+        enabled,
+        created_at,
+        updated_at
+      )
+      VALUES (
+        $1,
+        COALESCE($2, 3),
+        COALESCE($3, 3),
+        COALESCE($4, true),
+        NOW(),
+        NOW()
+      )
+      ON CONFLICT (company_id)
+      DO UPDATE SET
+        interval_days = COALESCE($2, reminder_config.interval_days),
+        max_attempts = COALESCE($3, reminder_config.max_attempts),
+        enabled = COALESCE($4, reminder_config.enabled),
+        updated_at = NOW()
+      RETURNING
+        id,
+        company_id,
+        interval_days,
+        max_attempts,
+        COALESCE(enabled, true) AS enabled,
+        created_at,
+        updated_at
+      `,
+      [companyId, intervalDays, maxAttempts, enabled]
     );
-
-    if (result.rowCount === 0) {
-      return res.status(404).json({
-        message: "Configuración no encontrada",
-      });
-    }
 
     const config = result.rows[0];
 
@@ -127,6 +222,8 @@ async function updateConfig(req, res) {
     console.error("❌ Error actualizando configuración:", err);
     return res.status(500).json({
       message: "Error actualizando configuración",
+      detail:
+        process.env.NODE_ENV !== "production" ? err.message : undefined,
     });
   }
 }
