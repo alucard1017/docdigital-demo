@@ -2,6 +2,10 @@
 import { useEffect, useRef, useCallback, useMemo, useState } from "react";
 import { io } from "socket.io-client";
 
+function isBrowser() {
+  return typeof window !== "undefined";
+}
+
 function buildSocketUrl() {
   const rawSocket = import.meta.env.VITE_SOCKET_URL;
   const rawApi = import.meta.env.VITE_API_URL;
@@ -11,10 +15,21 @@ function buildSocketUrl() {
   }
 
   if (typeof rawApi === "string" && rawApi.trim()) {
-    return rawApi.trim().replace(/\/api\/?$/i, "").replace(/\/+$/, "");
+    return rawApi
+      .trim()
+      .replace(/\/api\/?$/i, "")
+      .replace(/\/+$/, "");
   }
 
   return "http://localhost:4000";
+}
+
+function isAuthLikeErrorMessage(message) {
+  if (!message || typeof message !== "string") return false;
+
+  return /jwt expired|unauthorized|authentication|invalid token|token inválido|token invalido|no autorizado|usuario no válido|usuario no valido/i.test(
+    message
+  );
 }
 
 export function useSocket(accessToken, options = {}) {
@@ -42,7 +57,9 @@ export function useSocket(accessToken, options = {}) {
         try {
           socketInstance.off(event, cb);
         } catch (err) {
-          console.warn("[WS] error removiendo listener:", event, err);
+          if (import.meta.env.DEV) {
+            console.warn("[WS] error removiendo listener:", event, err);
+          }
         }
       });
     });
@@ -50,27 +67,30 @@ export function useSocket(accessToken, options = {}) {
     listenersRef.current = {};
   }, []);
 
-  const hardDisconnect = useCallback((socketInstance) => {
-    if (!socketInstance) return;
+  const hardDisconnect = useCallback(
+    (socketInstance) => {
+      if (!socketInstance) return;
 
-    clearAllListeners(socketInstance);
+      clearAllListeners(socketInstance);
 
-    try {
-      socketInstance.off("connect");
-      socketInstance.off("disconnect");
-      socketInstance.off("connect_error");
-      socketInstance.off("error");
-      socketInstance.off("auth_error");
-    } catch (_) {}
+      try {
+        socketInstance.off("connect");
+        socketInstance.off("disconnect");
+        socketInstance.off("connect_error");
+        socketInstance.off("error");
+        socketInstance.off("auth_error");
+      } catch (_) {}
 
-    try {
-      socketInstance.removeAllListeners?.();
-    } catch (_) {}
+      try {
+        socketInstance.removeAllListeners?.();
+      } catch (_) {}
 
-    try {
-      socketInstance.disconnect();
-    } catch (_) {}
-  }, [clearAllListeners]);
+      try {
+        socketInstance.disconnect();
+      } catch (_) {}
+    },
+    [clearAllListeners]
+  );
 
   const disconnect = useCallback(() => {
     const socket = socketRef.current;
@@ -83,6 +103,10 @@ export function useSocket(accessToken, options = {}) {
 
   useEffect(() => {
     authExpiredHandledRef.current = false;
+
+    if (!isBrowser()) {
+      return;
+    }
 
     if (!normalizedToken) {
       disconnect();
@@ -112,6 +136,7 @@ export function useSocket(accessToken, options = {}) {
     const handleConnect = () => {
       setConnected(true);
       authExpiredHandledRef.current = false;
+
       if (import.meta.env.DEV) {
         console.log("[WS] conectado");
       }
@@ -119,12 +144,14 @@ export function useSocket(accessToken, options = {}) {
 
     const handleDisconnect = (reason) => {
       setConnected(false);
+
       if (import.meta.env.DEV) {
         console.warn("[WS] desconectado:", reason);
       }
     };
 
     const maybeDispatchAuthExpired = (detail = {}) => {
+      if (!isBrowser()) return;
       if (authExpiredHandledRef.current) return;
 
       authExpiredHandledRef.current = true;
@@ -153,12 +180,7 @@ export function useSocket(accessToken, options = {}) {
         console.error("[WS] connect_error:", message, err);
       }
 
-      const isAuthError =
-        /jwt expired|unauthorized|authentication|invalid token|token inválido|token invalido|no autorizado|usuario no válido|usuario no valido/i.test(
-          message
-        );
-
-      if (isAuthError) {
+      if (isAuthLikeErrorMessage(message)) {
         hardDisconnect(socket);
         socketRef.current = null;
 
@@ -204,7 +226,14 @@ export function useSocket(accessToken, options = {}) {
 
       setConnected(false);
     };
-  }, [normalizedToken, socketUrl, options.reconnectionAttempts, options.reconnectionDelay, disconnect, hardDisconnect]);
+  }, [
+    normalizedToken,
+    socketUrl,
+    options.reconnectionAttempts,
+    options.reconnectionDelay,
+    disconnect,
+    hardDisconnect,
+  ]);
 
   const on = useCallback((event, callback) => {
     const socket = socketRef.current;
@@ -224,7 +253,6 @@ export function useSocket(accessToken, options = {}) {
     }
 
     const eventSet = listenersRef.current[eventName];
-
     if (eventSet.has(callback)) return;
 
     eventSet.add(callback);

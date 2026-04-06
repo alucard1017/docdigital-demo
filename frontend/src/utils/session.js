@@ -7,6 +7,10 @@ export const SESSION_MODE_KEY = "sessionMode";
 export const SESSION_MODE_PERSISTENT = "persistent";
 export const SESSION_MODE_TEMPORARY = "temporary";
 
+function isBrowser() {
+  return typeof window !== "undefined";
+}
+
 function isStorageAvailable(storage) {
   try {
     if (!storage) return false;
@@ -20,13 +24,21 @@ function isStorageAvailable(storage) {
   }
 }
 
-function getSafeStorage(type) {
-  if (typeof window === "undefined") return null;
+function getSafeStorage(kind) {
+  if (!isBrowser()) return null;
 
   const storage =
-    type === "local" ? window.localStorage : window.sessionStorage;
+    kind === "local" ? window.localStorage : window.sessionStorage;
 
   return isStorageAvailable(storage) ? storage : null;
+}
+
+function getLocalStorageSafe() {
+  return getSafeStorage("local");
+}
+
+function getSessionStorageSafe() {
+  return getSafeStorage("session");
 }
 
 function safeGet(storage, key) {
@@ -61,20 +73,14 @@ function safeRemove(storage, key) {
   }
 }
 
-function getLocalStorageSafe() {
-  return getSafeStorage("local");
-}
-
-function getSessionStorageSafe() {
-  return getSafeStorage("session");
-}
-
 function normalizeToken(token) {
   return typeof token === "string" ? token.trim() : "";
 }
 
 function normalizeUser(user) {
-  return user && typeof user === "object" && !Array.isArray(user) ? user : null;
+  return user && typeof user === "object" && !Array.isArray(user)
+    ? user
+    : null;
 }
 
 function parseUser(raw) {
@@ -97,12 +103,7 @@ function clearKeys(storage, keys = []) {
 
 function readSessionFromStorage(storage) {
   if (!storage) {
-    return {
-      token: "",
-      user: null,
-      mode: null,
-      valid: false,
-    };
+    return { token: "", user: null, mode: null, valid: false };
   }
 
   const token = normalizeToken(safeGet(storage, ACCESS_TOKEN_KEY));
@@ -111,12 +112,7 @@ function readSessionFromStorage(storage) {
 
   const valid = !!token && !!user;
 
-  return {
-    token,
-    user,
-    mode,
-    valid,
-  };
+  return { token, user, mode, valid };
 }
 
 function cleanupBrokenSession(storage) {
@@ -220,7 +216,6 @@ export function hasSession() {
 export function isPersistentSession() {
   const localStorageSafe = getLocalStorageSafe();
   const storedMode = safeGet(localStorageSafe, SESSION_MODE_KEY);
-
   return storedMode === SESSION_MODE_PERSISTENT;
 }
 

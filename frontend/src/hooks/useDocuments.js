@@ -1,3 +1,4 @@
+// frontend/src/hooks/useDocuments.js
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import api from "../api/client";
 import { DOC_STATUS } from "../constants";
@@ -64,6 +65,14 @@ function mapSortToApi(value) {
     default:
       return { sort: "created_at", order: "desc" };
   }
+}
+
+function getErrorMessage(err, fallback) {
+  return (
+    err?.response?.data?.message ||
+    err?.message ||
+    fallback
+  );
 }
 
 export function useDocuments(token) {
@@ -143,8 +152,8 @@ export function useDocuments(token) {
         typeof searchArg === "string"
           ? searchArg
           : searchArg == null
-            ? ""
-            : String(searchArg);
+          ? ""
+          : String(searchArg);
 
       const trimmedSearch = normalizedSearch.trim();
 
@@ -206,20 +215,26 @@ export function useDocuments(token) {
 
         console.error("Fallo al cargar documentos:", err);
 
-        const msg =
-          err.response?.data?.message ||
-          err.message ||
-          "No se pudieron cargar los documentos. Intenta nuevamente.";
+        const msg = getErrorMessage(
+          err,
+          "No se pudieron cargar los documentos. Intenta nuevamente."
+        );
 
         setErrorDocs(msg);
         resetState();
+
+        addToast({
+          type: "error",
+          title: "Error al cargar documentos",
+          message: msg,
+        });
       } finally {
         if (latestRequestRef.current === requestId) {
           setLoadingDocs(false);
         }
       }
     },
-    [token, resetState]
+    [token, resetState, addToast]
   );
 
   const cargarPreviewPdf = useCallback(
@@ -254,10 +269,10 @@ export function useDocuments(token) {
 
         console.error("Error preparando URL de PDF:", err);
 
-        const msg =
-          err.response?.data?.message ||
-          err.message ||
-          "No se pudo cargar la vista previa del PDF.";
+        const msg = getErrorMessage(
+          err,
+          "No se pudo cargar la vista previa del PDF."
+        );
 
         setPdfError(msg);
         setPdfUrl(null);
@@ -335,7 +350,7 @@ export function useDocuments(token) {
           addToast({
             type: "error",
             title: "Documento no encontrado",
-            message: "No se encontró el documento seleccionado",
+            message: "No se encontró el documento seleccionado.",
           });
           return false;
         }
@@ -353,15 +368,10 @@ export function useDocuments(token) {
         } catch (err) {
           console.error("Error abriendo PDF:", err);
 
-          const msg =
-            err.response?.data?.message ||
-            err.message ||
-            "No se pudo abrir el PDF";
-
           addToast({
             type: "error",
             title: "No se pudo abrir el PDF",
-            message: msg,
+            message: getErrorMessage(err, "No se pudo abrir el PDF."),
           });
 
           return false;
@@ -382,19 +392,19 @@ export function useDocuments(token) {
           addToast({
             type: "success",
             title: "Documento firmado",
-            message: "El documento se firmó correctamente",
+            message: "El documento se firmó correctamente.",
           });
         } else if (accion === "visar") {
           addToast({
             type: "success",
             title: "Documento visado",
-            message: "El documento se visó correctamente",
+            message: "El documento se visó correctamente.",
           });
         } else if (accion === "rechazar") {
           addToast({
             type: "success",
             title: "Documento rechazado",
-            message: "El documento se rechazó correctamente",
+            message: "El documento se rechazó correctamente.",
           });
         } else if (data?.message) {
           addToast({
@@ -418,15 +428,13 @@ export function useDocuments(token) {
 
         return true;
       } catch (err) {
-        const msg =
-          err.response?.data?.message ||
-          err.message ||
-          "No se pudo procesar la acción";
-
         addToast({
           type: "error",
           title: "No se pudo procesar la acción",
-          message: msg,
+          message: getErrorMessage(
+            err,
+            "No se pudo procesar la acción sobre el documento."
+          ),
         });
 
         return false;
@@ -445,15 +453,17 @@ export function useDocuments(token) {
     ]
   );
 
-  const docsFiltrados = useMemo(() => {
-    return Array.isArray(docs) ? docs : [];
-  }, [docs]);
+  const docsFiltrados = useMemo(
+    () => (Array.isArray(docs) ? docs : []),
+    [docs]
+  );
 
   const docsPaginados = useMemo(() => docsFiltrados, [docsFiltrados]);
 
-  const pendientes = useMemo(() => {
+  const { pendientesCount, visados, firmados, rechazados } = useMemo(() => {
     const safeDocs = Array.isArray(docs) ? docs : [];
-    return safeDocs.filter((d) => {
+
+    const pendientes = safeDocs.filter((d) => {
       const status = d?.status;
       return (
         status === DOC_STATUS.PENDIENTE ||
@@ -461,21 +471,25 @@ export function useDocuments(token) {
         status === DOC_STATUS.PENDIENTE_FIRMA
       );
     }).length;
-  }, [docs]);
 
-  const visados = useMemo(() => {
-    const safeDocs = Array.isArray(docs) ? docs : [];
-    return safeDocs.filter((d) => d?.status === DOC_STATUS.VISADO).length;
-  }, [docs]);
+    const visadosCount = safeDocs.filter(
+      (d) => d?.status === DOC_STATUS.VISADO
+    ).length;
 
-  const firmados = useMemo(() => {
-    const safeDocs = Array.isArray(docs) ? docs : [];
-    return safeDocs.filter((d) => d?.status === DOC_STATUS.FIRMADO).length;
-  }, [docs]);
+    const firmadosCount = safeDocs.filter(
+      (d) => d?.status === DOC_STATUS.FIRMADO
+    ).length;
 
-  const rechazados = useMemo(() => {
-    const safeDocs = Array.isArray(docs) ? docs : [];
-    return safeDocs.filter((d) => d?.status === DOC_STATUS.RECHAZADO).length;
+    const rechazadosCount = safeDocs.filter(
+      (d) => d?.status === DOC_STATUS.RECHAZADO
+    ).length;
+
+    return {
+      pendientesCount: pendientes,
+      visados: visadosCount,
+      firmados: firmadosCount,
+      rechazados: rechazadosCount,
+    };
   }, [docs]);
 
   const totalFiltrado = Number.isFinite(pagination.total)
@@ -510,7 +524,7 @@ export function useDocuments(token) {
     manejarAccionDocumento,
     docsFiltrados,
     docsPaginados,
-    pendientes,
+    pendientes: pendientesCount,
     visados,
     firmados,
     rechazados,

@@ -1,7 +1,8 @@
-// src/components/DocumentRow.js
-import React from "react";
+// src/components/DocumentRow.jsx
+import React, { useCallback, useMemo } from "react";
 import { DOC_STATUS } from "../constants";
 import api from "../api/client";
+import { useToast } from "../hooks/useToast";
 
 function getTramiteLabel(value) {
   if (value === "notaria") return "Notaría";
@@ -27,11 +28,19 @@ function buildTipoLabel(tipoTramite, tipoDocumento) {
 
 function getContractNumber(doc) {
   return (
-    doc.numero_contrato_interno ||
-    doc.numero_contrato ||
-    doc.contract_number ||
-    doc.n_contrato ||
+    doc?.numero_contrato_interno ||
+    doc?.numero_contrato ||
+    doc?.contract_number ||
+    doc?.n_contrato ||
     "Sin número"
+  );
+}
+
+function getErrorMessage(err, fallback) {
+  return (
+    err?.response?.data?.message ||
+    err?.message ||
+    fallback
   );
 }
 
@@ -56,95 +65,154 @@ const STATUS_COLORS = {
 };
 
 export function DocumentRow({ doc, onOpenDetail }) {
-  const tipoLabel = buildTipoLabel(doc.tipo_tramite, doc.tipo_documento);
-  const numeroContrato = getContractNumber(doc);
-  const titleDocumento = doc.title || "Sin título";
+  const { addToast } = useToast();
 
-  let fechaLinea1 = "-";
-  let fechaLinea2 = "";
+  const tipoLabel = useMemo(
+    () => buildTipoLabel(doc?.tipo_tramite, doc?.tipo_documento),
+    [doc?.tipo_tramite, doc?.tipo_documento]
+  );
 
-  if (doc.created_at) {
-    const d = new Date(doc.created_at);
+  const numeroContrato = useMemo(() => getContractNumber(doc), [doc]);
 
-    fechaLinea1 = d.toLocaleDateString("es-CO", {
-      day: "2-digit",
-      month: "2-digit",
-      year: "numeric",
-    });
+  const titleDocumento = useMemo(
+    () => doc?.title || "Sin título",
+    [doc?.title]
+  );
 
-    fechaLinea2 = d.toLocaleTimeString("es-CO", {
-      hour: "2-digit",
-      minute: "2-digit",
-    });
-  }
-
-  const estadoLabel = STATUS_LABELS[doc.status] || doc.status || "Sin estado";
-  const estadoColor = STATUS_COLORS[doc.status] || "#6b7280";
-
-  const handleOpenDetail = (e) => {
-    if (e) e.stopPropagation();
-    if (typeof onOpenDetail === "function") {
-      onOpenDetail(doc);
+  const { fechaLinea1, fechaLinea2 } = useMemo(() => {
+    if (!doc?.created_at) {
+      return { fechaLinea1: "-", fechaLinea2: "" };
     }
-  };
 
-  const handleVerPdf = async (e) => {
-    e.stopPropagation();
-    try {
-      const res = await api.get(`/docs/${doc.id}/pdf`);
-      const data = res.data;
+    const date = new Date(doc.created_at);
 
-      if (!data?.url) {
-        throw new Error("No se pudo obtener la URL del PDF");
+    if (Number.isNaN(date.getTime())) {
+      return { fechaLinea1: "-", fechaLinea2: "" };
+    }
+
+    return {
+      fechaLinea1: date.toLocaleDateString("es-CO", {
+        day: "2-digit",
+        month: "2-digit",
+        year: "numeric",
+      }),
+      fechaLinea2: date.toLocaleTimeString("es-CO", {
+        hour: "2-digit",
+        minute: "2-digit",
+      }),
+    };
+  }, [doc?.created_at]);
+
+  const estadoLabel = useMemo(
+    () => STATUS_LABELS[doc?.status] || doc?.status || "Sin estado",
+    [doc?.status]
+  );
+
+  const estadoColor = useMemo(
+    () => STATUS_COLORS[doc?.status] || "#6b7280",
+    [doc?.status]
+  );
+
+  const handleOpenDetail = useCallback(
+    (e) => {
+      if (e) e.stopPropagation();
+      if (typeof onOpenDetail === "function") {
+        onOpenDetail(doc);
+      }
+    },
+    [doc, onOpenDetail]
+  );
+
+  const fetchPdfUrl = useCallback(async () => {
+    if (!doc?.id) {
+      throw new Error("Documento inválido");
+    }
+
+    const res = await api.get(`/docs/${doc.id}/pdf`);
+    const data = res.data;
+
+    if (!data?.url) {
+      throw new Error("No se pudo obtener la URL del PDF");
+    }
+
+    return data.url;
+  }, [doc?.id]);
+
+  const handleVerPdf = useCallback(
+    async (e) => {
+      e.stopPropagation();
+
+      try {
+        const url = await fetchPdfUrl();
+        window.open(url, "_blank", "noopener,noreferrer");
+      } catch (err) {
+        console.error("Error abriendo PDF:", err);
+
+        addToast({
+          type: "error",
+          title: "No se pudo abrir el PDF",
+          message: getErrorMessage(err, "No se pudo abrir el PDF"),
+        });
+      }
+    },
+    [fetchPdfUrl, addToast]
+  );
+
+  const handleDescargarPdf = useCallback(
+    async (e) => {
+      e.stopPropagation();
+
+      try {
+        const url = await fetchPdfUrl();
+
+        const link = document.createElement("a");
+        link.href = url;
+        link.download = `${titleDocumento}.pdf`;
+        link.target = "_blank";
+        link.rel = "noopener noreferrer";
+        document.body.appendChild(link);
+        link.click();
+        document.body.removeChild(link);
+
+        addToast({
+          type: "success",
+          title: "Descarga iniciada",
+          message: `Se inició la descarga de "${titleDocumento}".`,
+        });
+      } catch (err) {
+        console.error("Error descargando PDF:", err);
+
+        addToast({
+          type: "error",
+          title: "No se pudo descargar el PDF",
+          message: getErrorMessage(err, "No se pudo descargar el PDF"),
+        });
+      }
+    },
+    [fetchPdfUrl, titleDocumento, addToast]
+  );
+
+  const handleVerRechazo = useCallback(
+    (e) => {
+      e.stopPropagation();
+
+      if (!doc?.reject_reason) {
+        addToast({
+          type: "info",
+          title: "Sin motivo registrado",
+          message: "Este documento no tiene motivo de rechazo.",
+        });
+        return;
       }
 
-      window.open(data.url, "_blank", "noopener,noreferrer");
-    } catch (err) {
-      console.error("Error abriendo PDF:", err);
-      const msg =
-        err.response?.data?.message ||
-        err.message ||
-        "No se pudo abrir el PDF";
-      alert("❌ " + msg);
-    }
-  };
-
-  const handleDescargarPdf = async (e) => {
-    e.stopPropagation();
-    try {
-      const res = await api.get(`/docs/${doc.id}/pdf`);
-      const data = res.data;
-
-      if (!data?.url) {
-        throw new Error("No se pudo obtener la URL del PDF");
-      }
-
-      const link = document.createElement("a");
-      link.href = data.url;
-      link.download = `${titleDocumento}.pdf`;
-      link.target = "_blank";
-      link.rel = "noopener noreferrer";
-      document.body.appendChild(link);
-      link.click();
-      document.body.removeChild(link);
-    } catch (err) {
-      console.error("Error descargando PDF:", err);
-      const msg =
-        err.response?.data?.message ||
-        err.message ||
-        "No se pudo descargar el PDF";
-      alert("❌ " + msg);
-    }
-  };
-
-  const handleVerRechazo = (e) => {
-    e.stopPropagation();
-    if (!doc.reject_reason) {
-      alert("Este documento no tiene motivo de rechazo.");
-      return;
-    }
-    alert("Motivo de rechazo:\n\n" + doc.reject_reason);
-  };
+      addToast({
+        type: "warning",
+        title: "Motivo de rechazo",
+        message: doc.reject_reason,
+      });
+    },
+    [doc?.reject_reason, addToast]
+  );
 
   return (
     <tr className="doc-row" onClick={handleOpenDetail}>
@@ -196,10 +264,10 @@ export function DocumentRow({ doc, onOpenDetail }) {
 
       <td className="doc-cell-signer">
         <div className="doc-signer-main">
-          {doc.firmante_nombre || "No asignado"}
+          {doc?.firmante_nombre || "No asignado"}
         </div>
         <div className="doc-signer-sub">
-          {doc.destinatario_nombre || "Sin empresa"}
+          {doc?.destinatario_nombre || "Sin empresa"}
         </div>
       </td>
 
@@ -235,7 +303,7 @@ export function DocumentRow({ doc, onOpenDetail }) {
             Descarga
           </button>
 
-          {doc.status === DOC_STATUS.RECHAZADO && doc.reject_reason && (
+          {doc?.status === DOC_STATUS.RECHAZADO && doc?.reject_reason && (
             <button
               type="button"
               className="btn-main btn-secondary-danger btn-xs"

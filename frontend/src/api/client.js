@@ -4,9 +4,12 @@ import { getStoredToken } from "../utils/session";
 
 const DEFAULT_API_BASE_URL = "http://localhost:4000/api";
 
-const normalizeText = (value) => {
-  return typeof value === "string" ? value.trim() : "";
-};
+// =============================
+// Normalización de texto / URLs
+// =============================
+
+const normalizeText = (value) =>
+  typeof value === "string" ? value.trim() : "";
 
 const normalizeLower = (value) => normalizeText(value).toLowerCase();
 const normalizeUpper = (value) => normalizeText(value).toUpperCase();
@@ -17,15 +20,18 @@ const ensureLeadingSlash = (value = "") => {
   return v.startsWith("/") ? v : `/${v}`;
 };
 
-const stripTrailingSlashes = (value = "") => {
-  return normalizeText(value).replace(/\/+$/, "");
-};
+const stripTrailingSlashes = (value = "") =>
+  normalizeText(value).replace(/\/+$/, "");
 
 const ensureApiSuffix = (value = "") => {
   const clean = stripTrailingSlashes(value);
   if (!clean) return DEFAULT_API_BASE_URL;
   return clean.endsWith("/api") ? clean : `${clean}/api`;
 };
+
+// =============================
+// Base URL / helpers
+// =============================
 
 export const getApiBaseUrl = () => {
   const raw = import.meta.env.VITE_API_URL;
@@ -45,14 +51,23 @@ export const buildApiUrl = (path = "") => {
 };
 
 if (import.meta.env.DEV) {
+  // eslint-disable-next-line no-console
   console.log("[API] Base URL:", API_BASE_URL);
 }
+
+// =============================
+// Instancia Axios
+// =============================
 
 const api = axios.create({
   baseURL: API_BASE_URL,
   timeout: 30000,
   withCredentials: true,
 });
+
+// =============================
+// Flags / sets de códigos
+// =============================
 
 let authExpiredDispatched = false;
 
@@ -100,9 +115,12 @@ const PUBLIC_PATH_PREFIXES = [
   "/auth/reset-password",
 ];
 
+// =============================
+// Helpers de request / response
+// =============================
+
 const normalizeUrlPath = (url = "") => {
   const value = normalizeText(url);
-
   if (!value) return "";
 
   try {
@@ -117,20 +135,17 @@ const normalizeUrlPath = (url = "") => {
   }
 };
 
-const getRequestMethod = (configOrError) => {
-  return (
-    configOrError?.method?.toUpperCase?.() ||
-    configOrError?.config?.method?.toUpperCase?.() ||
-    null
-  );
-};
+const getRequestMethod = (configOrError) =>
+  configOrError?.method?.toUpperCase?.() ||
+  configOrError?.config?.method?.toUpperCase?.() ||
+  null;
 
-const getRequestUrl = (configOrError) => {
-  return configOrError?.url || configOrError?.config?.url || null;
-};
+const getRequestUrl = (configOrError) =>
+  configOrError?.url || configOrError?.config?.url || null;
 
 const getFullRequestUrl = (configOrError) => {
-  const baseURL = configOrError?.baseURL || configOrError?.config?.baseURL || "";
+  const baseURL =
+    configOrError?.baseURL || configOrError?.config?.baseURL || "";
   const url = getRequestUrl(configOrError) || "";
   return `${stripTrailingSlashes(baseURL)}${ensureLeadingSlash(url)}`;
 };
@@ -138,26 +153,6 @@ const getFullRequestUrl = (configOrError) => {
 export const isPublicRequest = (url = "") => {
   const path = normalizeUrlPath(url);
   return PUBLIC_PATH_PREFIXES.some((prefix) => path.startsWith(prefix));
-};
-
-export const isAuthFailure = (status, message, code) => {
-  const normalizedCode = normalizeUpper(code);
-  const normalizedMessage = normalizeLower(message);
-
-  if (status === 401) {
-    if (AUTH_FAILURE_CODES.has(normalizedCode)) return true;
-    if (AUTH_FAILURE_MESSAGES.has(normalizedMessage)) return true;
-    return true;
-  }
-
-  if (status === 403) {
-    if (AUTH_FAILURE_CODES.has(normalizedCode)) return true;
-    if (AUTH_FAILURE_MESSAGES.has(normalizedMessage)) return true;
-    if (FORBIDDEN_MESSAGES.has(normalizedMessage)) return false;
-    return false;
-  }
-
-  return false;
 };
 
 export const isRequestCanceled = (error) => {
@@ -168,6 +163,48 @@ export const isRequestCanceled = (error) => {
     error?.code === "ERR_CANCELED" ||
     normalizeLower(error?.message) === "canceled"
   );
+};
+
+const extractErrorMeta = (error) => {
+  const status = error?.response?.status ?? null;
+  const data = error?.response?.data ?? null;
+  const message = data?.message || error?.message || "";
+  const code = data?.code || null;
+
+  const method = getRequestMethod(error);
+  const url = getRequestUrl(error);
+  const fullUrl = getFullRequestUrl(error);
+  const publicRequest = isPublicRequest(url);
+
+  return { status, data, message, code, method, url, fullUrl, publicRequest };
+};
+
+// =============================
+// Detección de auth expirado
+// =============================
+
+export const isAuthFailure = (status, message, code) => {
+  const normalizedCode = normalizeUpper(code);
+  const normalizedMessage = normalizeLower(message);
+
+  if (status === 401) {
+    if (AUTH_FAILURE_CODES.has(normalizedCode)) return true;
+    if (AUTH_FAILURE_MESSAGES.has(normalizedMessage)) return true;
+    // 401 genérico → tratamos como auth inválida
+    return true;
+  }
+
+  if (status === 403) {
+    if (AUTH_FAILURE_CODES.has(normalizedCode)) return true;
+    if (AUTH_FAILURE_MESSAGES.has(normalizedMessage)) return true;
+
+    // Mensajes típicos de falta de permisos, pero sesión sigue viva
+    if (FORBIDDEN_MESSAGES.has(normalizedMessage)) return false;
+
+    return false;
+  }
+
+  return false;
 };
 
 export const dispatchAuthExpired = (detail = {}) => {
@@ -198,6 +235,7 @@ export const dispatchAuthExpired = (detail = {}) => {
     authExpiredDispatched = false;
 
     if (import.meta.env.DEV) {
+      // eslint-disable-next-line no-console
       console.error("[API AUTH] error disparando auth:expired:", err);
     }
 
@@ -209,6 +247,10 @@ export const resetAuthExpiredDispatch = () => {
   authExpiredDispatched = false;
 };
 
+// =============================
+// Interceptor de request
+// =============================
+
 api.interceptors.request.use(
   (config) => {
     const token = getStoredToken();
@@ -217,10 +259,13 @@ api.interceptors.request.use(
 
     if (token && !isPublicRequest(config.url)) {
       config.headers = config.headers || {};
-      config.headers.Authorization = `Bearer ${token}`;
+      if (!config.headers.Authorization) {
+        config.headers.Authorization = `Bearer ${token}`;
+      }
     }
 
     if (import.meta.env.DEV) {
+      // eslint-disable-next-line no-console
       console.debug("[API REQ]", {
         method: getRequestMethod(config),
         url: config.url,
@@ -236,6 +281,7 @@ api.interceptors.request.use(
   },
   (error) => {
     if (import.meta.env.DEV && !isRequestCanceled(error)) {
+      // eslint-disable-next-line no-console
       console.error("[API REQ ERROR]", error);
     }
 
@@ -243,47 +289,54 @@ api.interceptors.request.use(
   }
 );
 
+// =============================
+// Interceptor de response
+// =============================
+
 api.interceptors.response.use(
   (response) => response,
   (error) => {
     if (isRequestCanceled(error)) {
       if (import.meta.env.DEV) {
+        // eslint-disable-next-line no-console
         console.debug("[API RES CANCELED]", {
           method: getRequestMethod(error),
           url: getRequestUrl(error),
         });
       }
-
       return Promise.reject(error);
     }
 
-    const status = error?.response?.status ?? null;
-    const data = error?.response?.data ?? null;
-    const message = data?.message || error?.message || "";
-    const errorCode = data?.code || null;
-    const method = getRequestMethod(error);
-    const url = getRequestUrl(error);
-    const fullUrl = getFullRequestUrl(error);
-    const publicRequest = isPublicRequest(url);
+    const {
+      status,
+      data,
+      message,
+      code,
+      method,
+      url,
+      fullUrl,
+      publicRequest,
+    } = extractErrorMeta(error);
 
     if (import.meta.env.DEV) {
+      // eslint-disable-next-line no-console
       console.error("[API RES ERROR]", {
         method,
         url,
         fullUrl,
         status,
         message,
-        code: errorCode,
+        code,
         isPublic: publicRequest,
         responseData: data,
       });
     }
 
-    if (!publicRequest && isAuthFailure(status, message, errorCode)) {
+    if (!publicRequest && isAuthFailure(status, message, code)) {
       dispatchAuthExpired({
         source: "http",
         status,
-        code: errorCode,
+        code,
         message,
         method,
         url,
@@ -295,11 +348,12 @@ api.interceptors.response.use(
   }
 );
 
+// =============================
+// Helpers REST específicos
+// =============================
+
 export async function getDocuments(params = {}, config = {}) {
-  const res = await api.get("/docs", {
-    ...config,
-    params,
-  });
+  const res = await api.get("/docs", { ...config, params });
   return res.data;
 }
 

@@ -1,10 +1,12 @@
-import React, { useState, useEffect } from "react";
+// src/components/DetailView.jsx
+import React, { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { Timeline } from "./Timeline";
 import { EventList } from "./EventList";
 import { DetailActions } from "./DetailActions";
 import { DOC_STATUS } from "../constants";
 import api, { getDocumentTimeline } from "../api/client";
 import { ElectronicSignatureNotice } from "./Legal/ElectronicSignatureNotice";
+import { useToast } from "../hooks/useToast";
 
 function getTramiteLabel(value) {
   if (value === "notaria") return "Notaría";
@@ -16,6 +18,42 @@ function getDocumentoLabel(value) {
   if (value === "poderes") return "Poderes y autorizaciones";
   if (value === "contratos") return "Solo contratos";
   return "N/D";
+}
+
+function getErrorMessage(err, fallback) {
+  return err?.response?.data?.message || err?.message || fallback;
+}
+
+function normalizeText(value) {
+  return typeof value === "string" ? value.trim().toLowerCase() : "";
+}
+
+function buildUserDisplayName(currentUser) {
+  const rawName =
+    currentUser?.name ||
+    currentUser?.fullName ||
+    currentUser?.username ||
+    "Usuario";
+
+  const normalizedName = normalizeText(currentUser?.name);
+  const normalizedFullName = normalizeText(currentUser?.fullName);
+  const normalizedEmail = normalizeText(currentUser?.email);
+
+  const isJean =
+    normalizedName === "jean" ||
+    normalizedFullName === "jean" ||
+    normalizedFullName.includes("jean") ||
+    normalizedEmail === "tu-correo@loqueuses.com";
+
+  return isJean ? "Alucard" : rawName;
+}
+
+function isAbortLikeError(err) {
+  return (
+    err?.name === "CanceledError" ||
+    err?.name === "AbortError" ||
+    err?.code === "ERR_CANCELED"
+  );
 }
 
 export function DetailView({
@@ -33,6 +71,8 @@ export function DetailView({
   logout,
   currentUser,
 }) {
+  const { addToast } = useToast();
+
   const [timeline, setTimeline] = useState(null);
   const [loadingTimeline, setLoadingTimeline] = useState(false);
 
@@ -51,12 +91,128 @@ export function DetailView({
   const [signError, setSignError] = useState("");
   const [visadoError, setVisadoError] = useState("");
 
-  const rawName = currentUser?.name || currentUser?.fullName || "Usuario";
-  const isJean =
-    currentUser &&
-    (currentUser.email === "tu-correo@loqueuses.com" ||
-      currentUser.name === "Jean");
-  const displayName = isJean ? "Alucard" : rawName;
+  const timelineToastShownRef = useRef(false);
+  const signersToastShownRef = useRef(false);
+
+  const safeEvents = useMemo(
+    () => (Array.isArray(events) ? events : []),
+    [events]
+  );
+
+  const displayName = useMemo(
+    () => buildUserDisplayName(currentUser),
+    [currentUser]
+  );
+
+  const numeroInterno = useMemo(() => {
+    return (
+      timeline?.document?.numero_contrato_interno ||
+      selectedDoc?.numero_contrato_interno ||
+      null
+    );
+  }, [timeline, selectedDoc]);
+
+  const tramiteLabel = useMemo(
+    () =>
+      getTramiteLabel(selectedDoc?.tipo_tramite || selectedDoc?.tipoTramite),
+    [selectedDoc]
+  );
+
+  const documentoLabel = useMemo(
+    () =>
+      getDocumentoLabel(
+        selectedDoc?.tipo_documento || selectedDoc?.tipoDocumento
+      ),
+    [selectedDoc]
+  );
+
+  const isSigned = selectedDoc?.status === DOC_STATUS.FIRMADO;
+  const isRejected = selectedDoc?.status === DOC_STATUS.RECHAZADO;
+
+  const mostrarBotonReenvioVisado =
+    selectedDoc?.requires_visado === true &&
+    selectedDoc?.status === DOC_STATUS.PENDIENTE_VISADO &&
+    !!selectedDoc?.visador_email;
+
+  const mostrarBotonRecordatorio =
+    selectedDoc?.status === DOC_STATUS.PENDIENTE_VISADO ||
+    selectedDoc?.status === DOC_STATUS.PENDIENTE_FIRMA;
+
+  const baseUrl = api.defaults.baseURL || "";
+  const downloadUrl = selectedDoc
+    ? `${baseUrl}/documents/${selectedDoc.id}/download`
+    : null;
+
+  const fetchTimelineAndParticipants = useCallback(
+    async (docId) => {
+      try {
+        setLoadingTimeline(true);
+        setLoadingParticipants(true);
+
+        const data = await getDocumentTimeline(docId);
+
+        setTimeline(data?.timeline || null);
+        setParticipants(Array.isArray(data?.participants) ? data.participants : []);
+        timelineToastShownRef.current = false;
+      } catch (err) {
+        if (isAbortLikeError(err)) return;
+
+        console.error("Error fetching timeline/participants:", err);
+        setTimeline(null);
+        setParticipants([]);
+
+        if (!timelineToastShownRef.current) {
+          timelineToastShownRef.current = true;
+          addToast({
+            type: "error",
+            title: "No se pudo cargar el flujo",
+            message: getErrorMessage(
+              err,
+              "No se pudo cargar la línea de tiempo del documento."
+            ),
+          });
+        }
+      } finally {
+        setLoadingTimeline(false);
+        setLoadingParticipants(false);
+      }
+    },
+    [addToast]
+  );
+
+  const fetchSigners = useCallback(
+    async (docId, signal) => {
+      try {
+        setLoadingSigners(true);
+
+        const res = await api.get(`/documents/${docId}/signers`, { signal });
+        const data = res.data;
+
+        setSigners(Array.isArray(data) ? data : []);
+        signersToastShownRef.current = false;
+      } catch (err) {
+        if (isAbortLikeError(err)) return;
+
+        console.error("Error fetching signers:", err);
+        setSigners([]);
+
+        if (!signersToastShownRef.current) {
+          signersToastShownRef.current = true;
+          addToast({
+            type: "error",
+            title: "No se pudieron cargar los firmantes",
+            message: getErrorMessage(
+              err,
+              "No se pudo cargar la lista de firmantes."
+            ),
+          });
+        }
+      } finally {
+        setLoadingSigners(false);
+      }
+    },
+    [addToast]
+  );
 
   useEffect(() => {
     if (!selectedDoc?.id) return;
@@ -64,173 +220,160 @@ export function DetailView({
     const docId = selectedDoc.id;
     const controller = new AbortController();
 
-    const fetchTimelineAndParticipants = async () => {
-      try {
-        setLoadingTimeline(true);
-        setLoadingParticipants(true);
-        const data = await getDocumentTimeline(docId);
-        setTimeline(data?.timeline || null);
-        setParticipants(
-          Array.isArray(data?.participants) ? data.participants : []
-        );
-      } catch (err) {
-        if (err.name === "CanceledError" || err.name === "AbortError") return;
-        console.error("Error fetching timeline/participants:", err);
-        setTimeline(null);
-        setParticipants([]);
-      } finally {
-        setLoadingTimeline(false);
-        setLoadingParticipants(false);
-      }
-    };
+    timelineToastShownRef.current = false;
+    signersToastShownRef.current = false;
 
-    const fetchSigners = async () => {
-      try {
-        setLoadingSigners(true);
-        const res = await api.get(`/documents/${docId}/signers`, {
-          signal: controller.signal,
-        });
-        const data = res.data;
-        setSigners(Array.isArray(data) ? data : []);
-      } catch (err) {
-        if (err.name === "CanceledError" || err.name === "AbortError") return;
-        console.error("Error fetching signers:", err);
-        setSigners([]);
-      } finally {
-        setLoadingSigners(false);
-      }
-    };
+    fetchTimelineAndParticipants(docId);
+    fetchSigners(docId, controller.signal);
 
-    fetchTimelineAndParticipants();
-    fetchSigners();
+    const interval = window.setInterval(() => {
+      fetchTimelineAndParticipants(docId);
+    }, 5000);
 
-    const interval = setInterval(fetchTimelineAndParticipants, 5000);
     return () => {
       controller.abort();
-      clearInterval(interval);
+      window.clearInterval(interval);
     };
-  }, [selectedDoc?.id]);
+  }, [selectedDoc?.id, fetchTimelineAndParticipants, fetchSigners]);
 
-  if (!selectedDoc) return null;
+  const handleBackToList = useCallback(() => {
+    setView("list");
+    setSelectedDoc(null);
+  }, [setView, setSelectedDoc]);
 
-  const safeEvents = Array.isArray(events) ? events : [];
+  const handleReenviarVisado = useCallback(async () => {
+    if (!selectedDoc?.id) return;
 
-  const mostrarBotonReenvioVisado =
-    selectedDoc.requires_visado === true &&
-    selectedDoc.status === DOC_STATUS.PENDIENTE_VISADO &&
-    selectedDoc.visador_email;
-
-  const mostrarBotonRecordatorio =
-    selectedDoc.status === DOC_STATUS.PENDIENTE_VISADO ||
-    selectedDoc.status === DOC_STATUS.PENDIENTE_FIRMA;
-
-  async function handleReenviarVisado() {
-    if (!selectedDoc) return;
     try {
       setReenviarLoadingVisado(true);
+
       const res = await api.post(`/documents/${selectedDoc.id}/reenviar`, {
         tipo: "VISADO",
       });
-      alert(res.data?.message || "Recordatorio de visado reenviado correctamente");
+
+      addToast({
+        type: "success",
+        title: "Visado reenviado",
+        message:
+          res.data?.message || "Recordatorio de visado reenviado correctamente.",
+      });
     } catch (err) {
       console.error("Error reenviando visado:", err);
-      const msg =
-        err.response?.data?.message ||
-        err.message ||
-        "No se pudo reenviar el correo de visado";
-      alert("❌ " + msg);
+
+      addToast({
+        type: "error",
+        title: "No se pudo reenviar el visado",
+        message: getErrorMessage(
+          err,
+          "No se pudo reenviar el correo de visado."
+        ),
+      });
     } finally {
       setReenviarLoadingVisado(false);
     }
-  }
+  }, [selectedDoc?.id, addToast]);
 
-  async function handleReenviarFirma(signerId) {
-    if (!selectedDoc || !signerId) return;
-    try {
-      setReenviarSignerId(signerId);
-      const res = await api.post(`/documents/${selectedDoc.id}/reenviar`, {
-        tipo: "FIRMA",
-        signerId,
-      });
-      alert(res.data?.message || "Recordatorio de firma reenviado correctamente");
-    } catch (err) {
-      console.error("Error reenviando firma:", err);
-      const msg =
-        err.response?.data?.message ||
-        err.message ||
-        "No se pudo reenviar el correo de firma";
-      alert("❌ " + msg);
-    } finally {
-      setReenviarSignerId(null);
-    }
-  }
+  const handleReenviarFirma = useCallback(
+    async (signerId) => {
+      if (!selectedDoc?.id || !signerId) return;
 
-  async function handleEnviarRecordatorioATodos() {
-    if (!selectedDoc) return;
+      try {
+        setReenviarSignerId(signerId);
+
+        const res = await api.post(`/documents/${selectedDoc.id}/reenviar`, {
+          tipo: "FIRMA",
+          signerId,
+        });
+
+        addToast({
+          type: "success",
+          title: "Recordatorio enviado",
+          message:
+            res.data?.message || "Recordatorio de firma reenviado correctamente.",
+        });
+      } catch (err) {
+        console.error("Error reenviando firma:", err);
+
+        addToast({
+          type: "error",
+          title: "No se pudo reenviar la firma",
+          message: getErrorMessage(
+            err,
+            "No se pudo reenviar el correo de firma."
+          ),
+        });
+      } finally {
+        setReenviarSignerId(null);
+      }
+    },
+    [selectedDoc?.id, addToast]
+  );
+
+  const handleEnviarRecordatorioATodos = useCallback(async () => {
+    if (!selectedDoc?.id) return;
+
     try {
       setRecordatorioLoading(true);
+
       const res = await api.post(`/documents/${selectedDoc.id}/recordatorio`);
-      alert(`✅ ${res.data?.message || "Recordatorio enviado"}`);
+
+      addToast({
+        type: "success",
+        title: "Recordatorio enviado",
+        message: res.data?.message || "Recordatorio enviado correctamente.",
+      });
     } catch (err) {
       console.error("Error enviando recordatorio a todos:", err);
-      const msg =
-        err.response?.data?.message ||
-        err.message ||
-        "No se pudo enviar el recordatorio";
-      alert("❌ " + msg);
+
+      addToast({
+        type: "error",
+        title: "No se pudo enviar el recordatorio",
+        message: getErrorMessage(err, "No se pudo enviar el recordatorio."),
+      });
     } finally {
       setRecordatorioLoading(false);
     }
-  }
+  }, [selectedDoc?.id, addToast]);
 
-  const baseUrl = api.defaults.baseURL || "";
-  const downloadUrl = selectedDoc
-    ? `${baseUrl}/documents/${selectedDoc.id}/download`
-    : null;
-
-  const numeroInterno =
-    (timeline &&
-      timeline.document &&
-      timeline.document.numero_contrato_interno) ||
-    selectedDoc.numero_contrato_interno;
-
-  const tramiteLabel = getTramiteLabel(
-    selectedDoc.tipo_tramite || selectedDoc.tipoTramite
-  );
-  const documentoLabel = getDocumentoLabel(
-    selectedDoc.tipo_documento || selectedDoc.tipoDocumento
-  );
-
-  const isSigned = selectedDoc.status === DOC_STATUS.FIRMADO;
-  const isRejected = selectedDoc.status === DOC_STATUS.RECHAZADO;
-
-  const manejarAccionDocumentoConLegal = async (id, accion, extraData = {}) => {
-    if (accion === "firmar") {
-      if (!acceptedLegalSign) {
-        setSignError(
-          "Debes aceptar el aviso legal de firma electrónica antes de firmar."
-        );
-        return;
+  const manejarAccionDocumentoConLegal = useCallback(
+    async (id, accion, extraData = {}) => {
+      if (accion === "firmar") {
+        if (!acceptedLegalSign) {
+          setSignError(
+            "Debes aceptar el aviso legal de firma electrónica antes de firmar."
+          );
+          return;
+        }
+        setSignError("");
       }
-      setSignError("");
-    }
 
-    if (accion === "visar") {
-      if (!acceptedLegalVisado) {
-        setVisadoError(
-          "Debes aceptar el aviso legal de visado antes de aprobar el documento."
-        );
-        return;
+      if (accion === "visar") {
+        if (!acceptedLegalVisado) {
+          setVisadoError(
+            "Debes aceptar el aviso legal de visado antes de aprobar el documento."
+          );
+          return;
+        }
+        setVisadoError("");
       }
-      setVisadoError("");
-    }
 
-    const ok = await manejarAccionDocumento(id, accion, extraData);
-    if (ok) {
-      setAcceptedLegalSign(false);
-      setAcceptedLegalVisado(false);
-    }
-  };
+      const ok = await manejarAccionDocumento(id, accion, extraData);
+
+      if (ok) {
+        setAcceptedLegalSign(false);
+        setAcceptedLegalVisado(false);
+        setSignError("");
+        setVisadoError("");
+      }
+    },
+    [
+      acceptedLegalSign,
+      acceptedLegalVisado,
+      manejarAccionDocumento,
+    ]
+  );
+
+  if (!selectedDoc) return null;
 
   return (
     <div className="detail-layout">
@@ -240,10 +383,7 @@ export function DetailView({
         <button
           type="button"
           className="nav-item"
-          onClick={() => {
-            setView("list");
-            setSelectedDoc(null);
-          }}
+          onClick={handleBackToList}
         >
           <span>⬅️</span> Volver a la bandeja
         </button>
@@ -264,6 +404,7 @@ export function DetailView({
             {numeroInterno ? `(${numeroInterno})` : `#${selectedDoc.id}`} ·
             Estado {selectedDoc.status}
           </span>
+
           <span className="detail-topbar-user">
             Hola, <span>{displayName}</span>
           </span>
@@ -277,11 +418,15 @@ export function DetailView({
 
             <div className="detail-meta">
               <p>
-                N° interno: <strong>{numeroInterno || `#${selectedDoc.id}`}</strong> ·
+                N° interno:{" "}
+                <strong>{numeroInterno || `#${selectedDoc.id}`}</strong> ·
                 Estado: <strong>{selectedDoc.status}</strong>
               </p>
               <p>
-                Tipo de trámite: <strong>{tramiteLabel} – {documentoLabel}</strong>
+                Tipo de trámite:{" "}
+                <strong>
+                  {tramiteLabel} – {documentoLabel}
+                </strong>
               </p>
             </div>
 
@@ -327,6 +472,10 @@ export function DetailView({
                     className="btn-main detail-btn-reminder-visado"
                     onClick={handleReenviarVisado}
                     disabled={reenviarLoadingVisado}
+                    style={{
+                      cursor: reenviarLoadingVisado ? "not-allowed" : "pointer",
+                      opacity: reenviarLoadingVisado ? 0.6 : 1,
+                    }}
                   >
                     {reenviarLoadingVisado
                       ? "Reenviando visado..."
@@ -382,6 +531,7 @@ export function DetailView({
                 onChange={setAcceptedLegalSign}
               />
             )}
+
             {signError && (
               <p
                 style={{
@@ -402,6 +552,7 @@ export function DetailView({
                 onChange={setAcceptedLegalVisado}
               />
             )}
+
             {visadoError && (
               <p
                 style={{
@@ -426,60 +577,65 @@ export function DetailView({
                 </p>
               ) : (
                 <ul className="detail-signers-list">
-                  {signers.map((s) => (
-                    <li key={s.id} className="detail-signers-item">
-                      <div>
-                        <div className="detail-signer-main">
-                          {s.name || "Firmante"}
-                        </div>
-                        <div className="detail-signer-sub">
-                          {s.email} · Estado: {s.status}
-                        </div>
-                      </div>
+                  {signers.map((s) => {
+                    const isPendingSigner =
+                      s.status !== "FIRMADO" && s.status !== "RECHAZADO";
 
-                      {s.status !== "FIRMADO" && s.status !== "RECHAZADO" && (
-                        <button
-                          type="button"
-                          className="btn-main"
-                          style={{
-                            padding: "8px 16px",
-                            fontSize: "0.85rem",
-                            backgroundColor: "#3b82f6",
-                            color: "#fff",
-                            border: "none",
-                            borderRadius: 6,
-                            fontWeight: 600,
-                            cursor:
-                              reenviarSignerId === s.id
-                                ? "not-allowed"
-                                : "pointer",
-                            opacity: reenviarSignerId === s.id ? 0.6 : 1,
-                          }}
-                          onClick={() => handleReenviarFirma(s.id)}
-                          disabled={reenviarSignerId === s.id}
-                        >
-                          {reenviarSignerId === s.id
-                            ? "⏳ Enviando..."
-                            : "📧 Enviar recordatorio"}
-                        </button>
-                      )}
+                    return (
+                      <li key={s.id} className="detail-signers-item">
+                        <div>
+                          <div className="detail-signer-main">
+                            {s.name || "Firmante"}
+                          </div>
+                          <div className="detail-signer-sub">
+                            {s.email} · Estado: {s.status}
+                          </div>
+                        </div>
 
-                      {s.status === "FIRMADO" && (
-                        <span
-                          style={{
-                            padding: "6px 12px",
-                            fontSize: "0.8rem",
-                            background: "#dcfce7",
-                            color: "#16a34a",
-                            borderRadius: 6,
-                            fontWeight: 600,
-                          }}
-                        >
-                          ✓ Firmado
-                        </span>
-                      )}
-                    </li>
-                  ))}
+                        {isPendingSigner && (
+                          <button
+                            type="button"
+                            className="btn-main"
+                            style={{
+                              padding: "8px 16px",
+                              fontSize: "0.85rem",
+                              backgroundColor: "#3b82f6",
+                              color: "#fff",
+                              border: "none",
+                              borderRadius: 6,
+                              fontWeight: 600,
+                              cursor:
+                                reenviarSignerId === s.id
+                                  ? "not-allowed"
+                                  : "pointer",
+                              opacity: reenviarSignerId === s.id ? 0.6 : 1,
+                            }}
+                            onClick={() => handleReenviarFirma(s.id)}
+                            disabled={reenviarSignerId === s.id}
+                          >
+                            {reenviarSignerId === s.id
+                              ? "⏳ Enviando..."
+                              : "📧 Enviar recordatorio"}
+                          </button>
+                        )}
+
+                        {s.status === "FIRMADO" && (
+                          <span
+                            style={{
+                              padding: "6px 12px",
+                              fontSize: "0.8rem",
+                              background: "#dcfce7",
+                              color: "#16a34a",
+                              borderRadius: 6,
+                              fontWeight: 600,
+                            }}
+                          >
+                            ✓ Firmado
+                          </span>
+                        )}
+                      </li>
+                    );
+                  })}
                 </ul>
               )}
             </div>
@@ -534,7 +690,7 @@ export function DetailView({
             <div className="detail-history">
               <h3 className="detail-history-title">Historial de acciones</h3>
 
-              {timeline && timeline.events && timeline.events.length > 0 ? (
+              {timeline?.events?.length > 0 ? (
                 <EventList events={timeline.events} />
               ) : (
                 <EventList events={safeEvents} />

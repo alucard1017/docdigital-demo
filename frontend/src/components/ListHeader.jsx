@@ -1,4 +1,5 @@
-import React from "react";
+// src/components/ListHeader.jsx
+import React, { useCallback, useMemo } from "react";
 import { API_BASE_URL } from "../constants";
 
 const API_URL = API_BASE_URL;
@@ -7,13 +8,50 @@ function apiUrl(path) {
   return `${API_URL.replace(/\/+$/, "")}/api${path}`;
 }
 
+const CHIP_BASE_STYLE = {
+  padding: "7px 12px",
+  borderRadius: 999,
+  fontSize: "0.8rem",
+  fontWeight: 700,
+  border: "1px solid transparent",
+  cursor: "pointer",
+  display: "inline-flex",
+  alignItems: "center",
+  gap: 6,
+  whiteSpace: "nowrap",
+  minHeight: 36,
+  transition: "all 0.2s ease",
+};
+
+const CONTROL_BASE_STYLE = {
+  height: 38,
+  padding: "0 12px",
+  borderRadius: 12,
+  border: "1px solid #334155",
+  fontSize: "0.85rem",
+  background: "#0f172a",
+  color: "#e5e7eb",
+  outline: "none",
+  minWidth: 0,
+  boxShadow: "inset 0 1px 0 rgba(255,255,255,0.03)",
+};
+
+const SECTION_CARD_STYLE = {
+  background: "linear-gradient(180deg, rgba(15,23,42,0.92), rgba(2,6,23,0.96))",
+  border: "1px solid rgba(51,65,85,0.7)",
+  borderRadius: 18,
+  padding: 18,
+  marginBottom: 18,
+  boxShadow: "0 14px 34px rgba(2,6,23,0.28)",
+};
+
 export function ListHeader({
   sort,
-  setSort,              // ahora viene del hook ya con lógica de reset page
+  setSort,          // viene del hook con reset de page
   statusFilter,
-  setStatusFilter,       // idem
+  setStatusFilter,  // idem
   search,
-  setSearch,             // maneja estado “en vivo”, el hook hace debounce
+  setSearch,        // estado “en vivo”, el hook hace debounce
   totalFiltrado,
   pendientes,
   visados,
@@ -22,7 +60,21 @@ export function ListHeader({
   onSync,
   token,
 }) {
-  const handleDownloadReport = async () => {
+  const total = useMemo(
+    () =>
+      (Number.isFinite(pendientes) ? pendientes : 0) +
+      (Number.isFinite(visados) ? visados : 0) +
+      (Number.isFinite(firmados) ? firmados : 0) +
+      (Number.isFinite(rechazados) ? rechazados : 0),
+    [pendientes, visados, firmados, rechazados]
+  );
+
+  const handleDownloadReport = useCallback(async () => {
+    if (!token) {
+      alert("No hay sesión activa para descargar el reporte.");
+      return;
+    }
+
     try {
       const res = await fetch(apiUrl("/docs/export/excel"), {
         headers: {
@@ -34,17 +86,22 @@ export function ListHeader({
         let msg = "Error descargando reporte";
         try {
           const data = await res.json();
-          msg = data.message || msg;
-        } catch (_) {}
-        alert(msg);
+          msg = data?.message || msg;
+        } catch (_) {
+          // ignorar parse error, usamos msg por defecto
+        }
+        alert(`❌ ${msg}`);
         return;
       }
 
       const blob = await res.blob();
       const url = window.URL.createObjectURL(blob);
       const a = document.createElement("a");
+
       a.href = url;
-      a.download = `documentos-${new Date().toISOString().slice(0, 10)}.xlsx`;
+      a.download = `documentos-${new Date()
+        .toISOString()
+        .slice(0, 10)}.xlsx`;
       document.body.appendChild(a);
       a.click();
       a.remove();
@@ -53,53 +110,14 @@ export function ListHeader({
       console.error("Error descargando reporte:", err);
       alert("Error de conexión al descargar reporte");
     }
-  };
+  }, [token]);
 
-  const handleClearSearch = () => {
+  const handleClearSearch = useCallback(() => {
     setSearch("");
-  };
-
-  const total = pendientes + visados + firmados + rechazados;
-
-  const chipBase = {
-    padding: "7px 12px",
-    borderRadius: 999,
-    fontSize: "0.8rem",
-    fontWeight: 700,
-    border: "1px solid transparent",
-    cursor: "pointer",
-    display: "inline-flex",
-    alignItems: "center",
-    gap: 6,
-    whiteSpace: "nowrap",
-    minHeight: 36,
-    transition: "all 0.2s ease",
-  };
-
-  const controlStyle = {
-    height: 38,
-    padding: "0 12px",
-    borderRadius: 12,
-    border: "1px solid #334155",
-    fontSize: "0.85rem",
-    background: "#0f172a",
-    color: "#e5e7eb",
-    outline: "none",
-    minWidth: 0,
-    boxShadow: "inset 0 1px 0 rgba(255,255,255,0.03)",
-  };
-
-  const sectionCard = {
-    background: "linear-gradient(180deg, rgba(15,23,42,0.92), rgba(2,6,23,0.96))",
-    border: "1px solid rgba(51,65,85,0.7)",
-    borderRadius: 18,
-    padding: 18,
-    marginBottom: 18,
-    boxShadow: "0 14px 34px rgba(2,6,23,0.28)",
-  };
+  }, [setSearch]);
 
   return (
-    <div style={sectionCard}>
+    <div style={SECTION_CARD_STYLE}>
       {/* Línea superior */}
       <div
         style={{
@@ -132,7 +150,8 @@ export function ListHeader({
               color: "#94a3b8",
             }}
           >
-            Gestiona documentos, revisa estados y accede rápido a las acciones principales.
+            Gestiona documentos, revisa estados y accede rápido a las acciones
+            principales.
           </p>
 
           <p
@@ -210,7 +229,7 @@ export function ListHeader({
           type="button"
           onClick={() => setStatusFilter("TODOS")}
           style={{
-            ...chipBase,
+            ...CHIP_BASE_STYLE,
             background:
               statusFilter === "TODOS"
                 ? "linear-gradient(135deg, #1e293b, #334155)"
@@ -226,7 +245,7 @@ export function ListHeader({
           type="button"
           onClick={() => setStatusFilter("PENDIENTES")}
           style={{
-            ...chipBase,
+            ...CHIP_BASE_STYLE,
             background:
               statusFilter === "PENDIENTES"
                 ? "linear-gradient(135deg, #3730a3, #4f46e5)"
@@ -242,7 +261,7 @@ export function ListHeader({
           type="button"
           onClick={() => setStatusFilter("VISADOS")}
           style={{
-            ...chipBase,
+            ...CHIP_BASE_STYLE,
             background:
               statusFilter === "VISADOS"
                 ? "linear-gradient(135deg, #0f766e, #14b8a6)"
@@ -258,7 +277,7 @@ export function ListHeader({
           type="button"
           onClick={() => setStatusFilter("FIRMADOS")}
           style={{
-            ...chipBase,
+            ...CHIP_BASE_STYLE,
             background:
               statusFilter === "FIRMADOS"
                 ? "linear-gradient(135deg, #166534, #22c55e)"
@@ -274,7 +293,7 @@ export function ListHeader({
           type="button"
           onClick={() => setStatusFilter("RECHAZADOS")}
           style={{
-            ...chipBase,
+            ...CHIP_BASE_STYLE,
             background:
               statusFilter === "RECHAZADOS"
                 ? "linear-gradient(135deg, #b91c1c, #ef4444)"
@@ -316,7 +335,7 @@ export function ListHeader({
           <select
             value={sort}
             onChange={(e) => setSort(e.target.value)}
-            style={{ ...controlStyle, minWidth: 190 }}
+            style={{ ...CONTROL_BASE_STYLE, minWidth: 190 }}
           >
             <option value="title_asc">Título (A → Z)</option>
             <option value="title_desc">Título (Z → A)</option>
@@ -347,7 +366,7 @@ export function ListHeader({
           <select
             value={statusFilter}
             onChange={(e) => setStatusFilter(e.target.value)}
-            style={{ ...controlStyle, minWidth: 160 }}
+            style={{ ...CONTROL_BASE_STYLE, minWidth: 160 }}
           >
             <option value="TODOS">Todos</option>
             <option value="PENDIENTES">Pendientes</option>
@@ -390,7 +409,7 @@ export function ListHeader({
               onChange={(e) => setSearch(e.target.value)}
               placeholder="Título, empresa o firmante..."
               style={{
-                ...controlStyle,
+                ...CONTROL_BASE_STYLE,
                 width: "100%",
                 paddingRight: search ? 32 : 12,
               }}

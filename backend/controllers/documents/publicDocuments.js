@@ -4,11 +4,35 @@ const { getSignedUrl } = require("../../services/storageR2");
 const { sellarPdfConQr } = require("../../services/pdfSeal");
 const { logAudit } = require("../../utils/auditLog");
 
+/* ================================
+   Utilidades comunes
+   ================================ */
+
+function isExpired(dateLike) {
+  if (!dateLike) return false;
+  try {
+    return new Date(dateLike) < new Date();
+  } catch {
+    return false;
+  }
+}
+
+function formatDateSafe(dateLike) {
+  try {
+    return new Date(dateLike).toISOString();
+  } catch {
+    return null;
+  }
+}
+
 /**
  * Helper: busca documento + firmante asociado usando signature_token del DOCUMENTO.
  * Opcionalmente filtra por email (para amarrar firmante concreto).
  */
-async function getDocumentAndSignerByDocumentToken(documentToken, emailFromQuery = null) {
+async function getDocumentAndSignerByDocumentToken(
+  documentToken,
+  emailFromQuery = null
+) {
   const docRes = await db.query(
     `
     SELECT
@@ -82,10 +106,7 @@ async function getPublicDocBySignerToken(req, res) {
 
     const row = result.rows[0];
 
-    if (
-      row.signature_token_expires_at &&
-      row.signature_token_expires_at < new Date()
-    ) {
+    if (isExpired(row.signature_token_expires_at)) {
       return res.status(400).json({
         message: "El enlace público ha expirado. Solicita uno nuevo al emisor.",
       });
@@ -114,7 +135,8 @@ async function getPublicDocBySignerToken(req, res) {
         firmante_nombre: row.firmante_nombre,
         firmante_run: row.firmante_run,
         numero_contrato_interno: row.numero_contrato_interno,
-        numero_contrato: row.numero_contrato || row.numero_contrato_interno || "",
+        numero_contrato:
+          row.numero_contrato || row.numero_contrato_interno || "",
         pdf_final_url: row.pdf_final_url || null,
         pdf_original_url: row.pdf_original_url || null,
       },
@@ -137,38 +159,37 @@ async function getPublicDocBySignerToken(req, res) {
    GET: Datos + PDF usando signature_token del DOCUMENTO
    (enlace genérico, sin firmante concreto)
    ================================ */
-// backend/controllers/documents/publicDocuments.js (solo esta función)
 async function getPublicDocByDocumentToken(req, res) {
   try {
     const { token } = req.params;
 
     const result = await db.query(
       `
-SELECT 
-  d.id,
-  d.title,
-  d.status,
-  d.file_path,
-  d.pdf_final_url,
-  d.pdf_original_url,
-  d.destinatario_nombre,
-  d.empresa_rut,
-  d.requires_visado,
-  d.signature_status,
-  d.signature_token_expires_at,
-  d.firmante_nombre,
-  d.firmante_run,
-  d.numero_contrato_interno,
-  d.visador_nombre,
-  COALESCE(
-    d.numero_contrato_interno,
-    d.metadata->>'numero_contrato',
-    d.metadata->>'numero_interno',
-    d.metadata->>'contract_number',
-    d.metadata->>'codigo_contrato'
-  ) AS numero_contrato
-FROM documents d
-WHERE d.signature_token = $1
+      SELECT 
+        d.id,
+        d.title,
+        d.status,
+        d.file_path,
+        d.pdf_final_url,
+        d.pdf_original_url,
+        d.destinatario_nombre,
+        d.empresa_rut,
+        d.requires_visado,
+        d.signature_status,
+        d.signature_token_expires_at,
+        d.firmante_nombre,
+        d.firmante_run,
+        d.numero_contrato_interno,
+        d.visador_nombre,
+        COALESCE(
+          d.numero_contrato_interno,
+          d.metadata->>'numero_contrato',
+          d.metadata->>'numero_interno',
+          d.metadata->>'contract_number',
+          d.metadata->>'codigo_contrato'
+        ) AS numero_contrato
+      FROM documents d
+      WHERE d.signature_token = $1
       `,
       [token]
     );
@@ -181,10 +202,7 @@ WHERE d.signature_token = $1
 
     const doc = result.rows[0];
 
-    if (
-      doc.signature_token_expires_at &&
-      doc.signature_token_expires_at < new Date()
-    ) {
+    if (isExpired(doc.signature_token_expires_at)) {
       return res.status(400).json({
         message: "El enlace público ha expirado. Solicita uno nuevo al emisor.",
       });
@@ -221,6 +239,7 @@ WHERE d.signature_token = $1
           req.headers["user-agent"] || null,
           JSON.stringify({
             source: "public_document_link",
+            opened_at: formatDateSafe(new Date()),
           }),
         ]
       );
@@ -243,7 +262,8 @@ WHERE d.signature_token = $1
         firmante_nombre: doc.firmante_nombre,
         firmante_run: doc.firmante_run,
         numero_contrato_interno: doc.numero_contrato_interno,
-        numero_contrato: doc.numero_contrato || doc.numero_contrato_interno || "",
+        numero_contrato:
+          doc.numero_contrato || doc.numero_contrato_interno || "",
         visador_nombre: doc.visador_nombre,
         pdf_final_url: doc.pdf_final_url || null,
         pdf_original_url: doc.pdf_original_url || null,
@@ -292,10 +312,7 @@ async function publicSignDocument(req, res) {
 
     const row = current.rows[0];
 
-    if (
-      row.signature_token_expires_at &&
-      row.signature_token_expires_at < new Date()
-    ) {
+    if (isExpired(row.signature_token_expires_at)) {
       return res
         .status(400)
         .json({ message: "El enlace de firma ha expirado" });
@@ -593,17 +610,16 @@ async function publicSignDocument(req, res) {
       }
     }
 
-return res.json({
-  ...doc,
-  numero_contrato_interno: doc.numero_contrato_interno,
-  numero_contrato: doc.numero_contrato_interno,
-  file_url: doc.pdf_final_url || doc.pdf_original_url || doc.file_path,
-  documentStatus: newDocStatus,
-  message: allSigned
-    ? "Documento firmado correctamente por todos los firmantes"
-    : "Firma registrada. Aún faltan firmantes por completar la firma",
-});
-
+    return res.json({
+      ...doc,
+      numero_contrato_interno: doc.numero_contrato_interno,
+      numero_contrato: doc.numero_contrato_interno,
+      file_url: doc.pdf_final_url || doc.pdf_original_url || doc.file_path,
+      documentStatus: newDocStatus,
+      message: allSigned
+        ? "Documento firmado correctamente por todos los firmantes"
+        : "Firma registrada. Aún faltan firmantes por completar la firma",
+    });
   } catch (err) {
     console.error("❌ Error firmando documento público:", err);
     return res.status(500).json({ message: "Error interno del servidor" });
@@ -652,10 +668,7 @@ async function publicRejectDocument(req, res) {
 
     const row = current.rows[0];
 
-    if (
-      row.signature_token_expires_at &&
-      row.signature_token_expires_at < new Date()
-    ) {
+    if (isExpired(row.signature_token_expires_at)) {
       return res
         .status(400)
         .json({ message: "El enlace de firma ha expirado" });
@@ -882,10 +895,7 @@ async function publicVisarDocument(req, res) {
 
     const docActual = current.rows[0];
 
-    if (
-      docActual.signature_token_expires_at &&
-      docActual.signature_token_expires_at < new Date()
-    ) {
+    if (isExpired(docActual.signature_token_expires_at)) {
       return res
         .status(400)
         .json({ message: "El enlace de visado ha expirado" });

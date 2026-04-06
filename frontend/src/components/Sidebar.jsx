@@ -1,5 +1,16 @@
 // src/components/Sidebar.jsx
-import React from "react";
+import React, { useCallback, useMemo } from "react";
+
+const OWNER_ID = 7;
+const SUBTLE_TEXT = "#9ca3af";
+
+function buildNavItemClass(active) {
+  return `nav-item${active ? " active" : ""}`;
+}
+
+function SidebarSectionLabel({ children }) {
+  return <h3 className="sidebar-section-label">{children}</h3>;
+}
 
 export function Sidebar({
   user,
@@ -11,8 +22,8 @@ export function Sidebar({
   setStatusFilter,
   logout,
   isAnyAdmin,
+  socketConnected,
 }) {
-  const OWNER_ID = 7;
   const isOwner = user?.id === OWNER_ID;
 
   const showAdminSection = isOwner || isAnyAdmin;
@@ -24,51 +35,106 @@ export function Sidebar({
 
   const totalDocs = Array.isArray(docs) ? docs.length : 0;
   const safePendientes = Number.isFinite(pendientes) ? pendientes : 0;
+  const displayRole = user?.role || "USER";
 
-  const subtleText = "#9ca3af";
+  const navItemBaseStyle = useMemo(
+    () => ({
+      display: "flex",
+      alignItems: "center",
+      gap: 8,
+      padding: "8px 10px",
+      borderRadius: 10,
+      fontSize: "0.82rem",
+      fontWeight: 500,
+      cursor: "pointer",
+      color: SUBTLE_TEXT,
+      transition:
+        "background-color 0.18s ease, color 0.18s ease, transform 0.08s ease",
+      userSelect: "none",
+    }),
+    []
+  );
 
-  const navItemBaseStyle = {
-    display: "flex",
-    alignItems: "center",
-    gap: 8,
-    padding: "8px 10px",
-    borderRadius: 10,
-    fontSize: "0.82rem",
-    fontWeight: 500,
-    cursor: "pointer",
-    color: subtleText,
-    transition:
-      "background-color 0.18s ease, color 0.18s ease, transform 0.08s ease",
-    userSelect: "none",
-  };
+  const handleKeyActivate = useCallback((e, onClick) => {
+    if (e.key === "Enter" || e.key === " ") {
+      e.preventDefault();
+      onClick();
+    }
+  }, []);
 
-  const makeNavItemClass = (isActive) =>
-    `nav-item${isActive ? " active" : ""}`;
+  const handleChangeView = useCallback(
+    (nextView) => {
+      if (typeof setView === "function") {
+        setView(nextView);
+      }
+    },
+    [setView]
+  );
 
-  const renderNavItem = ({
-    active = false,
-    label,
-    icon,
-    title,
-    onClick,
-  }) => (
-    <div
-      className={makeNavItemClass(active)}
-      style={navItemBaseStyle}
-      onClick={onClick}
-      title={title}
-      role="button"
-      tabIndex={0}
-      onKeyDown={(e) => {
-        if (e.key === "Enter" || e.key === " ") {
-          e.preventDefault();
-          onClick();
-        }
-      }}
-    >
-      <span>{icon}</span>
-      <span>{label}</span>
-    </div>
+  const handleChangeStatus = useCallback(
+    (nextStatus) => {
+      if (typeof setStatusFilter === "function") {
+        setStatusFilter(nextStatus);
+      }
+    },
+    [setStatusFilter]
+  );
+
+  const renderNavItem = useCallback(
+    ({
+      active = false,
+      label,
+      icon,
+      title,
+      onClick,
+      ariaCurrent = "false",
+      badge = null,
+    }) => (
+      <div
+        className={buildNavItemClass(active)}
+        style={navItemBaseStyle}
+        onClick={onClick}
+        title={title}
+        role="button"
+        tabIndex={0}
+        aria-current={active ? "page" : ariaCurrent}
+        onKeyDown={(e) => handleKeyActivate(e, onClick)}
+      >
+        <span
+          aria-hidden="true"
+          style={{
+            width: 18,
+            display: "inline-flex",
+            justifyContent: "center",
+            flexShrink: 0,
+          }}
+        >
+          {icon}
+        </span>
+
+        <span style={{ flex: 1, minWidth: 0 }}>{label}</span>
+
+        {badge !== null && badge !== undefined && badge !== "" && (
+          <span
+            style={{
+              marginLeft: "auto",
+              padding: "2px 8px",
+              borderRadius: 999,
+              fontSize: "0.68rem",
+              fontWeight: 700,
+              background: "rgba(148,163,184,0.12)",
+              border: "1px solid rgba(148,163,184,0.18)",
+              color: "#e5e7eb",
+              lineHeight: 1.2,
+              flexShrink: 0,
+            }}
+          >
+            {badge}
+          </span>
+        )}
+      </div>
+    ),
+    [handleKeyActivate, navItemBaseStyle]
   );
 
   return (
@@ -90,9 +156,22 @@ export function Sidebar({
             background:
               "conic-gradient(from 180deg at 50% 50%, #4f46e5 0deg, #0ea5e9 90deg, #22c55e 210deg, #4f46e5 360deg)",
             boxShadow: "0 8px 25px rgba(15,23,42,0.9)",
+            position: "relative",
+            overflow: "hidden",
           }}
-        />
-        <div>
+          aria-hidden="true"
+        >
+          <div
+            style={{
+              position: "absolute",
+              inset: 1,
+              borderRadius: 9,
+              border: "1px solid rgba(255,255,255,0.12)",
+            }}
+          />
+        </div>
+
+        <div style={{ minWidth: 0 }}>
           <div
             style={{
               fontWeight: 800,
@@ -104,13 +183,44 @@ export function Sidebar({
           >
             VeriFirma
           </div>
+
           <div
             style={{
               fontSize: "0.74rem",
-              color: subtleText,
+              color: SUBTLE_TEXT,
+              display: "flex",
+              alignItems: "center",
+              gap: 6,
             }}
           >
-            Panel principal
+            <span>Panel principal</span>
+
+            {typeof socketConnected === "boolean" && (
+              <>
+                <span style={{ opacity: 0.45 }}>•</span>
+                <span
+                  style={{
+                    display: "inline-flex",
+                    alignItems: "center",
+                    gap: 5,
+                    color: socketConnected ? "#86efac" : "#fca5a5",
+                  }}
+                >
+                  <span
+                    style={{
+                      width: 6,
+                      height: 6,
+                      borderRadius: "999px",
+                      background: socketConnected ? "#22c55e" : "#ef4444",
+                      boxShadow: socketConnected
+                        ? "0 0 0 4px rgba(34,197,94,0.18)"
+                        : "0 0 0 4px rgba(239,68,68,0.16)",
+                    }}
+                  />
+                  {socketConnected ? "En línea" : "Sin conexión"}
+                </span>
+              </>
+            )}
           </div>
         </div>
       </div>
@@ -137,7 +247,7 @@ export function Sidebar({
             alignItems: "flex-start",
           }}
         >
-          <div>
+          <div style={{ minWidth: 0 }}>
             <div
               style={{
                 fontWeight: 700,
@@ -145,18 +255,37 @@ export function Sidebar({
                 fontSize: "0.72rem",
                 textTransform: "uppercase",
                 letterSpacing: "0.08em",
-                color: subtleText,
+                color: SUBTLE_TEXT,
               }}
             >
               Sesión activa
             </div>
-            <div style={{ fontWeight: 600 }}>{user?.name || "Usuario"}</div>
+
             <div
               style={{
-                opacity: 0.8,
-                fontSize: "0.7rem",
-                color: subtleText,
+                fontWeight: 600,
+                fontSize: "0.84rem",
+                color: "#f8fafc",
+                overflow: "hidden",
+                textOverflow: "ellipsis",
+                whiteSpace: "nowrap",
               }}
+              title={user?.name || "Usuario"}
+            >
+              {user?.name || "Usuario"}
+            </div>
+
+            <div
+              style={{
+                opacity: 0.82,
+                fontSize: "0.7rem",
+                color: SUBTLE_TEXT,
+                marginTop: 2,
+                overflow: "hidden",
+                textOverflow: "ellipsis",
+                whiteSpace: "nowrap",
+              }}
+              title={user?.email || "usuario@correo.com"}
             >
               {user?.email || "usuario@correo.com"}
             </div>
@@ -175,7 +304,10 @@ export function Sidebar({
               display: "inline-flex",
               alignItems: "center",
               gap: 4,
+              flexShrink: 0,
+              maxWidth: 120,
             }}
+            title={displayRole}
           >
             <span
               style={{
@@ -184,22 +316,32 @@ export function Sidebar({
                 borderRadius: "999px",
                 backgroundColor: "#22c55e",
                 boxShadow: "0 0 0 4px rgba(34,197,94,0.25)",
+                flexShrink: 0,
               }}
             />
-            <span>{user?.role || "USER"}</span>
+            <span
+              style={{
+                overflow: "hidden",
+                textOverflow: "ellipsis",
+                whiteSpace: "nowrap",
+              }}
+            >
+              {displayRole}
+            </span>
           </div>
         </div>
       </div>
 
       {/* Bandeja */}
-      <h3 className="sidebar-section-label">Bandeja</h3>
+      <SidebarSectionLabel>Bandeja</SidebarSectionLabel>
 
       {renderNavItem({
         active: view === "list",
         icon: "📄",
         label: "Mis trámites",
         title: "Ver todos los trámites",
-        onClick: () => setView("list"),
+        onClick: () => handleChangeView("list"),
+        badge: totalDocs > 0 ? totalDocs : null,
       })}
 
       {renderNavItem({
@@ -207,18 +349,19 @@ export function Sidebar({
         icon: "📤",
         label: "Crear nuevo trámite",
         title: "Crear nuevo trámite de firma",
-        onClick: () => setView("upload"),
+        onClick: () => handleChangeView("upload"),
       })}
 
       {/* Atajos */}
-      <h3 className="sidebar-section-label">Atajos</h3>
+      <SidebarSectionLabel>Atajos</SidebarSectionLabel>
 
       {renderNavItem({
         active: statusFilter === "ONLY_PENDIENTES",
         icon: "⏳",
         label: "Solo pendientes",
         title: "Mostrar solo documentos pendientes",
-        onClick: () => setStatusFilter("ONLY_PENDIENTES"),
+        onClick: () => handleChangeStatus("ONLY_PENDIENTES"),
+        badge: safePendientes > 0 ? safePendientes : null,
       })}
 
       {renderNavItem({
@@ -226,7 +369,7 @@ export function Sidebar({
         icon: "✅",
         label: "Solo firmados",
         title: "Mostrar solo documentos firmados",
-        onClick: () => setStatusFilter("ONLY_FIRMADOS"),
+        onClick: () => handleChangeStatus("ONLY_FIRMADOS"),
       })}
 
       {renderNavItem({
@@ -234,20 +377,20 @@ export function Sidebar({
         icon: "❌",
         label: "Solo rechazados",
         title: "Mostrar solo documentos rechazados",
-        onClick: () => setStatusFilter("ONLY_RECHAZADOS"),
+        onClick: () => handleChangeStatus("ONLY_RECHAZADOS"),
       })}
 
       {/* Reportes */}
       {showAdminSection && (
         <>
-          <h3 className="sidebar-section-label">Reportes</h3>
+          <SidebarSectionLabel>Reportes</SidebarSectionLabel>
 
           {renderNavItem({
             active: view === "dashboard",
             icon: "📊",
             label: "Dashboard",
             title: "Dashboard administrativo",
-            onClick: () => setView("dashboard"),
+            onClick: () => handleChangeView("dashboard"),
           })}
 
           {renderNavItem({
@@ -255,7 +398,7 @@ export function Sidebar({
             icon: "📧",
             label: "Métricas de email",
             title: "Ver métricas de email",
-            onClick: () => setView("email-metrics"),
+            onClick: () => handleChangeView("email-metrics"),
           })}
 
           {renderNavItem({
@@ -263,7 +406,7 @@ export function Sidebar({
             icon: "📈",
             label: "Analytics empresa",
             title: "Analytics de la empresa",
-            onClick: () => setView("company-analytics"),
+            onClick: () => handleChangeView("company-analytics"),
           })}
 
           {renderNavItem({
@@ -271,20 +414,20 @@ export function Sidebar({
             icon: "📋",
             label: "Plantillas",
             title: "Gestionar plantillas de documentos",
-            onClick: () => setView("templates"),
+            onClick: () => handleChangeView("templates"),
           })}
         </>
       )}
 
       {/* Cuenta */}
-      <h3 className="sidebar-section-label">Cuenta</h3>
+      <SidebarSectionLabel>Cuenta</SidebarSectionLabel>
 
       {renderNavItem({
         active: view === "pricing",
         icon: "💳",
         label: "Planes y facturación",
         title: "Ver planes y facturación",
-        onClick: () => setView("pricing"),
+        onClick: () => handleChangeView("pricing"),
       })}
 
       {renderNavItem({
@@ -292,20 +435,20 @@ export function Sidebar({
         icon: "👤",
         label: "Mi perfil",
         title: "Editar tu perfil",
-        onClick: () => setView("profile"),
+        onClick: () => handleChangeView("profile"),
       })}
 
       {/* Administración */}
       {showAdminSection && (
         <>
-          <h3 className="sidebar-section-label">Administración</h3>
+          <SidebarSectionLabel>Administración</SidebarSectionLabel>
 
           {renderNavItem({
             active: view === "users",
             icon: "👥",
             label: "Usuarios",
             title: "Gestionar usuarios de la empresa",
-            onClick: () => setView("users"),
+            onClick: () => handleChangeView("users"),
           })}
 
           {renderNavItem({
@@ -313,7 +456,7 @@ export function Sidebar({
             icon: "🔔",
             label: "Recordatorios",
             title: "Configurar recordatorios automáticos",
-            onClick: () => setView("reminders-config"),
+            onClick: () => handleChangeView("reminders-config"),
           })}
 
           {isAdminGlobalOrOwner && (
@@ -323,7 +466,7 @@ export function Sidebar({
                 icon: "🏢",
                 label: "Empresas",
                 title: "Gestionar empresas",
-                onClick: () => setView("companies"),
+                onClick: () => handleChangeView("companies"),
               })}
 
               {renderNavItem({
@@ -331,7 +474,7 @@ export function Sidebar({
                 icon: "⚙️",
                 label: "Estado sistema",
                 title: "Estado del sistema",
-                onClick: () => setView("status"),
+                onClick: () => handleChangeView("status"),
               })}
 
               {renderNavItem({
@@ -339,7 +482,7 @@ export function Sidebar({
                 icon: "📜",
                 label: "Auditoría negocio",
                 title: "Auditoría de negocio",
-                onClick: () => setView("audit-logs"),
+                onClick: () => handleChangeView("audit-logs"),
               })}
 
               {renderNavItem({
@@ -347,14 +490,14 @@ export function Sidebar({
                 icon: "🔐",
                 label: "Auth logs",
                 title: "Logs de autenticación",
-                onClick: () => setView("auth-logs"),
+                onClick: () => handleChangeView("auth-logs"),
               })}
             </>
           )}
         </>
       )}
 
-      {/* Footer */}
+      {/* Footer métricas rápidas */}
       <div
         style={{
           marginTop: "auto",
@@ -362,19 +505,52 @@ export function Sidebar({
           padding: 10,
           borderRadius: 12,
           background: "#020617",
-          color: subtleText,
+          color: SUBTLE_TEXT,
           fontSize: "0.7rem",
           border: "1px solid #1f2937",
           boxShadow: "0 10px 26px rgba(15,23,42,0.8)",
         }}
       >
-        <div style={{ marginBottom: 4 }}>
-          Trámites totales:{" "}
+        <div
+          style={{
+            display: "flex",
+            justifyContent: "space-between",
+            gap: 8,
+            marginBottom: 6,
+          }}
+        >
+          <span>Trámites totales</span>
           <strong style={{ color: "#e5e7eb" }}>{totalDocs}</strong>
         </div>
-        <div>
-          Pendientes hoy:{" "}
+
+        <div
+          style={{
+            display: "flex",
+            justifyContent: "space-between",
+            gap: 8,
+            marginBottom: 8,
+          }}
+        >
+          <span>Pendientes hoy</span>
           <strong style={{ color: "#fbbf24" }}>{safePendientes}</strong>
+        </div>
+
+        <div
+          style={{
+            height: 1,
+            background: "rgba(148,163,184,0.12)",
+            marginBlock: 8,
+          }}
+        />
+
+        <div
+          style={{
+            fontSize: "0.68rem",
+            color: "#94a3b8",
+            lineHeight: 1.5,
+          }}
+        >
+          Gestiona envíos, seguimiento y firma desde una sola bandeja.
         </div>
       </div>
 
@@ -384,6 +560,7 @@ export function Sidebar({
         label: "Cerrar sesión",
         title: "Cerrar sesión",
         onClick: logout,
+        ariaCurrent: "false",
       })}
     </aside>
   );

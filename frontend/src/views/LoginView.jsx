@@ -1,6 +1,28 @@
 // src/views/LoginView.jsx
 import React, { useState } from "react";
 
+const baseInputStyle = {
+  width: "100%",
+  borderRadius: 999,
+  border: "1px solid rgba(148,163,184,0.7)",
+  padding: "9px 14px",
+  fontSize: "0.9rem",
+  outline: "none",
+  background:
+    "linear-gradient(145deg,#020617,#020617 40%,#020617 100%)",
+  color: "#e5e7eb",
+  transition:
+    "border-color 0.16s ease, box-shadow 0.16s ease, transform 0.08s ease",
+};
+
+const labelStyle = {
+  fontWeight: 600,
+  fontSize: "0.8rem",
+  display: "block",
+  marginBottom: 6,
+  color: "#e5e7eb",
+};
+
 export function LoginView({
   identifier,
   setIdentifier,
@@ -21,6 +43,23 @@ export function LoginView({
   const handleGoToRegister = () => {
     window.location.href = "/register";
   };
+
+  const handleGoToForgot = () => {
+    window.location.href = "/forgot-password";
+  };
+
+  const applyFocusStyle = (e) => {
+    e.target.style.borderColor = "#4f46e5";
+    e.target.style.boxShadow =
+      "0 0 0 1px rgba(79,70,229,0.7),0 10px 25px rgba(15,23,42,0.85)";
+  };
+
+  const resetFocusStyle = (e) => {
+    e.target.style.borderColor = "rgba(148,163,184,0.7)";
+    e.target.style.boxShadow = "none";
+  };
+
+  const isErrorMessage = message && message.includes("❌");
 
   return (
     <>
@@ -99,13 +138,13 @@ export function LoginView({
                 marginBottom: 12,
                 padding: "8px 10px",
                 borderRadius: 10,
-                border: message.includes("❌")
+                border: isErrorMessage
                   ? "1px solid rgba(248,113,113,0.7)"
                   : "1px solid rgba(52,211,153,0.7)",
-                background: message.includes("❌")
+                background: isErrorMessage
                   ? "rgba(127,29,29,0.4)"
                   : "rgba(6,95,70,0.35)",
-                color: message.includes("❌") ? "#fecaca" : "#bbf7d0",
+                color: isErrorMessage ? "#fecaca" : "#bbf7d0",
                 fontSize: "0.85rem",
                 textAlign: "center",
               }}
@@ -121,17 +160,7 @@ export function LoginView({
             style={{ display: "grid", gap: 14 }}
           >
             <div>
-              <label
-                style={{
-                  fontWeight: 600,
-                  fontSize: "0.8rem",
-                  display: "block",
-                  marginBottom: 6,
-                  color: "#e5e7eb",
-                }}
-              >
-                RUN / correo electrónico
-              </label>
+              <label style={labelStyle}>RUN / correo electrónico</label>
               <input
                 value={identifier}
                 onChange={(e) => setIdentifier(e.target.value)}
@@ -139,43 +168,14 @@ export function LoginView({
                 required
                 autoFocus
                 autoComplete="username"
-                style={{
-                  width: "100%",
-                  borderRadius: 999,
-                  border: "1px solid rgba(148,163,184,0.7)",
-                  padding: "9px 14px",
-                  fontSize: "0.9rem",
-                  outline: "none",
-                  background:
-                    "linear-gradient(145deg,#020617,#020617 40%,#020617 100%)",
-                  color: "#e5e7eb",
-                  transition:
-                    "border-color 0.16s ease, box-shadow 0.16s ease, transform 0.08s ease",
-                }}
-                onFocus={(e) => {
-                  e.target.style.borderColor = "#4f46e5";
-                  e.target.style.boxShadow =
-                    "0 0 0 1px rgba(79,70,229,0.7),0 10px 25px rgba(15,23,42,0.85)";
-                }}
-                onBlur={(e) => {
-                  e.target.style.borderColor = "rgba(148,163,184,0.7)";
-                  e.target.style.boxShadow = "none";
-                }}
+                style={baseInputStyle}
+                onFocus={applyFocusStyle}
+                onBlur={resetFocusStyle}
               />
             </div>
 
             <div>
-              <label
-                style={{
-                  fontWeight: 600,
-                  fontSize: "0.8rem",
-                  display: "block",
-                  marginBottom: 6,
-                  color: "#e5e7eb",
-                }}
-              >
-                Contraseña
-              </label>
+              <label style={labelStyle}>Contraseña</label>
               <div style={{ position: "relative" }}>
                 <input
                   type={showPassword ? "text" : "password"}
@@ -184,27 +184,11 @@ export function LoginView({
                   required
                   autoComplete="current-password"
                   style={{
-                    width: "100%",
-                    borderRadius: 999,
-                    border: "1px solid rgba(148,163,184,0.7)",
+                    ...baseInputStyle,
                     padding: "9px 90px 9px 14px",
-                    fontSize: "0.9rem",
-                    outline: "none",
-                    background:
-                      "linear-gradient(145deg,#020617,#020617 40%,#020617 100%)",
-                    color: "#e5e7eb",
-                    transition:
-                      "border-color 0.16s ease, box-shadow 0.16s ease, transform 0.08s ease",
                   }}
-                  onFocus={(e) => {
-                    e.target.style.borderColor = "#4f46e5";
-                    e.target.style.boxShadow =
-                      "0 0 0 1px rgba(79,70,229,0.7),0 10px 25px rgba(15,23,42,0.85)";
-                  }}
-                  onBlur={(e) => {
-                    e.target.style.borderColor = "rgba(148,163,184,0.7)";
-                    e.target.style.boxShadow = "none";
-                  }}
+                  onFocus={applyFocusStyle}
+                  onBlur={resetFocusStyle}
                 />
                 <button
                   type="button"
@@ -231,7 +215,7 @@ export function LoginView({
               </div>
             </div>
 
-            {/* Remember me */}
+            {/* Remember me + forgot */}
             <div
               style={{
                 display: "flex",
@@ -270,7 +254,7 @@ export function LoginView({
 
               <button
                 type="button"
-                onClick={() => (window.location.href = "/forgot-password")}
+                onClick={handleGoToForgot}
                 style={{
                   background: "none",
                   border: "none",
@@ -307,7 +291,7 @@ export function LoginView({
             </button>
           </form>
 
-          {/* Links secundarios + seguridad */}
+          {/* Links secundarios + ayuda */}
           <div
             style={{
               marginTop: 14,
@@ -371,7 +355,7 @@ export function LoginView({
             </div>
           )}
 
-          {/* Microcopy + link a modal */}
+          {/* Microcopy seguridad */}
           <div
             style={{
               marginTop: 14,

@@ -30,6 +30,33 @@ function pickFirstNonEmpty(...values) {
   return "";
 }
 
+function classifyPublicError(error) {
+  if (!error) return { type: "generic", message: "" };
+
+  const text = String(error).toLowerCase();
+
+  if (text.includes("expir") || text.includes("expired")) {
+    return {
+      type: "expired",
+      message:
+        "Este enlace ya no es válido. Por seguridad, los enlaces de firma tienen una duración limitada. Solicita un nuevo enlace a la empresa que te envió el documento.",
+    };
+  }
+
+  if (text.includes("token") || text.includes("inválido") || text.includes("invalid")) {
+    return {
+      type: "invalid",
+      message:
+        "No pudimos validar este enlace de acceso. Verifica que lo hayas abierto completo desde tu correo o solicita un nuevo enlace.",
+    };
+  }
+
+  return {
+    type: "generic",
+    message: String(error),
+  };
+}
+
 export function PublicSignView({
   publicSignLoading,
   publicSignError,
@@ -279,6 +306,11 @@ export function PublicSignView({
     visadoDone,
   ]);
 
+  const classifiedError = useMemo(
+    () => classifyPublicError(publicSignError),
+    [publicSignError]
+  );
+
   function getDefaultErrorMessage() {
     return isVisado
       ? "No se pudo registrar el visado."
@@ -403,6 +435,13 @@ export function PublicSignView({
     setRejectError("");
   }
 
+  const showCompletedInfo =
+    !canActOnDocument &&
+    document &&
+    !publicSignLoading &&
+    !publicSignError &&
+    (docFullySigned || alreadySignedByThisSigner || docRejected || visadoDone);
+
   return (
     <div className="public-sign-page">
       <div className="public-sign-shell">
@@ -472,16 +511,18 @@ export function PublicSignView({
               No se pudo cargar el documento
             </div>
             <div className="public-sign-message-card__text">
-              {publicSignError}
+              {classifiedError.message}
             </div>
-            <button
-              type="button"
-              className="public-sign-button public-sign-button--secondary public-sign-button--auto"
-              onClick={() => cargarFirmaPublica(publicSignToken)}
-              disabled={publicSignLoading}
-            >
-              Reintentar carga
-            </button>
+            {classifiedError.type === "generic" && (
+              <button
+                type="button"
+                className="public-sign-button public-sign-button--secondary public-sign-button--auto"
+                onClick={() => cargarFirmaPublica(publicSignToken)}
+                disabled={publicSignLoading}
+              >
+                Reintentar carga
+              </button>
+            )}
           </div>
         )}
 
@@ -491,7 +532,9 @@ export function PublicSignView({
               <div className="public-sign-document-panel__header">
                 <div>
                   <div className="public-sign-section-label">Documento</div>
-                  <div className="public-sign-document-title">{documentTitle}</div>
+                  <div className="public-sign-document-title">
+                    {documentTitle}
+                  </div>
                 </div>
 
                 {pdfUrl && (
@@ -521,7 +564,9 @@ export function PublicSignView({
             <aside className="public-sign-sidebar">
               <div className="public-sign-summary">
                 <div className="public-sign-section-label">Resumen</div>
-                <div className="public-sign-summary__title">{documentTitle}</div>
+                <div className="public-sign-summary__title">
+                  {documentTitle}
+                </div>
                 <div className="public-sign-summary__text">
                   Abre el documento completo en una nueva pestaña, revisa todo
                   su contenido y luego vuelve a esta página para firmar o rechazar.
@@ -531,7 +576,9 @@ export function PublicSignView({
               <div className="public-sign-meta-grid">
                 <div className="public-sign-meta-card">
                   <div className="public-sign-meta-card__label">Empresa</div>
-                  <div className="public-sign-meta-card__value">{companyName}</div>
+                  <div className="public-sign-meta-card__value">
+                    {companyName}
+                  </div>
                   <div className="public-sign-meta-card__subvalue">
                     RUT: {companyRut}
                   </div>
@@ -551,12 +598,37 @@ export function PublicSignView({
 
                 {!isVisado && signer && (
                   <div className="public-sign-meta-card">
-                    <div className="public-sign-meta-card__label">Firmando como</div>
-                    <div className="public-sign-meta-card__value">{signerName}</div>
-                    <div className="public-sign-meta-card__subvalue">{signerEmail}</div>
+                    <div className="public-sign-meta-card__label">
+                      Firmando como
+                    </div>
+                    <div className="public-sign-meta-card__value">
+                      {signerName}
+                    </div>
+                    <div className="public-sign-meta-card__subvalue">
+                      {signerEmail}
+                    </div>
                   </div>
                 )}
               </div>
+
+              {showCompletedInfo && (
+                <div className="public-sign-message-card public-sign-message-card--info">
+                  <div className="public-sign-message-card__title">
+                    Este enlace ya no requiere acción
+                  </div>
+                  <div className="public-sign-message-card__text">
+                    {docRejected &&
+                      "Este documento fue rechazado y el flujo de firma se encuentra cerrado."}
+                    {(docFullySigned || alreadySignedByThisSigner) &&
+                      !docRejected &&
+                      "Este documento ya está firmado. No puedes realizar nuevas acciones desde este enlace."}
+                    {visadoDone &&
+                      !docRejected &&
+                      !docFullySigned &&
+                      "El visado para este documento ya fue procesado."}
+                  </div>
+                </div>
+              )}
 
               {canActOnDocument && (
                 <>
@@ -570,8 +642,16 @@ export function PublicSignView({
                   />
 
                   {legalError && (
-                    <div className="public-sign-inline-error">{legalError}</div>
+                    <div className="public-sign-inline-error">
+                      {legalError}
+                    </div>
                   )}
+
+                  <p className="public-sign-helper-text">
+                    Al continuar, registrarás tu{" "}
+                    {isVisado ? "visado" : "firma electrónica"} sobre este
+                    documento. Esta acción no se puede deshacer.
+                  </p>
                 </>
               )}
 
@@ -614,7 +694,8 @@ export function PublicSignView({
                   </h2>
 
                   <p className="public-sign-reject-card__text">
-                    Indica el motivo del rechazo.
+                    Indica el motivo del rechazo. Este motivo puede ser
+                    compartido con la empresa que te envió el documento.
                   </p>
 
                   <textarea
@@ -624,10 +705,19 @@ export function PublicSignView({
                     className="public-sign-textarea"
                     placeholder="Escribe aquí el motivo del rechazo..."
                     disabled={rejecting}
+                    aria-invalid={rejectError ? "true" : "false"}
+                    aria-describedby={
+                      rejectError ? "public-sign-reject-error" : undefined
+                    }
                   />
 
                   {rejectError && (
-                    <div className="public-sign-inline-error">{rejectError}</div>
+                    <div
+                      id="public-sign-reject-error"
+                      className="public-sign-inline-error"
+                    >
+                      {rejectError}
+                    </div>
                   )}
 
                   <div className="public-sign-reject-actions">

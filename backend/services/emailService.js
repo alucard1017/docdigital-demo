@@ -6,15 +6,33 @@ const { uploadBufferToS3, getSignedUrl } = require("./storageR2");
 
 console.log("📬 [EMAIL] Cargando emailService.js (Brevo API HTTP)");
 
-const PUBLIC_VERIFY_BASE_URL =
-  process.env.PUBLIC_VERIFY_URL || "https://app.verifirma.cl/verificar";
+/* ===================================
+   Configuración base de URLs
+   =================================== */
 
-const DASHBOARD_BASE_URL =
-  process.env.DASHBOARD_URL || "https://app.verifirma.cl";
+function normalizeUrl(value, fallback = "") {
+  const raw = String(value || fallback || "").trim();
+  if (!raw) return "";
+  // Forzamos https si el valor no incluye protocolo
+  if (!/^https?:\/\//i.test(raw)) {
+    return `https://${raw.replace(/^\/+/, "")}`;
+  }
+  return raw;
+}
 
-/* ================================
+const PUBLIC_VERIFY_BASE_URL = normalizeUrl(
+  process.env.PUBLIC_VERIFY_URL,
+  "https://app.verifirma.cl/verificar"
+);
+
+const DASHBOARD_BASE_URL = normalizeUrl(
+  process.env.DASHBOARD_URL,
+  "https://app.verifirma.cl"
+);
+
+/* ===================================
    Utilidades
-   ================================ */
+   =================================== */
 
 async function generateQrImageUrl(targetUrl) {
   if (!targetUrl) return "";
@@ -37,8 +55,31 @@ async function generateQrImageUrl(targetUrl) {
   }
 }
 
+function formatDateCL(dateLike) {
+  if (!dateLike) return "Fecha no disponible";
+  try {
+    return new Date(dateLike).toLocaleString("es-CL");
+  } catch {
+    return String(dateLike);
+  }
+}
+
+function safeSubject(prefix, title) {
+  const cleanTitle = String(title || "").trim() || "Documento";
+  return `${prefix}: ${cleanTitle}`.slice(0, 255);
+}
+
+function safeName(name, fallback = "") {
+  const text = String(name || "").trim();
+  return text || fallback;
+}
+
+/* ===================================
+   Wrapper genérico de envío
+   =================================== */
+
 // Wrapper genérico para enviar HTML usando Brevo HTTP
-// Mejorado: logging detallado y manejo de errores
+// con logging detallado y tracking en BD
 async function sendEmail({
   to,
   subject,
@@ -47,20 +88,29 @@ async function sendEmail({
   firmanteId = null,
 }) {
   const trackingId = crypto.randomUUID();
+  const cleanTo = String(to || "").trim();
 
   console.log("📬 [EMAIL] Intentando enviar email:", {
-    to,
+    to: cleanTo,
     subject,
     documentoId,
     firmanteId,
     trackingId,
   });
 
+  if (!cleanTo) {
+    console.error("❌ [EMAIL] Envío cancelado: destinatario vacío", {
+      subject,
+      documentoId,
+      firmanteId,
+      trackingId,
+    });
+    return false;
+  }
+
   try {
-    // Se asume que sendEmailHttp devuelve un objeto:
-    // { ok: boolean, status: number|null, data: any, error: string|null }
     const result = await sendEmailHttp({
-      to,
+      to: cleanTo,
       subject,
       html,
       headers: {
@@ -74,7 +124,7 @@ async function sendEmail({
 
     if (!result || result.ok !== true) {
       console.error("❌ [EMAIL] Falló el envío (Brevo HTTP):", {
-        to,
+        to: cleanTo,
         subject,
         documentoId,
         firmanteId,
@@ -87,7 +137,7 @@ async function sendEmail({
     }
 
     console.log("✅ [EMAIL] Envío aceptado por Brevo:", {
-      to,
+      to: cleanTo,
       subject,
       documentoId,
       firmanteId,
@@ -109,10 +159,10 @@ async function sendEmail({
              created_at
            )
            VALUES ($1, $2, $3, 'sent', $4, NOW())`,
-          [documentoId, firmanteId || null, to, trackingId]
+          [documentoId, firmanteId || null, cleanTo, trackingId]
         );
         console.log(
-          `📊 [EMAIL] Email tracking registrado (sent) para ${to} - documento ${documentoId}`
+          `📊 [EMAIL] Email tracking registrado (sent) para ${cleanTo} - documento ${documentoId}`
         );
       } catch (err) {
         console.error(
@@ -125,7 +175,7 @@ async function sendEmail({
     return true;
   } catch (err) {
     console.error("❌ [EMAIL] Excepción al enviar email:", {
-      to,
+      to: cleanTo,
       subject,
       documentoId,
       firmanteId,
@@ -138,9 +188,9 @@ async function sendEmail({
   }
 }
 
-/* ================================
+/* ===================================
    CSS base para todos los templates
-   ================================ */
+   =================================== */
 
 const baseStyles = `
   body {
@@ -362,9 +412,9 @@ const baseStyles = `
   }
 `;
 
-/* ================================
+/* ===================================
    Templates
-   ================================ */
+   =================================== */
 
 async function sendSigningInvitation(
   email,
@@ -380,7 +430,7 @@ async function sendSigningInvitation(
     firmanteId = null,
   } = options;
 
-  const subject = `Invitación a firmar: ${docTitle}`;
+  const subject = safeSubject("Invitación a firmar", docTitle);
 
   const verificationUrl = verificationCode
     ? `${PUBLIC_VERIFY_BASE_URL}?code=${encodeURIComponent(verificationCode)}`
@@ -388,6 +438,8 @@ async function sendSigningInvitation(
 
   const qrUrlTarget = qrTargetUrl || signUrl || verificationUrl;
   const qrImageUrl = await generateQrImageUrl(qrUrlTarget);
+
+  const safeSignerName = safeName(signerName, "");
 
   const html = `
     <!DOCTYPE html>
@@ -406,7 +458,9 @@ async function sendSigningInvitation(
           </div>
 
           <div class="content">
-            <p>Hola ${signerName ? `<strong>${signerName}</strong>` : ""},</p>
+            <p>Hola ${
+              safeSignerName ? `<strong>${safeSignerName}</strong>` : ""
+            },</p>
             <p>
               Has recibido una invitación para <strong>firmar electrónicamente</strong> 
               el siguiente documento:
@@ -434,7 +488,7 @@ async function sendSigningInvitation(
             verificationCode
               ? `
             <div class="info-box">
-              <h4>🔐 Verificación Independiente</h4>
+              <h4>🔐 Verificación independiente</h4>
               <p>
                 Puedes comprobar la validez de este documento en cualquier 
                 momento con el siguiente código:
@@ -481,7 +535,7 @@ async function sendSigningInvitation(
               <a href="${DASHBOARD_BASE_URL}">www.verifirma.cl</a>
             </p>
             <p style="color: #9ca3af; font-size: 10px;">
-              Este es un email automático, por favor no respondas.
+              Este es un correo automático, por favor no respondas.
             </p>
           </div>
         </div>
@@ -506,8 +560,8 @@ async function sendVisadoInvitation(
   options = {}
 ) {
   const { documentoId = null } = options;
-
-  const subject = `Invitación a visar: ${docTitle}`;
+  const subject = safeSubject("Invitación a visar", docTitle);
+  const safeVisadorName = safeName(visadorName, "");
 
   const html = `
     <!DOCTYPE html>
@@ -526,7 +580,9 @@ async function sendVisadoInvitation(
           </div>
 
           <div class="content">
-            <p>Hola ${visadorName ? `<strong>${visadorName}</strong>` : ""},</p>
+            <p>Hola ${
+              safeVisadorName ? `<strong>${safeVisadorName}</strong>` : ""
+            },</p>
             <p>
               Has recibido una solicitud para <strong>visar</strong> el siguiente documento:
             </p>
@@ -557,7 +613,7 @@ async function sendVisadoInvitation(
               <a href="${DASHBOARD_BASE_URL}">www.verifirma.cl</a>
             </p>
             <p style="color: #9ca3af; font-size: 10px;">
-              Este es un email automático, por favor no respondas.
+              Este es un correo automático, por favor no respondas.
             </p>
           </div>
         </div>
@@ -583,11 +639,15 @@ async function sendRejectionNotification(
   fechaRechazo,
   documentId = null
 ) {
-  const subject = `⚠️ Documento rechazado: ${docTitle}`;
-
+  const subject = safeSubject("⚠️ Documento rechazado", docTitle);
   const dashboardUrl = documentId
     ? `${DASHBOARD_BASE_URL}/#/documento/${documentId}`
     : DASHBOARD_BASE_URL;
+
+  const safeEmisorName = safeName(emisorName, "");
+  const safeFirmanteName = safeName(firmanteNombre, "Firmante");
+  const safeFirmanteEmail = String(firmanteEmail || "").trim() || "Correo no disponible";
+  const safeMotivo = String(motivo || "").trim() || "No especificado";
 
   const html = `
     <!DOCTYPE html>
@@ -606,7 +666,9 @@ async function sendRejectionNotification(
           </div>
 
           <div class="content">
-            <p>Hola ${emisorName ? `<strong>${emisorName}</strong>` : ""},</p>
+            <p>Hola ${
+              safeEmisorName ? `<strong>${safeEmisorName}</strong>` : ""
+            },</p>
             <p style="color: #b91c1c; font-weight: 600;">
               El siguiente documento ha sido rechazado por uno de los firmantes:
             </p>
@@ -617,11 +679,9 @@ async function sendRejectionNotification(
           <div class="info-box danger">
             <h4>📋 Detalles del rechazo</h4>
             <ul class="details-list">
-              <li><strong>Rechazado por:</strong> ${firmanteNombre} (${firmanteEmail})</li>
-              <li><strong>Fecha:</strong> ${new Date(fechaRechazo).toLocaleString(
-                "es-CL"
-              )}</li>
-              <li><strong>Motivo:</strong> <em>${motivo || "No especificado"}</em></li>
+              <li><strong>Rechazado por:</strong> ${safeFirmanteName} (${safeFirmanteEmail})</li>
+              <li><strong>Fecha:</strong> ${formatDateCL(fechaRechazo)}</li>
+              <li><strong>Motivo:</strong> <em>${safeMotivo}</em></li>
             </ul>
           </div>
 
@@ -643,7 +703,7 @@ async function sendRejectionNotification(
               <a href="${DASHBOARD_BASE_URL}">www.verifirma.cl</a>
             </p>
             <p style="color: #9ca3af; font-size: 10px;">
-              Este es un email automático, por favor no respondas.
+              Este es un correo automático, por favor no respondas.
             </p>
           </div>
         </div>
@@ -669,9 +729,12 @@ async function sendReminder(
 ) {
   const { documentoId = null, firmanteId = null } = options;
 
-  const subject = `Recordatorio: ${
-    tipo === "VISADO" ? "Visar" : "Firmar"
-  } documento "${docTitle}"`;
+  const subject = safeSubject(
+    `Recordatorio: ${tipo === "VISADO" ? "Visar" : "Firmar"} documento`,
+    docTitle
+  );
+
+  const safeRecipientName = safeName(recipientName, "");
 
   const html = `
     <!DOCTYPE html>
@@ -690,7 +753,9 @@ async function sendReminder(
           </div>
 
           <div class="content">
-            <p>Hola ${recipientName ? `<strong>${recipientName}</strong>` : ""},</p>
+            <p>Hola ${
+              safeRecipientName ? `<strong>${safeRecipientName}</strong>` : ""
+            },</p>
             <p>
               Te recordamos que tienes pendiente ${
                 tipo === "VISADO" ? "visar" : "firmar"
@@ -723,7 +788,7 @@ async function sendReminder(
               <a href="${DASHBOARD_BASE_URL}">www.verifirma.cl</a>
             </p>
             <p style="color: #9ca3af; font-size: 10px;">
-              Este es un email automático, por favor no respondas.
+              Este es un correo automático, por favor no respondas.
             </p>
           </div>
         </div>
@@ -754,11 +819,13 @@ async function sendDestinationNotification(
   empresaNombre,
   verificationCode = ""
 ) {
-  const subject = `Notificación de trámite: ${docTitle}`;
+  const subject = safeSubject("Notificación de trámite", docTitle);
 
   const verificationUrl = verificationCode
     ? `${PUBLIC_VERIFY_BASE_URL}?code=${encodeURIComponent(verificationCode)}`
     : PUBLIC_VERIFY_BASE_URL;
+
+  const safeEmpresaNombre = safeName(empresaNombre, "Cliente");
 
   const html = `
     <!DOCTYPE html>
@@ -777,7 +844,7 @@ async function sendDestinationNotification(
           </div>
 
           <div class="content">
-            <p>Hola <strong>${empresaNombre}</strong>,</p>
+            <p>Hola <strong>${safeEmpresaNombre}</strong>,</p>
             <p>
               Te informamos que se ha iniciado un trámite de firma electrónica 
               para el siguiente documento:
@@ -831,7 +898,7 @@ async function sendDestinationNotification(
               <a href="${DASHBOARD_BASE_URL}">www.verifirma.cl</a>
             </p>
             <p style="color: #9ca3af; font-size: 10px;">
-              Este es un email automático, por favor no respondas.
+              Este es un correo automático, por favor no respondas.
             </p>
           </div>
         </div>
@@ -842,9 +909,9 @@ async function sendDestinationNotification(
   return sendEmail({ to: email, subject, html });
 }
 
-/* ================================
+/* ===================================
    EXPORTAR
-   ================================ */
+   =================================== */
 
 module.exports = {
   sendEmail,

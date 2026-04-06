@@ -32,6 +32,10 @@ function getCurrentPath() {
   return window.location?.pathname || "";
 }
 
+function isBrowser() {
+  return typeof window !== "undefined";
+}
+
 export function AuthProvider({ children }) {
   const [user, setUserState] = useState(() => normalizeUser(getStoredUser()));
   const [token, setTokenState] = useState(() => normalizeToken(getStoredToken()));
@@ -39,6 +43,8 @@ export function AuthProvider({ children }) {
 
   const authEventHandledRef = useRef(false);
   const logoutInProgressRef = useRef(false);
+  const authResetTimerRef = useRef(null);
+  const logoutReleaseTimerRef = useRef(null);
 
   const hydrateSession = useCallback(() => {
     const storedUser = normalizeUser(getStoredUser());
@@ -52,6 +58,17 @@ export function AuthProvider({ children }) {
     hydrateSession();
     setAuthLoading(false);
   }, [hydrateSession]);
+
+  useEffect(() => {
+    return () => {
+      if (authResetTimerRef.current) {
+        clearTimeout(authResetTimerRef.current);
+      }
+      if (logoutReleaseTimerRef.current) {
+        clearTimeout(logoutReleaseTimerRef.current);
+      }
+    };
+  }, []);
 
   const isAuthenticated = !!token && !!user;
 
@@ -96,6 +113,7 @@ export function AuthProvider({ children }) {
 
     const redirectTo = options.redirectTo || null;
     const replace = options.replace !== false;
+    const reason = options.reason || null;
     const currentPath = getCurrentPath();
 
     clearSession();
@@ -107,11 +125,11 @@ export function AuthProvider({ children }) {
       console.warn("[AUTH] logout ejecutado", {
         redirectTo,
         currentPath,
-        reason: options.reason || null,
+        reason,
       });
     }
 
-    if (redirectTo && currentPath !== redirectTo) {
+    if (redirectTo && currentPath !== redirectTo && isBrowser()) {
       if (replace) {
         replaceTo(redirectTo);
       } else {
@@ -119,12 +137,18 @@ export function AuthProvider({ children }) {
       }
     }
 
-    window.setTimeout(() => {
+    if (logoutReleaseTimerRef.current) {
+      clearTimeout(logoutReleaseTimerRef.current);
+    }
+
+    logoutReleaseTimerRef.current = window.setTimeout(() => {
       logoutInProgressRef.current = false;
     }, 500);
   }, []);
 
   useEffect(() => {
+    if (!isBrowser()) return;
+
     const handleAuthExpired = (event) => {
       if (authEventHandledRef.current || logoutInProgressRef.current) {
         return;
@@ -149,7 +173,11 @@ export function AuthProvider({ children }) {
         reason: event?.detail || null,
       });
 
-      window.setTimeout(() => {
+      if (authResetTimerRef.current) {
+        clearTimeout(authResetTimerRef.current);
+      }
+
+      authResetTimerRef.current = window.setTimeout(() => {
         authEventHandledRef.current = false;
       }, 1000);
     };
@@ -164,7 +192,6 @@ export function AuthProvider({ children }) {
   const updateUser = useCallback(
     (nextUser) => {
       const normalizedUser = normalizeUser(nextUser);
-
       setUserState(normalizedUser);
 
       if (token && normalizedUser) {
@@ -189,6 +216,8 @@ export function AuthProvider({ children }) {
   }, []);
 
   useEffect(() => {
+    if (!isBrowser()) return;
+
     const onStorageSync = () => {
       hydrateSession();
     };
