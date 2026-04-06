@@ -1,9 +1,91 @@
 // src/components/Timeline.jsx
-import React from "react";
+import React, { useMemo } from "react";
 import "./Timeline.css";
 
+function formatTimestamp(ts) {
+  if (!ts) return "";
+  const date = ts instanceof Date ? ts : new Date(ts);
+  if (Number.isNaN(date.getTime())) return "";
+  return date.toLocaleString("es-CO", {
+    day: "2-digit",
+    month: "2-digit",
+    year: "numeric",
+    hour: "2-digit",
+    minute: "2-digit",
+  });
+}
+
+function getEventIcon(event) {
+  const action = String(event.action || "").toUpperCase();
+  const source = event.source;
+
+  if (action === "CREADO") return "📄";
+  if (action === "VISADO") return "✓";
+  if (action === "FIRMADO") return "✓";
+  if (action === "FIRMADO_PUBLICO") return "✓";
+  if (action === "FIRMADO_REPRESENTANTE") return "✓";
+  if (action === "RECHAZADO") return "✕";
+
+  if (source === "audit_log") return "📝";
+
+  return "◉";
+}
+
+function getEventTitle(event) {
+  const action = String(event.action || "").toUpperCase();
+  const source = event.source;
+
+  if (action === "CREADO") return "📄 Documento creado";
+  if (action === "VISADO") return "✓ Documento visado";
+  if (action === "FIRMADO") return "✓ Documento firmado";
+  if (action === "FIRMADO_PUBLICO")
+    return "✓ Documento firmado desde enlace público";
+  if (action === "FIRMADO_REPRESENTANTE")
+    return "✓ Firmado por representante";
+  if (action === "RECHAZADO") return "✕ Documento rechazado";
+
+  if (source === "audit_log") return `📝 Registro de auditoría (${action})`;
+
+  return action || "Evento";
+}
+
+function getEventStatus(index, total) {
+  if (index < total - 1) return "completed";
+  if (index === total - 1) return "active";
+  return "pending";
+}
+
+function formatDetails(event) {
+  if (event.details) return String(event.details);
+
+  if (event.metadata && typeof event.metadata === "object") {
+    const { document_id, title, status, ...rest } = event.metadata;
+    const extras =
+      Object.keys(rest).length > 0 ? JSON.stringify(rest) : "";
+    return `Documento: ${title || document_id || "-"} · Estado: ${
+      status || "-"
+    }${extras ? ` · Extra: ${extras}` : ""}`;
+  }
+
+  return "";
+}
+
 export function Timeline({ timeline }) {
-  if (!timeline || !timeline.events) {
+  const hasEvents = !!timeline && Array.isArray(timeline.events);
+
+  const { events, progress, currentStep, nextStep } = useMemo(
+    () => ({
+      events: hasEvents ? timeline.events : [],
+      progress: Number.isFinite(timeline?.progress)
+        ? Math.max(0, Math.min(100, timeline.progress))
+        : 0,
+      currentStep: timeline?.currentStep || "En curso",
+      nextStep: timeline?.nextStep || "Por definir",
+    }),
+    [timeline, hasEvents]
+  );
+
+  if (!hasEvents) {
     return (
       <div
         style={{
@@ -12,64 +94,10 @@ export function Timeline({ timeline }) {
           color: "#94a3b8",
         }}
       >
-        Cargando progreso...
+        Cargando historial del documento…
       </div>
     );
   }
-
-  const { events, progress, currentStep, nextStep } = timeline;
-
-  const getEventIcon = (event) => {
-    const { action, source } = event;
-
-    if (action === "CREADO") return "📄";
-    if (action === "VISADO") return "✓";
-    if (action === "FIRMADO") return "✓";
-    if (action === "FIRMADO_PUBLICO") return "✓";
-    if (action === "FIRMADO_REPRESENTANTE") return "✓";
-    if (action === "RECHAZADO") return "✕";
-
-    if (source === "audit_log") return "📝";
-
-    return "◉";
-  };
-
-  const getEventStatus = (index, totalEvents) => {
-    if (index < totalEvents - 1) return "completed";
-    if (index === totalEvents - 1) return "active";
-    return "pending";
-  };
-
-  const getEventTitle = (event) => {
-    const { action, source } = event;
-
-    if (action === "CREADO") return "📄 Documento Creado";
-    if (action === "VISADO") return "✓ Documento Visado";
-    if (action === "FIRMADO") return "✓ Documento Firmado";
-    if (action === "FIRMADO_PUBLICO")
-      return "✓ Documento firmado desde enlace público";
-    if (action === "FIRMADO_REPRESENTANTE")
-      return "✓ Firmado por Representante";
-    if (action === "RECHAZADO") return "✕ Documento Rechazado";
-
-    if (source === "audit_log") return `📝 Auditoría: ${action}`;
-
-    return action;
-  };
-
-  const formatDetails = (event) => {
-    if (event.details) return String(event.details);
-
-    if (event.metadata && typeof event.metadata === "object") {
-      const { document_id, title, status, ...rest } = event.metadata;
-      const extras = Object.keys(rest).length ? JSON.stringify(rest) : "";
-      return `Documento: ${title || document_id || "-"} | Estado: ${
-        status || "-"
-      } ${extras ? `| Extra: ${extras}` : ""}`;
-    }
-
-    return "";
-  };
 
   return (
     <div className="timeline-container">
@@ -83,17 +111,17 @@ export function Timeline({ timeline }) {
             fontWeight: 800,
           }}
         >
-          Progreso del Documento
+          Progreso del documento
         </h3>
 
-        {/* Barra de progreso */}
         <div className="progress-bar-wrapper">
           <div className="progress-bar-background">
             <div
               className="progress-bar-fill"
               style={{ width: `${progress}%` }}
-            ></div>
+            />
           </div>
+
           <div
             style={{
               display: "flex",
@@ -111,7 +139,6 @@ export function Timeline({ timeline }) {
           </div>
         </div>
 
-        {/* Estado actual */}
         <div
           style={{
             marginTop: "16px",
@@ -128,7 +155,7 @@ export function Timeline({ timeline }) {
               marginBottom: "4px",
             }}
           >
-            Estado Actual
+            Estado actual
           </div>
           <div
             style={{
@@ -146,7 +173,8 @@ export function Timeline({ timeline }) {
               marginTop: "6px",
             }}
           >
-            Próximo: {nextStep}
+            Próximo paso:{" "}
+            <span style={{ fontWeight: 600 }}>{nextStep}</span>
           </div>
         </div>
       </div>
@@ -156,6 +184,9 @@ export function Timeline({ timeline }) {
         {events.map((event, index) => {
           const status = getEventStatus(index, events.length);
           const isLast = index === events.length - 1;
+          const detailsText = formatDetails(event);
+          const timestampText = formatTimestamp(event.timestamp);
+          const isAudit = event.source === "audit_log";
 
           return (
             <div
@@ -165,14 +196,18 @@ export function Timeline({ timeline }) {
               {!isLast && (
                 <div
                   className={`timeline-line timeline-line-${status}`}
-                ></div>
+                />
               )}
 
               <div className={`timeline-dot timeline-dot-${status}`}>
-                <span className="timeline-icon">{getEventIcon(event)}</span>
+                <span className="timeline-icon">
+                  {getEventIcon(event)}
+                </span>
               </div>
 
-              <div className={`timeline-content timeline-content-${status}`}>
+              <div
+                className={`timeline-content timeline-content-${status}`}
+              >
                 <h4
                   style={{
                     margin: "0 0 6px 0",
@@ -184,7 +219,7 @@ export function Timeline({ timeline }) {
                   {getEventTitle(event)}
                 </h4>
 
-                {formatDetails(event) && (
+                {detailsText && (
                   <p
                     style={{
                       margin: "4px 0",
@@ -192,41 +227,37 @@ export function Timeline({ timeline }) {
                       color: "#475569",
                     }}
                   >
-                    {formatDetails(event)}
+                    {detailsText}
                   </p>
                 )}
 
-                <p
-                  style={{
-                    margin: "8px 0 0 0",
-                    fontSize: "0.75rem",
-                    color: "#94a3b8",
-                  }}
-                >
-                  {new Date(event.timestamp).toLocaleString("es-CO", {
-                    day: "2-digit",
-                    month: "2-digit",
-                    year: "numeric",
-                    hour: "2-digit",
-                    minute: "2-digit",
-                  })}
-                </p>
+                {timestampText && (
+                  <p
+                    style={{
+                      margin: "8px 0 0 0",
+                      fontSize: "0.75rem",
+                      color: "#94a3b8",
+                    }}
+                  >
+                    {timestampText}
+                  </p>
+                )}
 
                 {event.actor && (
                   <p
                     style={{
                       margin: "4px 0 0 0",
                       fontSize: "0.75rem",
-                      color:
-                        event.source === "audit_log" ? "#0f766e" : "#7c3aed",
+                      color: isAudit ? "#0f766e" : "#7c3aed",
                       fontWeight: 600,
                     }}
                   >
-                    Por: {event.actor}
+                    {isAudit ? "Sistema / Auditoría" : "Por:"}{" "}
+                    {event.actor}
                   </p>
                 )}
 
-                {event.source === "audit_log" && (
+                {isAudit && (
                   <div
                     style={{
                       marginTop: "6px",
@@ -247,7 +278,9 @@ export function Timeline({ timeline }) {
                         Agente: {event.userAgent}
                       </div>
                     )}
-                    {event.requestId && <div>Req ID: {event.requestId}</div>}
+                    {event.requestId && (
+                      <div>Req ID: {event.requestId}</div>
+                    )}
                   </div>
                 )}
               </div>

@@ -1,4 +1,3 @@
-// src/components/ListHeader.jsx
 import React, { useCallback, useMemo } from "react";
 import { API_BASE_URL } from "../constants";
 
@@ -405,7 +404,7 @@ export function ListHeader({
               type="text"
               value={search}
               onChange={(e) => setSearch(e.target.value)}
-              placeholder="Título, empresa o firmante..."
+              placeholder="Título, participante o empresa..."
               style={{
                 ...CONTROL_BASE_STYLE,
                 width: "100%",

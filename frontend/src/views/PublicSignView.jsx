@@ -1,5 +1,5 @@
 // frontend/src/views/PublicSignView.jsx
-import React, { useMemo, useState } from "react";
+import React, { useMemo, useState, useCallback, useEffect } from "react";
 import "./PublicSignView.css";
 import { PublicHeader } from "../components/PublicHeader";
 import { PublicFooter } from "../components/PublicFooter";
@@ -30,24 +30,63 @@ function pickFirstNonEmpty(...values) {
   return "";
 }
 
+function sanitizePublicMessage(message, fallback) {
+  const raw = String(message || "").trim();
+  if (!raw) return fallback;
+
+  const lowered = raw.toLowerCase();
+
+  if (
+    lowered.includes("jwt") ||
+    lowered.includes("stack") ||
+    lowered.includes("sql") ||
+    lowered.includes("sequelize") ||
+    lowered.includes("postgres") ||
+    lowered.includes("token malformed") ||
+    lowered.includes("internal server error")
+  ) {
+    return fallback;
+  }
+
+  return raw;
+}
+
 function classifyPublicError(error) {
-  if (!error) {
+  const text = String(error || "").toLowerCase();
+
+  if (!text) {
     return {
-      type: "generic",
-      title: "No se pudo cargar el documento",
+      kind: "generic-error",
+      title: "No se pudo abrir el documento",
       message:
-        "Ocurrió un problema al abrir este enlace. Intenta nuevamente en unos segundos.",
+        "Ocurrió un problema al cargar este enlace. Intenta nuevamente en unos segundos.",
+      canRetry: true,
     };
   }
 
-  const text = String(error).toLowerCase();
-
   if (text.includes("expir") || text.includes("expired")) {
     return {
-      type: "expired",
+      kind: "expired",
       title: "Este enlace venció",
       message:
         "Este enlace de firma ya no está disponible. Solicita un nuevo enlace a la empresa que te envió el documento.",
+      canRetry: false,
+    };
+  }
+
+  if (
+    text.includes("used") ||
+    text.includes("already used") ||
+    text.includes("ya fue usado") ||
+    text.includes("ya fue firmado") ||
+    text.includes("ya fue rechazado")
+  ) {
+    return {
+      kind: "used",
+      title: "Este enlace ya no requiere acción",
+      message:
+        "Este enlace ya fue utilizado anteriormente y no admite una nueva acción.",
+      canRetry: false,
     };
   }
 
@@ -58,109 +97,88 @@ function classifyPublicError(error) {
     text.includes("invalid")
   ) {
     return {
-      type: "invalid",
+      kind: "invalid",
       title: "Este enlace no es válido",
       message:
         "No pudimos validar este acceso. Abre el enlace completo desde tu correo o solicita uno nuevo.",
-    };
-  }
-
-  if (
-    text.includes("used") ||
-    text.includes("ya fue usado") ||
-    text.includes("already used") ||
-    text.includes("ya fue firmado") ||
-    text.includes("ya fue rechazado")
-  ) {
-    return {
-      type: "used",
-      title: "Este enlace ya no requiere acción",
-      message:
-        "El documento ya fue procesado con este enlace, por lo que no puedes realizar una nueva acción aquí.",
+      canRetry: false,
     };
   }
 
   return {
-    type: "generic",
-    title: "No se pudo cargar el documento",
+    kind: "generic-error",
+    title: "No se pudo abrir el documento",
     message:
-      "Ocurrió un problema al abrir este enlace. Intenta nuevamente en unos segundos.",
+      "Ocurrió un problema al cargar este enlace. Intenta nuevamente en unos segundos.",
+    canRetry: true,
   };
 }
 
-function resolvePublicFlowState({
+function resolvePublicState({
   publicSignError,
   document,
-  signerStatus,
   documentStatus,
+  signerStatus,
   isVisado,
 }) {
   if (publicSignError) {
-    const classified = classifyPublicError(publicSignError);
+    return classifyPublicError(publicSignError);
+  }
+
+  if (!document) {
     return {
-      kind: classified.type,
-      title: classified.title,
-      message: classified.message,
-      canRetryLoad: classified.type === "generic",
+      kind: "loading",
+      title: "",
+      message: "",
+      canRetry: false,
     };
   }
 
-  const alreadySignedByThisSigner = !isVisado && signerStatus === "FIRMADO";
-  const docFullySigned = !isVisado && documentStatus === "FIRMADO";
-  const docRejected = documentStatus === "RECHAZADO";
-
+  const signerAlreadyDone = !isVisado && signerStatus === "FIRMADO";
+  const documentCompleted = !isVisado && documentStatus === "FIRMADO";
+  const documentRejected = documentStatus === "RECHAZADO";
   const visadoDone =
     isVisado &&
     documentStatus &&
     documentStatus !== "PENDIENTE_VISADO" &&
     documentStatus !== "PENDIENTE";
 
-  if (!document) {
-    return {
-      kind: "loading-or-empty",
-      title: "",
-      message: "",
-      canRetryLoad: false,
-    };
-  }
-
-  if (docRejected) {
+  if (documentRejected) {
     return {
       kind: "rejected",
       title: "Este documento fue rechazado",
-      message:
-        "El flujo de firma se encuentra cerrado y este enlace ya no admite acciones.",
-      canRetryLoad: false,
+      message: "El flujo quedó cerrado y este enlace ya no admite acciones.",
+      canRetry: false,
     };
   }
 
-  if (docFullySigned) {
+  if (documentCompleted) {
     return {
       kind: "completed",
       title: "Este documento ya fue firmado",
       message:
-        "El proceso ya fue completado. No puedes realizar nuevas acciones desde este enlace.",
-      canRetryLoad: false,
+        "El proceso ya fue completado y no puedes realizar nuevas acciones desde este enlace.",
+      canRetry: false,
     };
   }
 
-  if (alreadySignedByThisSigner) {
+  if (signerAlreadyDone) {
     return {
       kind: "used",
       title: "Tu firma ya fue registrada",
       message:
-        "Este enlace ya fue utilizado anteriormente y no requiere una nueva acción.",
-      canRetryLoad: false,
+        "Este enlace ya fue usado anteriormente y no requiere una nueva acción.",
+      canRetry: false,
     };
   }
 
   if (visadoDone) {
     return {
       kind: "used",
-      title: "El visado ya fue procesado",
+      title: "El visado ya fue registrado",
       message:
-        "La revisión de este documento ya fue registrada y este enlace no requiere otra acción.",
-      canRetryLoad: false,
+        "La revisión del documento ya fue procesada y este enlace no requiere otra acción.",
+      canRetry: false,
     };
   }
 
@@ -170,8 +188,70 @@ function resolvePublicFlowState({
     message: isVisado
       ? "Revisa el documento y registra tu visado cuando estés listo."
       : "Revisa el documento y registra tu firma cuando estés listo.",
-    canRetryLoad: false,
+    canRetry: false,
   };
+}
+
+function getStatusBadge(state, isVisado) {
+  switch (state.kind) {
+    case "completed":
+      return {
+        label: "Completado",
+        className: "public-sign-status public-sign-status--success",
+      };
+    case "used":
+      return {
+        label: "Sin acción",
+        className: "public-sign-status public-sign-status--warning",
+      };
+    case "rejected":
+    case "expired":
+    case "invalid":
+    case "generic-error":
+      return {
+        label:
+          state.kind === "expired"
+            ? "Enlace vencido"
+            : state.kind === "invalid"
+            ? "Enlace inválido"
+            : state.kind === "rejected"
+            ? "Rechazado"
+            : "Error",
+        className: "public-sign-status public-sign-status--danger",
+      };
+    default:
+      return {
+        label: isVisado ? "Pendiente de visado" : "Pendiente de firma",
+        className: isVisado
+          ? "public-sign-status public-sign-status--warning"
+          : "public-sign-status public-sign-status--info",
+      };
+  }
+}
+
+function buildActionSuccessMessage(isVisado, responseMessage) {
+  return sanitizePublicMessage(
+    responseMessage,
+    isVisado
+      ? "Visado registrado correctamente."
+      : "Firma registrada correctamente."
+  );
+}
+
+function buildActionErrorMessage(isVisado, responseMessage) {
+  return sanitizePublicMessage(
+    responseMessage,
+    isVisado
+      ? "No se pudo registrar el visado. Intenta nuevamente."
+      : "No se pudo registrar la firma. Intenta nuevamente."
+  );
+}
+
+function buildRejectErrorMessage(responseMessage) {
+  return sanitizePublicMessage(
+    responseMessage,
+    "No se pudo registrar el rechazo. Intenta nuevamente."
+  );
 }
 
 export function PublicSignView({
@@ -187,9 +267,20 @@ export function PublicSignView({
   const API_BASE = useMemo(() => normalizePublicApiBase(API_URL), [API_URL]);
   const isVisado = publicSignMode === "visado";
 
-  const document = useMemo(() => {
-    return publicSignDoc?.document || publicSignDoc || null;
-  }, [publicSignDoc]);
+  const [showReject, setShowReject] = useState(false);
+  const [rejectReason, setRejectReason] = useState("");
+  const [rejecting, setRejecting] = useState(false);
+  const [rejectError, setRejectError] = useState("");
+  const [acceptedLegal, setAcceptedLegal] = useState(false);
+  const [legalError, setLegalError] = useState("");
+  const [signing, setSigning] = useState(false);
+  const [actionMessage, setActionMessage] = useState("");
+  const [actionMessageType, setActionMessageType] = useState("info");
+
+  const document = useMemo(
+    () => publicSignDoc?.document || publicSignDoc || null,
+    [publicSignDoc]
+  );
 
   const documentMeta = useMemo(() => {
     return (
@@ -267,7 +358,6 @@ export function PublicSignView({
       documentMeta?.razon_social,
       signedDocument?.destinatario_nombre,
       signedDocument?.empresa_nombre,
-      signedDocument?.nombre_empresa,
       publicSignDoc?.destinatario_nombre,
       publicSignDoc?.empresa_nombre,
       publicSignDoc?.nombre_empresa,
@@ -284,20 +374,16 @@ export function PublicSignView({
       document?.rut_empresa,
       document?.company_rut,
       document?.companyRut,
-      document?.rut,
       documentMeta?.empresa_rut,
       documentMeta?.rut_empresa,
       documentMeta?.company_rut,
       documentMeta?.companyRut,
-      documentMeta?.rut,
       signedDocument?.empresa_rut,
       signedDocument?.rut_empresa,
-      signedDocument?.rut,
       publicSignDoc?.empresa_rut,
       publicSignDoc?.rut_empresa,
       publicSignDoc?.company_rut,
       publicSignDoc?.companyRut,
-      publicSignDoc?.rut,
       "No informado"
     );
   }, [document, documentMeta, signedDocument, publicSignDoc]);
@@ -313,10 +399,8 @@ export function PublicSignView({
       documentMeta?.numeroContrato,
       signedDocument?.numero_contrato_interno,
       signedDocument?.numero_contrato,
-      signedDocument?.numeroContrato,
       publicSignDoc?.numero_contrato_interno,
       publicSignDoc?.numero_contrato,
-      publicSignDoc?.numeroContrato,
       "---------"
     );
   }, [document, documentMeta, signedDocument, publicSignDoc]);
@@ -328,9 +412,9 @@ export function PublicSignView({
       signer?.signer_name,
       signer?.full_name,
       signer?.fullname,
-      "Firmante"
+      isVisado ? "Revisor" : "Firmante"
     );
-  }, [signer]);
+  }, [signer, isVisado]);
 
   const signerEmail = useMemo(() => {
     return pickFirstNonEmpty(
@@ -341,15 +425,6 @@ export function PublicSignView({
       "Sin correo disponible"
     );
   }, [signer]);
-
-  const [showReject, setShowReject] = useState(false);
-  const [rejectReason, setRejectReason] = useState("");
-  const [rejecting, setRejecting] = useState(false);
-  const [rejectError, setRejectError] = useState("");
-  const [acceptedLegal, setAcceptedLegal] = useState(false);
-  const [legalError, setLegalError] = useState("");
-  const [signing, setSigning] = useState(false);
-  const [actionMessage, setActionMessage] = useState("");
 
   const signerStatus = normalizeStatus(
     signer?.status || signer?.signer_status || signer?.estado
@@ -363,129 +438,62 @@ export function PublicSignView({
       signedDocument?.estado
   );
 
-  const alreadySignedByThisSigner = !isVisado && signerStatus === "FIRMADO";
-  const docFullySigned = !isVisado && documentStatus === "FIRMADO";
-  const docRejected = documentStatus === "RECHAZADO";
+  const flowState = useMemo(
+    () =>
+      resolvePublicState({
+        publicSignError,
+        document,
+        documentStatus,
+        signerStatus,
+        isVisado,
+      }),
+    [publicSignError, document, documentStatus, signerStatus, isVisado]
+  );
 
-  const visadoDone =
-    isVisado &&
-    documentStatus &&
-    documentStatus !== "PENDIENTE_VISADO" &&
-    documentStatus !== "PENDIENTE";
+  const statusBadge = useMemo(
+    () => getStatusBadge(flowState, isVisado),
+    [flowState, isVisado]
+  );
 
   const canActOnDocument =
+    flowState.kind === "pending" &&
     !!document &&
     !!publicSignToken &&
     !!API_BASE &&
-    !publicSignLoading &&
-    !publicSignError &&
-    !docFullySigned &&
-    !alreadySignedByThisSigner &&
-    !docRejected &&
-    !visadoDone;
+    !publicSignLoading;
 
   const showSkeleton = publicSignLoading && !document && !publicSignError;
   const titleText = isVisado ? "Visado de documento" : "Firma electrónica";
 
-  const statusBadge = useMemo(() => {
-    if (docRejected) {
-      return {
-        label: "Rechazado",
-        className: "public-sign-status public-sign-status--danger",
-      };
+  useEffect(() => {
+    if (!canActOnDocument) {
+      setShowReject(false);
+      setRejectReason("");
+      setRejectError("");
+      setLegalError("");
     }
+  }, [canActOnDocument]);
 
-    if (docFullySigned || alreadySignedByThisSigner) {
-      return {
-        label: docFullySigned ? "Completado" : "Ya firmado",
-        className: "public-sign-status public-sign-status--success",
-      };
+  const handleRetryLoad = useCallback(() => {
+    if (!publicSignToken || typeof cargarFirmaPublica !== "function") return;
+    cargarFirmaPublica(publicSignToken);
+  }, [cargarFirmaPublica, publicSignToken]);
+
+  const handleConfirm = useCallback(async () => {
+    if (signing || rejecting || !canActOnDocument) return;
+
+    if (!acceptedLegal) {
+      setLegalError(
+        isVisado
+          ? "Debes aceptar el aviso legal antes de registrar el visado."
+          : "Debes aceptar el aviso legal antes de registrar la firma."
+      );
+      return;
     }
-
-    if (visadoDone) {
-      return {
-        label: "Visado procesado",
-        className: "public-sign-status public-sign-status--success",
-      };
-    }
-
-    if (publicSignError) {
-      const classified = classifyPublicError(publicSignError);
-
-      if (classified.type === "expired") {
-        return {
-          label: "Enlace vencido",
-          className: "public-sign-status public-sign-status--danger",
-        };
-      }
-
-      if (classified.type === "invalid") {
-        return {
-          label: "Enlace inválido",
-          className: "public-sign-status public-sign-status--danger",
-        };
-      }
-
-      if (classified.type === "used") {
-        return {
-          label: "Sin acción",
-          className: "public-sign-status public-sign-status--warning",
-        };
-      }
-
-      return {
-        label: "Error de carga",
-        className: "public-sign-status public-sign-status--danger",
-      };
-    }
-
-    return {
-      label: isVisado ? "Pendiente de visado" : "Pendiente de firma",
-      className: isVisado
-        ? "public-sign-status public-sign-status--warning"
-        : "public-sign-status public-sign-status--info",
-    };
-  }, [
-    alreadySignedByThisSigner,
-    docFullySigned,
-    docRejected,
-    isVisado,
-    publicSignError,
-    visadoDone,
-  ]);
-
-  const publicFlowState = useMemo(
-    () =>
-      resolvePublicFlowState({
-        publicSignError,
-        document,
-        signerStatus,
-        documentStatus,
-        isVisado,
-      }),
-    [publicSignError, document, signerStatus, documentStatus, isVisado]
-  );
-
-  function getDefaultErrorMessage() {
-    return isVisado
-      ? "No se pudo registrar el visado."
-      : "No se pudo registrar la firma.";
-  }
-
-  async function handleConfirm() {
-    if (signing || !canActOnDocument) return;
 
     try {
-      if (!acceptedLegal) {
-        setLegalError(
-          isVisado
-            ? "Debes aceptar el aviso legal de visado antes de continuar."
-            : "Debes aceptar el aviso legal de firma electrónica antes de continuar."
-        );
-        return;
-      }
-
       setActionMessage("");
+      setActionMessageType("info");
       setLegalError("");
       setSigning(true);
 
@@ -505,45 +513,47 @@ export function PublicSignView({
       }
 
       if (!res.ok) {
-        throw new Error(data?.message || getDefaultErrorMessage());
+        throw new Error(buildActionErrorMessage(isVisado, data?.message));
       }
 
       await cargarFirmaPublica(publicSignToken);
 
-      setActionMessage(
-        data?.message ||
-          (isVisado
-            ? "Visado registrado correctamente."
-            : "Firma registrada correctamente.")
-      );
-
+      setActionMessage(buildActionSuccessMessage(isVisado, data?.message));
+      setActionMessageType("success");
       window.scrollTo({ top: 0, behavior: "smooth" });
     } catch (err) {
       setActionMessage(
-        `❌ ${
-          err?.message ||
-          "Ocurrió un error al procesar la acción. Intenta nuevamente."
-        }`
+        buildActionErrorMessage(isVisado, err?.message)
       );
+      setActionMessageType("error");
     } finally {
       setSigning(false);
     }
-  }
+  }, [
+    signing,
+    rejecting,
+    canActOnDocument,
+    acceptedLegal,
+    isVisado,
+    API_BASE,
+    publicSignToken,
+    cargarFirmaPublica,
+  ]);
 
-  async function handleReject() {
-    if (rejecting || !canActOnDocument) return;
+  const handleReject = useCallback(async () => {
+    if (rejecting || signing || !canActOnDocument) return;
+
+    const motivo = String(rejectReason || "").trim();
+
+    if (!motivo) {
+      setRejectError("Debes ingresar un motivo de rechazo.");
+      return;
+    }
 
     try {
       setRejectError("");
       setActionMessage("");
-
-      const motivo = String(rejectReason || "").trim();
-
-      if (!motivo) {
-        setRejectError("Debes ingresar un motivo de rechazo.");
-        return;
-      }
-
+      setActionMessageType("info");
       setRejecting(true);
 
       const res = await fetch(
@@ -563,39 +573,48 @@ export function PublicSignView({
       }
 
       if (!res.ok) {
-        throw new Error(
-          data?.message || "No se pudo registrar el rechazo del documento."
-        );
+        throw new Error(buildRejectErrorMessage(data?.message));
       }
 
       await cargarFirmaPublica(publicSignToken);
 
-      setActionMessage(data?.message || "Documento rechazado correctamente.");
+      setActionMessage(
+        sanitizePublicMessage(
+          data?.message,
+          "Documento rechazado correctamente."
+        )
+      );
+      setActionMessageType("success");
       setShowReject(false);
       setRejectReason("");
       setRejectError("");
       window.scrollTo({ top: 0, behavior: "smooth" });
     } catch (err) {
-      setRejectError(
-        err?.message || "Error al registrar el rechazo. Intenta nuevamente."
-      );
+      setRejectError(buildRejectErrorMessage(err?.message));
     } finally {
       setRejecting(false);
     }
-  }
+  }, [
+    rejecting,
+    signing,
+    canActOnDocument,
+    rejectReason,
+    API_BASE,
+    publicSignToken,
+    cargarFirmaPublica,
+  ]);
 
-  function handleToggleReject() {
+  const handleToggleReject = useCallback(() => {
     setShowReject((prev) => !prev);
     setRejectReason("");
     setRejectError("");
-  }
+  }, []);
 
-  const showCompletedInfo =
+  const showPassiveStateCard =
     !canActOnDocument &&
     document &&
     !publicSignLoading &&
-    !publicSignError &&
-    (docFullySigned || alreadySignedByThisSigner || docRejected || visadoDone);
+    flowState.kind !== "pending";
 
   const ActionBlock = canActOnDocument ? (
     <div className="public-sign-action-block">
@@ -614,8 +633,8 @@ export function PublicSignView({
 
       <p className="public-sign-helper-text">
         Al continuar, registrarás tu{" "}
-        {isVisado ? "visado" : "firma electrónica"} sobre este documento. Esta
-        acción no se puede deshacer.
+        {isVisado ? "visado" : "firma electrónica"}. Esta acción no se puede
+        deshacer.
       </p>
 
       {!showReject && (
@@ -657,8 +676,8 @@ export function PublicSignView({
           </h2>
 
           <p className="public-sign-reject-card__text">
-            Explica brevemente el motivo. Esta información puede ser compartida
-            con la empresa que te envió el documento.
+            Explica brevemente el motivo. Esta información puede compartirse con
+            la empresa que te envió el documento.
           </p>
 
           <textarea
@@ -707,6 +726,14 @@ export function PublicSignView({
     </div>
   ) : null;
 
+  const messageCardClassName = `public-sign-message-card ${
+    actionMessageType === "error"
+      ? "public-sign-message-card--error"
+      : actionMessageType === "success"
+      ? "public-sign-message-card--success"
+      : ""
+  }`;
+
   return (
     <div className="public-sign-page">
       <div className="public-sign-shell">
@@ -732,26 +759,20 @@ export function PublicSignView({
                 : "public-sign-intro__title--info"
             }`}
           >
-            {isVisado
-              ? "Estás revisando este documento para registrar tu visado"
-              : "Estás revisando este documento para registrar tu firma"}
+            {flowState.kind === "pending"
+              ? isVisado
+                ? "Revisa este documento para registrar tu visado"
+                : "Revisa este documento para registrar tu firma"
+              : flowState.title}
           </div>
 
           <div className="public-sign-intro__text">
-            {isVisado
-              ? "Lee el contenido y, si todo está correcto, registra tu visado para que el flujo continúe."
-              : "Lee el contenido y, si estás de acuerdo, registra tu firma electrónica simple."}
+            {flowState.message}
           </div>
         </section>
 
         {actionMessage && (
-          <div
-            className={`public-sign-message-card ${
-              actionMessage.startsWith("❌")
-                ? "public-sign-message-card--error"
-                : ""
-            }`}
-          >
+          <div className={messageCardClassName}>
             <div className="public-sign-message-card__text">{actionMessage}</div>
           </div>
         )}
@@ -763,7 +784,7 @@ export function PublicSignView({
               Cargando documento…
             </div>
             <div className="public-sign-message-card__text">
-              Estamos preparando la vista del documento para que puedas revisarlo.
+              Estamos preparando la vista para que puedas revisarlo.
             </div>
           </div>
         )}
@@ -771,17 +792,17 @@ export function PublicSignView({
         {publicSignError && (
           <div className="public-sign-message-card public-sign-message-card--error">
             <div className="public-sign-message-card__title">
-              {publicFlowState.title}
+              {flowState.title}
             </div>
             <div className="public-sign-message-card__text">
-              {publicFlowState.message}
+              {flowState.message}
             </div>
 
-            {publicFlowState.canRetryLoad && (
+            {flowState.canRetry && (
               <button
                 type="button"
                 className="public-sign-button public-sign-button--secondary public-sign-button--auto"
-                onClick={() => cargarFirmaPublica(publicSignToken)}
+                onClick={handleRetryLoad}
                 disabled={publicSignLoading}
               >
                 Reintentar carga
@@ -797,8 +818,7 @@ export function PublicSignView({
                 <div className="public-sign-section-label">Resumen</div>
                 <div className="public-sign-summary__title">{documentTitle}</div>
                 <div className="public-sign-summary__text">
-                  Revisa la información principal y luego abre el documento completo
-                  para confirmar su contenido antes de continuar.
+                  Revisa la información principal antes de abrir el documento completo.
                 </div>
               </div>
 
@@ -816,17 +836,14 @@ export function PublicSignView({
                     Número de contrato
                   </div>
                   <div className="public-sign-meta-card__value public-sign-meta-card__value--contract">
-                    {document?.numero_contrato_interno ||
-                      document?.numero_contrato ||
-                      contractNumber ||
-                      "---------"}
+                    {contractNumber}
                   </div>
                 </div>
 
-                {!isVisado && signer && (
+                {signer && (
                   <div className="public-sign-meta-card">
                     <div className="public-sign-meta-card__label">
-                      Firmando como
+                      {isVisado ? "Revisando como" : "Firmando como"}
                     </div>
                     <div className="public-sign-meta-card__value">{signerName}</div>
                     <div className="public-sign-meta-card__subvalue">
@@ -847,13 +864,13 @@ export function PublicSignView({
                 </a>
               )}
 
-              {showCompletedInfo && (
+              {showPassiveStateCard && (
                 <div className="public-sign-message-card public-sign-message-card--info">
                   <div className="public-sign-message-card__title">
-                    {publicFlowState.title}
+                    {flowState.title}
                   </div>
                   <div className="public-sign-message-card__text">
-                    {publicFlowState.message}
+                    {flowState.message}
                   </div>
                 </div>
               )}
@@ -876,16 +893,14 @@ export function PublicSignView({
                   <PublicPdfViewer fileUrl={pdfUrl} />
                 ) : (
                   <div className="public-sign-pdf-empty">
-                    No hay una vista previa disponible en este momento. Si el enlace
-                    está habilitado, puedes abrir el documento completo en una nueva
-                    pestaña.
+                    No hay una vista previa disponible en este momento. Puedes
+                    abrir el documento completo en una nueva pestaña si el enlace
+                    está habilitado.
                   </div>
                 )}
               </div>
 
-              <div className="public-sign-mobile-actions">
-                {ActionBlock}
-              </div>
+              <div className="public-sign-mobile-actions">{ActionBlock}</div>
             </section>
           </div>
         )}

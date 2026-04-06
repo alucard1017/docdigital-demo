@@ -10,19 +10,26 @@ const { logAudit } = require("../../utils/auditLog");
 
 function isExpired(dateLike) {
   if (!dateLike) return false;
-  try {
-    return new Date(dateLike) < new Date();
-  } catch {
-    return false;
-  }
+  const d = new Date(dateLike);
+  return Number.isNaN(d.getTime()) ? false : d < new Date();
 }
 
 function formatDateSafe(dateLike) {
-  try {
-    return new Date(dateLike).toISOString();
-  } catch {
-    return null;
-  }
+  const d = new Date(dateLike);
+  return Number.isNaN(d.getTime()) ? null : d.toISOString();
+}
+
+function getClientIp(req) {
+  return (
+    (req.headers["x-forwarded-for"] || "")
+      .toString()
+      .split(",")[0]
+      .trim() || req.ip || req.socket.remoteAddress || null
+  );
+}
+
+function getUserAgent(req) {
+  return req.headers["user-agent"] || null;
 }
 
 /**
@@ -61,6 +68,10 @@ async function getDocumentAndSignerByDocumentToken(
 async function getPublicDocBySignerToken(req, res) {
   try {
     const { token } = req.params;
+
+    if (!token || typeof token !== "string") {
+      return res.status(400).json({ message: "Token inválido" });
+    }
 
     const result = await db.query(
       `
@@ -107,7 +118,7 @@ async function getPublicDocBySignerToken(req, res) {
     const row = result.rows[0];
 
     if (isExpired(row.signature_token_expires_at)) {
-      return res.status(400).json({
+      return res.status(410).json({
         message: "El enlace público ha expirado. Solicita uno nuevo al emisor.",
       });
     }
@@ -163,6 +174,10 @@ async function getPublicDocByDocumentToken(req, res) {
   try {
     const { token } = req.params;
 
+    if (!token || typeof token !== "string") {
+      return res.status(400).json({ message: "Token inválido" });
+    }
+
     const result = await db.query(
       `
       SELECT 
@@ -203,7 +218,7 @@ async function getPublicDocByDocumentToken(req, res) {
     const doc = result.rows[0];
 
     if (isExpired(doc.signature_token_expires_at)) {
-      return res.status(400).json({
+      return res.status(410).json({
         message: "El enlace público ha expirado. Solicita uno nuevo al emisor.",
       });
     }
@@ -219,6 +234,7 @@ async function getPublicDocByDocumentToken(req, res) {
 
     const pdfUrl = await getSignedUrl(basePath, 3600);
 
+    // Registrar apertura de invitación (audit trail público)
     try {
       await db.query(
         `
@@ -235,8 +251,8 @@ async function getPublicDocByDocumentToken(req, res) {
         `,
         [
           doc.id,
-          req.ip,
-          req.headers["user-agent"] || null,
+          getClientIp(req),
+          getUserAgent(req),
           JSON.stringify({
             source: "public_document_link",
             opened_at: formatDateSafe(new Date()),
@@ -285,6 +301,10 @@ async function publicSignDocument(req, res) {
   try {
     const { token } = req.params;
 
+    if (!token || typeof token !== "string") {
+      return res.status(400).json({ message: "Token inválido" });
+    }
+
     let current = await db.query(
       `
       SELECT 
@@ -314,7 +334,7 @@ async function publicSignDocument(req, res) {
 
     if (isExpired(row.signature_token_expires_at)) {
       return res
-        .status(400)
+        .status(410)
         .json({ message: "El enlace de firma ha expirado" });
     }
 
@@ -336,6 +356,7 @@ async function publicSignDocument(req, res) {
         .json({ message: "Este firmante ya firmó el documento" });
     }
 
+    // Marcar firmante como firmado
     await db.query(
       `
       UPDATE document_signers
@@ -461,7 +482,10 @@ async function publicSignDocument(req, res) {
       }
     }
 
-    // Evento resumen en document_events (modelo nuevo)
+    const ipAddress = getClientIp(req);
+    const userAgent = getUserAgent(req);
+
+    // Evento resumen en document_events
     await db.query(
       `
       INSERT INTO document_events (
@@ -499,8 +523,8 @@ async function publicSignDocument(req, res) {
         `,
         [
           doc.id,
-          req.ip,
-          req.headers["user-agent"] || null,
+          ipAddress,
+          userAgent,
           null,
           JSON.stringify({
             signer_email: row.signer_email,
@@ -579,7 +603,6 @@ async function publicSignDocument(req, res) {
             numeroContratoInterno: doc.numero_contrato_interno,
           });
 
-          // Refrescar doc.pdf_final_url desde BD
           const updatedDocRes = await db.query(
             `
             SELECT
@@ -628,12 +651,15 @@ async function publicSignDocument(req, res) {
 
 /* ================================
    POST: Rechazar documento por token (firmante externo)
-   Prioridad: 1) sign_token  2) signature_token
    ================================ */
 async function publicRejectDocument(req, res) {
   try {
     const { token } = req.params;
     const { motivo } = req.body || {};
+
+    if (!token || typeof token !== "string") {
+      return res.status(400).json({ message: "Token inválido" });
+    }
 
     if (!motivo || !motivo.trim()) {
       return res
@@ -670,7 +696,7 @@ async function publicRejectDocument(req, res) {
 
     if (isExpired(row.signature_token_expires_at)) {
       return res
-        .status(400)
+        .status(410)
         .json({ message: "El enlace de firma ha expirado" });
     }
 
@@ -699,6 +725,7 @@ async function publicRejectDocument(req, res) {
         .json({ message: "Este firmante ya rechazó el documento" });
     }
 
+    // Rechazar firmante
     await db.query(
       `
       UPDATE document_signers
@@ -710,6 +737,7 @@ async function publicRejectDocument(req, res) {
       [row.signer_id, motivo]
     );
 
+    // Sincronizar con document_participants
     try {
       await db.query(
         `
@@ -728,6 +756,7 @@ async function publicRejectDocument(req, res) {
       );
     }
 
+    // Rechazar documento
     const docUpdateRes = await db.query(
       `
       UPDATE documents
@@ -742,6 +771,7 @@ async function publicRejectDocument(req, res) {
     );
     const doc = docUpdateRes.rows[0];
 
+    // Sincronizar con legacy
     if (doc.nuevo_documento_id) {
       try {
         await db.query(
@@ -772,6 +802,10 @@ async function publicRejectDocument(req, res) {
       }
     }
 
+    const ipAddress = getClientIp(req);
+    const userAgent = getUserAgent(req);
+
+    // Eventos legales
     await db.query(
       `
       INSERT INTO document_events (
@@ -805,8 +839,8 @@ async function publicRejectDocument(req, res) {
         `,
         [
           doc.id,
-          req.ip,
-          req.headers["user-agent"] || null,
+          ipAddress,
+          userAgent,
           JSON.stringify({
             signer_email: row.signer_email,
             signer_name: row.signer_name,
@@ -872,11 +906,15 @@ async function publicRejectDocument(req, res) {
 }
 
 /* ================================
-   POST: Visar documento por token (visador externo, signature_token del DOCUMENTO)
+   POST: Visar documento por token (visador externo)
    ================================ */
 async function publicVisarDocument(req, res) {
   try {
     const { token } = req.params;
+
+    if (!token || typeof token !== "string") {
+      return res.status(400).json({ message: "Token inválido" });
+    }
 
     const current = await db.query(
       `
@@ -897,7 +935,7 @@ async function publicVisarDocument(req, res) {
 
     if (isExpired(docActual.signature_token_expires_at)) {
       return res
-        .status(400)
+        .status(410)
         .json({ message: "El enlace de visado ha expirado" });
     }
 
@@ -930,6 +968,9 @@ async function publicVisarDocument(req, res) {
       ["PENDIENTE_FIRMA", docActual.id]
     );
     const doc = result.rows[0];
+
+    const ipAddress = getClientIp(req);
+    const userAgent = getUserAgent(req);
 
     await db.query(
       `
@@ -964,8 +1005,8 @@ async function publicVisarDocument(req, res) {
         `,
         [
           doc.id,
-          req.ip,
-          req.headers["user-agent"] || null,
+          ipAddress,
+          userAgent,
           JSON.stringify({
             visador_nombre: doc.visador_nombre || "Visador externo",
             source: "public_link",
@@ -1028,11 +1069,16 @@ async function publicVisarDocument(req, res) {
 
 /* ================================
    GET: Verificación por código (QR / código verificación)
-   Devuelve siempre pdf_final_url (si existe) y pdf_url firmado.
    ================================ */
 async function verifyByCode(req, res) {
   try {
     const { codigo } = req.params;
+
+    if (!codigo || typeof codigo !== "string") {
+      return res
+        .status(400)
+        .json({ message: "Código de verificación inválido" });
+    }
 
     const docResult = await db.query(
       `

@@ -1,4 +1,3 @@
-// src/components/DocumentRow.jsx
 import React, { useCallback, useMemo } from "react";
 import { DOC_STATUS } from "../constants";
 import api from "../api/client";
@@ -18,10 +17,10 @@ function getTramiteLabel(value) {
 
 function getDocumentoLabel(value) {
   const v = normalize(value);
-  if (v === "poder" || v === "poderes") return "Poderes";
-  if (v === "contrato" || v === "contratos") return "Contratos";
+  if (v === "poder" || v === "poderes") return "Poder";
+  if (v === "contrato" || v === "contratos") return "Contrato";
   if (v === "autorizacion" || v === "autorización" || v === "autorizaciones") {
-    return "Autorizaciones";
+    return "Autorización";
   }
   return "";
 }
@@ -33,7 +32,9 @@ function buildTipoLabel(tipoTramite, tipoDocumento) {
   if (tramite && documento) return `${tramite} · ${documento}`;
   if (documento) return documento;
   if (tramite) return tramite;
-  return "Documento";
+
+  // Si no tenemos nada, usamos un genérico corto pero no “Documento” redundante
+  return "General";
 }
 
 function getContractNumber(doc) {
@@ -117,6 +118,32 @@ export function DocumentRow({ doc, onOpenDetail }) {
     () => STATUS_COLORS[doc?.status] || "#6b7280",
     [doc?.status]
   );
+
+  // Participante: prioriza firmante, luego empresa, luego fallback único
+  const displayFirmante = useMemo(
+    () =>
+      doc?.firmante_nombre ||
+      doc?.signer_name ||
+      doc?.signer ||
+      null,
+    [doc]
+  );
+
+  const displayEmpresa = useMemo(
+    () =>
+      doc?.destinatario_nombre ||
+      doc?.empresa_nombre ||
+      doc?.company_name ||
+      null,
+    [doc]
+  );
+
+  const displayParticipantePrincipal = displayFirmante || displayEmpresa;
+  const displayParticipanteSecundario = displayFirmante && displayEmpresa
+    ? displayEmpresa
+    : "";
+
+  const participanteFallback = "Pendiente de asignar";
 
   const handleOpenDetail = useCallback(
     (e) => {
@@ -212,8 +239,8 @@ export function DocumentRow({ doc, onOpenDetail }) {
 
       addToast({
         type: "warning",
-          title: "Motivo de rechazo",
-          message: doc.reject_reason,
+        title: "Motivo de rechazo",
+        message: doc.reject_reason,
       });
     },
     [doc?.reject_reason, addToast]
@@ -269,11 +296,11 @@ export function DocumentRow({ doc, onOpenDetail }) {
 
       <td className="doc-cell-signer">
         <div className="doc-signer-main">
-          {doc?.firmante_nombre || "No asignado"}
+          {displayParticipantePrincipal || participanteFallback}
         </div>
-        <div className="doc-signer-sub">
-          {doc?.destinatario_nombre || "Sin empresa"}
-        </div>
+        {displayParticipanteSecundario ? (
+          <div className="doc-signer-sub">{displayParticipanteSecundario}</div>
+        ) : null}
       </td>
 
       <td className="doc-cell-actions" onClick={(e) => e.stopPropagation()}>

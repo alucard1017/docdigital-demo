@@ -247,19 +247,16 @@ const createAutomaticReminders = async (
   {
     documentId,
     signers,
-    intervalDays,   // ya no lo vamos a usar, pero lo dejamos en la firma por ahora
+    intervalDays,
     maxAttempts,
     companyId,
   }
 ) => {
   if (!documentId || !signers?.length) return 0;
 
-  // Primer recordatorio SIEMPRE a 12h, ignorando intervalDays
   const firstReminderAt = new Date(Date.now() + 12 * 60 * 60 * 1000);
 
   for (const signer of signers) {
-    const emailDestino = signer.email;
-
     await client.query(
       `
       INSERT INTO recordatorios (
@@ -278,17 +275,14 @@ const createAutomaticReminders = async (
         updated_at
       )
       VALUES (
-        $1,                  -- documento_id
-        $2,                  -- company_id
-        $3,                  -- firmante_id
-        $4,                  -- destinatario_email
-        'AUTO',              -- tipo
-        'pendiente',         -- estado
-        $5,                  -- proximo_intento_at (12h)
-        NULL,                -- sent_at
-        0,                   -- intentos
-        $6,                  -- max_intentos (3)
-        NULL,                -- error_message
+        $1, $2, $3, $4,
+        'AUTO',
+        'pendiente',
+        $5,
+        NULL,
+        0,
+        $6,
+        NULL,
         NOW(),
         NOW()
       )
@@ -297,7 +291,7 @@ const createAutomaticReminders = async (
         documentId,
         companyId || null,
         signer.id || null,
-        emailDestino,
+        signer.email,
         firstReminderAt,
         maxAttempts,
       ]
@@ -323,43 +317,6 @@ const cancelPendingReminders = async (client, documentId) => {
   );
 
   return result.rowCount || 0;
-};
-
-const markReminderSent = async (client, reminderId) => {
-  await client.query(
-    `
-    UPDATE recordatorios
-    SET
-      estado = 'enviado',
-      status = 'SENT',
-      sent_at = NOW(),
-      intentos = COALESCE(intentos, attempt, 0) + 1,
-      attempt = COALESCE(attempt, intentos, 0) + 1,
-      updated_at = NOW()
-    WHERE id = $1
-    `,
-    [reminderId]
-  );
-};
-
-const markReminderError = async (client, reminderId, message, finalError = false) => {
-  const nextState = finalError ? 'fallido' : 'pendiente';
-  const nextLegacyStatus = finalError ? 'FAILED' : 'PENDING';
-
-  await client.query(
-    `
-    UPDATE recordatorios
-    SET
-      estado = $1,
-      status = $2,
-      intentos = COALESCE(intentos, attempt, 0) + 1,
-      attempt = COALESCE(attempt, intentos, 0) + 1,
-      error_message = $3,
-      updated_at = NOW()
-    WHERE id = $4
-    `,
-    [nextState, nextLegacyStatus, message || null, reminderId]
-  );
 };
 
 const getDocumentFlowType = async (client, documentId) => {
@@ -450,9 +407,8 @@ const countParticipantSignatures = async (client, documentId) => {
   };
 };
 
-
 /* ================================
-   Mapeo de estados entre legacy y nuevo modelo
+   Mapeo de estados
    ================================ */
 
 const mapLegacyStatusToDocumentsStatus = (legacyStatus) => {
@@ -470,33 +426,25 @@ const mapLegacyStatusToDocumentsStatus = (legacyStatus) => {
   }
 };
 
-const mapFlowStateAfterSend = () => {
-  return {
-    legacyStatus: "EN_FIRMA",
-    documentsStatus: "PENDIENTE_FIRMA",
-  };
-};
+const mapFlowStateAfterSend = () => ({
+  legacyStatus: "EN_FIRMA",
+  documentsStatus: "PENDIENTE_FIRMA",
+});
 
-const mapFlowStateAfterSigned = () => {
-  return {
-    legacyStatus: "FIRMADO",
-    documentsStatus: "FIRMADO",
-  };
-};
+const mapFlowStateAfterSigned = () => ({
+  legacyStatus: "FIRMADO",
+  documentsStatus: "FIRMADO",
+});
 
-const mapFlowStateWhileSigning = () => {
-  return {
-    legacyStatus: "EN_FIRMA",
-    documentsStatus: "PENDIENTE_FIRMA",
-  };
-};
+const mapFlowStateWhileSigning = () => ({
+  legacyStatus: "EN_FIRMA",
+  documentsStatus: "PENDIENTE_FIRMA",
+});
 
-const mapFlowStateAfterRejected = () => {
-  return {
-    legacyStatus: "RECHAZADO",
-    documentsStatus: "RECHAZADO",
-  };
-};
+const mapFlowStateAfterRejected = () => ({
+  legacyStatus: "RECHAZADO",
+  documentsStatus: "RECHAZADO",
+});
 
 /* ================================
    Crear flujo (BORRADOR)
@@ -529,22 +477,24 @@ async function createFlow(req, res) {
     const codigoVerificacion = crypto.randomUUID().slice(0, 8);
 
     const docResult = await client.query(
-      `INSERT INTO documentos (
-         tipo,
-         titulo,
-         estado,
-         hash_pdf,
-         codigo_verificacion,
-         categoria_firma,
-         tipo_flujo,
-         creado_por,
-         company_id,
-         fecha_expiracion,
-         created_at,
-         updated_at
-       )
-       VALUES ($1, $2, $3, NULL, $4, $5, $6, $7, $8, $9, NOW(), NOW())
-       RETURNING *`,
+      `
+      INSERT INTO documentos (
+        tipo,
+        titulo,
+        estado,
+        hash_pdf,
+        codigo_verificacion,
+        categoria_firma,
+        tipo_flujo,
+        creado_por,
+        company_id,
+        fecha_expiracion,
+        created_at,
+        updated_at
+      )
+      VALUES ($1, $2, $3, NULL, $4, $5, $6, $7, $8, $9, NOW(), NOW())
+      RETURNING *
+      `,
       [
         tipo,
         titulo,
@@ -562,18 +512,20 @@ async function createFlow(req, res) {
 
     for (const [index, f] of firmantes.entries()) {
       await client.query(
-        `INSERT INTO firmantes (
-           documento_id,
-           nombre,
-           email,
-           rut,
-           rol,
-           orden_firma,
-           estado,
-           created_at,
-           updated_at
-         )
-         VALUES ($1, $2, $3, $4, $5, $6, 'PENDIENTE', NOW(), NOW())`,
+        `
+        INSERT INTO firmantes (
+          documento_id,
+          nombre,
+          email,
+          rut,
+          rol,
+          orden_firma,
+          estado,
+          created_at,
+          updated_at
+        )
+        VALUES ($1, $2, $3, $4, $5, $6, 'PENDIENTE', NOW(), NOW())
+        `,
         [
           documento.id,
           f.nombre,
@@ -586,13 +538,15 @@ async function createFlow(req, res) {
     }
 
     await client.query(
-      `INSERT INTO eventos_firma (
-         documento_id,
-         tipo_evento,
-         metadata,
-         created_at
-       )
-       VALUES ($1, 'CREADO', $2, NOW())`,
+      `
+      INSERT INTO eventos_firma (
+        documento_id,
+        tipo_evento,
+        metadata,
+        created_at
+      )
+      VALUES ($1, 'CREADO', $2, NOW())
+      `,
       [
         documento.id,
         JSON.stringify({
@@ -611,13 +565,12 @@ async function createFlow(req, res) {
       ownerId: documento.creado_por,
       filePath: null,
       description: documento.tipo || null,
-      signFlowType: (tipoFlujo || "SECUENCIAL") === "PARALELO" ? "PARALLEL" : "SEQUENTIAL",
+      signFlowType:
+        (tipoFlujo || "SECUENCIAL") === "PARALELO" ? "PARALLEL" : "SEQUENTIAL",
       notaryMode: "NONE",
       countryCode: "CL",
       fechaExpiracion: documento.fecha_expiracion || null,
     });
-
-    console.log(`✅ Documento legacy ${documento.id} → documents ${newDocumentId}`);
 
     const signersArray = firmantes
       .filter((f) => f.rol !== "VISADOR")
@@ -794,18 +747,27 @@ async function sendFlow(req, res) {
 
     let recordatoriosCreados = 0;
 
-    // cancelamos recordatorios pendientes del documento legacy
-    await cancelPendingReminders(client, documento.id); // usamos documentos.id
+    await cancelPendingReminders(client, documento.id);
 
     if (reminderConfig.enabled) {
       recordatoriosCreados = await createAutomaticReminders(client, {
-        documentId: documento.id,   // documentos.id (legacy)
-        signers: firmantes,         // firmantes legacy
+        documentId: documento.id,
+        signers: firmantes,
         intervalDays: reminderConfig.intervalDays,
         maxAttempts: reminderConfig.maxAttempts,
         companyId: documento.company_id,
       });
     }
+
+    await syncParticipantsFromFlow(client, {
+      documentId: newDocumentId,
+      signers: firmantes
+        .filter((f) => f.rol !== "VISADOR")
+        .map((f) => ({ name: f.nombre, email: f.email })),
+      visadores: firmantes
+        .filter((f) => f.rol === "VISADOR")
+        .map((f) => ({ name: f.nombre, email: f.email })),
+    });
 
     await client.query("COMMIT");
 
@@ -1011,104 +973,94 @@ async function signFlow(req, res) {
       newDocumentId
     );
 
-    console.log(
-      `DEBUG firmas legacy: ${firmadosNum}/${totalNum}, participants: ${firmadosDpNum}/${totalDpNum} (doc_new: ${newDocumentId})`
+    const allSigned = totalNum > 0 && firmadosNum >= totalNum;
+
+    let nuevoEstadoDocumento = firmante.documento_estado;
+    let nuevoEstadoDocuments = mapLegacyStatusToDocumentsStatus(
+      firmante.documento_estado
     );
 
-const allSigned = totalNum > 0 && firmadosNum >= totalNum;
+    if (allSigned) {
+      const { legacyStatus, documentsStatus } = mapFlowStateAfterSigned();
 
-let nuevoEstadoDocumento = firmante.documento_estado;
-let nuevoEstadoDocuments = mapLegacyStatusToDocumentsStatus(
-  firmante.documento_estado
-);
+      nuevoEstadoDocumento = legacyStatus;
+      nuevoEstadoDocuments = documentsStatus;
 
-if (allSigned) {
-  const {
-    legacyStatus,
-    documentsStatus,
-  } = mapFlowStateAfterSigned();
+      await client.query(
+        `
+        UPDATE documentos
+        SET estado = $1,
+            firmado_en = NOW(),
+            updated_at = NOW()
+        WHERE id = $2
+        `,
+        [legacyStatus, firmante.documento_id]
+      );
 
-  nuevoEstadoDocumento = legacyStatus;
-  nuevoEstadoDocuments = documentsStatus;
+      if (newDocumentId) {
+        await client.query(
+          `
+          UPDATE documents
+          SET status = $1,
+              firmado_en = NOW(),
+              updated_at = NOW()
+          WHERE id = $2
+          `,
+          [documentsStatus, newDocumentId]
+        );
+      }
 
-  await client.query(
-    `
-    UPDATE documentos
-    SET estado = $1,
-        firmado_en = NOW(),
-        updated_at = NOW()
-    WHERE id = $2
-    `,
-    [legacyStatus, firmante.documento_id]
-  );
+      await cancelPendingReminders(client, firmante.documento_id);
 
-  if (newDocumentId) {
-    await client.query(
-      `
-      UPDATE documents
-      SET status = $1,
-          firmado_en = NOW(),
-          updated_at = NOW()
-      WHERE id = $2
-      `,
-      [documentsStatus, newDocumentId]
-    );
-  }
+      await client.query(
+        `
+        INSERT INTO eventos_firma (
+          documento_id,
+          tipo_evento,
+          metadata,
+          created_at
+        )
+        VALUES ($1, 'DOCUMENTO_FIRMADO_COMPLETO', $2, NOW())
+        `,
+        [
+          firmante.documento_id,
+          JSON.stringify({
+            descripcion: "Todos los firmantes han firmado",
+            firmados: firmadosNum,
+            total: totalNum,
+          }),
+        ]
+      );
+    } else if (firmante.rol === "VISADOR") {
+      const { legacyStatus, documentsStatus } = mapFlowStateWhileSigning();
 
-  await cancelPendingReminders(client, firmante.documento_id);
+      nuevoEstadoDocumento = legacyStatus;
+      nuevoEstadoDocuments = documentsStatus;
 
-  await client.query(
-    `
-    INSERT INTO eventos_firma (
-      documento_id,
-      tipo_evento,
-      metadata,
-      created_at
-    )
-    VALUES ($1, 'DOCUMENTO_FIRMADO_COMPLETO', $2, NOW())
-    `,
-    [
-      firmante.documento_id,
-      JSON.stringify({
-        descripcion: "Todos los firmantes han firmado",
-        firmados: firmadosNum,
-        total: totalNum,
-      }),
-    ]
-  );
-} else if (firmante.rol === "VISADOR") {
-  const {
-    legacyStatus,
-    documentsStatus,
-  } = mapFlowStateWhileSigning();
+      await client.query(
+        `
+        UPDATE documentos
+        SET estado = $1,
+            updated_at = NOW()
+        WHERE id = $2
+        `,
+        [legacyStatus, firmante.documento_id]
+      );
 
-  nuevoEstadoDocumento = legacyStatus;
-  nuevoEstadoDocuments = documentsStatus;
+      if (newDocumentId) {
+        await client.query(
+          `
+          UPDATE documents
+          SET status = $1,
+              updated_at = NOW()
+          WHERE id = $2
+          `,
+          [documentsStatus, newDocumentId]
+        );
+      }
 
-  await client.query(
-    `
-    UPDATE documentos
-    SET estado = $1,
-        updated_at = NOW()
-    WHERE id = $2
-    `,
-    [legacyStatus, firmante.documento_id]
-  );
-
-  if (newDocumentId) {
-    await client.query(
-      `
-      UPDATE documents
-      SET status = $1,
-          updated_at = NOW()
-      WHERE id = $2
-      `,
-      [documentsStatus, newDocumentId]
-    );
-  }
-
-  await cancelPendingReminders(client, firmante.documento_id);
-}
+      await cancelPendingReminders(client, firmante.documento_id);
+    }
 
     await client.query("COMMIT");
 

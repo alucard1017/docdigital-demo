@@ -56,6 +56,176 @@ function isAbortLikeError(err) {
   );
 }
 
+function formatDateTime(value) {
+  if (!value) return "";
+  const date = value instanceof Date ? value : new Date(value);
+  if (Number.isNaN(date.getTime())) return "";
+  return date.toLocaleString("es-CO", {
+    day: "2-digit",
+    month: "2-digit",
+    year: "numeric",
+    hour: "2-digit",
+    minute: "2-digit",
+  });
+}
+
+function normalizeParticipantRole(value = "") {
+  const role = String(value || "").trim().toLowerCase();
+
+  if (role.includes("vis")) {
+    return {
+      key: "visador",
+      label: "Visador",
+      badgeClass: "detail-flow-badge detail-flow-badge--warning",
+    };
+  }
+
+  if (role.includes("firma") || role.includes("sign")) {
+    return {
+      key: "firmante",
+      label: "Firmante",
+      badgeClass: "detail-flow-badge detail-flow-badge--info",
+    };
+  }
+
+  if (role.includes("represent")) {
+    return {
+      key: "representante",
+      label: "Representante",
+      badgeClass: "detail-flow-badge detail-flow-badge--neutral",
+    };
+  }
+
+  return {
+    key: "participante",
+    label: "Participante",
+    badgeClass: "detail-flow-badge detail-flow-badge--neutral",
+  };
+}
+
+function normalizeFlowStatus(value = "") {
+  const status = String(value || "").trim().toUpperCase();
+
+  if (status === "FIRMADO") {
+    return {
+      key: "done",
+      label: "Firmado",
+      className: "detail-flow-status detail-flow-status--success",
+    };
+  }
+
+  if (status === "VISADO") {
+    return {
+      key: "done",
+      label: "Visado",
+      className: "detail-flow-status detail-flow-status--warning",
+    };
+  }
+
+  if (status === "RECHAZADO") {
+    return {
+      key: "rejected",
+      label: "Rechazado",
+      className: "detail-flow-status detail-flow-status--danger",
+    };
+  }
+
+  if (
+    status === "PENDIENTE" ||
+    status === "PENDIENTE_FIRMA" ||
+    status === "PENDIENTE_VISADO"
+  ) {
+    return {
+      key: "pending",
+      label: "Pendiente",
+      className: "detail-flow-status detail-flow-status--pending",
+    };
+  }
+
+  return {
+    key: "unknown",
+    label: status || "Sin estado",
+    className: "detail-flow-status detail-flow-status--neutral",
+  };
+}
+
+function buildFlowParticipants(participants = [], signers = []) {
+  const signerMap = new Map(
+    (Array.isArray(signers) ? signers : []).map((signer) => [String(signer.id), signer])
+  );
+
+  return (Array.isArray(participants) ? participants : [])
+    .slice()
+    .sort((a, b) => {
+      const aOrder = Number.isFinite(Number(a?.flow_order)) ? Number(a.flow_order) : 9999;
+      const bOrder = Number.isFinite(Number(b?.flow_order)) ? Number(b.flow_order) : 9999;
+      return aOrder - bOrder;
+    })
+    .map((participant, index) => {
+      const roleInfo = normalizeParticipantRole(participant?.role_in_doc);
+      const statusInfo = normalizeFlowStatus(participant?.status);
+      const signer = signerMap.get(String(participant?.signer_id || participant?.id));
+
+      return {
+        id: participant?.id || `${participant?.email || "participant"}-${index}`,
+        order: Number.isFinite(Number(participant?.flow_order))
+          ? Number(participant.flow_order)
+          : index + 1,
+        name: participant?.name || signer?.name || "Participante",
+        email: participant?.email || signer?.email || "Sin correo",
+        roleLabel: roleInfo.label,
+        roleBadgeClass: roleInfo.badgeClass,
+        roleKey: roleInfo.key,
+        statusKey: statusInfo.key,
+        statusLabel: statusInfo.label,
+        statusClassName: statusInfo.className,
+        signedAt: participant?.signed_at || signer?.signed_at || null,
+      };
+    });
+}
+
+function buildDocumentStateMeta(status) {
+  const normalized = String(status || "").trim().toUpperCase();
+
+  if (normalized === DOC_STATUS.FIRMADO) {
+    return {
+      label: "Firmado",
+      className: "detail-doc-state detail-doc-state--success",
+      helper: "El flujo del documento ya fue completado.",
+    };
+  }
+
+  if (normalized === DOC_STATUS.RECHAZADO) {
+    return {
+      label: "Rechazado",
+      className: "detail-doc-state detail-doc-state--danger",
+      helper: "El documento fue rechazado y el flujo quedó cerrado.",
+    };
+  }
+
+  if (normalized === DOC_STATUS.PENDIENTE_VISADO) {
+    return {
+      label: "Pendiente de visado",
+      className: "detail-doc-state detail-doc-state--warning",
+      helper: "Aún falta la aprobación o revisión previa antes de completar la firma.",
+    };
+  }
+
+  if (normalized === DOC_STATUS.PENDIENTE_FIRMA) {
+    return {
+      label: "Pendiente de firma",
+      className: "detail-doc-state detail-doc-state--info",
+      helper: "El documento sigue esperando firmas pendientes.",
+    };
+  }
+
+  return {
+    label: normalized || "Sin estado",
+    className: "detail-doc-state detail-doc-state--neutral",
+    helper: "Estado actual del documento.",
+  };
+}
+
 export function DetailView({
   selectedDoc,
   pdfUrl,
@@ -142,6 +312,21 @@ export function DetailView({
   const downloadUrl = selectedDoc
     ? `${baseUrl}/documents/${selectedDoc.id}/download`
     : null;
+
+  const documentStateMeta = useMemo(
+    () => buildDocumentStateMeta(selectedDoc?.status),
+    [selectedDoc?.status]
+  );
+
+  const flowParticipants = useMemo(
+    () => buildFlowParticipants(participants, signers),
+    [participants, signers]
+  );
+
+  const nextPendingParticipant = useMemo(
+    () => flowParticipants.find((p) => p.statusKey === "pending") || null,
+    [flowParticipants]
+  );
 
   const fetchTimelineAndParticipants = useCallback(
     async (docId) => {
@@ -366,11 +551,7 @@ export function DetailView({
         setVisadoError("");
       }
     },
-    [
-      acceptedLegalSign,
-      acceptedLegalVisado,
-      manejarAccionDocumento,
-    ]
+    [acceptedLegalSign, acceptedLegalVisado, manejarAccionDocumento]
   );
 
   if (!selectedDoc) return null;
@@ -401,8 +582,8 @@ export function DetailView({
         <header className="detail-topbar">
           <span className="detail-topbar-title">
             Revisión de documento{" "}
-            {numeroInterno ? `(${numeroInterno})` : `#${selectedDoc.id}`} ·
-            Estado {selectedDoc.status}
+            {numeroInterno ? `(${numeroInterno})` : `#${selectedDoc.id}`} · Estado{" "}
+            {selectedDoc.status}
           </span>
 
           <span className="detail-topbar-user">
@@ -412,22 +593,29 @@ export function DetailView({
 
         <div className="detail-container">
           <div className="detail-card">
-            <h1 className="detail-title">
-              {selectedDoc.title || "Documento sin título"}
-            </h1>
+            <div className="detail-header-block">
+              <div>
+                <h1 className="detail-title">
+                  {selectedDoc.title || "Documento sin título"}
+                </h1>
 
-            <div className="detail-meta">
-              <p>
-                N° interno:{" "}
-                <strong>{numeroInterno || `#${selectedDoc.id}`}</strong> ·
-                Estado: <strong>{selectedDoc.status}</strong>
-              </p>
-              <p>
-                Tipo de trámite:{" "}
-                <strong>
-                  {tramiteLabel} – {documentoLabel}
-                </strong>
-              </p>
+                <div className="detail-meta">
+                  <p>
+                    N° interno: <strong>{numeroInterno || `#${selectedDoc.id}`}</strong>
+                  </p>
+                  <p>
+                    Tipo de trámite:{" "}
+                    <strong>
+                      {tramiteLabel} – {documentoLabel}
+                    </strong>
+                  </p>
+                </div>
+              </div>
+
+              <div className={documentStateMeta.className}>
+                <div className="detail-doc-state__label">{documentStateMeta.label}</div>
+                <div className="detail-doc-state__helper">{documentStateMeta.helper}</div>
+              </div>
             </div>
 
             {selectedDoc.description && (
@@ -443,259 +631,276 @@ export function DetailView({
                 </div>
               )}
 
-            <div className="detail-toolbar">
-              <span className="detail-toolbar-label">
-                Visualización del documento final
-              </span>
+            <section className="detail-section">
+              <div className="detail-section__header">
+                <h3 className="detail-section__title">Documento y acciones</h3>
+                <p className="detail-section__subtitle">
+                  Visualiza el PDF final, descarga el archivo o reenvía recordatorios según el estado actual.
+                </p>
+              </div>
 
-              <div className="detail-toolbar-actions">
-                {mostrarBotonRecordatorio && (
-                  <button
-                    type="button"
-                    className="btn-main detail-btn-reminder-all"
-                    onClick={handleEnviarRecordatorioATodos}
-                    disabled={recordatorioLoading}
-                    style={{
-                      cursor: recordatorioLoading ? "not-allowed" : "pointer",
-                      opacity: recordatorioLoading ? 0.6 : 1,
-                    }}
-                  >
-                    {recordatorioLoading
-                      ? "Enviando recordatorio..."
-                      : "🔔 Recordatorio a todos"}
-                  </button>
-                )}
+              <div className="detail-toolbar">
+                <span className="detail-toolbar-label">
+                  Visualización del documento final
+                </span>
 
-                {mostrarBotonReenvioVisado && (
-                  <button
-                    type="button"
-                    className="btn-main detail-btn-reminder-visado"
-                    onClick={handleReenviarVisado}
-                    disabled={reenviarLoadingVisado}
-                    style={{
-                      cursor: reenviarLoadingVisado ? "not-allowed" : "pointer",
-                      opacity: reenviarLoadingVisado ? 0.6 : 1,
-                    }}
-                  >
-                    {reenviarLoadingVisado
-                      ? "Reenviando visado..."
-                      : "Reenviar visado"}
-                  </button>
-                )}
+                <div className="detail-toolbar-actions">
+                  {mostrarBotonRecordatorio && (
+                    <button
+                      type="button"
+                      className="btn-main detail-btn-reminder-all"
+                      onClick={handleEnviarRecordatorioATodos}
+                      disabled={recordatorioLoading}
+                      style={{
+                        cursor: recordatorioLoading ? "not-allowed" : "pointer",
+                        opacity: recordatorioLoading ? 0.6 : 1,
+                      }}
+                    >
+                      {recordatorioLoading
+                        ? "Enviando recordatorio..."
+                        : "🔔 Recordatorio a todos"}
+                    </button>
+                  )}
 
-                {downloadUrl && (
-                  <a
-                    href={downloadUrl}
-                    className="btn-main detail-btn-download"
-                  >
-                    📥 Descargar PDF
-                  </a>
-                )}
+                  {mostrarBotonReenvioVisado && (
+                    <button
+                      type="button"
+                      className="btn-main detail-btn-reminder-visado"
+                      onClick={handleReenviarVisado}
+                      disabled={reenviarLoadingVisado}
+                      style={{
+                        cursor: reenviarLoadingVisado ? "not-allowed" : "pointer",
+                        opacity: reenviarLoadingVisado ? 0.6 : 1,
+                      }}
+                    >
+                      {reenviarLoadingVisado
+                        ? "Reenviando visado..."
+                        : "Reenviar visado"}
+                    </button>
+                  )}
 
-                {pdfUrl && !loadingPdf && (
-                  <a
-                    href={pdfUrl}
-                    target="_blank"
-                    rel="noopener noreferrer"
-                    className="btn-main detail-btn-view"
-                  >
-                    👁️ Abrir PDF en otra pestaña
-                  </a>
+                  {downloadUrl && (
+                    <a href={downloadUrl} className="btn-main detail-btn-download">
+                      📥 Descargar PDF
+                    </a>
+                  )}
+
+                  {pdfUrl && !loadingPdf && (
+                    <a
+                      href={pdfUrl}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className="btn-main detail-btn-view"
+                    >
+                      👁️ Abrir PDF en otra pestaña
+                    </a>
+                  )}
+                </div>
+              </div>
+
+              <div className="detail-pdf-wrapper">
+                {loadingPdf ? (
+                  <div className="detail-pdf-empty">
+                    Cargando vista previa del PDF...
+                  </div>
+                ) : pdfUrl ? (
+                  <iframe
+                    title={`PDF del documento ${selectedDoc.id}`}
+                    src={pdfUrl}
+                    className="detail-pdf-iframe"
+                  />
+                ) : (
+                  <div className="detail-pdf-empty">
+                    {pdfError ||
+                      'No se pudo cargar la vista previa del PDF. Usa "Descargar PDF" para ver el documento.'}
+                  </div>
                 )}
               </div>
-            </div>
+            </section>
 
-            <div className="detail-pdf-wrapper">
-              {loadingPdf ? (
-                <div className="detail-pdf-empty">
-                  Cargando vista previa del PDF...
+            {(puedeFirmar || puedeVisar) && !isSigned && !isRejected && (
+              <section className="detail-section">
+                <div className="detail-section__header">
+                  <h3 className="detail-section__title">Validaciones previas</h3>
+                  <p className="detail-section__subtitle">
+                    Antes de firmar o visar, deja constancia de aceptación del aviso legal correspondiente.
+                  </p>
                 </div>
-              ) : pdfUrl ? (
-                <iframe
-                  title={`PDF del documento ${selectedDoc.id}`}
-                  src={pdfUrl}
-                  className="detail-pdf-iframe"
-                />
-              ) : (
-                <div className="detail-pdf-empty">
-                  {pdfError ||
-                    'No se pudo cargar la vista previa del PDF. Usa "Descargar PDF" para ver el documento.'}
-                </div>
-              )}
-            </div>
 
-            {puedeFirmar && !isSigned && !isRejected && (
-              <ElectronicSignatureNotice
-                mode="firma"
-                checked={acceptedLegalSign}
-                onChange={setAcceptedLegalSign}
-              />
+                {puedeFirmar && (
+                  <>
+                    <ElectronicSignatureNotice
+                      mode="firma"
+                      checked={acceptedLegalSign}
+                      onChange={setAcceptedLegalSign}
+                    />
+                    {signError && (
+                      <p className="detail-inline-error">{signError}</p>
+                    )}
+                  </>
+                )}
+
+                {puedeVisar && (
+                  <>
+                    <ElectronicSignatureNotice
+                      mode="visado"
+                      checked={acceptedLegalVisado}
+                      onChange={setAcceptedLegalVisado}
+                    />
+                    {visadoError && (
+                      <p className="detail-inline-error">{visadoError}</p>
+                    )}
+                  </>
+                )}
+              </section>
             )}
 
-            {signError && (
-              <p
-                style={{
-                  color: "#b91c1c",
-                  fontSize: 13,
-                  marginBottom: 12,
-                  marginTop: -4,
-                }}
-              >
-                {signError}
-              </p>
-            )}
-
-            {puedeVisar && !isSigned && !isRejected && (
-              <ElectronicSignatureNotice
-                mode="visado"
-                checked={acceptedLegalVisado}
-                onChange={setAcceptedLegalVisado}
-              />
-            )}
-
-            {visadoError && (
-              <p
-                style={{
-                  color: "#b91c1c",
-                  fontSize: 13,
-                  marginBottom: 12,
-                  marginTop: -4,
-                }}
-              >
-                {visadoError}
-              </p>
-            )}
-
-            <div className="detail-signers">
-              <h3 className="detail-signers-title">Firmantes</h3>
-
-              {loadingSigners ? (
-                <p className="detail-signers-loading">Cargando firmantes...</p>
-              ) : signers.length === 0 ? (
-                <p className="detail-signers-empty">
-                  No hay firmantes registrados para este documento.
+            <section className="detail-section">
+              <div className="detail-section__header">
+                <h3 className="detail-section__title">Flujo de participantes</h3>
+                <p className="detail-section__subtitle">
+                  Revisa el orden del proceso, el rol de cada participante y quién sigue en el flujo secuencial.
                 </p>
-              ) : (
-                <ul className="detail-signers-list">
-                  {signers.map((s) => {
-                    const isPendingSigner =
-                      s.status !== "FIRMADO" && s.status !== "RECHAZADO";
+              </div>
 
-                    return (
-                      <li key={s.id} className="detail-signers-item">
-                        <div>
-                          <div className="detail-signer-main">
-                            {s.name || "Firmante"}
-                          </div>
-                          <div className="detail-signer-sub">
-                            {s.email} · Estado: {s.status}
-                          </div>
-                        </div>
-
-                        {isPendingSigner && (
-                          <button
-                            type="button"
-                            className="btn-main"
-                            style={{
-                              padding: "8px 16px",
-                              fontSize: "0.85rem",
-                              backgroundColor: "#3b82f6",
-                              color: "#fff",
-                              border: "none",
-                              borderRadius: 6,
-                              fontWeight: 600,
-                              cursor:
-                                reenviarSignerId === s.id
-                                  ? "not-allowed"
-                                  : "pointer",
-                              opacity: reenviarSignerId === s.id ? 0.6 : 1,
-                            }}
-                            onClick={() => handleReenviarFirma(s.id)}
-                            disabled={reenviarSignerId === s.id}
-                          >
-                            {reenviarSignerId === s.id
-                              ? "⏳ Enviando..."
-                              : "📧 Enviar recordatorio"}
-                          </button>
-                        )}
-
-                        {s.status === "FIRMADO" && (
-                          <span
-                            style={{
-                              padding: "6px 12px",
-                              fontSize: "0.8rem",
-                              background: "#dcfce7",
-                              color: "#16a34a",
-                              borderRadius: 6,
-                              fontWeight: 600,
-                            }}
-                          >
-                            ✓ Firmado
-                          </span>
-                        )}
-                      </li>
-                    );
-                  })}
-                </ul>
-              )}
-            </div>
-
-            <div className="detail-signers" style={{ marginTop: 24 }}>
-              <h3 className="detail-signers-title">Flujo de participantes</h3>
-
-              {loadingParticipants ? (
+              {loadingParticipants || loadingSigners ? (
                 <p className="detail-signers-loading">
                   Cargando flujo de participantes...
                 </p>
-              ) : participants.length === 0 ? (
+              ) : flowParticipants.length === 0 ? (
                 <p className="detail-signers-empty">
                   No hay participantes registrados para este documento.
                 </p>
               ) : (
-                <ul className="detail-signers-list">
-                  {participants.map((p) => (
-                    <li key={p.id} className="detail-signers-item">
-                      <div>
-                        <div className="detail-signer-main">
-                          #{p.flow_order} · {p.role_in_doc} · {p.name}
-                        </div>
-                        <div className="detail-signer-sub">
-                          {p.email} · Estado: {p.status}
-                          {p.signed_at &&
-                            ` · firmado el ${new Date(
-                              p.signed_at
-                            ).toLocaleString()}`}
-                        </div>
-                      </div>
-                    </li>
-                  ))}
-                </ul>
-              )}
-            </div>
+                <>
+                  <div className="detail-flow-summary">
+                    <div className="detail-flow-summary__label">Próximo paso</div>
+                    <div className="detail-flow-summary__value">
+                      {nextPendingParticipant
+                        ? `#${nextPendingParticipant.order} · ${nextPendingParticipant.roleLabel} · ${nextPendingParticipant.name}`
+                        : "No hay participantes pendientes"}
+                    </div>
+                  </div>
 
-            <div className="detail-timeline-wrapper">
-              {loadingTimeline ? (
-                <div className="detail-timeline-loading">
-                  Cargando progreso...
-                </div>
-              ) : timeline ? (
-                <Timeline timeline={timeline} />
-              ) : (
-                <div className="detail-timeline-empty">
-                  No hay datos de progreso disponibles.
-                </div>
-              )}
-            </div>
+                  <ul className="detail-flow-list">
+                    {flowParticipants.map((participant) => {
+                      const canRemind =
+                        participant.roleKey === "firmante" &&
+                        participant.statusKey === "pending";
 
-            <div className="detail-history">
-              <h3 className="detail-history-title">Historial de acciones</h3>
+                      const signerMatch = signers.find(
+                        (s) =>
+                          String(s.id) === String(participant.id) ||
+                          String(s.email || "").toLowerCase() ===
+                            String(participant.email || "").toLowerCase()
+                      );
 
-              {timeline?.events?.length > 0 ? (
-                <EventList events={timeline.events} />
-              ) : (
-                <EventList events={safeEvents} />
+                      const signerId = signerMatch?.id;
+
+                      return (
+                        <li key={participant.id} className="detail-flow-item">
+                          <div className="detail-flow-item__order">
+                            {participant.order}
+                          </div>
+
+                          <div className="detail-flow-item__body">
+                            <div className="detail-flow-item__top">
+                              <div>
+                                <div className="detail-signer-main">
+                                  {participant.name}
+                                </div>
+                                <div className="detail-signer-sub">
+                                  {participant.email}
+                                </div>
+                              </div>
+
+                              <div className="detail-flow-item__badges">
+                                <span className={participant.roleBadgeClass}>
+                                  {participant.roleLabel}
+                                </span>
+                                <span className={participant.statusClassName}>
+                                  {participant.statusLabel}
+                                </span>
+                              </div>
+                            </div>
+
+                            <div className="detail-flow-item__meta">
+                              {participant.signedAt ? (
+                                <span>
+                                  Registrado el {formatDateTime(participant.signedAt)}
+                                </span>
+                              ) : (
+                                <span>Aún no registra acción</span>
+                              )}
+                            </div>
+                          </div>
+
+                          {canRemind && signerId && (
+                            <button
+                              type="button"
+                              className="btn-main detail-btn-inline-reminder"
+                              onClick={() => handleReenviarFirma(signerId)}
+                              disabled={reenviarSignerId === signerId}
+                              style={{
+                                cursor:
+                                  reenviarSignerId === signerId
+                                    ? "not-allowed"
+                                    : "pointer",
+                                opacity: reenviarSignerId === signerId ? 0.6 : 1,
+                              }}
+                            >
+                              {reenviarSignerId === signerId
+                                ? "⏳ Enviando..."
+                                : "📧 Recordar"}
+                            </button>
+                          )}
+                        </li>
+                      );
+                    })}
+                  </ul>
+                </>
               )}
-            </div>
+            </section>
+
+            <section className="detail-section">
+              <div className="detail-section__header">
+                <h3 className="detail-section__title">Timeline del documento</h3>
+                <p className="detail-section__subtitle">
+                  Consulta el avance general y distingue eventos automáticos de acciones realizadas por usuarios.
+                </p>
+              </div>
+
+              <div className="detail-timeline-wrapper">
+                {loadingTimeline ? (
+                  <div className="detail-timeline-loading">
+                    Cargando progreso...
+                  </div>
+                ) : timeline ? (
+                  <Timeline timeline={timeline} />
+                ) : (
+                  <div className="detail-timeline-empty">
+                    No hay datos de progreso disponibles.
+                  </div>
+                )}
+              </div>
+            </section>
+
+            <section className="detail-section">
+              <div className="detail-section__header">
+                <h3 className="detail-section__title">Historial de acciones</h3>
+                <p className="detail-section__subtitle">
+                  Registro detallado de eventos del documento para seguimiento y auditoría.
+                </p>
+              </div>
+
+              <div className="detail-history">
+                {timeline?.events?.length > 0 ? (
+                  <EventList events={timeline.events} />
+                ) : (
+                  <EventList events={safeEvents} />
+                )}
+              </div>
+            </section>
 
             <DetailActions
               puedeFirmar={puedeFirmar}

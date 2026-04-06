@@ -120,11 +120,12 @@
   border-radius: 12px;
   flex-grow: 1;
   transition: all 0.25s ease;
+  border: 1px solid transparent;
 }
 
 .timeline-content-completed {
   background: #f0fdf4;
-  border: 1px solid #bbf7d0;
+  border-color: #bbf7d0;
 }
 
 .timeline-content-completed:hover {
@@ -134,7 +135,7 @@
 
 .timeline-content-active {
   background: #f0f9ff;
-  border: 1px solid #7dd3fc;
+  border-color: #7dd3fc;
   box-shadow: 0 4px 16px rgba(37, 99, 235, 0.15);
 }
 
@@ -145,7 +146,7 @@
 
 .timeline-content-pending {
   background: #f8fafc;
-  border: 1px solid #e2e8f0;
+  border-color: #e2e8f0;
 }
 
 .timeline-content-pending:hover {

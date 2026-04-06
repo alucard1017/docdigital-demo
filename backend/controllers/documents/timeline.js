@@ -8,20 +8,22 @@ const { logAudit } = require("../../utils/auditLog");
 async function getDocumentPdf(req, res) {
   try {
     const docId = Number(req.params.id);
-    if (Number.isNaN(docId)) {
+    if (!Number.isFinite(docId)) {
       return res.status(400).json({ message: "ID de documento inválido" });
     }
 
     const result = await db.query(
-      `SELECT 
-         id,
-         file_path,
-         pdf_original_url,
-         pdf_final_url,
-         status,
-         pdf_hash_final
-       FROM documents
-       WHERE id = $1`,
+      `
+      SELECT 
+        id,
+        file_path,
+        pdf_original_url,
+        pdf_final_url,
+        status,
+        pdf_hash_final
+      FROM documents
+      WHERE id = $1
+      `,
       [docId]
     );
 
@@ -43,15 +45,11 @@ async function getDocumentPdf(req, res) {
         .json({ message: "Documento sin archivo asociado" });
     }
 
-    // PDF que debe ver el usuario:
-    // - Si está FIRMADO y hay pdf_final_url -> PDF sellado
-    // - En otro caso, original o file_path (compatibilidad legacy)
     const key =
       status === "FIRMADO" && pdf_final_url
         ? pdf_final_url
         : pdf_original_url || file_path;
 
-    // Verificación de integridad SOLO si hay hash guardado
     if (pdf_hash_final) {
       try {
         const signedUrl = await getSignedUrl(key, 600);
@@ -60,12 +58,11 @@ async function getDocumentPdf(req, res) {
           responseType: "arraybuffer",
         });
         const buffer = Buffer.from(fileResponse.data);
-
         const currentHash = computeHash(buffer);
 
         if (currentHash !== pdf_hash_final) {
           console.error(
-            "❌ Hash de PDF no coincide (vista pública) para documento",
+            "❌ Hash de PDF no coincide (getDocumentPdf) para documento",
             docId,
             {
               key,
@@ -75,8 +72,8 @@ async function getDocumentPdf(req, res) {
           );
 
           await logAudit({
-            user: null,
-            action: "public_document_hash_mismatch",
+            user: req.user || null,
+            action: "document_pdf_hash_mismatch",
             entityType: "document",
             entityId: docId,
             metadata: {
@@ -84,7 +81,7 @@ async function getDocumentPdf(req, res) {
               stored_hash: pdf_hash_final,
               current_hash: currentHash,
               key,
-              context: "getDocumentPdf_public",
+              context: "getDocumentPdf",
             },
             req,
           });
@@ -100,7 +97,6 @@ async function getDocumentPdf(req, res) {
           docId,
           verifyErr
         );
-        // Si falla la verificación técnica (problema de red/R2), mantenemos 500
         return res.status(500).json({
           message: "Error verificando la integridad del documento.",
         });
@@ -120,33 +116,35 @@ async function getDocumentPdf(req, res) {
 }
 
 /* ================================
-   GET: Timeline del documento
+   GET: Timeline del documento (UI)
    ================================ */
 async function getTimeline(req, res) {
   try {
     const docId = Number(req.params.id);
-    if (Number.isNaN(docId)) {
+    if (!Number.isFinite(docId)) {
       return res.status(400).json({ message: "ID de documento inválido" });
     }
 
     const docRes = await db.query(
-      `SELECT 
-         id,
-         title,
-         status,
-         company_id,
-         destinatario_nombre,
-         empresa_rut,
-         created_at,
-         updated_at,
-         requires_visado,
-         firmante_nombre,
-         visador_nombre,
-         numero_contrato_interno,
-         tipo_tramite,
-         tipo_documento
-       FROM documents 
-       WHERE id = $1`,
+      `
+      SELECT 
+        id,
+        title,
+        status,
+        company_id,
+        destinatario_nombre,
+        empresa_rut,
+        created_at,
+        updated_at,
+        requires_visado,
+        firmante_nombre,
+        visador_nombre,
+        numero_contrato_interno,
+        tipo_tramite,
+        tipo_documento
+      FROM documents 
+      WHERE id = $1
+      `,
       [docId]
     );
 
@@ -163,48 +161,58 @@ async function getTimeline(req, res) {
         role_in_doc,
         status,
         step_order,
+        flow_order,
+        flow_group,
         "name",
         email,
         signed_at
       FROM document_participants
       WHERE document_id = $1
-      ORDER BY step_order ASC, id ASC
+      ORDER BY flow_order ASC NULLS LAST, step_order ASC NULLS LAST, id ASC
       `,
       [doc.id]
     );
     const participants = participantsRes.rows || [];
 
     const eventsRes = await db.query(
-      `SELECT 
-         id,
-         action,
-         details,
-         actor,
-         from_status,
-         to_status,
-         created_at
-       FROM document_events 
-       WHERE document_id = $1 
-       ORDER BY created_at ASC`,
+      `
+      SELECT 
+        id,
+        action,
+        details,
+        actor,
+        from_status,
+        to_status,
+        event_type,
+        metadata,
+        ip_address,
+        user_agent,
+        created_at
+      FROM document_events 
+      WHERE document_id = $1 
+      ORDER BY created_at ASC
+      `,
       [docId]
     );
     const documentEvents = eventsRes.rows || [];
 
     const auditRes = await db.query(
-      `SELECT
-         id,
-         created_at,
-         user_id,
-         action,
-         details,
-         metadata,
-         ip,
-         user_agent,
-         request_id
-       FROM audit_log
-       WHERE entity_type = 'document'
-         AND entity_id = $1
-       ORDER BY created_at ASC`,
+      `
+      SELECT
+        id,
+        created_at,
+        user_id,
+        action,
+        details,
+        metadata,
+        ip,
+        user_agent,
+        request_id
+      FROM audit_log
+      WHERE entity_type = 'document'
+        AND entity_id = $1
+      ORDER BY created_at ASC
+      `,
       [docId]
     );
     const auditEvents = auditRes.rows || [];
@@ -213,16 +221,16 @@ async function getTimeline(req, res) {
       ...documentEvents.map((evt) => ({
         id: evt.id,
         source: "document_events",
-        action: evt.action,
-        actor: evt.actor,
+        action: evt.action || evt.event_type,
+        actor: evt.actor || "system",
         timestamp: evt.created_at,
         fromStatus: evt.from_status,
         toStatus: evt.to_status,
         details: evt.details,
-        metadata: null,
+        metadata: evt.metadata || null,
         companyId: doc.company_id || null,
-        ip: null,
-        userAgent: null,
+        ip: evt.ip_address || null,
+        userAgent: evt.user_agent || null,
         requestId: null,
       })),
       ...auditEvents.map((evt) => ({
@@ -309,19 +317,21 @@ async function getTimeline(req, res) {
 }
 
 /* ================================
-   GET: Timeline legal (document_events)
+   GET: Timeline legal (solo document_events)
    ================================ */
 async function getLegalTimeline(req, res) {
   try {
     const docId = Number(req.params.id);
-    if (Number.isNaN(docId)) {
+    if (!Number.isFinite(docId)) {
       return res.status(400).json({ message: "ID de documento inválido" });
     }
 
     const docRes = await db.query(
-      `SELECT id, title, status, company_id
-       FROM documents
-       WHERE id = $1`,
+      `
+      SELECT id, title, status, company_id
+      FROM documents
+      WHERE id = $1
+      `,
       [docId]
     );
 
@@ -383,14 +393,16 @@ async function getLegalTimeline(req, res) {
 async function getSigners(req, res) {
   try {
     const docId = Number(req.params.id);
-    if (Number.isNaN(docId)) {
+    if (!Number.isFinite(docId)) {
       return res.status(400).json({ message: "ID de documento inválido" });
     }
 
     const docRes = await db.query(
-      `SELECT id 
-       FROM documents 
-       WHERE id = $1 AND owner_id = $2`,
+      `
+      SELECT id 
+      FROM documents 
+      WHERE id = $1 AND owner_id = $2
+      `,
       [docId, req.user.id]
     );
 
@@ -399,14 +411,16 @@ async function getSigners(req, res) {
     }
 
     const signersRes = await db.query(
-      `SELECT 
-         id,
-         name,
-         email,
-         status
-       FROM document_signers
-       WHERE document_id = $1
-       ORDER BY id ASC`,
+      `
+      SELECT 
+        id,
+        name,
+        email,
+        status
+      FROM document_signers
+      WHERE document_id = $1
+      ORDER BY id ASC
+      `,
       [docId]
     );
 

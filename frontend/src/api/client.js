@@ -1,3 +1,4 @@
+// src/api/client.js
 import axios from "axios";
 import { getStoredToken } from "../utils/session";
 
@@ -373,10 +374,22 @@ export async function getDocumentPdfUrl(id, config = {}) {
   return res.data;
 }
 
+/**
+ * Timeline “pro”: debe devolver:
+ * {
+ *   document: {...},
+ *   participants: [...],
+ *   events: [...]
+ * }
+ */
 export async function getDocumentTimeline(id, config = {}) {
   const res = await api.get(`/documents/${id}/timeline`, config);
   return res.data;
 }
+
+// =============================
+// Público (token de firma / verificación)
+// =============================
 
 export async function getPublicVerificationByCode(code, config = {}) {
   const res = await api.get(

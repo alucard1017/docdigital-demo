@@ -1,18 +1,59 @@
+// backend/controllers/documents/signing.js
 const { db, sellarPdfConQr, DOCUMENT_STATES } = require("./common");
 const { logAudit } = require("../../utils/auditLog");
+
+/* ================================
+   Helpers internos
+   ================================ */
+
+const parseId = (raw) => {
+  const id = Number(raw);
+  return Number.isFinite(id) ? id : null;
+};
+
+function getClientIp(req) {
+  return (
+    (req.headers["x-forwarded-for"] || "")
+      .toString()
+      .split(",")[0]
+      .trim() || req.ip || req.socket?.remoteAddress || null
+  );
+}
+
+function getUserAgent(req) {
+  return req.headers["user-agent"] || null;
+}
+
+function getDocumentHash(doc) {
+  return (
+    doc.final_hash_sha256 ||
+    doc.sealed_hash_sha256 ||
+    doc.hash_final_file ||
+    doc.pdf_hash_final ||
+    doc.hash_sha256 ||
+    doc.hash_original_file ||
+    null
+  );
+}
 
 /* ================================
    POST: Firmar documento (propietario)
    ================================ */
 async function signDocument(req, res) {
   try {
-    const id = req.params.id;
+    const id = parseId(req.params.id);
     const userId = req.user.id;
 
+    if (id === null) {
+      return res.status(400).json({ message: "ID de documento inválido" });
+    }
+
     const current = await db.query(
-      `SELECT * 
-       FROM documents 
-       WHERE id = $1 AND owner_id = $2`,
+      `
+      SELECT *
+      FROM documents
+      WHERE id = $1 AND owner_id = $2
+      `,
       [id, userId]
     );
 
@@ -23,7 +64,7 @@ async function signDocument(req, res) {
     const docActual = current.rows[0];
 
     if (docActual.status === DOCUMENT_STATES.SIGNED) {
-      return res.status(400).json({ message: "Ya firmado" });
+      return res.status(400).json({ message: "El documento ya está firmado" });
     }
 
     if (docActual.status === DOCUMENT_STATES.REJECTED) {
@@ -39,28 +80,67 @@ async function signDocument(req, res) {
       });
     }
 
-    const result = await db.query(
-      `UPDATE documents 
-       SET status = $1,
-           updated_at = NOW()
-       WHERE id = $2 AND owner_id = $3
-       RETURNING *`,
+    const updateRes = await db.query(
+      `
+      UPDATE documents
+      SET status = $1,
+          updated_at = NOW()
+      WHERE id = $2 AND owner_id = $3
+      RETURNING *
+      `,
       [DOCUMENT_STATES.SIGNED, id, userId]
     );
-    const doc = result.rows[0];
+
+    const doc = updateRes.rows[0];
+
+    const ipAddress = getClientIp(req);
+    const userAgent = getUserAgent(req);
+    const hashDocument = getDocumentHash(doc);
 
     await db.query(
-      `INSERT INTO document_events (
-         document_id, actor, action, details, from_status, to_status
-       )
-       VALUES ($1, $2, $3, $4, $5, $6)`,
+      `
+      INSERT INTO document_events (
+        document_id,
+        participant_id,
+        actor,
+        action,
+        details,
+        from_status,
+        to_status,
+        event_type,
+        ip_address,
+        user_agent,
+        hash_document,
+        company_id,
+        user_id,
+        metadata
+      )
+      VALUES (
+        $1, $2, $3, $4, $5, $6, $7,
+        $8, $9, $10, $11, $12, $13, $14
+      )
+      `,
       [
         doc.id,
+        null,
         req.user.name || "Sistema",
         "FIRMADO",
         "Firmado por propietario (aceptó aviso legal de uso de firma electrónica simple, con equivalencia a firma manuscrita conforme a la Ley N° 19.799).",
         docActual.status,
         DOCUMENT_STATES.SIGNED,
+        "SIGNED_OWNER",
+        ipAddress,
+        userAgent,
+        hashDocument,
+        doc.company_id || null,
+        req.user.id || null,
+        JSON.stringify({
+          source: "owner_panel",
+          actor_type: "OWNER",
+          owner_id: req.user.id,
+          owner_name: req.user.name || null,
+          document_title: doc.title || null,
+        }),
       ]
     );
 
@@ -76,20 +156,22 @@ async function signDocument(req, res) {
       req,
     });
 
-    // Sellar PDF con QR / código y dejar que pdfSeal.js actualice pdf_final_url y pdf_hash_final
+    // Sellar PDF con QR / código y actualizar pdf_final_url si aplica
     try {
       if (doc.nuevo_documento_id) {
         const docNuevoRes = await db.query(
-          `SELECT id, codigo_verificacion, categoria_firma
-           FROM documentos
-           WHERE id = $1`,
+          `
+          SELECT id, codigo_verificacion, categoria_firma
+          FROM documentos
+          WHERE id = $1
+          `,
           [doc.nuevo_documento_id]
         );
 
         if (docNuevoRes.rowCount > 0) {
           const docNuevo = docNuevoRes.rows[0];
-
           const sourceKey = doc.pdf_original_url || doc.file_path;
+
           if (sourceKey) {
             await sellarPdfConQr({
               s3Key: sourceKey,
@@ -100,9 +182,11 @@ async function signDocument(req, res) {
             });
 
             const updatedDocRes = await db.query(
-              `SELECT pdf_final_url 
-               FROM documents 
-               WHERE id = $1`,
+              `
+              SELECT pdf_final_url
+              FROM documents
+              WHERE id = $1
+              `,
               [doc.id]
             );
 
@@ -130,12 +214,23 @@ async function signDocument(req, res) {
 /* ================================
    POST: Visar documento (propietario)
    ================================ */
-async function viserDocumentInternalUpdate(id, userId) {
+
+async function viserDocumentInternalUpdate(id, userId, req = null) {
+  const numericId = parseId(id);
+
+  if (numericId === null) {
+    return {
+      error: { status: 400, body: { message: "ID de documento inválido" } },
+    };
+  }
+
   const current = await db.query(
-    `SELECT * 
-     FROM documents 
-     WHERE id = $1 AND owner_id = $2`,
-    [id, userId]
+    `
+    SELECT *
+    FROM documents
+    WHERE id = $1 AND owner_id = $2
+    `,
+    [numericId, userId]
   );
 
   if (current.rowCount === 0) {
@@ -176,26 +271,66 @@ async function viserDocumentInternalUpdate(id, userId) {
   }
 
   const result = await db.query(
-    `UPDATE documents 
-     SET status = $1, updated_at = NOW() 
-     WHERE id = $2 AND owner_id = $3 
-     RETURNING *`,
-    ["PENDIENTE_FIRMA", id, userId]
+    `
+    UPDATE documents
+    SET status = $1,
+        updated_at = NOW()
+    WHERE id = $2 AND owner_id = $3
+    RETURNING *
+    `,
+    ["PENDIENTE_FIRMA", numericId, userId]
   );
+
   const doc = result.rows[0];
 
+  const ipAddress = req ? getClientIp(req) : null;
+  const userAgent = req ? getUserAgent(req) : null;
+  const hashDocument = getDocumentHash(doc);
+
   await db.query(
-    `INSERT INTO document_events (
-       document_id, actor, action, details, from_status, to_status
-     ) 
-     VALUES ($1, $2, $3, $4, $5, $6)`,
+    `
+    INSERT INTO document_events (
+      document_id,
+      participant_id,
+      actor,
+      action,
+      details,
+      from_status,
+      to_status,
+      event_type,
+      ip_address,
+      user_agent,
+      hash_document,
+      company_id,
+      user_id,
+      metadata
+    )
+    VALUES (
+      $1, $2, $3, $4, $5, $6, $7,
+      $8, $9, $10, $11, $12, $13, $14
+    )
+    `,
     [
       doc.id,
-      "Sistema",
+      null,
+      req?.user?.name || "Sistema",
       "VISADO",
       "Documento visado por el propietario",
       docActual.status,
       "PENDIENTE_FIRMA",
+      "VISADO_OWNER",
+      ipAddress,
+      userAgent,
+      hashDocument,
+      doc.company_id || null,
+      req?.user?.id || null,
+      JSON.stringify({
+        source: "owner_panel",
+        actor_type: "OWNER",
+        owner_id: req?.user?.id || null,
+        owner_name: req?.user?.name || null,
+        document_title: doc.title || null,
+      }),
     ]
   );
 
@@ -207,7 +342,7 @@ async function visarDocument(req, res) {
     const id = req.params.id;
     const userId = req.user.id;
 
-    const result = await viserDocumentInternalUpdate(id, userId);
+    const result = await viserDocumentInternalUpdate(id, userId, req);
     if (result.error) {
       return res.status(result.error.status).json(result.error.body);
     }
@@ -238,18 +373,24 @@ async function visarDocument(req, res) {
 }
 
 /* ================================
- * POST: Rechazar documento (propietario)
- * ================================ */
+   POST: Rechazar documento (propietario)
+   ================================ */
 async function rejectDocument(req, res) {
   try {
-    const id = req.params.id;
-    const { motivo } = req.body;
+    const id = parseId(req.params.id);
+    const { motivo } = req.body || {};
     const userId = req.user.id;
 
+    if (id === null) {
+      return res.status(400).json({ message: "ID de documento inválido" });
+    }
+
     const current = await db.query(
-      `SELECT * 
-       FROM documents 
-       WHERE id = $1 AND owner_id = $2`,
+      `
+      SELECT *
+      FROM documents
+      WHERE id = $1 AND owner_id = $2
+      `,
       [id, userId]
     );
 
@@ -269,28 +410,71 @@ async function rejectDocument(req, res) {
       return res.status(400).json({ message: "Ya rechazado" });
     }
 
+    const rejectReason = motivo || "Sin especificar";
+
     const result = await db.query(
-      `UPDATE documents 
-       SET status = $1, reject_reason = $2, updated_at = NOW()
-       WHERE id = $3 AND owner_id = $4 
-       RETURNING *`,
-      [DOCUMENT_STATES.REJECTED, motivo || "Sin especificar", id, userId]
+      `
+      UPDATE documents
+      SET status = $1,
+          reject_reason = $2,
+          updated_at = NOW()
+      WHERE id = $3 AND owner_id = $4
+      RETURNING *
+      `,
+      [DOCUMENT_STATES.REJECTED, rejectReason, id, userId]
     );
 
     const doc = result.rows[0];
 
+    const ipAddress = getClientIp(req);
+    const userAgent = getUserAgent(req);
+    const hashDocument = getDocumentHash(doc);
+
     await db.query(
-      `INSERT INTO document_events (
-         document_id, actor, action, details, from_status, to_status
-       ) 
-       VALUES ($1, $2, $3, $4, $5, $6)`,
+      `
+      INSERT INTO document_events (
+        document_id,
+        participant_id,
+        actor,
+        action,
+        details,
+        from_status,
+        to_status,
+        event_type,
+        ip_address,
+        user_agent,
+        hash_document,
+        company_id,
+        user_id,
+        metadata
+      )
+      VALUES (
+        $1, $2, $3, $4, $5, $6, $7,
+        $8, $9, $10, $11, $12, $13, $14
+      )
+      `,
       [
         doc.id,
+        null,
         req.user.name || "Sistema",
         "RECHAZADO",
-        `Documento rechazado: ${motivo || "Sin especificar"}`,
+        `Documento rechazado: ${rejectReason}`,
         docActual.status,
         DOCUMENT_STATES.REJECTED,
+        "REJECTED_OWNER",
+        ipAddress,
+        userAgent,
+        hashDocument,
+        doc.company_id || null,
+        req.user.id || null,
+        JSON.stringify({
+          source: "owner_panel",
+          actor_type: "OWNER",
+          owner_id: req.user.id,
+          owner_name: req.user.name || null,
+          reason: rejectReason,
+          document_title: doc.title || null,
+        }),
       ]
     );
 
@@ -299,15 +483,17 @@ async function rejectDocument(req, res) {
       action: "document_rejected",
       entityType: "document",
       entityId: doc.id,
-      metadata: { motivo: motivo || "Sin especificar" },
+      metadata: { motivo: rejectReason },
       req,
     });
 
     // Notificación por email al creador
     const creadorRes = await db.query(
-      `SELECT u.email, u.name
-       FROM users u
-       WHERE u.id = $1`,
+      `
+      SELECT u.email, u.name
+      FROM users u
+      WHERE u.id = $1
+      `,
       [doc.owner_id]
     );
 
@@ -323,7 +509,7 @@ async function rejectDocument(req, res) {
           <p>El documento <strong>${doc.title}</strong> ha sido rechazado.</p>
           <div style="background: #fef2f2; padding: 16px; border-radius: 8px; border-left: 4px solid #b91c1c; margin: 16px 0;">
             <strong>Motivo del rechazo:</strong><br/>
-            ${motivo || "Sin especificar"}
+            ${rejectReason}
           </div>
           <p>Por favor, revisa el motivo y toma las acciones necesarias.</p>
           <a href="${process.env.FRONTEND_URL}" style="display:inline-block;padding:12px 24px;background:#2563eb;color:#fff;text-decoration:none;border-radius:8px;margin-top:16px;">

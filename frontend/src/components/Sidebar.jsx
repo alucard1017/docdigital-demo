@@ -28,7 +28,6 @@ export function Sidebar({
   socketCanRetry,
   onRetrySocket,
 }) {
-
   const isOwner = user?.id === OWNER_ID;
 
   const showAdminSection = isOwner || isAnyAdmin;
@@ -42,7 +41,6 @@ export function Sidebar({
   const safePendientes = Number.isFinite(totalPendientes)
     ? totalPendientes
     : 0;
-
   const safeVisados = Number.isFinite(totalVisados) ? totalVisados : 0;
   const safeFirmados = Number.isFinite(totalFirmados) ? totalFirmados : 0;
   const safeRechazados = Number.isFinite(totalRechazados)
@@ -142,40 +140,42 @@ export function Sidebar({
     [handleKeyActivate, navItemBaseStyle]
   );
 
+  // Estados de WebSocket para UI
   const isSocketConnected = socketStatus === "connected";
   const isSocketReconnecting = socketStatus === "reconnecting";
+  const isSocketConnecting = socketStatus === "connecting";
   const isSocketError =
     socketStatus === "error" || socketStatus === "disconnected";
 
   const socketLabel = (() => {
     if (isSocketConnected) return "En línea";
     if (isSocketReconnecting) return "Reconectando…";
-    if (socketStatus === "connecting") return "Conectando…";
+    if (isSocketConnecting) return "Conectando…";
     if (isSocketError) return "Sin conexión";
     return "Sin conexión";
   })();
 
   const socketDotColor = isSocketConnected
     ? "#22c55e"
-    : isSocketReconnecting || socketStatus === "connecting"
+    : isSocketReconnecting || isSocketConnecting
     ? "#facc15"
     : "#ef4444";
 
   const socketTextColor = isSocketConnected
     ? "#86efac"
-    : isSocketReconnecting || socketStatus === "connecting"
+    : isSocketReconnecting || isSocketConnecting
     ? "#facc15"
     : "#fca5a5";
 
   const socketGlow = isSocketConnected
     ? "0 0 0 4px rgba(34,197,94,0.18)"
-    : isSocketReconnecting || socketStatus === "connecting"
+    : isSocketReconnecting || isSocketConnecting
     ? "0 0 0 4px rgba(250,204,21,0.20)"
     : "0 0 0 4px rgba(239,68,68,0.16)";
 
   return (
     <aside className="sidebar sidebar-root">
-      {/* Branding */}
+      {/* Branding + estado tiempo real */}
       <div
         style={{
           display: "flex",
@@ -241,6 +241,13 @@ export function Sidebar({
                     gap: 5,
                     color: socketTextColor,
                   }}
+                  title={
+                    isSocketConnected
+                      ? "Conectado al servidor en tiempo real"
+                      : isSocketReconnecting || isSocketConnecting
+                      ? "Intentando reconectar al servidor en tiempo real"
+                      : "Conexión en tiempo real perdida"
+                  }
                 >
                   <span
                     style={{
@@ -283,18 +290,32 @@ export function Sidebar({
               style={{
                 marginTop: 4,
                 fontSize: "0.68rem",
-                color: "#f97373",
+                color: "#fecaca",
                 maxWidth: 260,
                 lineHeight: 1.4,
+                display: "flex",
+                flexWrap: "wrap",
+                gap: 4,
+                alignItems: "center",
               }}
             >
-              {socketLastError}
+              <span
+                style={{
+                  overflow: "hidden",
+                  textOverflow: "ellipsis",
+                  whiteSpace: "nowrap",
+                  flex: "1 1 auto",
+                }}
+              >
+                {socketLastError}
+              </span>
+
               {socketCanRetry && typeof onRetrySocket === "function" && (
                 <button
                   type="button"
                   onClick={onRetrySocket}
                   style={{
-                    marginLeft: 6,
+                    flexShrink: 0,
                     paddingInline: 6,
                     paddingBlock: 2,
                     borderRadius: 999,

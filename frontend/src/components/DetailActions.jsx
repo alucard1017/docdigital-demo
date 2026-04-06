@@ -6,7 +6,7 @@ import { useToast } from "../hooks/useToast";
 const API_URL = API_BASE_URL;
 
 function apiUrl(path) {
-  const base = API_URL.replace(/\/+$/, "");
+  const base = (API_URL || "").replace(/\/+$/, "");
   const cleanPath = path.startsWith("/") ? path : `/${path}`;
   return `${base}${cleanPath}`;
 }
@@ -52,7 +52,7 @@ export function DetailActions({
   const handleRechazar = useCallback(async () => {
     if (!selectedDoc?.id) return;
 
-    const motivo = window.prompt("Indique el motivo de rechazo:");
+    const motivo = window.prompt("Indica el motivo de rechazo:");
     if (!motivo) return;
 
     const ok = await manejarAccionDocumento(selectedDoc.id, "rechazar", {
@@ -67,11 +67,8 @@ export function DetailActions({
   const handleVisar = useCallback(async () => {
     if (!selectedDoc?.id) return;
 
-    const okConfirm = window.confirm(
-      "Declaro que he revisado íntegramente el documento, que tomo conocimiento de su contenido y que emito mi visado en conformidad, para los efectos que correspondan, en el marco de la Ley N° 19.799 sobre documentos electrónicos y firma electrónica. Entiendo que este visado quedará registrado electrónicamente junto con la trazabilidad del proceso."
-    );
-    if (!okConfirm) return;
-
+    // El aviso legal ya se valida en DetailView (ElectronicSignatureNotice),
+    // aquí solo ejecutamos la acción.
     const ok = await manejarAccionDocumento(selectedDoc.id, "visar");
     if (ok) {
       handleVolver();
@@ -81,11 +78,7 @@ export function DetailActions({
   const handleFirmar = useCallback(async () => {
     if (!selectedDoc?.id) return;
 
-    const okConfirm = window.confirm(
-      "Declaro que he leído íntegramente el documento, que estoy de acuerdo con su contenido y que autorizo su suscripción mediante firma electrónica simple, de conformidad con la Ley N° 19.799 sobre documentos y firma electrónica, otorgándole la misma validez y eficacia jurídica que a un documento firmado de forma manuscrita en soporte papel."
-    );
-    if (!okConfirm) return;
-
+    // Igual que en visado: el aviso legal ya se exige antes.
     const ok = await manejarAccionDocumento(selectedDoc.id, "firmar");
     if (ok) {
       handleVolver();
@@ -96,7 +89,7 @@ export function DetailActions({
     if (!selectedDoc?.id) return;
 
     const okConfirm = window.confirm(
-      "¿Desea cancelar este trámite? Esta acción no se puede deshacer."
+      "¿Deseas cancelar este trámite? Esta acción no se puede deshacer."
     );
     if (!okConfirm) return;
 
@@ -110,22 +103,10 @@ export function DetailActions({
   }, [selectedDoc?.id, manejarAccionDocumento, handleVolver]);
 
   return (
-    <div
-      style={{
-        display: "flex",
-        justifyContent: "flex-end",
-        gap: 12,
-        borderTop: "1px solid #e5e7eb",
-        paddingTop: 16,
-      }}
-    >
+    <div className="detail-actions-bar">
       <button
         type="button"
-        className="btn-main"
-        style={{
-          background: "#e5e7eb",
-          color: "#374151",
-        }}
+        className="btn-main detail-actions-btn detail-actions-btn--secondary"
         onClick={handleVolver}
       >
         Volver sin firmar
@@ -133,11 +114,7 @@ export function DetailActions({
 
       <button
         type="button"
-        className="btn-main"
-        style={{
-          background: "#16a34a",
-          color: "white",
-        }}
+        className="btn-main detail-actions-btn detail-actions-btn--download"
         onClick={handleDownload}
       >
         Descargar PDF
@@ -146,11 +123,7 @@ export function DetailActions({
       {!isAdmin && puedeRechazar && (
         <button
           type="button"
-          className="btn-main"
-          style={{
-            background: "#fee2e2",
-            color: "#b91c1c",
-          }}
+          className="btn-main detail-actions-btn detail-actions-btn--reject"
           onClick={handleRechazar}
         >
           Rechazar
@@ -160,11 +133,7 @@ export function DetailActions({
       {!isAdmin && puedeVisar && (
         <button
           type="button"
-          className="btn-main"
-          style={{
-            background: "#fbbf24",
-            color: "#78350f",
-          }}
+          className="btn-main detail-actions-btn detail-actions-btn--visar"
           onClick={handleVisar}
         >
           Visar documento
@@ -174,7 +143,7 @@ export function DetailActions({
       {!isAdmin && puedeFirmar && (
         <button
           type="button"
-          className="btn-main btn-primary"
+          className="btn-main detail-actions-btn detail-actions-btn--primary"
           onClick={handleFirmar}
         >
           Firmar documento
@@ -184,11 +153,7 @@ export function DetailActions({
       {isAdmin && (
         <button
           type="button"
-          className="btn-main"
-          style={{
-            background: "#ef4444",
-            color: "white",
-          }}
+          className="btn-main detail-actions-btn detail-actions-btn--admin-cancel"
           onClick={handleCancelarAdmin}
         >
           Cancelar trámite

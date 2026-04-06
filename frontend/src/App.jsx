@@ -97,22 +97,7 @@ const VIEW_TO_PATH = {
   "company-analytics": "/company-analytics",
 };
 
-const VALID_PROTECTED_VIEWS = new Set([
-  "list",
-  "upload",
-  "users",
-  "dashboard",
-  "companies",
-  "status",
-  "audit-logs",
-  "auth-logs",
-  "reminders-config",
-  "email-metrics",
-  "pricing",
-  "profile",
-  "templates",
-  "company-analytics",
-]);
+const VALID_PROTECTED_VIEWS = new Set(Object.values(ROUTE_MAP));
 
 const PUBLIC_AUTH_PATHS = new Set([
   "/login",
@@ -348,7 +333,6 @@ function App() {
       ? pagination.page
       : 1;
 
-  // Totales globales desde el hook (fallback defensivo por si vienen undefined)
   const safeTotalDocsGlobal = Number.isFinite(totalGlobal)
     ? totalGlobal
     : safeDocs.length;
@@ -381,6 +365,7 @@ function App() {
     [cargarDocs, page, sort, statusFilter, search]
   );
 
+  // Sync router path → view
   useEffect(() => {
     const syncPath = () => {
       const nextPath = getPath();
@@ -405,6 +390,7 @@ function App() {
     };
   }, [isAuthenticated, selectedDoc]);
 
+  // Redirecciones de auth
   useEffect(() => {
     if (authLoading) return;
     if (isAnyPublicAccess) return;
@@ -423,6 +409,7 @@ function App() {
     }
   }, [authLoading, isAuthenticated, path, isAnyPublicAccess, setSelectedDoc]);
 
+  // Validar view protegida
   useEffect(() => {
     if (!isAuthenticated) return;
     if (view === "detail") return;
@@ -441,6 +428,7 @@ function App() {
     }
   }, [view, path, isAuthenticated, setSelectedDoc]);
 
+  // WebSocket → eventos de documentos
   useEffect(() => {
     if (!token) return;
     if (typeof socketOn !== "function" || typeof socketOff !== "function")
@@ -451,8 +439,8 @@ function App() {
         type: "success",
         title: "Documento enviado",
         message: data?.titulo
-          ? `"${data.titulo}" se envió correctamente`
-          : "El documento se envió correctamente",
+          ? `"${data.titulo}" se envió correctamente.`
+          : "El documento se envió correctamente.",
       });
 
       refreshDocs({ page: 1 });
@@ -463,8 +451,8 @@ function App() {
         type: "success",
         title: "Documento firmado",
         message: data?.titulo
-          ? `"${data.titulo}" se firmó correctamente`
-          : "El documento se firmó correctamente",
+          ? `"${data.titulo}" se firmó correctamente.`
+          : "El documento se firmó correctamente.",
       });
 
       refreshDocs({ page: 1 });
@@ -478,6 +466,19 @@ function App() {
       socketOff("document:signed", handleSigned);
     };
   }, [token, socketOn, socketOff, addToast, refreshDocs]);
+
+  // WebSocket → toasts de error de conexión
+  useEffect(() => {
+    if (!socketLastError) return;
+
+    if (socketStatus === "error" || socketStatus === "disconnected") {
+      addToast({
+        type: "error",
+        title: "Problema con la conexión en tiempo real",
+        message: socketLastError,
+      });
+    }
+  }, [socketStatus, socketLastError, addToast]);
 
   const handleLogout = useCallback(() => {
     setSelectedDoc(null);
@@ -746,7 +747,7 @@ function App() {
                       >
                         Estado
                       </th>
-                      <th className="col-party">Firmante / Empresa</th>
+                      <th className="col-party">Participante</th>
                       <th
                         className="col-actions"
                         style={{ textAlign: "center" }}

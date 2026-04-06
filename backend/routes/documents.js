@@ -2,8 +2,8 @@
 const express = require("express");
 const Sentry = require("@sentry/node");
 
-const { requireAuth } = require("./auth");
 const db = require("../db");
+const { requireAuth } = require("./auth");
 const { upload, handleMulterError } = require("../middlewares/uploadPdf");
 const { validatePdf } = require("../middlewares/pdfValidator");
 
@@ -14,7 +14,6 @@ const {
   getDocumentAnalytics,
   previewDocument,
 } = require("../controllers/documents/report");
-
 const { resendReminder } = require("../controllers/documents/reminders");
 const {
   getReminderStatus,
@@ -43,8 +42,13 @@ const router = express.Router();
 const isGlobalAdmin = (user) =>
   user?.role === "SUPER_ADMIN" || user?.role === "ADMIN_GLOBAL";
 
+const parseIdParam = (raw) => {
+  const id = Number(raw);
+  return Number.isFinite(id) ? id : null;
+};
+
 async function loadDocumentById(id) {
-  const docRes = await db.query(
+  const res = await db.query(
     `
     SELECT id, owner_id, title, status, company_id
     FROM documents
@@ -52,7 +56,19 @@ async function loadDocumentById(id) {
     `,
     [id]
   );
-  return docRes.rowCount > 0 ? docRes.rows[0] : null;
+  return res.rowCount > 0 ? res.rows[0] : null;
+}
+
+async function loadLegacyDocumentById(id) {
+  const res = await db.query(
+    `
+    SELECT id, creado_por, titulo, estado, company_id
+    FROM documentos
+    WHERE id = $1
+    `,
+    [id]
+  );
+  return res.rowCount > 0 ? res.rows[0] : null;
 }
 
 function setSentryDocumentContext(doc) {
@@ -68,10 +84,10 @@ function setSentryDocumentContext(doc) {
 
 async function checkDocumentCompanyScope(req, res, next) {
   try {
-    const id = Number(req.params.id);
+    const id = parseIdParam(req.params.id);
     const user = req.user;
 
-    if (Number.isNaN(id)) {
+    if (id === null) {
       return res.status(400).json({ message: "ID de documento inválido" });
     }
 
@@ -90,6 +106,7 @@ async function checkDocumentCompanyScope(req, res, next) {
 
     setSentryDocumentContext(doc);
     req.document = doc;
+
     return next();
   } catch (err) {
     console.error("❌ Error verificando permisos de documento:", err);
@@ -99,27 +116,17 @@ async function checkDocumentCompanyScope(req, res, next) {
 
 async function checkLegacyDocumentCompanyScope(req, res, next) {
   try {
-    const id = Number(req.params.id);
+    const id = parseIdParam(req.params.id);
     const user = req.user;
 
-    if (Number.isNaN(id)) {
+    if (id === null) {
       return res.status(400).json({ message: "ID de documento inválido" });
     }
 
-    const docRes = await db.query(
-      `
-      SELECT id, creado_por, titulo, estado, company_id
-      FROM documentos
-      WHERE id = $1
-      `,
-      [id]
-    );
-
-    if (docRes.rowCount === 0) {
+    const doc = await loadLegacyDocumentById(id);
+    if (!doc) {
       return res.status(404).json({ message: "Documento no encontrado" });
     }
-
-    const doc = docRes.rows[0];
 
     if (!isGlobalAdmin(user)) {
       if (!user.company_id || doc.company_id !== user.company_id) {
@@ -139,10 +146,10 @@ async function checkLegacyDocumentCompanyScope(req, res, next) {
 
 async function checkDocumentOwnership(req, res, next) {
   try {
-    const id = Number(req.params.id);
+    const id = parseIdParam(req.params.id);
     const user = req.user;
 
-    if (Number.isNaN(id)) {
+    if (id === null) {
       return res.status(400).json({ message: "ID de documento inválido" });
     }
 
@@ -167,6 +174,7 @@ async function checkDocumentOwnership(req, res, next) {
 
     setSentryDocumentContext(doc);
     req.document = doc;
+
     return next();
   } catch (err) {
     console.error("❌ Error verificando propiedad de documento:", err);
@@ -186,6 +194,7 @@ function withDocumentAudit(action) {
       if (res.statusCode < 400) {
         const rawId =
           req.params.id ||
+          req.params.documentoId ||
           req.params.documento_id ||
           (body && (body.documentoId || body.id)) ||
           null;
@@ -222,12 +231,9 @@ function withDocumentAudit(action) {
 }
 
 /* ================================
-   RUTAS GET - ESPECÍFICAS (SIN ID)
+   RUTAS GET - STATS / ANALYTICS
    ================================ */
 
-// GET /documents/stats
-// Puede devolver totales globales para dashboard / sidebar:
-// { total, pendientes, visados, firmados, rechazados }
 if (typeof documentsController.getDocumentStats === "function") {
   router.get("/stats", requireAuth, documentsController.getDocumentStats);
 } else {
@@ -256,16 +262,16 @@ router.get("/audit", requireAuth, async (req, res) => {
     const where = [];
 
     if (documento_id) {
-      const docIdNum = Number(documento_id);
-      if (!Number.isNaN(docIdNum)) {
+      const docIdNum = parseIdParam(documento_id);
+      if (docIdNum !== null) {
         values.push(docIdNum);
         where.push(`documento_id = $${values.length}`);
       }
     }
 
     if (usuario_id) {
-      const userIdNum = Number(usuario_id);
-      if (!Number.isNaN(userIdNum)) {
+      const userIdNum = parseIdParam(usuario_id);
+      if (userIdNum !== null) {
         values.push(userIdNum);
         where.push(`usuario_id = $${values.length}`);
       }
@@ -309,40 +315,13 @@ router.get("/audit", requireAuth, async (req, res) => {
 });
 
 /* ================================
-   RUTAS GET - LISTADOS
+   RUTAS GET - LISTADO DOCUMENTOS
    ================================ */
 
-/**
- * GET /documents
- *
- * Controlador: documentsController.getUserDocuments
- *
- * Contrato recomendado de respuesta:
- * {
- *   data: [...],           // documentos de la página actual
- *   pagination: {
- *     page,
- *     limit,
- *     total,              // total de documentos que cumplen el filtro
- *     totalPages,
- *     hasNextPage,
- *     hasPrevPage,
- *   },
- *   stats: {               // totales por estado (opcional pero ideal)
- *     total,
- *     pendientes,
- *     visados,
- *     firmados,
- *     rechazados,
- *   }
- * }
- *
- * El hook useDocuments del frontend ya está preparado para leer este formato.
- */
 router.get("/", requireAuth, documentsController.getUserDocuments);
 
 /* ================================
-   RUTAS POST - LEGACY (UPLOAD FILE)
+   RUTA POST /documents (upload file)
    ================================ */
 
 router.post(
@@ -367,7 +346,7 @@ router.post(
 );
 
 /* ================================
-   RUTA POST /documents/multi-party (JSON multi‑party)
+   RUTA POST /documents/multi-party
    ================================ */
 
 router.post("/multi-party", requireAuth, async (req, res) => {
@@ -459,6 +438,11 @@ router.post("/multi-party", requireAuth, async (req, res) => {
     const createdSigners = [];
 
     for (const s of signers) {
+      const orderIndex =
+        typeof s.orderIndex === "number" && Number.isFinite(s.orderIndex)
+          ? s.orderIndex
+          : 1;
+
       const signerRes = await client.query(signerInsertSql, [
         documento.id,
         user.company_id,
@@ -467,7 +451,7 @@ router.post("/multi-party", requireAuth, async (req, res) => {
         s.email,
         s.phone || null,
         s.identifier || null,
-        typeof s.orderIndex === "number" ? s.orderIndex : 1,
+        orderIndex,
       ]);
       createdSigners.push(signerRes.rows[0]);
     }
@@ -542,7 +526,7 @@ router.post("/multi-party", requireAuth, async (req, res) => {
 });
 
 /* ================================
-   RUTAS POST - SIN PARÁMETROS
+   RUTAS POST - RECORDATORIOS AUTO
    ================================ */
 
 router.post(
@@ -575,7 +559,7 @@ router.post(
 );
 
 /* ================================
-   RUTAS DE FLUJO
+   RUTAS DE FLUJO LEGACY
    ================================ */
 
 router.post(
@@ -593,8 +577,10 @@ router.post(
   documentsController.sendFlow
 );
 
-// Firma pública legacy (por firmanteId)
-router.post("/firmar-flujo/:firmanteId", documentsController.signFlow);
+router.post(
+  "/firmar-flujo/:firmanteId",
+  documentsController.signFlow
+);
 
 /* ================================
    RUTAS GET - CON :id
@@ -687,7 +673,7 @@ router.post(
 );
 
 /* ================================
-   RUTAS POST - RECORDATORIOS
+   RUTAS POST - RECORDATORIOS MANUALES
    ================================ */
 
 router.post(
@@ -703,7 +689,10 @@ router.post(
   checkDocumentCompanyScope,
   async (req, res) => {
     try {
-      const id = Number(req.params.id);
+      const id = parseIdParam(req.params.id);
+      if (id === null) {
+        return res.status(400).json({ message: "ID de documento inválido" });
+      }
 
       const { enviarRecordatorioManual } =
         require("../services/reminderService");
@@ -802,14 +791,14 @@ router.post(
   requireAuth,
   async (req, res) => {
     const user = req.user;
-    const documentoId = Number(req.params.documentoId);
-    const signerId = Number(req.params.signerId);
+    const documentoId = parseIdParam(req.params.documentoId);
+    const signerId = parseIdParam(req.params.signerId);
 
     if (!user || !user.company_id) {
       return res.status(401).json({ message: "No autenticado" });
     }
 
-    if (Number.isNaN(documentoId) || Number.isNaN(signerId)) {
+    if (documentoId === null || signerId === null) {
       return res.status(400).json({ message: "IDs inválidos" });
     }
 
@@ -871,7 +860,8 @@ router.post(
           .json({ message: "No tienes permisos sobre este firmante" });
       }
 
-      const token = require("crypto").randomBytes(24).toString("hex");
+      const crypto = require("crypto");
+      const token = crypto.randomBytes(24).toString("hex");
       const expiresAt = new Date(Date.now() + 7 * 24 * 60 * 60 * 1000);
 
       const inviteRes = await client.query(
@@ -887,7 +877,7 @@ router.post(
         )
         RETURNING id, token, expires_at, sent_at;
         `,
-        [signer.id, expiresAt.toISOString(), token]
+        [signer.id, expiresAt ? token : token, expiresAt.toISOString()]
       );
 
       const invitation = inviteRes.rows[0];
