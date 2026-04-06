@@ -228,7 +228,7 @@ export function Sidebar({
       {/* Usuario */}
       <div
         style={{
-          marginBottom: 18,
+          marginBottom: 8,
           padding: 10,
           borderRadius: 12,
           background:
@@ -241,95 +241,94 @@ export function Sidebar({
       >
         <div
           style={{
-            display: "flex",
-            justifyContent: "space-between",
-            gap: 8,
-            alignItems: "flex-start",
+            fontWeight: 700,
+            marginBottom: 3,
+            fontSize: "0.72rem",
+            textTransform: "uppercase",
+            letterSpacing: "0.08em",
+            color: SUBTLE_TEXT,
           }}
         >
-          <div style={{ minWidth: 0 }}>
-            <div
-              style={{
-                fontWeight: 700,
-                marginBottom: 3,
-                fontSize: "0.72rem",
-                textTransform: "uppercase",
-                letterSpacing: "0.08em",
-                color: SUBTLE_TEXT,
-              }}
-            >
-              Sesión activa
-            </div>
-
-            <div
-              style={{
-                fontWeight: 600,
-                fontSize: "0.84rem",
-                color: "#f8fafc",
-                overflow: "hidden",
-                textOverflow: "ellipsis",
-                whiteSpace: "nowrap",
-              }}
-              title={user?.name || "Usuario"}
-            >
-              {user?.name || "Usuario"}
-            </div>
-
-            <div
-              style={{
-                opacity: 0.82,
-                fontSize: "0.7rem",
-                color: SUBTLE_TEXT,
-                marginTop: 2,
-                overflow: "hidden",
-                textOverflow: "ellipsis",
-                whiteSpace: "nowrap",
-              }}
-              title={user?.email || "usuario@correo.com"}
-            >
-              {user?.email || "usuario@correo.com"}
-            </div>
-          </div>
-
-          <div
-            style={{
-              paddingInline: 10,
-              paddingBlock: 3,
-              borderRadius: 999,
-              background: "linear-gradient(135deg, #111827, #020617)",
-              border: "1px solid #1f2937",
-              fontSize: "0.68rem",
-              textTransform: "uppercase",
-              letterSpacing: "0.08em",
-              display: "inline-flex",
-              alignItems: "center",
-              gap: 4,
-              flexShrink: 0,
-              maxWidth: 120,
-            }}
-            title={displayRole}
-          >
-            <span
-              style={{
-                width: 7,
-                height: 7,
-                borderRadius: "999px",
-                backgroundColor: "#22c55e",
-                boxShadow: "0 0 0 4px rgba(34,197,94,0.25)",
-                flexShrink: 0,
-              }}
-            />
-            <span
-              style={{
-                overflow: "hidden",
-                textOverflow: "ellipsis",
-                whiteSpace: "nowrap",
-              }}
-            >
-              {displayRole}
-            </span>
-          </div>
+          Sesión activa
         </div>
+
+        <div
+          style={{
+            fontWeight: 600,
+            fontSize: "0.84rem",
+            color: "#f8fafc",
+            lineHeight: 1.25,
+            wordBreak: "break-word",
+            overflowWrap: "anywhere",
+            whiteSpace: "normal",
+          }}
+          title={user?.name || "Usuario"}
+        >
+          {user?.name || "Usuario"}
+        </div>
+
+        <div
+          style={{
+            opacity: 0.82,
+            fontSize: "0.7rem",
+            color: SUBTLE_TEXT,
+            marginTop: 2,
+            lineHeight: 1.3,
+            wordBreak: "break-word",
+            overflowWrap: "anywhere",
+            whiteSpace: "normal",
+          }}
+          title={user?.email || "usuario@correo.com"}
+        >
+          {user?.email || "usuario@correo.com"}
+        </div>
+      </div>
+
+      {/* Rol / quién soy: justo entre usuario y Bandeja */}
+      <div
+        style={{
+          marginBottom: 14,
+          paddingInline: 2,
+        }}
+      >
+        <span
+          style={{
+            display: "inline-flex",
+            alignItems: "center",
+            gap: 6,
+            paddingInline: 10,
+            paddingBlock: 4,
+            borderRadius: 999,
+            background: "linear-gradient(135deg, #111827, #020617)",
+            border: "1px solid #1f2937",
+            fontSize: "0.68rem",
+            textTransform: "uppercase",
+            letterSpacing: "0.08em",
+            color: "#e5e7eb",
+            maxWidth: 170,
+          }}
+          title={displayRole}
+        >
+          <span
+            style={{
+              width: 7,
+              height: 7,
+              borderRadius: "999px",
+              backgroundColor: "#22c55e",
+              boxShadow: "0 0 0 4px rgba(34,197,94,0.25)",
+              flexShrink: 0,
+            }}
+          />
+          <span
+            style={{
+              overflow: "hidden",
+              textOverflow: "ellipsis",
+              whiteSpace: "nowrap",
+            }}
+          >
+            {displayRole}
+          </span>
+        </span>
       </div>
 
       {/* Bandeja */}
