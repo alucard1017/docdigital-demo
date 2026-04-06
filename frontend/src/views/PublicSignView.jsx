@@ -31,29 +31,146 @@ function pickFirstNonEmpty(...values) {
 }
 
 function classifyPublicError(error) {
-  if (!error) return { type: "generic", message: "" };
+  if (!error) {
+    return {
+      type: "generic",
+      title: "No se pudo cargar el documento",
+      message:
+        "Ocurrió un problema al abrir este enlace. Intenta nuevamente en unos segundos.",
+    };
+  }
 
   const text = String(error).toLowerCase();
 
   if (text.includes("expir") || text.includes("expired")) {
     return {
       type: "expired",
+      title: "Este enlace venció",
       message:
-        "Este enlace ya no es válido. Por seguridad, los enlaces de firma tienen una duración limitada. Solicita un nuevo enlace a la empresa que te envió el documento.",
+        "Este enlace de firma ya no está disponible. Solicita un nuevo enlace a la empresa que te envió el documento.",
     };
   }
 
-  if (text.includes("token") || text.includes("inválido") || text.includes("invalid")) {
+  if (
+    text.includes("token") ||
+    text.includes("inválido") ||
+    text.includes("invalido") ||
+    text.includes("invalid")
+  ) {
     return {
       type: "invalid",
+      title: "Este enlace no es válido",
       message:
-        "No pudimos validar este enlace de acceso. Verifica que lo hayas abierto completo desde tu correo o solicita un nuevo enlace.",
+        "No pudimos validar este acceso. Abre el enlace completo desde tu correo o solicita uno nuevo.",
+    };
+  }
+
+  if (
+    text.includes("used") ||
+    text.includes("ya fue usado") ||
+    text.includes("already used") ||
+    text.includes("ya fue firmado") ||
+    text.includes("ya fue rechazado")
+  ) {
+    return {
+      type: "used",
+      title: "Este enlace ya no requiere acción",
+      message:
+        "El documento ya fue procesado con este enlace, por lo que no puedes realizar una nueva acción aquí.",
     };
   }
 
   return {
     type: "generic",
-    message: String(error),
+    title: "No se pudo cargar el documento",
+    message:
+      "Ocurrió un problema al abrir este enlace. Intenta nuevamente en unos segundos.",
+  };
+}
+
+function resolvePublicFlowState({
+  publicSignError,
+  document,
+  signerStatus,
+  documentStatus,
+  isVisado,
+}) {
+  if (publicSignError) {
+    const classified = classifyPublicError(publicSignError);
+    return {
+      kind: classified.type,
+      title: classified.title,
+      message: classified.message,
+      canRetryLoad: classified.type === "generic",
+    };
+  }
+
+  const alreadySignedByThisSigner = !isVisado && signerStatus === "FIRMADO";
+  const docFullySigned = !isVisado && documentStatus === "FIRMADO";
+  const docRejected = documentStatus === "RECHAZADO";
+
+  const visadoDone =
+    isVisado &&
+    documentStatus &&
+    documentStatus !== "PENDIENTE_VISADO" &&
+    documentStatus !== "PENDIENTE";
+
+  if (!document) {
+    return {
+      kind: "loading-or-empty",
+      title: "",
+      message: "",
+      canRetryLoad: false,
+    };
+  }
+
+  if (docRejected) {
+    return {
+      kind: "rejected",
+      title: "Este documento fue rechazado",
+      message:
+        "El flujo de firma se encuentra cerrado y este enlace ya no admite acciones.",
+      canRetryLoad: false,
+    };
+  }
+
+  if (docFullySigned) {
+    return {
+      kind: "completed",
+      title: "Este documento ya fue firmado",
+      message:
+        "El proceso ya fue completado. No puedes realizar nuevas acciones desde este enlace.",
+      canRetryLoad: false,
+    };
+  }
+
+  if (alreadySignedByThisSigner) {
+    return {
+      kind: "used",
+      title: "Tu firma ya fue registrada",
+      message:
+        "Este enlace ya fue utilizado anteriormente y no requiere una nueva acción.",
+      canRetryLoad: false,
+    };
+  }
+
+  if (visadoDone) {
+    return {
+      kind: "used",
+      title: "El visado ya fue procesado",
+      message:
+        "La revisión de este documento ya fue registrada y este enlace no requiere otra acción.",
+      canRetryLoad: false,
+    };
+  }
+
+  return {
+    kind: "pending",
+    title: isVisado ? "Pendiente de visado" : "Pendiente de firma",
+    message: isVisado
+      ? "Revisa el documento y registra tu visado cuando estés listo."
+      : "Revisa el documento y registra tu firma cuando estés listo.",
+    canRetryLoad: false,
   };
 }
 
@@ -292,6 +409,36 @@ export function PublicSignView({
       };
     }
 
+    if (publicSignError) {
+      const classified = classifyPublicError(publicSignError);
+
+      if (classified.type === "expired") {
+        return {
+          label: "Enlace vencido",
+          className: "public-sign-status public-sign-status--danger",
+        };
+      }
+
+      if (classified.type === "invalid") {
+        return {
+          label: "Enlace inválido",
+          className: "public-sign-status public-sign-status--danger",
+        };
+      }
+
+      if (classified.type === "used") {
+        return {
+          label: "Sin acción",
+          className: "public-sign-status public-sign-status--warning",
+        };
+      }
+
+      return {
+        label: "Error de carga",
+        className: "public-sign-status public-sign-status--danger",
+      };
+    }
+
     return {
       label: isVisado ? "Pendiente de visado" : "Pendiente de firma",
       className: isVisado
@@ -303,12 +450,20 @@ export function PublicSignView({
     docFullySigned,
     docRejected,
     isVisado,
+    publicSignError,
     visadoDone,
   ]);
 
-  const classifiedError = useMemo(
-    () => classifyPublicError(publicSignError),
-    [publicSignError]
+  const publicFlowState = useMemo(
+    () =>
+      resolvePublicFlowState({
+        publicSignError,
+        document,
+        signerStatus,
+        documentStatus,
+        isVisado,
+      }),
+    [publicSignError, document, signerStatus, documentStatus, isVisado]
   );
 
   function getDefaultErrorMessage() {
@@ -468,14 +623,14 @@ export function PublicSignView({
             }`}
           >
             {isVisado
-              ? "Estás revisando y visando este documento"
-              : "Estás firmando electrónicamente este documento"}
+              ? "Estás revisando este documento para registrar tu visado"
+              : "Estás revisando este documento para registrar tu firma"}
           </div>
 
           <div className="public-sign-intro__text">
             {isVisado
-              ? "Tu visado deja constancia de revisión y continuidad del flujo."
-              : "Esta acción representa la aceptación del contenido mediante firma electrónica simple."}
+              ? "Lee el contenido y, si todo está correcto, registra tu visado para que el flujo continúe."
+              : "Lee el contenido y, si estás de acuerdo, registra tu firma electrónica simple."}
           </div>
         </section>
 
@@ -500,7 +655,7 @@ export function PublicSignView({
               Cargando documento…
             </div>
             <div className="public-sign-message-card__text">
-              Estamos preparando la vista pública del documento.
+              Estamos preparando la vista del documento para que puedas revisarlo.
             </div>
           </div>
         )}
@@ -508,12 +663,13 @@ export function PublicSignView({
         {publicSignError && (
           <div className="public-sign-message-card public-sign-message-card--error">
             <div className="public-sign-message-card__title">
-              No se pudo cargar el documento
+              {publicFlowState.title}
             </div>
             <div className="public-sign-message-card__text">
-              {classifiedError.message}
+              {publicFlowState.message}
             </div>
-            {classifiedError.type === "generic" && (
+
+            {publicFlowState.canRetryLoad && (
               <button
                 type="button"
                 className="public-sign-button public-sign-button--secondary public-sign-button--auto"
@@ -528,57 +684,20 @@ export function PublicSignView({
 
         {document && !publicSignLoading && !publicSignError && (
           <div className="public-sign-layout">
-            <section className="public-sign-document-panel">
-              <div className="public-sign-document-panel__header">
-                <div>
-                  <div className="public-sign-section-label">Documento</div>
-                  <div className="public-sign-document-title">
-                    {documentTitle}
-                  </div>
-                </div>
-
-                {pdfUrl && (
-                  <a
-                    href={pdfUrl}
-                    target="_blank"
-                    rel="noopener noreferrer"
-                    className="public-sign-open-pdf public-sign-open-pdf--fullwidth"
-                  >
-                    Abrir documento completo
-                  </a>
-                )}
-              </div>
-
-              <div className="public-sign-pdf-stage">
-                {pdfUrl ? (
-                  <PublicPdfViewer fileUrl={pdfUrl} />
-                ) : (
-                  <div className="public-sign-pdf-empty">
-                    No hay una vista previa disponible en este momento. Usa el
-                    acceso directo al PDF completo cuando esté disponible.
-                  </div>
-                )}
-              </div>
-            </section>
-
             <aside className="public-sign-sidebar">
               <div className="public-sign-summary">
                 <div className="public-sign-section-label">Resumen</div>
-                <div className="public-sign-summary__title">
-                  {documentTitle}
-                </div>
+                <div className="public-sign-summary__title">{documentTitle}</div>
                 <div className="public-sign-summary__text">
-                  Abre el documento completo en una nueva pestaña, revisa todo
-                  su contenido y luego vuelve a esta página para firmar o rechazar.
+                  Revisa la información principal y luego abre el documento completo
+                  para confirmar su contenido antes de continuar.
                 </div>
               </div>
 
               <div className="public-sign-meta-grid">
                 <div className="public-sign-meta-card">
                   <div className="public-sign-meta-card__label">Empresa</div>
-                  <div className="public-sign-meta-card__value">
-                    {companyName}
-                  </div>
+                  <div className="public-sign-meta-card__value">{companyName}</div>
                   <div className="public-sign-meta-card__subvalue">
                     RUT: {companyRut}
                   </div>
@@ -601,9 +720,7 @@ export function PublicSignView({
                     <div className="public-sign-meta-card__label">
                       Firmando como
                     </div>
-                    <div className="public-sign-meta-card__value">
-                      {signerName}
-                    </div>
+                    <div className="public-sign-meta-card__value">{signerName}</div>
                     <div className="public-sign-meta-card__subvalue">
                       {signerEmail}
                     </div>
@@ -611,21 +728,24 @@ export function PublicSignView({
                 )}
               </div>
 
+              {pdfUrl && (
+                <a
+                  href={pdfUrl}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="public-sign-open-pdf public-sign-open-pdf--fullwidth"
+                >
+                  Abrir documento completo
+                </a>
+              )}
+
               {showCompletedInfo && (
                 <div className="public-sign-message-card public-sign-message-card--info">
                   <div className="public-sign-message-card__title">
-                    Este enlace ya no requiere acción
+                    {publicFlowState.title}
                   </div>
                   <div className="public-sign-message-card__text">
-                    {docRejected &&
-                      "Este documento fue rechazado y el flujo de firma se encuentra cerrado."}
-                    {(docFullySigned || alreadySignedByThisSigner) &&
-                      !docRejected &&
-                      "Este documento ya está firmado. No puedes realizar nuevas acciones desde este enlace."}
-                    {visadoDone &&
-                      !docRejected &&
-                      !docFullySigned &&
-                      "El visado para este documento ya fue procesado."}
+                    {publicFlowState.message}
                   </div>
                 </div>
               )}
@@ -694,8 +814,8 @@ export function PublicSignView({
                   </h2>
 
                   <p className="public-sign-reject-card__text">
-                    Indica el motivo del rechazo. Este motivo puede ser
-                    compartido con la empresa que te envió el documento.
+                    Explica brevemente el motivo. Esta información puede ser
+                    compartida con la empresa que te envió el documento.
                   </p>
 
                   <textarea
@@ -742,6 +862,27 @@ export function PublicSignView({
                 </div>
               )}
             </aside>
+
+            <section className="public-sign-document-panel">
+              <div className="public-sign-document-panel__header">
+                <div>
+                  <div className="public-sign-section-label">Documento</div>
+                  <div className="public-sign-document-title">{documentTitle}</div>
+                </div>
+              </div>
+
+              <div className="public-sign-pdf-stage">
+                {pdfUrl ? (
+                  <PublicPdfViewer fileUrl={pdfUrl} />
+                ) : (
+                  <div className="public-sign-pdf-empty">
+                    No hay una vista previa disponible en este momento. Si el enlace
+                    está habilitado, puedes abrir el documento completo en una nueva
+                    pestaña.
+                  </div>
+                )}
+              </div>
+            </section>
           </div>
         )}
 

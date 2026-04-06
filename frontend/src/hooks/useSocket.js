@@ -32,11 +32,23 @@ function isAuthLikeErrorMessage(message) {
   );
 }
 
+const SOCKET_STATUS = {
+  IDLE: "idle",
+  CONNECTING: "connecting",
+  CONNECTED: "connected",
+  RECONNECTING: "reconnecting",
+  DISCONNECTED: "disconnected",
+  ERROR: "error",
+};
+
 export function useSocket(accessToken, options = {}) {
   const socketRef = useRef(null);
   const listenersRef = useRef({});
   const authExpiredHandledRef = useRef(false);
-  const [connected, setConnected] = useState(false);
+
+  const [status, setStatus] = useState(SOCKET_STATUS.IDLE);
+  const [lastError, setLastError] = useState(null);
+  const [canRetry, setCanRetry] = useState(false);
 
   const socketUrl = useMemo(() => buildSocketUrl(), []);
   const normalizedToken =
@@ -79,6 +91,9 @@ export function useSocket(accessToken, options = {}) {
         socketInstance.off("connect_error");
         socketInstance.off("error");
         socketInstance.off("auth_error");
+        socketInstance.off("reconnect_attempt");
+        socketInstance.off("reconnect");
+        socketInstance.off("reconnect_failed");
       } catch (_) {}
 
       try {
@@ -98,11 +113,16 @@ export function useSocket(accessToken, options = {}) {
 
     hardDisconnect(socket);
     socketRef.current = null;
-    setConnected(false);
+
+    setStatus(SOCKET_STATUS.DISCONNECTED);
+    setLastError(null);
+    setCanRetry(false);
   }, [hardDisconnect]);
 
   useEffect(() => {
     authExpiredHandledRef.current = false;
+    setLastError(null);
+    setCanRetry(false);
 
     if (!isBrowser()) {
       return;
@@ -133,22 +153,8 @@ export function useSocket(accessToken, options = {}) {
           : 1500,
     });
 
-    const handleConnect = () => {
-      setConnected(true);
-      authExpiredHandledRef.current = false;
-
-      if (import.meta.env.DEV) {
-        console.log("[WS] conectado");
-      }
-    };
-
-    const handleDisconnect = (reason) => {
-      setConnected(false);
-
-      if (import.meta.env.DEV) {
-        console.warn("[WS] desconectado:", reason);
-      }
-    };
+    setStatus(SOCKET_STATUS.CONNECTING);
+    setCanRetry(false);
 
     const maybeDispatchAuthExpired = (detail = {}) => {
       if (!isBrowser()) return;
@@ -170,17 +176,75 @@ export function useSocket(accessToken, options = {}) {
       }
     };
 
-    const handleConnectError = (err) => {
-      setConnected(false);
+    const handleConnect = () => {
+      setStatus(SOCKET_STATUS.CONNECTED);
+      setLastError(null);
+      setCanRetry(false);
+      authExpiredHandledRef.current = false;
 
+      if (import.meta.env.DEV) {
+        console.log("[WS] conectado");
+      }
+    };
+
+    const handleDisconnect = (reason) => {
+      if (import.meta.env.DEV) {
+        console.warn("[WS] desconectado:", reason);
+      }
+
+      const isIntentionalClose =
+        reason === "io client disconnect" || reason === "client namespace disconnect";
+
+      if (isIntentionalClose) {
+        setStatus(SOCKET_STATUS.DISCONNECTED);
+        setCanRetry(false);
+      } else {
+        setStatus(SOCKET_STATUS.DISCONNECTED);
+        setCanRetry(true);
+      }
+    };
+
+    const handleReconnectAttempt = (attemptNumber) => {
+      setStatus(SOCKET_STATUS.RECONNECTING);
+      setCanRetry(true);
+
+      if (import.meta.env.DEV) {
+        console.log("[WS] reconnect_attempt:", attemptNumber);
+      }
+    };
+
+    const handleReconnect = (attemptNumber) => {
+      setStatus(SOCKET_STATUS.CONNECTED);
+      setLastError(null);
+      setCanRetry(false);
+
+      if (import.meta.env.DEV) {
+        console.log("[WS] reconnect success:", attemptNumber);
+      }
+    };
+
+    const handleReconnectFailed = () => {
+      setStatus(SOCKET_STATUS.ERROR);
+      setLastError("No se pudo restablecer la conexión en tiempo razonable.");
+      setCanRetry(true);
+
+      if (import.meta.env.DEV) {
+        console.warn("[WS] reconnect_failed");
+      }
+    };
+
+    const handleConnectError = (err) => {
       const message =
-        err?.message || err?.data?.message || "Error de conexión WS";
+        err?.message || err?.data?.message || "Error de conexión con el servidor.";
 
       if (import.meta.env.DEV) {
         console.error("[WS] connect_error:", message, err);
       }
 
       if (isAuthLikeErrorMessage(message)) {
+        setStatus(SOCKET_STATUS.ERROR);
+        setLastError("Tu sesión ha expirado. Vuelve a iniciar sesión.");
+
         hardDisconnect(socket);
         socketRef.current = null;
 
@@ -189,7 +253,12 @@ export function useSocket(accessToken, options = {}) {
           code: err?.code || null,
           status: err?.data?.status || null,
         });
+        return;
       }
+
+      setStatus(SOCKET_STATUS.ERROR);
+      setLastError("No se pudo conectar al servidor en este momento.");
+      setCanRetry(true);
     };
 
     const handleAuthErrorEvent = (payload) => {
@@ -197,11 +266,15 @@ export function useSocket(accessToken, options = {}) {
         console.warn("[WS] auth_error recibido:", payload);
       }
 
+      const message =
+        payload?.message || "Error de autenticación en WebSocket.";
+
+      setStatus(SOCKET_STATUS.ERROR);
+      setLastError("Tu sesión ha expirado. Vuelve a iniciar sesión.");
+      setCanRetry(false);
+
       hardDisconnect(socket);
       socketRef.current = null;
-
-      const message =
-        payload?.message || "Error de autenticación en WebSocket";
 
       maybeDispatchAuthExpired({
         message,
@@ -214,6 +287,9 @@ export function useSocket(accessToken, options = {}) {
     socket.on("disconnect", handleDisconnect);
     socket.on("connect_error", handleConnectError);
     socket.on("auth_error", handleAuthErrorEvent);
+    socket.on("reconnect_attempt", handleReconnectAttempt);
+    socket.on("reconnect", handleReconnect);
+    socket.on("reconnect_failed", handleReconnectFailed);
 
     socketRef.current = socket;
 
@@ -224,7 +300,9 @@ export function useSocket(accessToken, options = {}) {
         socketRef.current = null;
       }
 
-      setConnected(false);
+      setStatus(SOCKET_STATUS.DISCONNECTED);
+      setLastError(null);
+      setCanRetry(false);
     };
   }, [
     normalizedToken,
@@ -294,12 +372,36 @@ export function useSocket(accessToken, options = {}) {
     }
   }, []);
 
+  const retryConnection = useCallback(() => {
+    const socket = socketRef.current;
+
+    if (!socket) return;
+
+    try {
+      setStatus(SOCKET_STATUS.CONNECTING);
+      setLastError(null);
+      setCanRetry(false);
+      socket.connect();
+    } catch (err) {
+      console.error("[WS] retryConnection error:", err);
+      setStatus(SOCKET_STATUS.ERROR);
+      setLastError("No se pudo reintentar la conexión.");
+      setCanRetry(true);
+    }
+  }, []);
+
+  const isConnected = status === SOCKET_STATUS.CONNECTED;
+
   return {
-    connected,
+    status,
+    connected: isConnected,
+    lastError,
+    canRetry,
     on,
     off,
     emit,
     disconnect,
+    retryConnection,
     socket: socketRef.current,
   };
 }

@@ -1,12 +1,11 @@
 .public-sign-page {
   min-height: 100vh;
   min-height: 100dvh;
-  padding: 32px 16px 24px;
-  background: radial-gradient(circle at top, #16213a 0%, #0f172a 45%, #09111f 100%);
+  padding: 16px 12px;
   box-sizing: border-box;
+  background: radial-gradient(circle at top, #16213a 0%, #0f172a 45%, #09111f 100%);
 }
 
-/* Dejamos que crezca según contenido, sin forzar 100vh */
 .public-sign-shell {
   max-width: 1400px;
   margin: 0 auto;
@@ -15,9 +14,11 @@
   flex-direction: column;
 }
 
+/* Heading */
+
 .public-sign-heading {
-  margin-top: 24px;
-  margin-bottom: 18px;
+  margin-top: 16px;
+  margin-bottom: 16px;
   display: flex;
   justify-content: space-between;
   align-items: center;
@@ -35,18 +36,21 @@
 
 .public-sign-title {
   margin: 0;
-  font-size: clamp(1.8rem, 4vw, 2.8rem);
+  font-size: clamp(1.5rem, 6vw, 2.4rem);
   line-height: 1.05;
   font-weight: 800;
   color: #f8fafc;
 }
 
+/* Estado global */
+
 .public-sign-status {
-  padding: 10px 14px;
+  padding: 8px 14px;
   border-radius: 999px;
-  font-size: 14px;
+  font-size: 13px;
   font-weight: 700;
   border: 1px solid transparent;
+  white-space: nowrap;
 }
 
 .public-sign-status--info {
@@ -73,10 +77,12 @@
   color: #fca5a5;
 }
 
+/* Intro / contexto */
+
 .public-sign-intro {
   margin-bottom: 18px;
   padding: 16px 18px;
-  border-radius: 18px;
+  border-radius: 20px;
   background: rgba(15, 23, 42, 0.72);
   border: 1px solid rgba(96, 165, 250, 0.24);
   color: #dbeafe;
@@ -110,11 +116,13 @@
   color: #fcd34d;
 }
 
+/* Mensajes de estado */
+
 .public-sign-message-card {
-  border-radius: 24px;
+  border-radius: 20px;
   border: 1px solid rgba(148, 163, 184, 0.18);
   background: rgba(2, 6, 23, 0.78);
-  padding: 48px;
+  padding: 24px 18px;
   text-align: center;
 }
 
@@ -123,7 +131,6 @@
   background: rgba(69, 10, 10, 0.78);
   color: #fecaca;
   text-align: left;
-  padding: 24px;
 }
 
 .public-sign-message-card__title {
@@ -142,117 +149,32 @@
   margin: 0 auto 16px;
 }
 
+/* Layout principal */
+
 .public-sign-layout {
   display: grid;
-  grid-template-columns: minmax(0, 1.7fr) minmax(320px, 400px);
-  gap: 24px;
+  grid-template-columns: 1fr;
+  gap: 18px;
   align-items: flex-start;
+  margin-top: 8px;
 }
 
-/* Panel del PDF: sin min-height forzada */
-.public-sign-document-panel {
-  border-radius: 22px;
-  border: 1px solid rgba(148, 163, 184, 0.16);
-  background: rgba(2, 6, 23, 0.9);
-  overflow: hidden;
-  display: flex;
-  flex-direction: column;
-  min-width: 0;
-}
-
-.public-sign-document-panel__header {
-  padding: 16px 20px;
-  border-bottom: 1px solid rgba(148, 163, 184, 0.12);
-  display: flex;
-  justify-content: space-between;
-  align-items: center;
-  gap: 12px;
-  flex-wrap: wrap;
-  flex-shrink: 0;
-}
-
-.public-sign-section-label {
-  font-size: 12px;
-  text-transform: uppercase;
-  letter-spacing: 0.1em;
-  color: #94a3b8;
-  margin-bottom: 6px;
-}
-
-.public-sign-document-title {
-  font-size: 1.15rem;
-  font-weight: 800;
-  color: #f8fafc;
-}
-
-.public-sign-open-pdf {
-  text-decoration: none;
-  padding: 11px 16px;
-  border-radius: 999px;
-  background: rgba(59, 130, 246, 0.16);
-  border: 1px solid rgba(96, 165, 250, 0.35);
-  color: #bfdbfe;
-  font-weight: 700;
-  font-size: 14px;
-  white-space: nowrap;
-}
-
-.public-sign-open-pdf--fullwidth {
-  width: 100%;
-  text-align: center;
-}
-
-/* Panel scrollable del PDF: solo crece según contenido */
-.public-sign-pdf-stage {
-  padding: 20px;
-  background: linear-gradient(
-    180deg,
-    rgba(15, 23, 42, 0.96) 0%,
-    rgba(2, 6, 23, 0.96) 100%
-  );
-  display: flex;
-  justify-content: center;
-  align-items: flex-start;
-  flex: 0 0 auto;
-  overflow: auto;
-}
-
-.public-sign-pdf-frame {
-  display: block;
-  width: 100%;
-  min-height: 70vh;
-  border: 0;
-  border-radius: 18px;
-  background: #ffffff;
-}
-
-.public-sign-pdf-empty {
-  width: 100%;
-  min-height: 420px;
-  border-radius: 18px;
-  border: 1px dashed rgba(148, 163, 184, 0.25);
-  display: grid;
-  place-items: center;
-  color: #94a3b8;
-  padding: 32px;
-  text-align: center;
-}
+/* Sidebar (resumen + acciones) */
 
 .public-sign-sidebar {
   min-width: 0;
-  position: sticky;
-  top: 16px;
-  align-self: start;
-  border-radius: 24px;
+  position: static;
+  align-self: stretch;
+  border-radius: 20px;
   border: 1px solid rgba(148, 163, 184, 0.16);
   background: rgba(2, 6, 23, 0.88);
   box-shadow: 0 20px 50px rgba(2, 6, 23, 0.4);
-  padding: 22px;
+  padding: 20px;
 }
 
 .public-sign-summary {
   margin-bottom: 18px;
-  padding-bottom: 18px;
+  padding-bottom: 16px;
   border-bottom: 1px solid rgba(148, 163, 184, 0.12);
 }
 
@@ -300,6 +222,28 @@
   margin-top: 4px;
 }
 
+/* Botón abrir PDF */
+
+.public-sign-open-pdf {
+  display: inline-block;
+  text-decoration: none;
+  padding: 11px 16px;
+  border-radius: 999px;
+  background: rgba(59, 130, 246, 0.16);
+  border: 1px solid rgba(96, 165, 250, 0.35);
+  color: #bfdbfe;
+  font-weight: 700;
+  font-size: 14px;
+  text-align: center;
+}
+
+.public-sign-open-pdf--fullwidth {
+  width: 100%;
+  margin-top: 8px;
+}
+
+/* Errores inline / ayudas */
+
 .public-sign-inline-error {
   margin-top: 12px;
   margin-bottom: 14px;
@@ -310,6 +254,15 @@
   color: #fecaca;
   font-size: 13px;
 }
+
+.public-sign-helper-text {
+  margin-top: 10px;
+  font-size: 13px;
+  color: #cbd5e1;
+  line-height: 1.6;
+}
+
+/* Acciones principales */
 
 .public-sign-actions {
   margin-top: 18px;
@@ -377,6 +330,8 @@
   margin-top: 4px;
 }
 
+/* Tarjeta de rechazo */
+
 .public-sign-reject-card {
   margin-top: 18px;
   padding: 18px;
@@ -420,11 +375,138 @@
   gap: 10px;
 }
 
+/* Panel del PDF */
+
+.public-sign-document-panel {
+  border-radius: 20px;
+  border: 1px solid rgba(148, 163, 184, 0.16);
+  background: rgba(2, 6, 23, 0.9);
+  overflow: hidden;
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+}
+
+.public-sign-document-panel__header {
+  padding: 14px;
+  border-bottom: 1px solid rgba(148, 163, 184, 0.12);
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 12px;
+  flex-wrap: wrap;
+  flex-shrink: 0;
+}
+
+.public-sign-section-label {
+  font-size: 12px;
+  text-transform: uppercase;
+  letter-spacing: 0.1em;
+  color: #94a3b8;
+  margin-bottom: 6px;
+}
+
+.public-sign-document-title {
+  font-size: 1.15rem;
+  font-weight: 800;
+  color: #f8fafc;
+}
+
+/* Stage del PDF */
+
+.public-sign-pdf-stage {
+  padding: 12px;
+  background: linear-gradient(
+    180deg,
+    rgba(15, 23, 42, 0.96) 0%,
+    rgba(2, 6, 23, 0.96) 100%
+  );
+  display: flex;
+  justify-content: center;
+  align-items: flex-start;
+  flex: 0 0 auto;
+  overflow: auto;
+}
+
+.public-sign-pdf-frame {
+  display: block;
+  width: 100%;
+  min-height: 52vh;
+  border: 0;
+  border-radius: 14px;
+  background: #ffffff;
+}
+
+.public-sign-pdf-empty {
+  width: 100%;
+  min-height: 320px;
+  border-radius: 18px;
+  border: 1px dashed rgba(148, 163, 184, 0.25);
+  display: grid;
+  place-items: center;
+  color: #94a3b8;
+  padding: 24px;
+  text-align: center;
+}
+
+/* Footer */
+
 .public-sign-footer-wrap {
   margin-top: 18px;
 }
 
-@media (max-width: 1080px) {
+/* Desktop / pantallas grandes */
+
+@media (min-width: 1080px) {
+  .public-sign-page {
+    padding: 32px 16px 24px;
+  }
+
+  .public-sign-heading {
+    margin-top: 24px;
+    margin-bottom: 18px;
+  }
+
+  .public-sign-title {
+    font-size: clamp(1.8rem, 4vw, 2.8rem);
+  }
+
+  .public-sign-layout {
+    grid-template-columns: minmax(320px, 400px) minmax(0, 1.7fr);
+    gap: 24px;
+  }
+
+  .public-sign-sidebar {
+    position: sticky;
+    top: 16px;
+    padding: 22px;
+  }
+
+  .public-sign-document-panel__header {
+    padding: 16px 20px;
+  }
+
+  .public-sign-pdf-stage {
+    padding: 20px;
+  }
+
+  .public-sign-pdf-frame {
+    min-height: 70vh;
+    border-radius: 18px;
+  }
+
+  .public-sign-message-card {
+    padding: 48px;
+  }
+
+  .public-sign-reject-actions {
+    grid-template-columns: 1fr 1fr;
+  }
+}
+
+/* Ajustes tablet */
+
+@media (min-width: 768px) and (max-width: 1079px) {
   .public-sign-layout {
     grid-template-columns: 1fr;
   }
@@ -439,57 +521,7 @@
   }
 }
 
-@media (max-width: 768px) {
-  .public-sign-page {
-    padding: 16px 12px;
-  }
-
-  .public-sign-shell {
-    /* en móvil también sin forzar min-height fija */
-  }
-
-  .public-sign-heading {
-    margin-top: 14px;
-    margin-bottom: 14px;
-  }
-
-  .public-sign-title {
-    font-size: clamp(1.5rem, 6vw, 2rem);
-  }
-
-  .public-sign-intro,
-  .public-sign-sidebar,
-  .public-sign-document-panel {
-    border-radius: 20px;
-  }
-
-  .public-sign-document-panel__header {
-    padding: 14px;
-  }
-
-  .public-sign-pdf-stage {
-    padding: 12px;
-  }
-
-  .public-sign-reject-actions {
-    grid-template-columns: 1fr;
-  }
-
-  .public-sign-open-pdf {
-    width: 100%;
-    text-align: center;
-  }
-
-  .public-sign-pdf-frame {
-    min-height: 52vh;
-  }
-
-  .public-sign-message-card {
-    padding: 24px 18px;
-  }
-}
-
-/* ---- React PDF Viewer ---- */
+/* React PDF Viewer */
 
 .public-pdf-viewer {
   width: 100%;

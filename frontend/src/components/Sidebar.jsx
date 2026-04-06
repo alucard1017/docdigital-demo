@@ -22,7 +22,11 @@ export function Sidebar({
   setStatusFilter,
   logout,
   isAnyAdmin,
-  socketConnected,
+  // nuevos props
+  socketStatus,      // "idle" | "connecting" | "connected" | "reconnecting" | "disconnected" | "error"
+  socketLastError,   // string | null
+  socketCanRetry,    // boolean
+  onRetrySocket,     // () => void
 }) {
   const isOwner = user?.id === OWNER_ID;
 
@@ -137,6 +141,37 @@ export function Sidebar({
     [handleKeyActivate, navItemBaseStyle]
   );
 
+  const isSocketConnected = socketStatus === "connected";
+  const isSocketReconnecting = socketStatus === "reconnecting";
+  const isSocketError =
+    socketStatus === "error" || socketStatus === "disconnected";
+
+  const socketLabel = (() => {
+    if (isSocketConnected) return "En línea";
+    if (isSocketReconnecting) return "Reconectando…";
+    if (socketStatus === "connecting") return "Conectando…";
+    if (isSocketError) return "Sin conexión";
+    return "Sin conexión";
+  })();
+
+  const socketDotColor = isSocketConnected
+    ? "#22c55e"
+    : isSocketReconnecting || socketStatus === "connecting"
+    ? "#facc15"
+    : "#ef4444";
+
+  const socketTextColor = isSocketConnected
+    ? "#86efac"
+    : isSocketReconnecting || socketStatus === "connecting"
+    ? "#facc15"
+    : "#fca5a5";
+
+  const socketGlow = isSocketConnected
+    ? "0 0 0 4px rgba(34,197,94,0.18)"
+    : isSocketReconnecting || socketStatus === "connecting"
+    ? "0 0 0 4px rgba(250,204,21,0.20)"
+    : "0 0 0 4px rgba(239,68,68,0.16)";
+
   return (
     <aside className="sidebar sidebar-root">
       {/* Branding */}
@@ -195,7 +230,7 @@ export function Sidebar({
           >
             <span>Panel principal</span>
 
-            {typeof socketConnected === "boolean" && (
+            {socketStatus && (
               <>
                 <span style={{ opacity: 0.45 }}>•</span>
                 <span
@@ -203,7 +238,7 @@ export function Sidebar({
                     display: "inline-flex",
                     alignItems: "center",
                     gap: 5,
-                    color: socketConnected ? "#86efac" : "#fca5a5",
+                    color: socketTextColor,
                   }}
                 >
                   <span
@@ -211,17 +246,70 @@ export function Sidebar({
                       width: 6,
                       height: 6,
                       borderRadius: "999px",
-                      background: socketConnected ? "#22c55e" : "#ef4444",
-                      boxShadow: socketConnected
-                        ? "0 0 0 4px rgba(34,197,94,0.18)"
-                        : "0 0 0 4px rgba(239,68,68,0.16)",
+                      background: socketDotColor,
+                      boxShadow: socketGlow,
                     }}
                   />
-                  {socketConnected ? "En línea" : "Sin conexión"}
+                  <span
+                    style={{
+                      display: "inline-flex",
+                      alignItems: "center",
+                      gap: 4,
+                    }}
+                  >
+                    {socketLabel}
+                    {isSocketReconnecting && (
+                      <span
+                        aria-hidden="true"
+                        style={{
+                          width: 10,
+                          height: 10,
+                          borderRadius: "999px",
+                          border: `1px solid ${socketTextColor}`,
+                          borderTopColor: "transparent",
+                          animation: "spin 0.7s linear infinite",
+                        }}
+                      />
+                    )}
+                  </span>
                 </span>
               </>
             )}
           </div>
+
+          {isSocketError && socketLastError && (
+            <div
+              style={{
+                marginTop: 4,
+                fontSize: "0.68rem",
+                color: "#f97373",
+                maxWidth: 260,
+                lineHeight: 1.4,
+              }}
+            >
+              {socketLastError}
+              {socketCanRetry && typeof onRetrySocket === "function" && (
+                <button
+                  type="button"
+                  onClick={onRetrySocket}
+                  style={{
+                    marginLeft: 6,
+                    paddingInline: 6,
+                    paddingBlock: 2,
+                    borderRadius: 999,
+                    border: "1px solid rgba(248,113,113,0.5)",
+                    background: "transparent",
+                    color: "#fecaca",
+                    fontSize: "0.66rem",
+                    fontWeight: 600,
+                    cursor: "pointer",
+                  }}
+                >
+                  Reintentar
+                </button>
+              )}
+            </div>
+          )}
         </div>
       </div>
 
@@ -284,7 +372,7 @@ export function Sidebar({
         </div>
       </div>
 
-      {/* Rol / quién soy: justo entre usuario y Bandeja */}
+      {/* Rol */}
       <div
         style={{
           marginBottom: 14,
