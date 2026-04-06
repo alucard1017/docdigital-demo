@@ -1,6 +1,5 @@
-// frontend/src/hooks/useDocuments.js
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import api from "../api/client";
+import api, { getDocuments, getDocumentPreview } from "../api/client";
 import { DOC_STATUS } from "../constants";
 import { useToast } from "./useToast";
 
@@ -26,6 +25,7 @@ function mapStatusFilterToApi(value) {
 
   switch (value) {
     case "PENDIENTES":
+      // backend considera varios estados como "pendientes"
       return "PENDIENTES";
     case "VISADOS":
       return DOC_STATUS.VISADO;
@@ -68,11 +68,7 @@ function mapSortToApi(value) {
 }
 
 function getErrorMessage(err, fallback) {
-  return (
-    err?.response?.data?.message ||
-    err?.message ||
-    fallback
-  );
+  return err?.response?.data?.message || err?.message || fallback;
 }
 
 export function useDocuments(token) {
@@ -104,6 +100,13 @@ export function useDocuments(token) {
     hasPrevPage: false,
   });
 
+  // totales globales para Sidebar / métricas
+  const [totalGlobal, setTotalGlobal] = useState(0);
+  const [pendientesGlobal, setPendientesGlobal] = useState(0);
+  const [visadosGlobal, setVisadosGlobal] = useState(0);
+  const [firmadosGlobal, setFirmadosGlobal] = useState(0);
+  const [rechazadosGlobal, setRechazadosGlobal] = useState(0);
+
   const latestRequestRef = useRef(0);
   const lastQueryKeyRef = useRef("");
   const latestPreviewRequestRef = useRef(0);
@@ -130,6 +133,11 @@ export function useDocuments(token) {
       hasNextPage: false,
       hasPrevPage: false,
     });
+    setTotalGlobal(0);
+    setPendientesGlobal(0);
+    setVisadosGlobal(0);
+    setFirmadosGlobal(0);
+    setRechazadosGlobal(0);
   }, [cleanupPdfUrl]);
 
   const cargarDocs = useCallback(
@@ -182,13 +190,13 @@ export function useDocuments(token) {
       setErrorDocs("");
 
       try {
-        const res = await api.get("/docs", { params });
+        const payload = await getDocuments(params);
 
         if (latestRequestRef.current !== requestId) return;
 
-        const payload = res?.data || {};
         const rows = Array.isArray(payload?.data) ? payload.data : [];
         const meta = payload?.pagination || {};
+        const stats = payload?.stats || {};
 
         const safePage = Number(meta.page) || pageArg;
         const safeLimit = Number(meta.limit) || PAGE_SIZE;
@@ -210,6 +218,19 @@ export function useDocuments(token) {
               ? meta.hasPrevPage
               : safePage > 1,
         });
+
+        // stats globales desde backend (fallbacks defensivos)
+        const total = Number(stats.total ?? safeTotal);
+        const pend = Number(stats.pendientes ?? 0);
+        const vis = Number(stats.visados ?? 0);
+        const fir = Number(stats.firmados ?? 0);
+        const rej = Number(stats.rechazados ?? 0);
+
+        setTotalGlobal(Number.isFinite(total) ? total : safeTotal);
+        setPendientesGlobal(Number.isFinite(pend) ? pend : 0);
+        setVisadosGlobal(Number.isFinite(vis) ? vis : 0);
+        setFirmadosGlobal(Number.isFinite(fir) ? fir : 0);
+        setRechazadosGlobal(Number.isFinite(rej) ? rej : 0);
       } catch (err) {
         if (latestRequestRef.current !== requestId) return;
 
@@ -254,13 +275,13 @@ export function useDocuments(token) {
       cleanupPdfUrl();
 
       try {
-        const res = await api.get(`/documents/${documentId}/preview`, {
+        const blobData = await getDocumentPreview(documentId, {
           responseType: "blob",
         });
 
         if (latestPreviewRequestRef.current !== requestId) return;
 
-        const blob = new Blob([res.data], { type: "application/pdf" });
+        const blob = new Blob([blobData], { type: "application/pdf" });
         const objectUrl = URL.createObjectURL(blob);
         currentObjectUrlRef.current = objectUrl;
         setPdfUrl(objectUrl);
@@ -310,6 +331,7 @@ export function useDocuments(token) {
     cargarPreviewPdf(selectedDoc.id);
 
     return () => {
+      // invalida la request anterior
       latestPreviewRequestRef.current += 1;
     };
   }, [selectedDoc?.id, cargarPreviewPdf, cleanupPdfUrl]);
@@ -460,7 +482,13 @@ export function useDocuments(token) {
 
   const docsPaginados = useMemo(() => docsFiltrados, [docsFiltrados]);
 
-  const { pendientesCount, visados, firmados, rechazados } = useMemo(() => {
+  // estos conteos son solo de la página actual (útiles para vista actual)
+  const {
+    pendientesCount,
+    visados,
+    firmados,
+    rechazados,
+  } = useMemo(() => {
     const safeDocs = Array.isArray(docs) ? docs : [];
 
     const pendientes = safeDocs.filter((d) => {
@@ -524,13 +552,21 @@ export function useDocuments(token) {
     manejarAccionDocumento,
     docsFiltrados,
     docsPaginados,
+    // conteos de la página actual
     pendientes: pendientesCount,
     visados,
     firmados,
     rechazados,
+    // paginación y totales filtrados
     totalFiltrado,
     totalPaginas,
     pagination,
     debouncedSearch,
+    // nuevos totales globales (desde backend.stats)
+    totalGlobal,
+    pendientesGlobal,
+    visadosGlobal,
+    firmadosGlobal,
+    rechazadosGlobal,
   };
 }

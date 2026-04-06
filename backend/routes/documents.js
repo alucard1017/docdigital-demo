@@ -24,7 +24,9 @@ const {
 const { logAudit, buildDocumentAuditMetadata } = require("../utils/auditLog");
 const { createRedisRateLimitMiddleware } = require("../utils/rateLimiter");
 const remindersQueue = require("../queues/remindersQueue");
-const { validateCreateDocumentBody } = require("../validators/createDocumentSchema");
+const {
+  validateCreateDocumentBody,
+} = require("../validators/createDocumentSchema");
 const { generateVerificationCode } = require("../utils/randomCode");
 const emailQueue = require("../queues/emailQueue");
 const {
@@ -223,6 +225,9 @@ function withDocumentAudit(action) {
    RUTAS GET - ESPECÍFICAS (SIN ID)
    ================================ */
 
+// GET /documents/stats
+// Puede devolver totales globales para dashboard / sidebar:
+// { total, pendientes, visados, firmados, rechazados }
 if (typeof documentsController.getDocumentStats === "function") {
   router.get("/stats", requireAuth, documentsController.getDocumentStats);
 } else {
@@ -307,6 +312,33 @@ router.get("/audit", requireAuth, async (req, res) => {
    RUTAS GET - LISTADOS
    ================================ */
 
+/**
+ * GET /documents
+ *
+ * Controlador: documentsController.getUserDocuments
+ *
+ * Contrato recomendado de respuesta:
+ * {
+ *   data: [...],           // documentos de la página actual
+ *   pagination: {
+ *     page,
+ *     limit,
+ *     total,              // total de documentos que cumplen el filtro
+ *     totalPages,
+ *     hasNextPage,
+ *     hasPrevPage,
+ *   },
+ *   stats: {               // totales por estado (opcional pero ideal)
+ *     total,
+ *     pendientes,
+ *     visados,
+ *     firmados,
+ *     rechazados,
+ *   }
+ * }
+ *
+ * El hook useDocuments del frontend ya está preparado para leer este formato.
+ */
 router.get("/", requireAuth, documentsController.getUserDocuments);
 
 /* ================================
@@ -673,7 +705,8 @@ router.post(
     try {
       const id = Number(req.params.id);
 
-      const { enviarRecordatorioManual } = require("../services/reminderService");
+      const { enviarRecordatorioManual } =
+        require("../services/reminderService");
 
       const result = await enviarRecordatorioManual(id);
 

@@ -124,7 +124,9 @@ async function fetchPdfBufferFromUrl(url) {
     validateStatus: (status) => status >= 200 && status < 300,
   });
 
-  const contentType = String(response.headers?.["content-type"] || "").toLowerCase();
+  const contentType = String(
+    response.headers?.["content-type"] || ""
+  ).toLowerCase();
 
   if (
     contentType &&
@@ -194,12 +196,7 @@ function buildSignerOrder(signer = {}, index = 0) {
 }
 
 function buildSignerType(signer = {}) {
-  return (
-    signer.tipo ||
-    signer.role ||
-    signer.rol ||
-    "FIRMANTE"
-  )
+  return (signer.tipo || signer.role || signer.rol || "FIRMANTE")
     .toString()
     .trim()
     .toUpperCase();
@@ -359,7 +356,6 @@ async function insertDocumentEvent(client, payload) {
 
   const safeEventType = eventType || "DOCUMENT_CREATED";
 
-  // Mapeo simple de eventType → action legible
   const action =
     safeEventType === "DOCUMENT_CREATED"
       ? "Documento creado"
@@ -510,10 +506,7 @@ async function createCanonicalSigners(client, { documentId, companyId, signers }
         signer.tipo,
         signer.debe_firmar,
         signer.debe_visar,
-        toJson(
-          { mensaje_personalizado: signer.mensaje_personalizado },
-          "{}"
-        ),
+        toJson({ mensaje_personalizado: signer.mensaje_personalizado }, "{}"),
       ]
     );
 
@@ -758,15 +751,15 @@ async function createDocument(req, res) {
       });
     }
 
-const requiresVisado = signers.some((s) => s.debe_visar);
-const verificationCode = generarCodigoVerificacion();
+    const requiresVisado = signers.some((s) => s.debe_visar);
+    const verificationCode = generarCodigoVerificacion();
 
-const numeroContratoInterno = await generarNumeroContratoInterno(
-  client,
-  companyId
-);
+    const numeroContratoInterno = await generarNumeroContratoInterno(
+      client,
+      companyId
+    );
 
-console.log("numeroContratoInterno =>", numeroContratoInterno);
+    console.log("numeroContratoInterno =>", numeroContratoInterno);
 
     let originalBuffer;
     let originalFilename;
@@ -813,62 +806,62 @@ console.log("numeroContratoInterno =>", numeroContratoInterno);
       ? DOCUMENT_STATES.SIGNING
       : DOCUMENT_STATES.DRAFT;
 
-const { rows: documentRows } = await client.query(
-  `
-  INSERT INTO documents (
-    owner_id,
-    company_id,
-    title,
-    description,
-    status,
-    file_name,
-    file_url,
-    storage_key,
-    hash_sha256,
-    sealed_hash_sha256,
-    verification_code,
-    signature_token,
-    requires_review,
-    created_by,
-    metadata,
-    file_path,
-    pdf_original_url,
-    created_at,
-    updated_at
-  )
-  VALUES (
-    $1, $2, $3, $4, $5, $6, $7, $8, $9, $10,
-    $11, $12, $13, $14, $15::jsonb, $16, $17, NOW(), NOW()
-  )
-  RETURNING *
-  `,
-  [
-    userId,
-    companyId,
-    titulo,
-    descripcion,
-    initialDocumentStatus,
-    originalFilename,
-    storageUrl,
-    storageKey,
-    documentHash,
-    null,             // sealed_hash_sha256
-    verificationCode, // verification_code
-    verificationCode, // signature_token 
-    requiresVisado,   // requires_review
-    userId,           // created_by
-    toJson(
-      {
-        autoSendFlow,
-        numeroContratoInterno,
-        signerCount: signers.length,
-      },
-      "{}"
-    ),
-    storageKey, // file_path
-    storageUrl, // pdf_original_url
-  ]
-);
+    const { rows: documentRows } = await client.query(
+      `
+      INSERT INTO documents (
+        owner_id,
+        company_id,
+        title,
+        description,
+        status,
+        file_name,
+        file_url,
+        storage_key,
+        hash_sha256,
+        sealed_hash_sha256,
+        verification_code,
+        signature_token,
+        requires_review,
+        created_by,
+        metadata,
+        file_path,
+        pdf_original_url,
+        created_at,
+        updated_at
+      )
+      VALUES (
+        $1, $2, $3, $4, $5, $6, $7, $8, $9, $10,
+        $11, $12, $13, $14, $15::jsonb, $16, $17, NOW(), NOW()
+      )
+      RETURNING *
+      `,
+      [
+        userId,
+        companyId,
+        titulo,
+        descripcion,
+        initialDocumentStatus,
+        originalFilename,
+        storageUrl,
+        storageKey,
+        documentHash,
+        null,
+        verificationCode,
+        verificationCode,
+        requiresVisado,
+        userId,
+        toJson(
+          {
+            autoSendFlow,
+            numeroContratoInterno,
+            signerCount: signers.length,
+          },
+          "{}"
+        ),
+        storageKey,
+        storageUrl,
+      ]
+    );
 
     const document = documentRows[0];
 
@@ -1026,8 +1019,6 @@ const { rows: documentRows } = await client.query(
     await client.query("COMMIT");
     client.release();
 
-    // URL pública de firma para el firmante
-    // Ejemplo final: https://firmar.verifirma.cl/?token=ABC123
     const SIGNING_PORTAL_URL =
       process.env.SIGNING_PORTAL_URL || "https://firmar.verifirma.cl";
 
@@ -1073,23 +1064,23 @@ const { rows: documentRows } = await client.query(
       });
     }
 
-return res.status(201).json({
-  message: autoSendFlow
-    ? "Documento creado y enviado a firma correctamente"
-    : "Documento creado correctamente",
-  id: document.id,
-  documentoId: documentoNuevo.id,
-  estado: autoSendFlow ? DOCUMENT_STATES.SIGNING : DOCUMENT_STATES.DRAFT,
-  documentsStatus: autoSendFlow ? "PENDIENTE_FIRMA" : "BORRADOR",
-  codigoVerificacion: verificationCode,
-  numeroContratoInterno,
-  recordatoriosCreados: remindersCreated,
-  signersCount: canonicalSigners.length,
-  participantsCount: participants.length,
-  fileUrl: storageUrl,
-  hash: documentHash,
-  legacyFirmantes: legacySigners.length,
-});
+    return res.status(201).json({
+      message: autoSendFlow
+        ? "Documento creado y enviado a firma correctamente"
+        : "Documento creado correctamente",
+      id: document.id,
+      documentoId: documentoNuevo.id,
+      estado: autoSendFlow ? DOCUMENT_STATES.SIGNING : DOCUMENT_STATES.DRAFT,
+      documentsStatus: autoSendFlow ? "PENDIENTE_FIRMA" : "BORRADOR",
+      codigoVerificacion: verificationCode,
+      numeroContratoInterno,
+      recordatoriosCreados: remindersCreated,
+      signersCount: canonicalSigners.length,
+      participantsCount: participants.length,
+      fileUrl: storageUrl,
+      hash: documentHash,
+      legacyFirmantes: legacySigners.length,
+    });
   } catch (error) {
     try {
       await client.query("ROLLBACK");
@@ -1105,6 +1096,7 @@ return res.status(201).json({
     });
   }
 }
+
 /* ================================
    GET USER DOCUMENTS (FILTROS + PAGINACIÓN)
    ================================ */
@@ -1190,13 +1182,29 @@ async function getUserDocuments(req, res) {
     const whereSql = where.length ? `WHERE ${where.join(" AND ")}` : "";
 
     const countSql = `
-      SELECT COUNT(*) AS total
+      SELECT
+        COUNT(*) AS total,
+        COUNT(*) FILTER (
+          WHERE d.status IN ('PENDIENTE','PENDIENTE_VISADO','PENDIENTE_FIRMA')
+        ) AS pendientes,
+        COUNT(*) FILTER (WHERE d.status = 'VISADO')   AS visados,
+        COUNT(*) FILTER (WHERE d.status = 'FIRMADO')  AS firmados,
+        COUNT(*) FILTER (WHERE d.status = 'RECHAZADO') AS rechazados
       FROM documents d
       ${whereSql}
     `;
 
     const countResult = await pool.query(countSql, values);
-    const total = Number(countResult.rows[0]?.total || 0);
+    const countRow = countResult.rows[0] || {};
+
+    const total = Number(countRow.total || 0);
+    const stats = {
+      total,
+      pendientes: Number(countRow.pendientes || 0),
+      visados: Number(countRow.visados || 0),
+      firmados: Number(countRow.firmados || 0),
+      rechazados: Number(countRow.rechazados || 0),
+    };
 
     values.push(limitNum);
     const limitIndex = values.length;
@@ -1237,7 +1245,6 @@ async function getUserDocuments(req, res) {
 
     const dataResult = await pool.query(dataSql, values);
 
-    // Log de ayuda (puedes quitarlo en producción)
     console.log("[getUserDocuments] QUERY PARAMS:", {
       rawQuery: req.query,
       page: pageNum,
@@ -1262,6 +1269,7 @@ async function getUserDocuments(req, res) {
         hasNextPage: offset + limitNum < total,
         hasPrevPage: pageNum > 1,
       },
+      stats,
       filters: {
         status: normalizedStatus,
         search: search || null,

@@ -47,11 +47,11 @@ const SECTION_CARD_STYLE = {
 
 export function ListHeader({
   sort,
-  setSort,          // viene del hook con reset de page
+  setSort,
   statusFilter,
-  setStatusFilter,  // idem
+  setStatusFilter,
   search,
-  setSearch,        // estado “en vivo”, el hook hace debounce
+  setSearch,
   totalFiltrado,
   pendientes,
   visados,
@@ -87,8 +87,8 @@ export function ListHeader({
         try {
           const data = await res.json();
           msg = data?.message || msg;
-        } catch (_) {
-          // ignorar parse error, usamos msg por defecto
+        } catch {
+          // ignore
         }
         alert(`❌ ${msg}`);
         return;
@@ -99,9 +99,7 @@ export function ListHeader({
       const a = document.createElement("a");
 
       a.href = url;
-      a.download = `documentos-${new Date()
-        .toISOString()
-        .slice(0, 10)}.xlsx`;
+      a.download = `documentos-${new Date().toISOString().slice(0, 10)}.xlsx`;
       document.body.appendChild(a);
       a.click();
       a.remove();

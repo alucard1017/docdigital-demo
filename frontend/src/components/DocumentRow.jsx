@@ -4,15 +4,25 @@ import { DOC_STATUS } from "../constants";
 import api from "../api/client";
 import { useToast } from "../hooks/useToast";
 
+function normalize(value) {
+  if (!value) return "";
+  return String(value).trim().toLowerCase();
+}
+
 function getTramiteLabel(value) {
-  if (value === "notaria") return "Notaría";
-  if (value === "propio") return "Propio";
+  const v = normalize(value);
+  if (v === "notaria" || v === "notaría") return "Notaría";
+  if (v === "propio") return "Propio";
   return "";
 }
 
 function getDocumentoLabel(value) {
-  if (value === "poderes") return "Poderes";
-  if (value === "contratos") return "Contratos";
+  const v = normalize(value);
+  if (v === "poder" || v === "poderes") return "Poderes";
+  if (v === "contrato" || v === "contratos") return "Contratos";
+  if (v === "autorizacion" || v === "autorización" || v === "autorizaciones") {
+    return "Autorizaciones";
+  }
   return "";
 }
 
@@ -23,7 +33,7 @@ function buildTipoLabel(tipoTramite, tipoDocumento) {
   if (tramite && documento) return `${tramite} · ${documento}`;
   if (documento) return documento;
   if (tramite) return tramite;
-  return "Sin tipo";
+  return "Documento";
 }
 
 function getContractNumber(doc) {
@@ -37,11 +47,7 @@ function getContractNumber(doc) {
 }
 
 function getErrorMessage(err, fallback) {
-  return (
-    err?.response?.data?.message ||
-    err?.message ||
-    fallback
-  );
+  return err?.response?.data?.message || err?.message || fallback;
 }
 
 const STATUS_LABELS = {
@@ -85,7 +91,6 @@ export function DocumentRow({ doc, onOpenDetail }) {
     }
 
     const date = new Date(doc.created_at);
-
     if (Number.isNaN(date.getTime())) {
       return { fechaLinea1: "-", fechaLinea2: "" };
     }
@@ -207,8 +212,8 @@ export function DocumentRow({ doc, onOpenDetail }) {
 
       addToast({
         type: "warning",
-        title: "Motivo de rechazo",
-        message: doc.reject_reason,
+          title: "Motivo de rechazo",
+          message: doc.reject_reason,
       });
     },
     [doc?.reject_reason, addToast]

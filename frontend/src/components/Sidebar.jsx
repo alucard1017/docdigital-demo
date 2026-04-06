@@ -14,20 +14,21 @@ function SidebarSectionLabel({ children }) {
 
 export function Sidebar({
   user,
-  docs,
-  pendientes,
+  totalDocuments,
+  totalPendientes,
+  totalVisados,
+  totalFirmados,
+  totalRechazados,
   view,
   setView,
-  statusFilter,
-  setStatusFilter,
   logout,
   isAnyAdmin,
-  // nuevos props
-  socketStatus,      // "idle" | "connecting" | "connected" | "reconnecting" | "disconnected" | "error"
-  socketLastError,   // string | null
-  socketCanRetry,    // boolean
-  onRetrySocket,     // () => void
+  socketStatus,
+  socketLastError,
+  socketCanRetry,
+  onRetrySocket,
 }) {
+
   const isOwner = user?.id === OWNER_ID;
 
   const showAdminSection = isOwner || isAnyAdmin;
@@ -37,8 +38,17 @@ export function Sidebar({
       user.role === "ADMIN_GLOBAL" ||
       user.id === OWNER_ID);
 
-  const totalDocs = Array.isArray(docs) ? docs.length : 0;
-  const safePendientes = Number.isFinite(pendientes) ? pendientes : 0;
+  const safeTotalDocs = Number.isFinite(totalDocuments) ? totalDocuments : 0;
+  const safePendientes = Number.isFinite(totalPendientes)
+    ? totalPendientes
+    : 0;
+
+  const safeVisados = Number.isFinite(totalVisados) ? totalVisados : 0;
+  const safeFirmados = Number.isFinite(totalFirmados) ? totalFirmados : 0;
+  const safeRechazados = Number.isFinite(totalRechazados)
+    ? totalRechazados
+    : 0;
+
   const displayRole = user?.role || "USER";
 
   const navItemBaseStyle = useMemo(
@@ -73,15 +83,6 @@ export function Sidebar({
       }
     },
     [setView]
-  );
-
-  const handleChangeStatus = useCallback(
-    (nextStatus) => {
-      if (typeof setStatusFilter === "function") {
-        setStatusFilter(nextStatus);
-      }
-    },
-    [setStatusFilter]
   );
 
   const renderNavItem = useCallback(
@@ -428,7 +429,7 @@ export function Sidebar({
         label: "Mis trámites",
         title: "Ver todos los trámites",
         onClick: () => handleChangeView("list"),
-        badge: totalDocs > 0 ? totalDocs : null,
+        badge: safeTotalDocs > 0 ? safeTotalDocs : null,
       })}
 
       {renderNavItem({
@@ -437,34 +438,6 @@ export function Sidebar({
         label: "Crear nuevo trámite",
         title: "Crear nuevo trámite de firma",
         onClick: () => handleChangeView("upload"),
-      })}
-
-      {/* Atajos */}
-      <SidebarSectionLabel>Atajos</SidebarSectionLabel>
-
-      {renderNavItem({
-        active: statusFilter === "ONLY_PENDIENTES",
-        icon: "⏳",
-        label: "Solo pendientes",
-        title: "Mostrar solo documentos pendientes",
-        onClick: () => handleChangeStatus("ONLY_PENDIENTES"),
-        badge: safePendientes > 0 ? safePendientes : null,
-      })}
-
-      {renderNavItem({
-        active: statusFilter === "ONLY_FIRMADOS",
-        icon: "✅",
-        label: "Solo firmados",
-        title: "Mostrar solo documentos firmados",
-        onClick: () => handleChangeStatus("ONLY_FIRMADOS"),
-      })}
-
-      {renderNavItem({
-        active: statusFilter === "ONLY_RECHAZADOS",
-        icon: "❌",
-        label: "Solo rechazados",
-        title: "Mostrar solo documentos rechazados",
-        onClick: () => handleChangeStatus("ONLY_RECHAZADOS"),
       })}
 
       {/* Reportes */}
@@ -607,7 +580,7 @@ export function Sidebar({
           }}
         >
           <span>Trámites totales</span>
-          <strong style={{ color: "#e5e7eb" }}>{totalDocs}</strong>
+          <strong style={{ color: "#e5e7eb" }}>{safeTotalDocs}</strong>
         </div>
 
         <div

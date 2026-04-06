@@ -283,6 +283,11 @@ function App() {
     totalFiltrado,
     totalPaginas,
     pagination,
+    totalGlobal,
+    pendientesGlobal,
+    visadosGlobal,
+    firmadosGlobal,
+    rechazadosGlobal,
   } = useDocuments(token);
 
   const {
@@ -311,7 +316,10 @@ function App() {
   });
 
   const {
-    connected: socketConnected,
+    status: socketStatus,
+    lastError: socketLastError,
+    canRetry: socketCanRetry,
+    retry: retrySocket,
     on: socketOn,
     off: socketOff,
   } = useSocket(token);
@@ -330,7 +338,9 @@ function App() {
   const safeVisados = Number.isFinite(visados) ? visados : 0;
   const safeFirmados = Number.isFinite(firmados) ? firmados : 0;
   const safeRechazados = Number.isFinite(rechazados) ? rechazados : 0;
-  const safeTotalFiltrado = Number.isFinite(totalFiltrado) ? totalFiltrado : 0;
+  const safeTotalFiltrado = Number.isFinite(totalFiltrado)
+    ? totalFiltrado
+    : 0;
   const safeTotalPaginas =
     Number.isFinite(totalPaginas) && totalPaginas > 0 ? totalPaginas : 1;
   const safeCurrentPage =
@@ -338,20 +348,36 @@ function App() {
       ? pagination.page
       : 1;
 
+  // Totales globales desde el hook (fallback defensivo por si vienen undefined)
+  const safeTotalDocsGlobal = Number.isFinite(totalGlobal)
+    ? totalGlobal
+    : safeDocs.length;
+  const safeTotalPendientesGlobal = Number.isFinite(pendientesGlobal)
+    ? pendientesGlobal
+    : safePendientes;
+  const safeVisadosGlobal = Number.isFinite(visadosGlobal)
+    ? visadosGlobal
+    : 0;
+  const safeFirmadosGlobal = Number.isFinite(firmadosGlobal)
+    ? firmadosGlobal
+    : 0;
+  const safeRechazadosGlobal = Number.isFinite(rechazadosGlobal)
+    ? rechazadosGlobal
+    : 0;
+
   const anyAdmin = isAnyAdmin(user);
   const canAudit = !!user && canViewAuditLogs(user);
 
   const refreshDocs = useCallback(
-    async (overrides = {}) => {
-      return cargarDocs({
+    async (overrides = {}) =>
+      cargarDocs({
         page,
         sort,
         statusFilter,
         search,
         force: true,
         ...overrides,
-      });
-    },
+      }),
     [cargarDocs, page, sort, statusFilter, search]
   );
 
@@ -417,7 +443,8 @@ function App() {
 
   useEffect(() => {
     if (!token) return;
-    if (typeof socketOn !== "function" || typeof socketOff !== "function") return;
+    if (typeof socketOn !== "function" || typeof socketOff !== "function")
+      return;
 
     const handleSent = (data) => {
       addToast({
@@ -767,7 +794,9 @@ function App() {
                   <button
                     type="button"
                     className="btn-main"
-                    disabled={loadingDocs || safeCurrentPage >= safeTotalPaginas}
+                    disabled={
+                      loadingDocs || safeCurrentPage >= safeTotalPaginas
+                    }
                     onClick={() =>
                       setPage((prev) => Math.min(safeTotalPaginas, prev + 1))
                     }
@@ -1001,18 +1030,19 @@ function App() {
       <div className="dashboard-layout">
         <Sidebar
           user={user}
-          docs={safeDocs}
-          pendientes={safePendientes}
+          totalDocuments={safeTotalDocsGlobal}
+          totalPendientes={safeTotalPendientesGlobal}
+          totalVisados={safeVisadosGlobal}
+          totalFirmados={safeFirmadosGlobal}
+          totalRechazados={safeRechazadosGlobal}
           view={view}
           setView={handleNavigateProtected}
-          statusFilter={statusFilter}
-          setStatusFilter={(val) => {
-            setStatusFilter(val);
-            setPage(1);
-          }}
           logout={handleLogout}
           isAnyAdmin={anyAdmin}
-          socketConnected={socketConnected}
+          socketStatus={socketStatus}
+          socketLastError={socketLastError}
+          socketCanRetry={socketCanRetry}
+          onRetrySocket={retrySocket}
         />
 
         <div className="content-body">

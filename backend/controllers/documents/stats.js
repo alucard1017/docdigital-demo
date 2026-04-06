@@ -1,8 +1,64 @@
 // backend/controllers/documents/stats.js
-const db = require('../../db');
+const db = require("../../db");
 
 function isGlobalAdmin(user) {
-  return user?.role === 'SUPER_ADMIN' || user?.role === 'ADMIN_GLOBAL';
+  return user?.role === "SUPER_ADMIN" || user?.role === "ADMIN_GLOBAL";
+}
+
+function toSafeNumber(value, fallback = 0) {
+  const n = Number(value);
+  return Number.isFinite(n) ? n : fallback;
+}
+
+function parseOptionalCompanyId(value) {
+  if (value == null || value === "") return null;
+
+  const parsed = Number(value);
+  if (!Number.isInteger(parsed) || parsed <= 0) {
+    return { error: "company_id inválido" };
+  }
+
+  return { value: parsed };
+}
+
+function buildScope(user, queryCompanyId) {
+  if (isGlobalAdmin(user)) {
+    const parsed = parseOptionalCompanyId(queryCompanyId);
+
+    if (parsed?.error) {
+      return { error: parsed.error };
+    }
+
+    const targetCompanyId = parsed?.value ?? null;
+
+    return {
+      targetCompanyId,
+      scopeLabel: targetCompanyId ? `company_${targetCompanyId}` : "global",
+    };
+  }
+
+  if (!user?.company_id) {
+    return { error: "Tu usuario no tiene company_id asignado" };
+  }
+
+  return {
+    targetCompanyId: user.company_id,
+    scopeLabel: `company_${user.company_id}`,
+  };
+}
+
+function buildWhereClause(targetCompanyId) {
+  if (!targetCompanyId) {
+    return {
+      whereSql: "",
+      params: [],
+    };
+  }
+
+  return {
+    whereSql: "WHERE company_id = $1",
+    params: [targetCompanyId],
+  };
 }
 
 /**
@@ -20,100 +76,82 @@ async function getDocumentStats(req, res) {
     const user = req.user;
     const { company_id: queryCompanyId } = req.query;
 
-    let targetCompanyId = null;
-    let scopeLabel = 'global';
+    const scope = buildScope(user, queryCompanyId);
 
-    if (isGlobalAdmin(user)) {
-      if (queryCompanyId) {
-        targetCompanyId = Number(queryCompanyId);
-        scopeLabel = `company_${targetCompanyId}`;
-      }
-    } else {
-      // ADMIN / USER obligatoriamente restringidos a su empresa
-      if (!user.company_id) {
-        return res
-          .status(400)
-          .json({ message: 'Tu usuario no tiene company_id asignado' });
-      }
-      targetCompanyId = user.company_id;
-      scopeLabel = `company_${targetCompanyId}`;
+    if (scope?.error) {
+      return res.status(400).json({ message: scope.error });
     }
 
-    const params = [];
-    let whereSql = '';
+    const { targetCompanyId, scopeLabel } = scope;
+    const { whereSql, params } = buildWhereClause(targetCompanyId);
 
-    if (targetCompanyId) {
-      params.push(targetCompanyId);
-      whereSql = `WHERE company_id = $${params.length}`;
-    }
+    const andCreatedLast30Days = whereSql
+      ? `${whereSql} AND created_at >= NOW() - INTERVAL '30 days'`
+      : `WHERE created_at >= NOW() - INTERVAL '30 days'`;
 
-    // KPIs por estado básico
     const kpiSql = `
       SELECT
         COUNT(*) AS total,
         COUNT(*) FILTER (
-          WHERE status IN ('PENDIENTE','PENDIENTE_VISADO','PENDIENTE_FIRMA')
+          WHERE status IN ('PENDIENTE', 'PENDIENTE_VISADO', 'PENDIENTE_FIRMA')
         ) AS pendientes,
-        COUNT(*) FILTER (WHERE status = 'FIRMADO')   AS firmados,
+        COUNT(*) FILTER (WHERE status = 'VISADO') AS visados,
+        COUNT(*) FILTER (WHERE status = 'FIRMADO') AS firmados,
         COUNT(*) FILTER (WHERE status = 'RECHAZADO') AS rechazados
       FROM documents
       ${whereSql}
     `;
 
-    const kpiRes = await db.query(kpiSql, params);
-    const kpis = kpiRes.rows[0] || {
-      total: 0,
-      pendientes: 0,
-      firmados: 0,
-      rechazados: 0,
-    };
-
-    // Documentos por día (últimos 30 días)
     const perDaySql = `
       SELECT
         to_char(created_at::date, 'YYYY-MM-DD') AS date,
         COUNT(*) AS count
       FROM documents
-      ${whereSql}
-        ${whereSql ? 'AND' : 'WHERE'} created_at >= NOW() - INTERVAL '30 days'
+      ${andCreatedLast30Days}
       GROUP BY created_at::date
       ORDER BY date ASC
     `;
-    const perDayRes = await db.query(perDaySql, params);
 
-    // Documentos por tipo_tramite (si tienes ese campo en documents)
     const tipoSql = `
       SELECT
-        COALESCE(tipo_tramite, 'SIN_TIPO') AS tipo_tramite,
+        COALESCE(NULLIF(tipo_tramite, ''), 'SIN_TIPO') AS tipo_tramite,
         COUNT(*) AS count
       FROM documents
       ${whereSql}
-      GROUP BY tipo_tramite
-      ORDER BY count DESC
+      GROUP BY COALESCE(NULLIF(tipo_tramite, ''), 'SIN_TIPO')
+      ORDER BY count DESC, tipo_tramite ASC
     `;
-    const tipoRes = await db.query(tipoSql, params);
+
+    const [kpiRes, perDayRes, tipoRes] = await Promise.all([
+      db.query(kpiSql, params),
+      db.query(perDaySql, params),
+      db.query(tipoSql, params),
+    ]);
+
+    const kpisRow = kpiRes.rows[0] || {};
 
     return res.json({
       scope: scopeLabel,
       company_id: targetCompanyId,
       kpis: {
-        total: Number(kpis.total || 0),
-        pendientes: Number(kpis.pendientes || 0),
-        firmados: Number(kpis.firmados || 0),
-        rechazados: Number(kpis.rechazados || 0),
+        total: toSafeNumber(kpisRow.total),
+        pendientes: toSafeNumber(kpisRow.pendientes),
+        visados: toSafeNumber(kpisRow.visados),
+        firmados: toSafeNumber(kpisRow.firmados),
+        rechazados: toSafeNumber(kpisRow.rechazados),
       },
-      perDay: perDayRes.rows.map((r) => ({
-        date: r.date,
-        count: Number(r.count),
+      perDay: perDayRes.rows.map((row) => ({
+        date: row.date,
+        count: toSafeNumber(row.count),
       })),
-      porTipoTramite: tipoRes.rows.map((r) => ({
-        tipo_tramite: r.tipo_tramite,
-        count: Number(r.count),
+      porTipoTramite: tipoRes.rows.map((row) => ({
+        tipo_tramite: row.tipo_tramite,
+        count: toSafeNumber(row.count),
       })),
     });
   } catch (err) {
-    console.error('❌ Error obteniendo stats de documentos:', err);
-    return res.status(500).json({ message: 'Error obteniendo estadísticas' });
+    console.error("❌ Error obteniendo stats de documentos:", err);
+    return res.status(500).json({ message: "Error obteniendo estadísticas" });
   }
 }
 

@@ -1,4 +1,3 @@
-// src/api/client.js
 import axios from "axios";
 import { getStoredToken } from "../utils/session";
 
@@ -190,7 +189,6 @@ export const isAuthFailure = (status, message, code) => {
   if (status === 401) {
     if (AUTH_FAILURE_CODES.has(normalizedCode)) return true;
     if (AUTH_FAILURE_MESSAGES.has(normalizedMessage)) return true;
-    // 401 genérico → tratamos como auth inválida
     return true;
   }
 
@@ -198,7 +196,6 @@ export const isAuthFailure = (status, message, code) => {
     if (AUTH_FAILURE_CODES.has(normalizedCode)) return true;
     if (AUTH_FAILURE_MESSAGES.has(normalizedMessage)) return true;
 
-    // Mensajes típicos de falta de permisos, pero sesión sigue viva
     if (FORBIDDEN_MESSAGES.has(normalizedMessage)) return false;
 
     return false;
@@ -352,6 +349,7 @@ api.interceptors.response.use(
 // Helpers REST específicos
 // =============================
 
+// /docs → { data, pagination, stats }
 export async function getDocuments(params = {}, config = {}) {
   const res = await api.get("/docs", { ...config, params });
   return res.data;
@@ -365,7 +363,7 @@ export async function getDocumentById(id, config = {}) {
 export async function getDocumentPreview(id, config = {}) {
   const res = await api.get(`/documents/${id}/preview`, {
     ...config,
-    responseType: "blob",
+    responseType: config.responseType || "blob",
   });
   return res.data;
 }
