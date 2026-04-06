@@ -1,4 +1,3 @@
-// backend/utils/auditLog.js
 const db = require("../db");
 
 /**

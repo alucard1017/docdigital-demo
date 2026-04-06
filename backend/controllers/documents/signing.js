@@ -1,4 +1,3 @@
-// backend/controllers/documents/signing.js
 const { db, sellarPdfConQr, DOCUMENT_STATES } = require("./common");
 const { logAudit } = require("../../utils/auditLog");
 
@@ -13,10 +12,11 @@ const parseId = (raw) => {
 
 function getClientIp(req) {
   return (
-    (req.headers["x-forwarded-for"] || "")
-      .toString()
-      .split(",")[0]
-      .trim() || req.ip || req.socket?.remoteAddress || null
+    (req.headers["x-real-ip"] ||
+      req.headers["x-forwarded-for"]?.toString().split(",").pop().trim() ||
+      req.ip ||
+      req.socket?.remoteAddress ||
+      null) || null
   );
 }
 
@@ -34,6 +34,29 @@ function getDocumentHash(doc) {
     doc.hash_original_file ||
     null
   );
+}
+
+function buildOwnerMetadata({
+  doc,
+  req,
+  fromStatus,
+  toStatus,
+  eventType,
+  extra = {},
+}) {
+  return {
+    source: "owner_panel",
+    actor_type: "OWNER",
+    owner_id: req?.user?.id || null,
+    owner_name: req?.user?.name || null,
+    document_title: doc.title || null,
+    document_id: doc.id,
+    company_id: doc.company_id || null,
+    from_status: fromStatus,
+    to_status: toStatus,
+    event_type: eventType,
+    ...extra,
+  };
 }
 
 /* ================================
@@ -97,6 +120,10 @@ async function signDocument(req, res) {
     const userAgent = getUserAgent(req);
     const hashDocument = getDocumentHash(doc);
 
+    const fromStatus = docActual.status;
+    const toStatus = DOCUMENT_STATES.SIGNED;
+    const eventType = "SIGNED_OWNER";
+
     await db.query(
       `
       INSERT INTO document_events (
@@ -116,31 +143,26 @@ async function signDocument(req, res) {
         metadata
       )
       VALUES (
-        $1, $2, $3, $4, $5, $6, $7,
-        $8, $9, $10, $11, $12, $13, $14
+        $1, NULL, $2, $3, $4, $5, $6,
+        $7, $8, $9, $10, $11, $12, $13
       )
       `,
       [
         doc.id,
-        null,
-        req.user.name || "Sistema",
-        "FIRMADO",
+        req.user.name || "Propietario",
+        "DOCUMENT_SIGNED_OWNER",
         "Firmado por propietario (aceptó aviso legal de uso de firma electrónica simple, con equivalencia a firma manuscrita conforme a la Ley N° 19.799).",
-        docActual.status,
-        DOCUMENT_STATES.SIGNED,
-        "SIGNED_OWNER",
+        fromStatus,
+        toStatus,
+        eventType,
         ipAddress,
         userAgent,
         hashDocument,
         doc.company_id || null,
         req.user.id || null,
-        JSON.stringify({
-          source: "owner_panel",
-          actor_type: "OWNER",
-          owner_id: req.user.id,
-          owner_name: req.user.name || null,
-          document_title: doc.title || null,
-        }),
+        JSON.stringify(
+          buildOwnerMetadata({ doc, req, fromStatus, toStatus, eventType })
+        ),
       ]
     );
 
@@ -150,8 +172,8 @@ async function signDocument(req, res) {
       entityType: "document",
       entityId: doc.id,
       metadata: {
-        from_status: docActual.status,
-        to_status: DOCUMENT_STATES.SIGNED,
+        from_status: fromStatus,
+        to_status: toStatus,
       },
       req,
     });
@@ -287,6 +309,10 @@ async function viserDocumentInternalUpdate(id, userId, req = null) {
   const userAgent = req ? getUserAgent(req) : null;
   const hashDocument = getDocumentHash(doc);
 
+  const fromStatus = docActual.status;
+  const toStatus = "PENDIENTE_FIRMA";
+  const eventType = "VISADO_OWNER";
+
   await db.query(
     `
     INSERT INTO document_events (
@@ -306,31 +332,26 @@ async function viserDocumentInternalUpdate(id, userId, req = null) {
       metadata
     )
     VALUES (
-      $1, $2, $3, $4, $5, $6, $7,
-      $8, $9, $10, $11, $12, $13, $14
+      $1, NULL, $2, $3, $4, $5, $6,
+      $7, $8, $9, $10, $11, $12, $13
     )
     `,
     [
       doc.id,
-      null,
-      req?.user?.name || "Sistema",
-      "VISADO",
+      req?.user?.name || "Propietario",
+      "DOCUMENT_VISADO_OWNER",
       "Documento visado por el propietario",
-      docActual.status,
-      "PENDIENTE_FIRMA",
-      "VISADO_OWNER",
+      fromStatus,
+      toStatus,
+      eventType,
       ipAddress,
       userAgent,
       hashDocument,
       doc.company_id || null,
       req?.user?.id || null,
-      JSON.stringify({
-        source: "owner_panel",
-        actor_type: "OWNER",
-        owner_id: req?.user?.id || null,
-        owner_name: req?.user?.name || null,
-        document_title: doc.title || null,
-      }),
+      JSON.stringify(
+        buildOwnerMetadata({ doc, req, fromStatus, toStatus, eventType })
+      ),
     ]
   );
 
@@ -367,7 +388,7 @@ async function visarDocument(req, res) {
       message: "Documento visado exitosamente",
     });
   } catch (err) {
-    console.error("❌ Error visando documento:", err);
+    console.error("❌ Error visado documento:", err);
     return res.status(500).json({ message: "Error interno del servidor" });
   }
 }
@@ -383,6 +404,12 @@ async function rejectDocument(req, res) {
 
     if (id === null) {
       return res.status(400).json({ message: "ID de documento inválido" });
+    }
+
+    if (!motivo || !motivo.trim()) {
+      return res
+        .status(400)
+        .json({ message: "Debes indicar un motivo de rechazo." });
     }
 
     const current = await db.query(
@@ -410,7 +437,7 @@ async function rejectDocument(req, res) {
       return res.status(400).json({ message: "Ya rechazado" });
     }
 
-    const rejectReason = motivo || "Sin especificar";
+    const rejectReason = motivo.trim();
 
     const result = await db.query(
       `
@@ -429,6 +456,10 @@ async function rejectDocument(req, res) {
     const ipAddress = getClientIp(req);
     const userAgent = getUserAgent(req);
     const hashDocument = getDocumentHash(doc);
+
+    const fromStatus = docActual.status;
+    const toStatus = DOCUMENT_STATES.REJECTED;
+    const eventType = "REJECTED_OWNER";
 
     await db.query(
       `
@@ -449,32 +480,33 @@ async function rejectDocument(req, res) {
         metadata
       )
       VALUES (
-        $1, $2, $3, $4, $5, $6, $7,
-        $8, $9, $10, $11, $12, $13, $14
+        $1, NULL, $2, $3, $4, $5, $6,
+        $7, $8, $9, $10, $11, $12, $13
       )
       `,
       [
         doc.id,
-        null,
-        req.user.name || "Sistema",
-        "RECHAZADO",
+        req.user.name || "Propietario",
+        "DOCUMENT_REJECTED_OWNER",
         `Documento rechazado: ${rejectReason}`,
-        docActual.status,
-        DOCUMENT_STATES.REJECTED,
-        "REJECTED_OWNER",
+        fromStatus,
+        toStatus,
+        eventType,
         ipAddress,
         userAgent,
         hashDocument,
         doc.company_id || null,
         req.user.id || null,
-        JSON.stringify({
-          source: "owner_panel",
-          actor_type: "OWNER",
-          owner_id: req.user.id,
-          owner_name: req.user.name || null,
-          reason: rejectReason,
-          document_title: doc.title || null,
-        }),
+        JSON.stringify(
+          buildOwnerMetadata({
+            doc,
+            req,
+            fromStatus,
+            toStatus,
+            eventType,
+            extra: { reason: rejectReason },
+          })
+        ),
       ]
     );
 
@@ -483,45 +515,13 @@ async function rejectDocument(req, res) {
       action: "document_rejected",
       entityType: "document",
       entityId: doc.id,
-      metadata: { motivo: rejectReason },
+      metadata: {
+        motivo: rejectReason,
+        from_status: fromStatus,
+        to_status: toStatus,
+      },
       req,
     });
-
-    // Notificación por email al creador
-    const creadorRes = await db.query(
-      `
-      SELECT u.email, u.name
-      FROM users u
-      WHERE u.id = $1
-      `,
-      [doc.owner_id]
-    );
-
-    if (creadorRes.rowCount > 0) {
-      const creador = creadorRes.rows[0];
-      const { sendNotification } = require("../../services/emailService");
-
-      const subject = `❌ Documento rechazado: ${doc.title}`;
-      const html = `
-        <div style="font-family: sans-serif; max-width: 600px; margin: 0 auto; padding: 20px;">
-          <h2 style="color: #b91c1c;">❌ Documento Rechazado</h2>
-          <p>Hola <strong>${creador.name}</strong>,</p>
-          <p>El documento <strong>${doc.title}</strong> ha sido rechazado.</p>
-          <div style="background: #fef2f2; padding: 16px; border-radius: 8px; border-left: 4px solid #b91c1c; margin: 16px 0;">
-            <strong>Motivo del rechazo:</strong><br/>
-            ${rejectReason}
-          </div>
-          <p>Por favor, revisa el motivo y toma las acciones necesarias.</p>
-          <a href="${process.env.FRONTEND_URL}" style="display:inline-block;padding:12px 24px;background:#2563eb;color:#fff;text-decoration:none;border-radius:8px;margin-top:16px;">
-            Ver en VeriFirma
-          </a>
-        </div>
-      `;
-
-      sendNotification(creador.email, subject, html).catch((err) =>
-        console.error("Error enviando notificación de rechazo:", err)
-      );
-    }
 
     return res.json({
       ...doc,
@@ -536,7 +536,7 @@ async function rejectDocument(req, res) {
 
 module.exports = {
   signDocument,
+  viserDocumentInternalUpdate,
   visarDocument,
   rejectDocument,
-  viserDocumentInternalUpdate,
 };

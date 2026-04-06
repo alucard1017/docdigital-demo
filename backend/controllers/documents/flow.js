@@ -4,7 +4,9 @@ const { crypto, DOCUMENT_STATES } = common;
 
 const pool = common?.db?.pool || common?.db;
 if (!pool || typeof pool.query !== "function") {
-  throw new Error("No se pudo resolver un cliente/pool SQL válido desde ./common");
+  throw new Error(
+    "No se pudo resolver un cliente/pool SQL válido desde ./common"
+  );
 }
 
 const getDbClient = async () => {
@@ -147,6 +149,7 @@ const upsertDocumentMirror = async (
    Sincronizar document_participants
    desde visadores + firmantes
    ================================ */
+
 async function syncParticipantsFromFlow(client, {
   documentId,
   signers = [],
@@ -161,30 +164,35 @@ async function syncParticipantsFromFlow(client, {
   const inserts = [];
   let idx = 1;
 
+  // Visadores (grupo 1)
   visadores.forEach((v, i) => {
     inserts.push(
-      `($${idx++}, 'VISADOR', 'PENDIENTE', NULL, NULL, NOW(), NOW(), $${idx++}, $${idx++}, 'VISADOR', $${idx++}, $${idx++})`
+      `($${idx++}, 'VISADOR', 'PENDIENTE', NULL, NULL, NOW(), NOW(), $${idx++}, $${idx++}, 'VISADOR', $${idx++}, $${idx++}, $${idx++})`
     );
     values.push(
-      documentId,
-      i + 1,
-      i + 1,
-      v.name,
-      v.email
+      documentId,           // document_id
+      i + 1,                // step_order
+      i + 1,                // flow_order
+      v.name,               // name
+      v.email,              // email
+      1                     // flow_group
     );
   });
 
   const offset = visadores.length;
+
+  // Firmantes (grupo 2, o 1 si no hay visadores)
   signers.forEach((s, i) => {
     inserts.push(
-      `($${idx++}, 'FIRMANTE', 'PENDIENTE', NULL, NULL, NOW(), NOW(), $${idx++}, $${idx++}, 'FIRMANTE', $${idx++}, $${idx++})`
+      `($${idx++}, 'FIRMANTE', 'PENDIENTE', NULL, NULL, NOW(), NOW(), $${idx++}, $${idx++}, 'FIRMANTE', $${idx++}, $${idx++}, $${idx++})`
     );
     values.push(
-      documentId,
-      offset + i + 1,
-      offset + i + 1,
-      s.name,
-      s.email
+      documentId,                  // document_id
+      offset + i + 1,              // step_order
+      offset + i + 1,              // flow_order
+      s.name,                      // name
+      s.email,                     // email
+      visadores.length > 0 ? 2 : 1 // flow_group
     );
   });
 
@@ -203,7 +211,8 @@ async function syncParticipantsFromFlow(client, {
       flow_order,
       "role",
       "name",
-      email
+      email,
+      flow_group
     )
     VALUES ${inserts.join(", ")}
   `;
@@ -414,15 +423,15 @@ const countParticipantSignatures = async (client, documentId) => {
 const mapLegacyStatusToDocumentsStatus = (legacyStatus) => {
   switch (legacyStatus) {
     case "BORRADOR":
-      return "BORRADOR";
+      return DOCUMENT_STATES.DRAFT;
     case "EN_FIRMA":
       return "PENDIENTE_FIRMA";
     case "FIRMADO":
-      return "FIRMADO";
+      return DOCUMENT_STATES.SIGNED;
     case "RECHAZADO":
-      return "RECHAZADO";
+      return DOCUMENT_STATES.REJECTED;
     default:
-      return legacyStatus || "BORRADOR";
+      return legacyStatus || DOCUMENT_STATES.DRAFT;
   }
 };
 
@@ -433,7 +442,7 @@ const mapFlowStateAfterSend = () => ({
 
 const mapFlowStateAfterSigned = () => ({
   legacyStatus: "FIRMADO",
-  documentsStatus: "FIRMADO",
+  documentsStatus: DOCUMENT_STATES.SIGNED,
 });
 
 const mapFlowStateWhileSigning = () => ({
@@ -443,7 +452,7 @@ const mapFlowStateWhileSigning = () => ({
 
 const mapFlowStateAfterRejected = () => ({
   legacyStatus: "RECHAZADO",
-  documentsStatus: "RECHAZADO",
+  documentsStatus: DOCUMENT_STATES.REJECTED,
 });
 
 /* ================================
@@ -586,6 +595,53 @@ async function createFlow(req, res) {
       visadores: visadoresArray,
     });
 
+    await client.query(
+      `
+      INSERT INTO document_events (
+        document_id,
+        participant_id,
+        actor,
+        action,
+        details,
+        from_status,
+        to_status,
+        event_type,
+        ip_address,
+        user_agent,
+        hash_document,
+        company_id,
+        user_id,
+        metadata,
+        created_at
+      )
+      VALUES (
+        $1, NULL, $2, $3, $4, $5, $6,
+        $7, $8, $9, $10, $11, $12, $13, NOW()
+      )
+      `,
+      [
+        newDocumentId,
+        req.user?.name || `user:${req.user.id}`,
+        "DOCUMENT_CREATED",
+        "Documento creado en estado BORRADOR",
+        null,
+        DOCUMENT_STATES.DRAFT,
+        "DOCUMENT_CREATED",
+        null,
+        null,
+        null,
+        documento.company_id || null,
+        req.user.id || null,
+        JSON.stringify({
+          fuente: "API",
+          legacy_documento_id: documento.id,
+          tipo: documento.tipo,
+          categoria_firma: documento.categoria_firma,
+          tipo_flujo: documento.tipo_flujo,
+        }),
+      ]
+    );
+
     await client.query("COMMIT");
 
     const metadata = buildDocumentAuditMetadata({
@@ -689,9 +745,7 @@ async function sendFlow(req, res) {
     const firmantes = firmantesRes.rows;
     const tieneVisador = firmantes.some((f) => f.rol === "VISADOR");
 
-    const nuevoEstadoMap = mapFlowStateAfterSend();
-    const nuevoEstadoLegacy = nuevoEstadoMap.legacyStatus;
-    const nuevoEstadoDocuments = nuevoEstadoMap.documentsStatus;
+    const { legacyStatus, documentsStatus } = mapFlowStateAfterSend();
 
     await client.query(
       `
@@ -701,13 +755,13 @@ async function sendFlow(req, res) {
           updated_at = NOW()
       WHERE id = $2
       `,
-      [nuevoEstadoLegacy, id]
+      [legacyStatus, id]
     );
 
     const newDocumentId = await upsertDocumentMirror(client, {
       nuevoDocumentoId: documento.id,
       title: documento.titulo,
-      status: nuevoEstadoDocuments,
+      status: documentsStatus,
       companyId: documento.company_id,
       ownerId: documento.creado_por,
       filePath: null,
@@ -736,7 +790,7 @@ async function sendFlow(req, res) {
         JSON.stringify({
           fuente: "API",
           enviado_por: req.user.id,
-          estado_inicial: nuevoEstadoLegacy,
+          estado_inicial: legacyStatus,
           total_firmantes: firmantes.length,
           tiene_visador: tieneVisador,
         }),
@@ -745,10 +799,9 @@ async function sendFlow(req, res) {
 
     const reminderConfig = await getReminderConfig(client, documento.company_id);
 
-    let recordatoriosCreados = 0;
-
     await cancelPendingReminders(client, documento.id);
 
+    let recordatoriosCreados = 0;
     if (reminderConfig.enabled) {
       recordatoriosCreados = await createAutomaticReminders(client, {
         documentId: documento.id,
@@ -769,13 +822,61 @@ async function sendFlow(req, res) {
         .map((f) => ({ name: f.nombre, email: f.email })),
     });
 
+    await client.query(
+      `
+      INSERT INTO document_events (
+        document_id,
+        participant_id,
+        actor,
+        action,
+        details,
+        from_status,
+        to_status,
+        event_type,
+        ip_address,
+        user_agent,
+        hash_document,
+        company_id,
+        user_id,
+        metadata,
+        created_at
+      )
+      VALUES (
+        $1, NULL, $2, $3, $4, $5, $6,
+        $7, $8, $9, $10, $11, $12, $13, NOW()
+      )
+      `,
+      [
+        newDocumentId,
+        req.user?.name || `user:${req.user.id}`,
+        "DOCUMENT_SENT",
+        "Documento enviado a firma",
+        DOCUMENT_STATES.DRAFT,
+        documentsStatus,
+        "DOCUMENT_SENT",
+        null,
+        null,
+        null,
+        documento.company_id || null,
+        req.user.id || null,
+        JSON.stringify({
+          fuente: "API",
+          legacy_documento_id: documento.id,
+          total_firmantes: firmantes.length,
+          tiene_visador: tieneVisador,
+          categoria_firma: documento.categoria_firma,
+          fecha_expiracion: documento.fecha_expiracion,
+        }),
+      ]
+    );
+
     await client.query("COMMIT");
 
     if (documento.company_id) {
       triggerWebhook(documento.company_id, "document.sent", {
         documentoId: documento.id,
         titulo: documento.titulo,
-        estado: nuevoEstadoLegacy,
+        estado: legacyStatus,
         firmantes: firmantes.length,
         tieneVisador,
       }).catch((err) => console.error("Error en webhook document.sent:", err));
@@ -783,7 +884,7 @@ async function sendFlow(req, res) {
       emitToCompany(documento.company_id, "document:sent", {
         documentoId: documento.id,
         titulo: documento.titulo,
-        estado: nuevoEstadoLegacy,
+        estado: legacyStatus,
         firmantes: firmantes.length,
       });
     }
@@ -791,15 +892,15 @@ async function sendFlow(req, res) {
     const metadata = buildDocumentAuditMetadata({
       documentId: documento.id,
       title: documento.titulo,
-      status: nuevoEstadoDocuments,
+      status: documentsStatus,
       companyId: documento.company_id,
       extra: {
         categoria_firma: documento.categoria_firma,
         firmantes: firmantes.length,
         fecha_expiracion: documento.fecha_expiracion,
         documents_equivalent_id: newDocumentId,
-        documents_status: nuevoEstadoDocuments,
-        legacy_status: nuevoEstadoLegacy,
+        documents_status: documentsStatus,
+        legacy_status: legacyStatus,
       },
     });
 
@@ -815,7 +916,7 @@ async function sendFlow(req, res) {
     return res.json({
       documentoId: documento.id,
       documentsId: newDocumentId,
-      estado: nuevoEstadoLegacy,
+      estado: legacyStatus,
       recordatoriosCreados,
       message: "Documento enviado a firma correctamente",
     });
@@ -833,7 +934,7 @@ async function sendFlow(req, res) {
 }
 
 /* ================================
-   Firmar flujo por firmante (público)
+   Firmar flujo por firmante (multi-firmante legacy)
    ================================ */
 async function signFlow(req, res) {
   const { firmanteId } = req.params;
@@ -919,7 +1020,7 @@ async function signFlow(req, res) {
 
     const newDocRes = await client.query(
       `
-      SELECT id
+      SELECT id, company_id
       FROM documents
       WHERE nuevo_documento_id = $1
       LIMIT 1
@@ -927,7 +1028,8 @@ async function signFlow(req, res) {
       [firmante.documento_id]
     );
 
-    const newDocumentId = newDocRes.rows[0]?.id || null;
+    const newDocRow = newDocRes.rows[0] || null;
+    const newDocumentId = newDocRow?.id || null;
 
     if (newDocumentId) {
       await updateParticipantStatus(client, {
@@ -1060,6 +1162,117 @@ async function signFlow(req, res) {
       }
 
       await cancelPendingReminders(client, firmante.documento_id);
+    }
+
+    const ipAddress = req.ip || null;
+    const userAgent = req.headers["user-agent"] || null;
+
+    if (newDocumentId) {
+      await client.query(
+        `
+        INSERT INTO document_events (
+          document_id,
+          participant_id,
+          actor,
+          action,
+          details,
+          from_status,
+          to_status,
+          event_type,
+          ip_address,
+          user_agent,
+          hash_document,
+          company_id,
+          user_id,
+          metadata,
+          created_at
+        )
+        VALUES (
+          $1, $2, $3, $4, $5, $6, $7,
+          $8, $9, $10, $11, $12, $13, $14, NOW()
+        )
+        `,
+        [
+          newDocumentId,
+          null,
+          firmante.nombre || firmante.email || "Firmante interno",
+          "DOCUMENT_SIGNED",
+          `Firma registrada para firmante ${firmante.email}`,
+          "PENDIENTE_FIRMA",
+          nuevoEstadoDocuments,
+          "DOCUMENT_SIGNED",
+          ipAddress,
+          userAgent,
+          null,
+          newDocRow?.company_id || firmante.company_id || null,
+          null,
+          JSON.stringify({
+            fuente: "API",
+            via: "signFlow",
+            tipo_flujo: tipoFlujo,
+            firmante_id: firmante.id,
+            firmante_email: firmante.email,
+            firmante_rol: firmante.rol,
+            all_signed: allSigned,
+            progress:
+              totalNum > 0
+                ? ((firmadosNum / totalNum) * 100).toFixed(1) + "%"
+                : "0.0%",
+            firmados_legacy: firmadosNum,
+            total_legacy: totalNum,
+            firmados_dp: firmadosDpNum,
+            total_dp: totalDpNum,
+          }),
+        ]
+      );
+    }
+
+    if (allSigned && newDocumentId) {
+      await client.query(
+        `
+        INSERT INTO document_events (
+          document_id,
+          participant_id,
+          actor,
+          action,
+          details,
+          from_status,
+          to_status,
+          event_type,
+          ip_address,
+          user_agent,
+          hash_document,
+          company_id,
+          user_id,
+          metadata,
+          created_at
+        )
+        VALUES (
+          $1, NULL, $2, $3, $4, $5, $6,
+          $7, $8, $9, $10, $11, $12, $13, NOW()
+        )
+        `,
+        [
+          newDocumentId,
+          "system",
+          "DOCUMENT_COMPLETED",
+          "Documento firmado por todos los firmantes",
+          "PENDIENTE_FIRMA",
+          DOCUMENT_STATES.SIGNED,
+          "DOCUMENT_COMPLETED",
+          ipAddress,
+          userAgent,
+          null,
+          newDocRow?.company_id || firmante.company_id || null,
+          null,
+          JSON.stringify({
+            fuente: "API",
+            via: "signFlow",
+            firmados: firmadosNum,
+            total: totalNum,
+          }),
+        ]
+      );
     }
 
     await client.query("COMMIT");

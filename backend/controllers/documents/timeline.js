@@ -1,9 +1,126 @@
-// backend/controllers/documents/timeline.js
 const { db, getSignedUrl, computeHash, axios } = require("./common");
 const { logAudit } = require("../../utils/auditLog");
 
 /* ================================
-   GET: URL firmada para VER PDF
+   Helpers comunes
+   ================================ */
+
+function getClientIp(req) {
+  return (
+    req.ip ||
+    req.headers["x-real-ip"] ||
+    req.headers["x-forwarded-for"]?.toString().split(",")[0].trim() ||
+    req.socket?.remoteAddress ||
+    null
+  );
+}
+
+function getUserAgent(req) {
+  return req.headers["user-agent"] || null;
+}
+
+function safeJson(value, fallback = null) {
+  if (!value) return fallback;
+  if (typeof value === "object") return value;
+  try {
+    return JSON.parse(value);
+  } catch {
+    return fallback;
+  }
+}
+
+function normalizeDocumentEvent(evt) {
+  const metadata = safeJson(evt.metadata, null);
+
+  const eventType = evt.event_type || evt.action || "UNKNOWN";
+  const action = evt.action || evt.event_type || "UNKNOWN";
+
+  return {
+    id: evt.id,
+    eventType,
+    action,
+    actor: evt.actor || "system",
+    fromStatus: evt.from_status || metadata?.from_status || null,
+    toStatus: evt.to_status || metadata?.to_status || null,
+    ip: evt.ip_address || null,
+    userAgent: evt.user_agent || null,
+    createdAt: evt.created_at,
+    metadata: {
+      ...(metadata || {}),
+      source: "document_events",
+      details: evt.details || null,
+      participant_id: evt.participant_id || null,
+      hash_document: evt.hash_document || null,
+      company_id: evt.company_id || null,
+      user_id: evt.user_id || null,
+    },
+  };
+}
+
+function normalizeAuditEvent(evt) {
+  const metadata = safeJson(evt.metadata, null);
+
+  const eventType = evt.action || "AUDIT_LOG";
+  const action = evt.action || "AUDIT_LOG";
+
+  return {
+    id: `audit-${evt.id}`,
+    eventType,
+    action,
+    actor: evt.user_id ? `user:${evt.user_id}` : "system",
+    fromStatus: metadata?.from_status || null,
+    toStatus: metadata?.to_status || null,
+    ip: evt.ip || null,
+    userAgent: evt.user_agent || null,
+    createdAt: evt.created_at,
+    metadata: {
+      ...(metadata || {}),
+      source: "audit_log",
+      details: evt.details || null,
+      request_id: evt.request_id || null,
+      user_id: evt.user_id || null,
+    },
+  };
+}
+
+function buildTimelineProgress(status, requiresVisado) {
+  switch (status) {
+    case "PENDIENTE_VISADO":
+      return {
+        currentStep: "Pendiente de visación",
+        nextStep: "⏳ Esperando visación",
+        progress: 25,
+      };
+    case "PENDIENTE_FIRMA":
+      return {
+        currentStep: "Pendiente de firma",
+        nextStep: "⏳ Esperando firma",
+        progress: requiresVisado ? 75 : 50,
+      };
+    case "FIRMADO":
+      return {
+        currentStep: "Firmado",
+        nextStep: "✅ Completado",
+        progress: 100,
+      };
+    case "RECHAZADO":
+      return {
+        currentStep: "Rechazado",
+        nextStep: "❌ Rechazado",
+        progress: 100,
+      };
+    case "BORRADOR":
+    default:
+      return {
+        currentStep: status || "Pendiente",
+        nextStep: "",
+        progress: 0,
+      };
+  }
+}
+
+/* ================================
+   GET: URL firmada para ver PDF
    ================================ */
 async function getDocumentPdf(req, res) {
   try {
@@ -16,6 +133,9 @@ async function getDocumentPdf(req, res) {
       `
       SELECT 
         id,
+        company_id,
+        owner_id,
+        title,
         file_path,
         pdf_original_url,
         pdf_final_url,
@@ -32,6 +152,9 @@ async function getDocumentPdf(req, res) {
     }
 
     const {
+      id,
+      company_id,
+      title,
       file_path,
       pdf_original_url,
       pdf_final_url,
@@ -57,30 +180,29 @@ async function getDocumentPdf(req, res) {
         const fileResponse = await axios.get(signedUrl, {
           responseType: "arraybuffer",
         });
+
         const buffer = Buffer.from(fileResponse.data);
         const currentHash = computeHash(buffer);
 
         if (currentHash !== pdf_hash_final) {
-          console.error(
-            "❌ Hash de PDF no coincide (getDocumentPdf) para documento",
-            docId,
-            {
-              key,
-              stored_hash: pdf_hash_final,
-              current_hash: currentHash,
-            }
-          );
+          console.error("❌ Hash de PDF no coincide", docId, {
+            key,
+            stored_hash: pdf_hash_final,
+            current_hash: currentHash,
+          });
 
           await logAudit({
             user: req.user || null,
-            action: "document_pdf_hash_mismatch",
+            action: "DOCUMENT_PDF_HASH_MISMATCH",
             entityType: "document",
             entityId: docId,
             metadata: {
               document_id: docId,
+              company_id,
+              title,
+              key,
               stored_hash: pdf_hash_final,
               current_hash: currentHash,
-              key,
               context: "getDocumentPdf",
             },
             req,
@@ -97,13 +219,47 @@ async function getDocumentPdf(req, res) {
           docId,
           verifyErr
         );
+
+        await logAudit({
+          user: req.user || null,
+          action: "DOCUMENT_PDF_HASH_VERIFY_ERROR",
+          entityType: "document",
+          entityId: docId,
+          metadata: {
+            document_id: docId,
+            company_id,
+            title,
+            key,
+            error: verifyErr.message,
+            context: "getDocumentPdf",
+          },
+          req,
+        });
+
         return res.status(500).json({
           message: "Error verificando la integridad del documento.",
         });
       }
     }
 
-    const finalSignedUrl = await getSignedUrl(key, 3600);
+    const finalSignedUrl = await getSignedUrl(key, 600);
+
+    await logAudit({
+      user: req.user || null,
+      action: "DOCUMENT_PDF_VIEWED",
+      entityType: "document",
+      entityId: docId,
+      metadata: {
+        document_id: docId,
+        company_id,
+        title,
+        key,
+        final_pdf: status === "FIRMADO" && !!pdf_final_url,
+        ip: getClientIp(req),
+        user_agent: getUserAgent(req),
+      },
+      req,
+    });
 
     return res.json({
       url: finalSignedUrl,
@@ -117,6 +273,10 @@ async function getDocumentPdf(req, res) {
 
 /* ================================
    GET: Timeline del documento (UI)
+   Contrato:
+   id, eventType, action, actor,
+   fromStatus, toStatus, ip, userAgent,
+   createdAt, metadata
    ================================ */
 async function getTimeline(req, res) {
   try {
@@ -127,7 +287,7 @@ async function getTimeline(req, res) {
 
     const docRes = await db.query(
       `
-      SELECT 
+      SELECT
         id,
         title,
         status,
@@ -140,9 +300,8 @@ async function getTimeline(req, res) {
         firmante_nombre,
         visador_nombre,
         numero_contrato_interno,
-        tipo_tramite,
         tipo_documento
-      FROM documents 
+      FROM documents
       WHERE id = $1
       `,
       [docId]
@@ -163,7 +322,7 @@ async function getTimeline(req, res) {
         step_order,
         flow_order,
         flow_group,
-        "name",
+        name,
         email,
         signed_at
       FROM document_participants
@@ -172,28 +331,34 @@ async function getTimeline(req, res) {
       `,
       [doc.id]
     );
+
     const participants = participantsRes.rows || [];
 
     const eventsRes = await db.query(
       `
       SELECT 
         id,
-        action,
-        details,
+        participant_id,
         actor,
+        COALESCE(action, tipo_evento) AS action,
+        COALESCE(details, detalle::text) AS details,
         from_status,
         to_status,
-        event_type,
+        COALESCE(event_type, tipo_evento) AS event_type,
         metadata,
-        ip_address,
+        COALESCE(ip_address, ip) AS ip_address,
         user_agent,
+        hash_document,
+        company_id,
+        user_id,
         created_at
-      FROM document_events 
-      WHERE document_id = $1 
+      FROM document_events
+      WHERE document_id = $1
       ORDER BY created_at ASC
       `,
       [docId]
     );
+
     const documentEvents = eventsRes.rows || [];
 
     const auditRes = await db.query(
@@ -215,77 +380,18 @@ async function getTimeline(req, res) {
       `,
       [docId]
     );
+
     const auditEvents = auditRes.rows || [];
 
-    const timelineEvents = [
-      ...documentEvents.map((evt) => ({
-        id: evt.id,
-        source: "document_events",
-        action: evt.action || evt.event_type,
-        actor: evt.actor || "system",
-        timestamp: evt.created_at,
-        fromStatus: evt.from_status,
-        toStatus: evt.to_status,
-        details: evt.details,
-        metadata: evt.metadata || null,
-        companyId: doc.company_id || null,
-        ip: evt.ip_address || null,
-        userAgent: evt.user_agent || null,
-        requestId: null,
-      })),
-      ...auditEvents.map((evt) => ({
-        id: evt.id,
-        source: "audit_log",
-        action: evt.action,
-        actor: evt.user_id ? `user:${evt.user_id}` : "system",
-        timestamp: evt.created_at,
-        fromStatus: null,
-        toStatus: null,
-        details: evt.details,
-        metadata: evt.metadata,
-        companyId:
-          (evt.metadata && evt.metadata.company_id) || doc.company_id || null,
-        ip: evt.ip,
-        userAgent: evt.user_agent,
-        requestId: evt.request_id,
-      })),
-    ];
+    const normalizedEvents = [
+      ...documentEvents.map(normalizeDocumentEvent),
+      ...auditEvents.map(normalizeAuditEvent),
+    ].sort((a, b) => new Date(a.createdAt) - new Date(b.createdAt));
 
-    timelineEvents.sort(
-      (a, b) => new Date(a.timestamp) - new Date(b.timestamp)
+    const { currentStep, nextStep, progress } = buildTimelineProgress(
+      doc.status,
+      doc.requires_visado
     );
-
-    let currentStep = "Pendiente";
-    let nextStep = "";
-    let progress = 0;
-
-    switch (doc.status) {
-      case "PENDIENTE_VISADO":
-        currentStep = "Pendiente de visado";
-        nextStep = "⏳ Esperando visación";
-        progress = 25;
-        break;
-      case "PENDIENTE_FIRMA":
-        currentStep = "Pendiente de firma";
-        nextStep = "⏳ Esperando firma";
-        progress = doc.requires_visado ? 75 : 50;
-        break;
-      case "FIRMADO":
-        currentStep = "Firmado";
-        nextStep = "✅ Completado";
-        progress = 100;
-        break;
-      case "RECHAZADO":
-        currentStep = "Rechazado";
-        nextStep = "❌ Rechazado";
-        progress = 0;
-        break;
-      default:
-        currentStep = doc.status || "Pendiente";
-        nextStep = "";
-        progress = 0;
-        break;
-    }
 
     return res.json({
       document: {
@@ -298,8 +404,9 @@ async function getTimeline(req, res) {
         created_at: doc.created_at,
         updated_at: doc.updated_at,
         requires_visado: doc.requires_visado,
+        firmante_nombre: doc.firmante_nombre,
+        visador_nombre: doc.visador_nombre,
         numero_contrato_interno: doc.numero_contrato_interno,
-        tipo_tramite: doc.tipo_tramite,
         tipo_documento: doc.tipo_documento,
       },
       participants,
@@ -307,7 +414,7 @@ async function getTimeline(req, res) {
         currentStep,
         nextStep,
         progress,
-        events: timelineEvents,
+        events: normalizedEvents,
       },
     });
   } catch (err) {
@@ -347,10 +454,17 @@ async function getLegalTimeline(req, res) {
         id,
         document_id,
         participant_id,
-        event_type,
-        ip_address,
+        actor,
+        COALESCE(action, tipo_evento) AS action,
+        COALESCE(details, detalle::text) AS details,
+        from_status,
+        to_status,
+        COALESCE(event_type, tipo_evento) AS event_type,
+        COALESCE(ip_address, ip) AS ip_address,
         user_agent,
         hash_document,
+        company_id,
+        user_id,
         metadata,
         created_at
       FROM document_events
@@ -364,12 +478,19 @@ async function getLegalTimeline(req, res) {
       id: evt.id,
       document_id: evt.document_id,
       participant_id: evt.participant_id,
+      actor: evt.actor || null,
       event_type: evt.event_type,
+      action: evt.action || null,
+      from_status: evt.from_status || null,
+      to_status: evt.to_status || null,
       timestamp: evt.created_at,
-      ip_address: evt.ip_address,
-      user_agent: evt.user_agent,
-      hash_document: evt.hash_document,
-      metadata: evt.metadata,
+      ip_address: evt.ip_address || null,
+      user_agent: evt.user_agent || null,
+      hash_document: evt.hash_document || null,
+      company_id: evt.company_id || null,
+      user_id: evt.user_id || null,
+      metadata: safeJson(evt.metadata, null),
+      details: evt.details || null,
     }));
 
     return res.json({
@@ -399,8 +520,8 @@ async function getSigners(req, res) {
 
     const docRes = await db.query(
       `
-      SELECT id 
-      FROM documents 
+      SELECT id, owner_id
+      FROM documents
       WHERE id = $1 AND owner_id = $2
       `,
       [docId, req.user.id]
@@ -412,11 +533,16 @@ async function getSigners(req, res) {
 
     const signersRes = await db.query(
       `
-      SELECT 
+      SELECT
         id,
+        document_id,
         name,
         email,
-        status
+        status,
+        role,
+        sign_token,
+        signed_at,
+        created_at
       FROM document_signers
       WHERE document_id = $1
       ORDER BY id ASC
@@ -424,7 +550,7 @@ async function getSigners(req, res) {
       [docId]
     );
 
-    return res.json(signersRes.rows);
+    return res.json(signersRes.rows || []);
   } catch (err) {
     console.error("❌ Error obteniendo firmantes:", err);
     return res.status(500).json({ message: "Error interno del servidor" });
