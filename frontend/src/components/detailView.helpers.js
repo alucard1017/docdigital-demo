@@ -48,6 +48,9 @@ export function buildUserDisplayName(currentUser) {
   );
 }
 
+/**
+ * Tipo de trámite: Notaría / Propio / Sin notaría / N/D
+ */
 export function getTramiteLabel(value) {
   const normalized = normalizeText(value);
 
@@ -60,6 +63,9 @@ export function getTramiteLabel(value) {
   return "N/D";
 }
 
+/**
+ * Tipo de documento: contratos, poderes, autorizaciones, etc.
+ */
 export function getDocumentLabel(value) {
   const normalized = normalizeText(value);
 
@@ -90,13 +96,25 @@ export function getDocumentLabel(value) {
   return "N/D";
 }
 
+/**
+ * Número interno / número de contrato.
+ * Usa primero el número de contrato interno moderno, luego fallback legacy.
+ */
 export function getDocumentNumber(selectedDoc, timeline) {
-  return (
-    timeline?.document?.numero_contrato_interno ||
+  const fromTimeline =
+    timeline?.document?.numero_contrato_interno ??
+    timeline?.document?.numerocontratointerno ??
+    null;
+
+  if (fromTimeline) return fromTimeline;
+
+  const fromSelected =
     selectedDoc?.numero_contrato_interno ||
+    selectedDoc?.numerocontratointerno ||
     selectedDoc?.numero_contrato ||
-    null
-  );
+    null;
+
+  return fromSelected;
 }
 
 export function getDocumentTitle(selectedDoc, timeline) {
@@ -159,15 +177,18 @@ export function normalizeFlowStatus(value = "") {
   };
 }
 
+/**
+ * Construye el flujo de participantes mezclando document_participants + document_signers
+ * y normalizando rol, estado, orden y fechas.
+ */
 export function buildFlowParticipants(participants = [], signers = []) {
   const safeParticipants = Array.isArray(participants) ? participants : [];
   const safeSigners = Array.isArray(signers) ? signers : [];
 
-  const signerMap = new Map(
-    safeSigners.map((signer) => [
-      String(signer?.id ?? signer?.signer_id ?? signer?.email ?? Math.random()),
-      signer,
-    ])
+  const signerMapById = new Map(
+    safeSigners
+      .filter((s) => s?.id != null)
+      .map((signer) => [String(signer.id), signer])
   );
 
   return safeParticipants
@@ -180,7 +201,18 @@ export function buildFlowParticipants(participants = [], signers = []) {
         ? Number(b.flow_order)
         : 9999;
 
-      return aOrder - bOrder;
+      if (aOrder !== bOrder) return aOrder - bOrder;
+
+      const aStep = Number.isFinite(Number(a?.step_order))
+        ? Number(a.step_order)
+        : 9999;
+      const bStep = Number.isFinite(Number(b?.step_order))
+        ? Number(b.step_order)
+        : 9999;
+
+      if (aStep !== bStep) return aStep - bStep;
+
+      return Number(a?.id || 0) - Number(b?.id || 0);
     })
     .map((participant, index) => {
       const roleInfo = normalizeParticipantRole(
@@ -188,39 +220,58 @@ export function buildFlowParticipants(participants = [], signers = []) {
       );
       const statusInfo = normalizeFlowStatus(participant?.status);
 
-      const signer =
-        signerMap.get(String(participant?.signer_id || participant?.id)) ||
-        safeSigners.find(
-          (item) =>
-            String(item?.email || "").toLowerCase() ===
-            String(participant?.email || "").toLowerCase()
-        );
+      const signerFromId =
+        signerMapById.get(String(participant?.signer_id || participant?.id)) ||
+        null;
+
+      const normalizedParticipantEmail = String(
+        participant?.email || ""
+      ).toLowerCase();
+
+      const signerFromEmail =
+        !signerFromId && normalizedParticipantEmail
+          ? safeSigners.find(
+              (s) =>
+                String(s?.email || "").toLowerCase() === normalizedParticipantEmail
+            )
+          : null;
+
+      const signer = signerFromId || signerFromEmail || null;
+
+      const resolvedName =
+        participant?.name ||
+        signer?.name ||
+        signer?.full_name ||
+        "Participante";
+
+      const resolvedEmail =
+        participant?.email || signer?.email || "Sin correo";
+
+      const resolvedSignedAt =
+        participant?.signed_at ||
+        participant?.updated_at ||
+        signer?.signed_at ||
+        null;
+
+      const order = Number.isFinite(Number(participant?.flow_order))
+        ? Number(participant.flow_order)
+        : index + 1;
 
       return {
         id:
           participant?.id ||
           participant?.signer_id ||
           `${participant?.email || "participant"}-${index}`,
-        order: Number.isFinite(Number(participant?.flow_order))
-          ? Number(participant.flow_order)
-          : index + 1,
-        name:
-          participant?.name ||
-          signer?.name ||
-          signer?.full_name ||
-          "Participante",
-        email: participant?.email || signer?.email || "Sin correo",
+        order,
+        name: resolvedName,
+        email: resolvedEmail,
         roleLabel: roleInfo.label,
         roleBadgeClass: roleInfo.badgeClass,
         roleKey: roleInfo.key,
         statusKey: statusInfo.key,
         statusLabel: statusInfo.label,
         statusClassName: statusInfo.className,
-        signedAt:
-          participant?.signed_at ||
-          participant?.updated_at ||
-          signer?.signed_at ||
-          null,
+        signedAt: resolvedSignedAt,
       };
     });
 }

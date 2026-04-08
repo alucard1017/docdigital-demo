@@ -27,8 +27,7 @@ ChartJS.register(
 );
 
 const COLORS = ["#0f766e", "#2563eb", "#d97706", "#dc2626", "#7c3aed", "#0891b2"];
-const SAFE_COLORS =
-  Array.isArray(COLORS) && COLORS.length > 0 ? COLORS : ["#475569"];
+const SAFE_COLORS = COLORS.length ? COLORS : ["#475569"];
 
 function formatNumber(value) {
   const n = Number(value ?? 0);
@@ -61,6 +60,15 @@ function buildInsight(kpis) {
   return "La operación se ve estable. Úsalo para confirmar tendencia diaria y detectar si algún tipo de trámite se está acumulando más que el resto.";
 }
 
+function mapTipoTramiteLabel(raw = "") {
+  const value = String(raw || "").toLowerCase();
+
+  if (value === "propio") return "Trámite propio";
+  if (value === "notaria" || value === "notaría") return "Con notaría";
+
+  return raw || "Sin tipo";
+}
+
 function EmptyPanel({ title, description }) {
   return (
     <div className="rounded-2xl border border-slate-200 bg-white p-8 text-center shadow-sm">
@@ -89,7 +97,9 @@ function EmptyPanel({ title, description }) {
 }
 
 function SkeletonCard() {
-  return <div className="h-28 animate-pulse rounded-2xl border border-slate-200 bg-slate-100" />;
+  return (
+    <div className="h-28 animate-pulse rounded-2xl border border-slate-200 bg-slate-100" />
+  );
 }
 
 function KpiCard({ label, value, tone = "slate", helper }) {
@@ -101,10 +111,18 @@ function KpiCard({ label, value, tone = "slate", helper }) {
   };
 
   return (
-    <div className={`rounded-2xl border p-5 shadow-sm ${toneMap[tone] || toneMap.slate}`}>
+    <div
+      className={`rounded-2xl border p-5 shadow-sm ${
+        toneMap[tone] || toneMap.slate
+      }`}
+    >
       <div className="mb-2 text-sm font-medium text-slate-500">{label}</div>
-      <div className="text-3xl font-semibold tracking-tight">{formatNumber(value)}</div>
-      {helper ? <p className="mt-2 text-xs leading-5 text-slate-500">{helper}</p> : null}
+      <div className="text-3xl font-semibold tracking-tight">
+        {formatNumber(value)}
+      </div>
+      {helper ? (
+        <p className="mt-2 text-xs leading-5 text-slate-500">{helper}</p>
+      ) : null}
     </div>
   );
 }
@@ -116,7 +134,9 @@ function ChartCard({ title, description, children, actions = null }) {
         <div>
           <h2 className="text-base font-semibold text-slate-900">{title}</h2>
           {description ? (
-            <p className="mt-1 text-sm leading-6 text-slate-500">{description}</p>
+            <p className="mt-1 text-sm leading-6 text-slate-500">
+              {description}
+            </p>
           ) : null}
         </div>
         {actions}
@@ -146,7 +166,7 @@ export function DashboardView({ user }) {
       setLoading(true);
       setError("");
 
-      const res = await api.get("/docs/stats", { signal });
+      const res = await api.get("/docs/stats", signal ? { signal } : undefined);
       const data = res?.data || {};
       const safeKpis = data?.kpis || {};
 
@@ -179,7 +199,7 @@ export function DashboardView({ user }) {
       setTipoTramiteData(
         Array.isArray(data?.porTipoTramite)
           ? data.porTipoTramite.map((t) => ({
-              name: t?.tipo_tramite || "Sin tipo",
+              name: mapTipoTramiteLabel(t?.tipo_tramite),
               value: Number(t?.count || 0),
             }))
           : []
@@ -188,12 +208,10 @@ export function DashboardView({ user }) {
       if (err?.name === "CanceledError" || err?.code === "ERR_CANCELED") return;
 
       console.error("Error cargando stats:", err);
-
       const msg =
         err?.response?.data?.message ||
         err?.message ||
         "Error al cargar estadísticas";
-
       setError(msg);
     } finally {
       setLoading(false);
@@ -206,14 +224,14 @@ export function DashboardView({ user }) {
     return () => controller.abort();
   }, [fetchStats]);
 
-  const hasAnyData = useMemo(() => {
-    return (
+  const hasAnyData = useMemo(
+    () =>
       Number(kpis.total) > 0 ||
       statusData.length > 0 ||
       perDayData.length > 0 ||
-      tipoTramiteData.length > 0
-    );
-  }, [kpis.total, statusData, perDayData, tipoTramiteData]);
+      tipoTramiteData.length > 0,
+    [kpis.total, statusData, perDayData, tipoTramiteData]
+  );
 
   const insight = useMemo(() => buildInsight(kpis), [kpis]);
 
@@ -345,6 +363,10 @@ export function DashboardView({ user }) {
     []
   );
 
+  const handleRefresh = () => {
+    fetchStats();
+  };
+
   return (
     <div className="min-h-full bg-slate-50 p-6">
       <div className="mx-auto flex max-w-7xl flex-col gap-6">
@@ -364,7 +386,7 @@ export function DashboardView({ user }) {
 
           <button
             type="button"
-            onClick={() => fetchStats()}
+            onClick={handleRefresh}
             className="inline-flex items-center justify-center rounded-xl border border-slate-300 bg-white px-4 py-2 text-sm font-medium text-slate-700 shadow-sm transition hover:bg-slate-100"
           >
             Actualizar panel
@@ -392,7 +414,7 @@ export function DashboardView({ user }) {
             <p className="mt-2 text-sm leading-6 text-rose-700">{error}</p>
             <button
               type="button"
-              onClick={() => fetchStats()}
+              onClick={handleRefresh}
               className="mt-4 rounded-xl bg-rose-600 px-4 py-2 text-sm font-medium text-white transition hover:bg-rose-700"
             >
               Reintentar
@@ -484,7 +506,10 @@ export function DashboardView({ user }) {
                   </div>
                 ) : (
                   <div className="h-[280px]">
-                    <Doughnut data={tipoTramiteChartData} options={doughnutOptions} />
+                    <Doughnut
+                      data={tipoTramiteChartData}
+                      options={doughnutOptions}
+                    />
                   </div>
                 )}
               </ChartCard>
@@ -502,8 +527,9 @@ export function DashboardView({ user }) {
                   enlace público.
                 </p>
                 <p className="mt-3 text-sm leading-7 text-slate-400">
-                  Si la creación diaria cae, prueba el flujo completo como usuario
-                  real para validar envío, apertura, firma y verificación de punta a punta.
+                  Si la creación diaria cae, prueba el flujo completo como
+                  usuario real para validar envío, apertura, firma y verificación
+                  de punta a punta.
                 </p>
               </section>
             </div>

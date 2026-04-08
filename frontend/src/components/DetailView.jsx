@@ -84,21 +84,25 @@ export function DetailView({
 
   const tramiteLabel = useMemo(() => {
     return getTramiteLabel(
-      timeline?.document?.tipo_tramite ||
-        selectedDoc?.tipo_tramite ||
+      timeline?.document?.tipo_tramite ??
+        selectedDoc?.tipo_tramite ??
         selectedDoc?.tipoTramite
     );
   }, [timeline, selectedDoc]);
 
   const documentoLabel = useMemo(() => {
     return getDocumentLabel(
-      timeline?.document?.tipo_documento ||
-        selectedDoc?.tipo_documento ||
+      timeline?.document?.tipo_documento ??
+        selectedDoc?.tipo_documento ??
         selectedDoc?.tipoDocumento
     );
   }, [timeline, selectedDoc]);
 
-  const currentStatus = selectedDoc?.status || timeline?.document?.status || null;
+  const currentStatus = useMemo(() => {
+    return timeline?.document?.status ?? selectedDoc?.status ?? null;
+  }, [timeline, selectedDoc]);
+
+  const currentDocId = selectedDoc?.id ?? timeline?.document?.id ?? null;
 
   const isSigned = currentStatus === "FIRMADO";
   const isRejected = currentStatus === "RECHAZADO";
@@ -112,8 +116,8 @@ export function DetailView({
   }, [currentStatus]);
 
   const baseUrl = api.defaults.baseURL || "";
-  const downloadUrl = selectedDoc
-    ? `${baseUrl}/documents/${selectedDoc.id}/download`
+  const downloadUrl = currentDocId
+    ? `${baseUrl}/documents/${currentDocId}/download`
     : null;
 
   const documentStateMeta = useMemo(() => {
@@ -376,8 +380,9 @@ export function DetailView({
         <header className="detail-topbar">
           <span className="detail-topbar-title">
             Revisión de documento{" "}
-            {numeroInterno ? `(${numeroInterno})` : `#${selectedDoc.id}`} · Estado{" "}
-            {currentStatus || "Sin estado"}
+            {numeroInterno ? `(${numeroInterno})` : currentDocId ? `#${currentDocId}` : ""}
+            {" · "}
+            Estado {currentStatus || "Sin estado"}
           </span>
 
           <span className="detail-topbar-user">
@@ -388,22 +393,36 @@ export function DetailView({
         <div className="detail-container">
           <div className="detail-card">
             <div className="detail-header-block">
-              <div>
+              <div className="detail-header-main">
                 <h1 className="detail-title">{titleDocumento}</h1>
 
                 <div className="detail-meta">
                   <p>
-                    N° interno: <strong>{numeroInterno || `#${selectedDoc.id}`}</strong>
+                    <span className="detail-meta-label">N° interno:</span>{" "}
+                    <span className="detail-meta-value">
+                      {numeroInterno || (currentDocId ? `#${currentDocId}` : "N/D")}
+                    </span>
                   </p>
+
                   <p>
-                    Tipo de trámite: <strong>{tramiteLabel} – {documentoLabel}</strong>
+                    <span className="detail-meta-label">Tipo de trámite:</span>{" "}
+                    <span className="detail-meta-value">{tramiteLabel}</span>
+                  </p>
+
+                  <p>
+                    <span className="detail-meta-label">Tipo de documento:</span>{" "}
+                    <span className="detail-meta-value">{documentoLabel}</span>
                   </p>
                 </div>
               </div>
 
               <div className={documentStateMeta.className}>
-                <div className="detail-doc-state__label">{documentStateMeta.label}</div>
-                <div className="detail-doc-state__helper">{documentStateMeta.helper}</div>
+                <div className="detail-doc-state__label">
+                  {documentStateMeta.label}
+                </div>
+                <div className="detail-doc-state__helper">
+                  {documentStateMeta.helper}
+                </div>
               </div>
             </div>
 
@@ -423,7 +442,8 @@ export function DetailView({
               <div className="detail-section__header">
                 <h3 className="detail-section__title">Documento y acciones</h3>
                 <p className="detail-section__subtitle">
-                  Visualiza el PDF final, descarga el archivo o reenvía recordatorios según el estado actual.
+                  Visualiza el PDF final, descarga el archivo o reenvía recordatorios
+                  según el estado actual.
                 </p>
               </div>
 
@@ -493,7 +513,7 @@ export function DetailView({
                   </div>
                 ) : pdfUrl ? (
                   <iframe
-                    title={`PDF del documento ${selectedDoc.id}`}
+                    title={`PDF del documento ${currentDocId || ""}`}
                     src={pdfUrl}
                     className="detail-pdf-iframe"
                   />
@@ -511,7 +531,8 @@ export function DetailView({
                 <div className="detail-section__header">
                   <h3 className="detail-section__title">Validaciones previas</h3>
                   <p className="detail-section__subtitle">
-                    Antes de firmar o visar, deja constancia de aceptación del aviso legal correspondiente.
+                    Antes de firmar o visar, deja constancia de aceptación del aviso
+                    legal correspondiente.
                   </p>
                 </div>
 
@@ -522,7 +543,9 @@ export function DetailView({
                       checked={acceptedLegalSign}
                       onChange={setAcceptedLegalSign}
                     />
-                    {signError && <p className="detail-inline-error">{signError}</p>}
+                    {signError && (
+                      <p className="detail-inline-error">{signError}</p>
+                    )}
                   </>
                 )}
 
@@ -533,7 +556,9 @@ export function DetailView({
                       checked={acceptedLegalVisado}
                       onChange={setAcceptedLegalVisado}
                     />
-                    {visadoError && <p className="detail-inline-error">{visadoError}</p>}
+                    {visadoError && (
+                      <p className="detail-inline-error">{visadoError}</p>
+                    )}
                   </>
                 )}
               </section>
@@ -543,7 +568,8 @@ export function DetailView({
               <div className="detail-section__header">
                 <h3 className="detail-section__title">Flujo de participantes</h3>
                 <p className="detail-section__subtitle">
-                  Revisa el orden del proceso, el rol de cada participante y quién sigue en el flujo secuencial.
+                  Revisa el orden del proceso, el rol de cada participante y quién
+                  sigue en el flujo secuencial.
                 </p>
               </div>
 
@@ -568,18 +594,26 @@ export function DetailView({
 
                   <ul className="detail-flow-list">
                     {flowParticipants.map((participant) => {
-                      const canRemind =
-                        participant.roleKey === FLOW_ROLE_KEYS.FIRMANTE &&
-                        participant.statusKey === "pending";
+                      const normalizedParticipantEmail = String(
+                        participant.email || ""
+                      ).toLowerCase();
 
-                      const signerMatch = signers.find(
-                        (s) =>
-                          String(s.id) === String(participant.id) ||
-                          String(s.email || "").toLowerCase() ===
-                            String(participant.email || "").toLowerCase()
-                      );
+                      const signerMatch = signers.find((s) => {
+                        const signerEmail = String(s?.email || "").toLowerCase();
+
+                        return (
+                          String(s?.id) === String(participant.id) ||
+                          (normalizedParticipantEmail &&
+                            signerEmail &&
+                            signerEmail === normalizedParticipantEmail)
+                        );
+                      });
 
                       const signerId = signerMatch?.id;
+                      const canRemind =
+                        participant.roleKey === FLOW_ROLE_KEYS.FIRMANTE &&
+                        participant.statusKey === "pending" &&
+                        Boolean(signerId);
 
                       return (
                         <li key={participant.id} className="detail-flow-item">
@@ -590,8 +624,12 @@ export function DetailView({
                           <div className="detail-flow-item__body">
                             <div className="detail-flow-item__top">
                               <div>
-                                <div className="detail-signer-main">{participant.name}</div>
-                                <div className="detail-signer-sub">{participant.email}</div>
+                                <div className="detail-flow-item__name">
+                                  {participant.name}
+                                </div>
+                                <div className="detail-flow-item__email">
+                                  {participant.email || "Sin correo registrado"}
+                                </div>
                               </div>
 
                               <div className="detail-flow-item__badges">
@@ -615,7 +653,7 @@ export function DetailView({
                             </div>
                           </div>
 
-                          {canRemind && signerId && (
+                          {canRemind ? (
                             <button
                               type="button"
                               className="btn-main detail-btn-inline-reminder"
@@ -633,7 +671,7 @@ export function DetailView({
                                 ? "⏳ Enviando..."
                                 : "📧 Recordar"}
                             </button>
-                          )}
+                          ) : null}
                         </li>
                       );
                     })}
@@ -646,13 +684,16 @@ export function DetailView({
               <div className="detail-section__header">
                 <h3 className="detail-section__title">Timeline del documento</h3>
                 <p className="detail-section__subtitle">
-                  Consulta el avance general y distingue eventos automáticos de acciones realizadas por usuarios.
+                  Consulta el avance general y distingue eventos automáticos de
+                  acciones realizadas por usuarios.
                 </p>
               </div>
 
               <div className="detail-timeline-wrapper">
                 {loadingTimeline ? (
-                  <div className="detail-timeline-loading">Cargando progreso...</div>
+                  <div className="detail-timeline-loading">
+                    Cargando progreso...
+                  </div>
                 ) : timeline ? (
                   <Timeline timeline={timeline} />
                 ) : (
@@ -667,7 +708,8 @@ export function DetailView({
               <div className="detail-section__header">
                 <h3 className="detail-section__title">Historial de acciones</h3>
                 <p className="detail-section__subtitle">
-                  Registro detallado de eventos del documento para seguimiento y auditoría.
+                  Registro detallado de eventos del documento para seguimiento y
+                  auditoría.
                 </p>
               </div>
 

@@ -2,10 +2,7 @@
 
 const { db, getSignedUrl, computeHash, axios } = require("./common");
 const { logAudit } = require("../../utils/auditLog");
-const {
-  getClientIp,
-  getUserAgent,
-} = require("./documentEventUtils");
+const { getClientIp, getUserAgent } = require("./documentEventUtils");
 
 /* ================================
    Helpers comunes
@@ -265,10 +262,50 @@ async function getDocumentPdf(req, res) {
 
 /* ================================
    GET: Timeline del documento (UI)
-   Contrato:
-   id, eventType, action, actor,
-   fromStatus, toStatus, ip, userAgent,
-   createdAt, metadata
+   CONTRATO FRONTEND (getDocumentTimeline):
+   {
+     document: {
+       id, title, status, company_id,
+       destinatario_nombre, empresa_rut,
+       created_at, updated_at,
+       requires_visado: boolean,
+       firmante_nombre, visador_nombre,
+       numero_contrato_interno,
+       tipo_documento
+     },
+     participants: [
+       {
+         id,
+         role_in_doc,
+         status,
+         step_order,
+         flow_order,
+         flow_group,
+         name,
+         email,
+         signed_at
+       }
+     ],
+     timeline: {
+       currentStep,
+       nextStep,
+       progress,
+       events: [
+         {
+           id,
+           eventType,
+           action,
+           actor,
+           fromStatus,
+           toStatus,
+           ip,
+           userAgent,
+           createdAt,
+           metadata
+         }
+       ]
+     }
+   }
    ================================ */
 async function getTimeline(req, res) {
   try {
@@ -319,7 +356,9 @@ async function getTimeline(req, res) {
         signed_at
       FROM document_participants
       WHERE document_id = $1
-      ORDER BY flow_order ASC NULLS LAST, step_order ASC NULLS LAST, id ASC
+      ORDER BY flow_order ASC NULLS LAST,
+               step_order ASC NULLS LAST,
+               id ASC
       `,
       [doc.id]
     );
@@ -380,9 +419,14 @@ async function getTimeline(req, res) {
       ...auditEvents.map(normalizeAuditEvent),
     ].sort((a, b) => new Date(a.createdAt) - new Date(b.createdAt));
 
+    const requiresVisadoBool =
+      doc.requires_visado === true ||
+      doc.requires_visado === "true" ||
+      doc.requires_visado === 1;
+
     const { currentStep, nextStep, progress } = buildTimelineProgress(
       doc.status,
-      doc.requires_visado
+      requiresVisadoBool
     );
 
     return res.json({
@@ -395,7 +439,7 @@ async function getTimeline(req, res) {
         empresa_rut: doc.empresa_rut,
         created_at: doc.created_at,
         updated_at: doc.updated_at,
-        requires_visado: doc.requires_visado,
+        requires_visado: requiresVisadoBool,
         firmante_nombre: doc.firmante_nombre,
         visador_nombre: doc.visador_nombre,
         numero_contrato_interno: doc.numero_contrato_interno,

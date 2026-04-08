@@ -89,11 +89,17 @@
   margin-bottom: 16px;
 }
 
+.detail-header-main {
+  flex: 1 1 0;
+  min-width: 0;
+}
+
 .detail-title {
   margin: 0 0 4px 0;
   font-size: 1.8rem;
   font-weight: 800;
   color: #0f172a;
+  word-break: break-word;
 }
 
 .detail-meta {
@@ -104,6 +110,16 @@
 
 .detail-meta p {
   margin: 2px 0;
+}
+
+.detail-meta-label {
+  font-weight: 600;
+  color: #475569;
+}
+
+.detail-meta-value {
+  color: #0f172a;
+  word-break: break-word;
 }
 
 /* Estado global del documento */
@@ -295,7 +311,7 @@
   margin-top: -4px;
 }
 
-/* Firmantes */
+/* Firmantes (resumen simple) */
 
 .detail-signers {
   margin-bottom: 24px;
@@ -334,11 +350,14 @@
 .detail-signer-main {
   font-size: 0.9rem;
   font-weight: 600;
+  color: #0f172a;
+  word-break: break-word;
 }
 
 .detail-signer-sub {
   font-size: 0.8rem;
   color: var(--text-muted);
+  word-break: break-word;
 }
 
 /* Flujo secuencial */
@@ -399,6 +418,19 @@
   align-items: flex-start;
   justify-content: space-between;
   gap: 10px;
+}
+
+.detail-flow-item__name {
+  font-size: 0.9rem;
+  font-weight: 600;
+  color: #0f172a;
+  word-break: break-word;
+}
+
+.detail-flow-item__email {
+  font-size: 0.8rem;
+  color: #64748b;
+  word-break: break-word;
 }
 
 .detail-flow-item__badges {
