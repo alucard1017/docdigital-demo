@@ -1,5 +1,8 @@
 // src/views/LoginView.jsx
 import React, { useState } from "react";
+import "../styles/auth.css";
+import "../styles/authLegacy.css";
+import "../styles/auth.css";
 
 const baseInputStyle = {
   width: "100%",

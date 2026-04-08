@@ -1,0 +1,46 @@
+/* Layout general dashboard */
+
+.dashboard-layout {
+  display: flex;
+  min-height: 100vh;
+  width: 100%;
+  max-width: 100vw;
+  overflow-x: hidden;
+}
+
+.main-area {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  align-items: stretch;
+  width: 100%;
+}
+
+.content-body {
+  width: 100%;
+  padding: 14px 10px 22px;
+  max-width: calc(100vw - 190px);
+  box-sizing: border-box;
+  overflow-x: hidden;
+}
+
+.content-body > * {
+  max-width: 100%;
+}
+
+/* Topbar genérico */
+
+.topbar {
+  width: 100%;
+  height: 70px;
+  padding: 0 20px;
+  box-sizing: border-box;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  background:
+    radial-gradient(circle at top left, rgba(37, 99, 235, 0.18) 0, transparent 55%),
+    rgba(15, 23, 42, 0.98);
+  border-bottom: 1px solid rgba(30, 64, 175, 0.65);
+  box-shadow: 0 18px 40px rgba(15, 23, 42, 0.9);
+}

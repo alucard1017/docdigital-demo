@@ -1,23 +1,15 @@
+// backend/controllers/documents/timeline.js
+
 const { db, getSignedUrl, computeHash, axios } = require("./common");
 const { logAudit } = require("../../utils/auditLog");
+const {
+  getClientIp,
+  getUserAgent,
+} = require("./documentEventUtils");
 
 /* ================================
    Helpers comunes
    ================================ */
-
-function getClientIp(req) {
-  return (
-    req.ip ||
-    req.headers["x-real-ip"] ||
-    req.headers["x-forwarded-for"]?.toString().split(",")[0].trim() ||
-    req.socket?.remoteAddress ||
-    null
-  );
-}
-
-function getUserAgent(req) {
-  return req.headers["user-agent"] || null;
-}
 
 function safeJson(value, fallback = null) {
   if (!value) return fallback;

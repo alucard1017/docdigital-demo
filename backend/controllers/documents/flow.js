@@ -1,4 +1,5 @@
 // backend/controllers/documents/flow.js
+
 const common = require("./common");
 const { crypto, DOCUMENT_STATES } = common;
 
@@ -31,6 +32,13 @@ const {
 const { triggerWebhook } = require("../../services/webhookService");
 const { emitToCompany } = require("../../services/socketService");
 const { getGeoFromIP } = require("../../utils/geoLocation");
+const {
+  getClientIp,
+  getUserAgent,
+} = require("./documentEventUtils");
+const {
+  insertDocumentEvent,
+} = require("./documentEventInserts");
 
 /* ================================
    Helpers transacción + espejo
@@ -263,6 +271,7 @@ const createAutomaticReminders = async (
 ) => {
   if (!documentId || !signers?.length) return 0;
 
+  // Primer recordatorio a las 12h
   const firstReminderAt = new Date(Date.now() + 12 * 60 * 60 * 1000);
 
   for (const signer of signers) {
@@ -595,52 +604,31 @@ async function createFlow(req, res) {
       visadores: visadoresArray,
     });
 
-    await client.query(
-      `
-      INSERT INTO document_events (
-        document_id,
-        participant_id,
-        actor,
-        action,
-        details,
-        from_status,
-        to_status,
-        event_type,
-        ip_address,
-        user_agent,
-        hash_document,
-        company_id,
-        user_id,
-        metadata,
-        created_at
-      )
-      VALUES (
-        $1, NULL, $2, $3, $4, $5, $6,
-        $7, $8, $9, $10, $11, $12, $13, NOW()
-      )
-      `,
-      [
-        newDocumentId,
-        req.user?.name || `user:${req.user.id}`,
-        "DOCUMENT_CREATED",
-        "Documento creado en estado BORRADOR",
-        null,
-        DOCUMENT_STATES.DRAFT,
-        "DOCUMENT_CREATED",
-        null,
-        null,
-        null,
-        documento.company_id || null,
-        req.user.id || null,
-        JSON.stringify({
-          fuente: "API",
-          legacy_documento_id: documento.id,
-          tipo: documento.tipo,
-          categoria_firma: documento.categoria_firma,
-          tipo_flujo: documento.tipo_flujo,
-        }),
-      ]
-    );
+    const ipAddress = getClientIp(req);
+    const userAgent = getUserAgent(req);
+
+    await insertDocumentEvent({
+      documentId: newDocumentId,
+      participantId: null,
+      actor: req.user?.name || `user:${req.user.id}`,
+      action: "DOCUMENT_CREATED",
+      details: "Documento creado en estado BORRADOR",
+      fromStatus: null,
+      toStatus: DOCUMENT_STATES.DRAFT,
+      eventType: "DOCUMENT_CREATED",
+      ipAddress,
+      userAgent,
+      hashDocument: null,
+      companyId: documento.company_id || null,
+      userId: req.user.id || null,
+      metadata: {
+        fuente: "API",
+        legacy_documento_id: documento.id,
+        tipo: documento.tipo,
+        categoria_firma: documento.categoria_firma,
+        tipo_flujo: documento.tipo_flujo,
+      },
+    });
 
     await client.query("COMMIT");
 
@@ -822,53 +810,32 @@ async function sendFlow(req, res) {
         .map((f) => ({ name: f.nombre, email: f.email })),
     });
 
-    await client.query(
-      `
-      INSERT INTO document_events (
-        document_id,
-        participant_id,
-        actor,
-        action,
-        details,
-        from_status,
-        to_status,
-        event_type,
-        ip_address,
-        user_agent,
-        hash_document,
-        company_id,
-        user_id,
-        metadata,
-        created_at
-      )
-      VALUES (
-        $1, NULL, $2, $3, $4, $5, $6,
-        $7, $8, $9, $10, $11, $12, $13, NOW()
-      )
-      `,
-      [
-        newDocumentId,
-        req.user?.name || `user:${req.user.id}`,
-        "DOCUMENT_SENT",
-        "Documento enviado a firma",
-        DOCUMENT_STATES.DRAFT,
-        documentsStatus,
-        "DOCUMENT_SENT",
-        null,
-        null,
-        null,
-        documento.company_id || null,
-        req.user.id || null,
-        JSON.stringify({
-          fuente: "API",
-          legacy_documento_id: documento.id,
-          total_firmantes: firmantes.length,
-          tiene_visador: tieneVisador,
-          categoria_firma: documento.categoria_firma,
-          fecha_expiracion: documento.fecha_expiracion,
-        }),
-      ]
-    );
+    const ipAddress = getClientIp(req);
+    const userAgent = getUserAgent(req);
+
+    await insertDocumentEvent({
+      documentId: newDocumentId,
+      participantId: null,
+      actor: req.user?.name || `user:${req.user.id}`,
+      action: "DOCUMENT_SENT",
+      details: "Documento enviado a firma",
+      fromStatus: DOCUMENT_STATES.DRAFT,
+      toStatus: documentsStatus,
+      eventType: "DOCUMENT_SENT",
+      ipAddress,
+      userAgent,
+      hashDocument: null,
+      companyId: documento.company_id || null,
+      userId: req.user.id || null,
+      metadata: {
+        fuente: "API",
+        legacy_documento_id: documento.id,
+        total_firmantes: firmantes.length,
+        tiene_visador: tieneVisador,
+        categoria_firma: documento.categoria_firma,
+        fecha_expiracion: documento.fecha_expiracion,
+      },
+    });
 
     await client.query("COMMIT");
 
@@ -1164,115 +1131,66 @@ async function signFlow(req, res) {
       await cancelPendingReminders(client, firmante.documento_id);
     }
 
-    const ipAddress = req.ip || null;
-    const userAgent = req.headers["user-agent"] || null;
+    const ipAddress = getClientIp(req);
+    const userAgent = getUserAgent(req);
 
     if (newDocumentId) {
-      await client.query(
-        `
-        INSERT INTO document_events (
-          document_id,
-          participant_id,
-          actor,
-          action,
-          details,
-          from_status,
-          to_status,
-          event_type,
-          ip_address,
-          user_agent,
-          hash_document,
-          company_id,
-          user_id,
-          metadata,
-          created_at
-        )
-        VALUES (
-          $1, $2, $3, $4, $5, $6, $7,
-          $8, $9, $10, $11, $12, $13, $14, NOW()
-        )
-        `,
-        [
-          newDocumentId,
-          null,
-          firmante.nombre || firmante.email || "Firmante interno",
-          "DOCUMENT_SIGNED",
-          `Firma registrada para firmante ${firmante.email}`,
-          "PENDIENTE_FIRMA",
-          nuevoEstadoDocuments,
-          "DOCUMENT_SIGNED",
-          ipAddress,
-          userAgent,
-          null,
-          newDocRow?.company_id || firmante.company_id || null,
-          null,
-          JSON.stringify({
-            fuente: "API",
-            via: "signFlow",
-            tipo_flujo: tipoFlujo,
-            firmante_id: firmante.id,
-            firmante_email: firmante.email,
-            firmante_rol: firmante.rol,
-            all_signed: allSigned,
-            progress:
-              totalNum > 0
-                ? ((firmadosNum / totalNum) * 100).toFixed(1) + "%"
-                : "0.0%",
-            firmados_legacy: firmadosNum,
-            total_legacy: totalNum,
-            firmados_dp: firmadosDpNum,
-            total_dp: totalDpNum,
-          }),
-        ]
-      );
+      await insertDocumentEvent({
+        documentId: newDocumentId,
+        participantId: null,
+        actor: firmante.nombre || firmante.email || "Firmante interno",
+        action: "DOCUMENT_SIGNED",
+        details: `Firma registrada para firmante ${firmante.email}`,
+        fromStatus: "PENDIENTE_FIRMA",
+        toStatus: nuevoEstadoDocuments,
+        eventType: "DOCUMENT_SIGNED",
+        ipAddress,
+        userAgent,
+        hashDocument: null,
+        companyId: newDocRow?.company_id || firmante.company_id || null,
+        userId: null,
+        metadata: {
+          fuente: "API",
+          via: "signFlow",
+          tipo_flujo: tipoFlujo,
+          firmante_id: firmante.id,
+          firmante_email: firmante.email,
+          firmante_rol: firmante.rol,
+          all_signed: allSigned,
+          progress:
+            totalNum > 0
+              ? ((firmadosNum / totalNum) * 100).toFixed(1) + "%"
+              : "0.0%",
+          firmados_legacy: firmadosNum,
+          total_legacy: totalNum,
+          firmados_dp: firmadosDpNum,
+          total_dp: totalDpNum,
+        },
+      });
     }
 
     if (allSigned && newDocumentId) {
-      await client.query(
-        `
-        INSERT INTO document_events (
-          document_id,
-          participant_id,
-          actor,
-          action,
-          details,
-          from_status,
-          to_status,
-          event_type,
-          ip_address,
-          user_agent,
-          hash_document,
-          company_id,
-          user_id,
-          metadata,
-          created_at
-        )
-        VALUES (
-          $1, NULL, $2, $3, $4, $5, $6,
-          $7, $8, $9, $10, $11, $12, $13, NOW()
-        )
-        `,
-        [
-          newDocumentId,
-          "system",
-          "DOCUMENT_COMPLETED",
-          "Documento firmado por todos los firmantes",
-          "PENDIENTE_FIRMA",
-          DOCUMENT_STATES.SIGNED,
-          "DOCUMENT_COMPLETED",
-          ipAddress,
-          userAgent,
-          null,
-          newDocRow?.company_id || firmante.company_id || null,
-          null,
-          JSON.stringify({
-            fuente: "API",
-            via: "signFlow",
-            firmados: firmadosNum,
-            total: totalNum,
-          }),
-        ]
-      );
+      await insertDocumentEvent({
+        documentId: newDocumentId,
+        participantId: null,
+        actor: "system",
+        action: "DOCUMENT_COMPLETED",
+        details: "Documento firmado por todos los firmantes",
+        fromStatus: "PENDIENTE_FIRMA",
+        toStatus: DOCUMENT_STATES.SIGNED,
+        eventType: "DOCUMENT_COMPLETED",
+        ipAddress,
+        userAgent,
+        hashDocument: null,
+        companyId: newDocRow?.company_id || firmante.company_id || null,
+        userId: null,
+        metadata: {
+          fuente: "API",
+          via: "signFlow",
+          firmados: firmadosNum,
+          total: totalNum,
+        },
+      });
     }
 
     await client.query("COMMIT");

@@ -1,0 +1,46 @@
+/* Cargando sesión */
+.session-loading {
+  padding: 40px;
+  text-align: center;
+  color: #64748b;
+}
+
+/* Fallbacks de módulos protegidos */
+.protected-fallback {
+  padding: 32px;
+  color: #64748b;
+  text-align: center;
+}
+
+/* Fallback onboarding / tour */
+.onboarding-fallback,
+.product-tour-fallback {
+  padding: 16px;
+  text-align: center;
+  color: #64748b;
+  font-size: 0.9rem;
+}
+
+/* Fallback onboarding un poco más amplio */
+.onboarding-fallback {
+  padding: 24px;
+}
+
+/* Fallback genérico de redirección */
+.redirect-fallback {
+  padding: 40px;
+  text-align: center;
+  color: #64748b;
+}
+
+/* Botón de probar error Sentry (modo dev) */
+.sentry-test-button {
+  margin-top: 16px;
+  padding: 6px 10px;
+  font-size: 0.75rem;
+  border-radius: 999px;
+  border: 1px solid #cbd5f5;
+  background: #eff6ff;
+  color: #1e3a8a;
+  cursor: pointer;
+}

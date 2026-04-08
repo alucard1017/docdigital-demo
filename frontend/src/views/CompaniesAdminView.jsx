@@ -1,10 +1,14 @@
+// src/views/CompaniesAdminView.jsx
 import { useCallback, useEffect, useMemo, useState } from "react";
 import api from "../api/client";
+import "../styles/companiesAdmin.css";
 
 function formatDate(value) {
   if (!value) return "";
+
   const d = new Date(value);
   if (Number.isNaN(d.getTime())) return "";
+
   return d.toLocaleDateString("es-CL", {
     year: "numeric",
     month: "short",
@@ -14,15 +18,21 @@ function formatDate(value) {
 
 function getPlanLabel(plan) {
   if (!plan) return "BASIC";
-  const v = String(plan).toUpperCase();
-  if (v === "PRO" || v === "BASIC" || v === "ENTERPRISE") return v;
-  return v;
+
+  const normalized = String(plan).toUpperCase();
+  if (normalized === "PRO") return "PRO";
+  if (normalized === "ENTERPRISE") return "ENTERPRISE";
+  return "BASIC";
 }
 
 function getPlanClassName(plan) {
-  const v = String(plan || "").toUpperCase();
-  if (v === "PRO") return "badge-plan badge-plan-pro";
-  if (v === "ENTERPRISE") return "badge-plan badge-plan-enterprise";
+  const normalized = String(plan || "").toUpperCase();
+
+  if (normalized === "PRO") return "badge-plan badge-plan-pro";
+  if (normalized === "ENTERPRISE") {
+    return "badge-plan badge-plan-enterprise";
+  }
+
   return "badge-plan badge-plan-basic";
 }
 
@@ -33,7 +43,7 @@ function CompaniesAdminView() {
   const [name, setName] = useState("");
   const [saving, setSaving] = useState(false);
 
-  const cargarCompanies = useCallback(async () => {
+  const loadCompanies = useCallback(async () => {
     setLoading(true);
     setError("");
 
@@ -43,9 +53,10 @@ function CompaniesAdminView() {
       setCompanies(Array.isArray(data) ? data : []);
     } catch (err) {
       const msg =
-        err.response?.data?.message ||
-        err.message ||
+        err?.response?.data?.message ||
+        err?.message ||
         "No se pudieron cargar las empresas";
+
       setError(msg);
       setCompanies([]);
     } finally {
@@ -54,116 +65,131 @@ function CompaniesAdminView() {
   }, []);
 
   useEffect(() => {
-    cargarCompanies();
-  }, [cargarCompanies]);
+    loadCompanies();
+  }, [loadCompanies]);
 
-  async function handleCreate(e) {
-    e.preventDefault();
-    if (!name.trim()) return;
+  const handleCreate = useCallback(
+    async (e) => {
+      e.preventDefault();
 
-    try {
-      setSaving(true);
+      const trimmedName = name.trim();
+      if (!trimmedName) return;
 
-      const res = await api.post("/companies", {
-        name: name.trim(),
-      });
+      try {
+        setSaving(true);
 
-      if (!res?.data) {
-        throw new Error("No se pudo crear la empresa");
+        const res = await api.post("/companies", {
+          name: trimmedName,
+        });
+
+        if (!res?.data) {
+          throw new Error("No se pudo crear la empresa");
+        }
+
+        setName("");
+        await loadCompanies();
+        window.alert("Empresa creada correctamente");
+      } catch (err) {
+        const msg =
+          err?.response?.data?.message ||
+          err?.message ||
+          "Error al crear empresa";
+
+        window.alert(msg);
+      } finally {
+        setSaving(false);
       }
+    },
+    [name, loadCompanies]
+  );
 
-      setName("");
-      await cargarCompanies();
-      window.alert("Empresa creada correctamente");
-    } catch (err) {
-      const msg =
-        err.response?.data?.message ||
-        err.message ||
-        "Error al crear empresa";
-      window.alert(msg);
-    } finally {
-      setSaving(false);
-    }
-  }
+  const handleRename = useCallback(
+    async (id, currentName) => {
+      const nextName = window.prompt(
+        "Nuevo nombre para la empresa:",
+        currentName || ""
+      );
 
-  async function handleRename(id, currentName) {
-    const nuevoNombre = window.prompt(
-      "Nuevo nombre para la empresa:",
-      currentName || ""
-    );
+      const trimmedName = nextName?.trim();
+      if (!trimmedName) return;
 
-    if (!nuevoNombre || !nuevoNombre.trim()) return;
+      try {
+        setSaving(true);
 
-    try {
-      setSaving(true);
+        const res = await api.put(`/companies/${id}`, {
+          name: trimmedName,
+        });
 
-      const res = await api.put(`/companies/${id}`, {
-        name: nuevoNombre.trim(),
-      });
+        if (!res?.data) {
+          throw new Error("No se pudo actualizar la empresa");
+        }
 
-      if (!res?.data) {
-        throw new Error("No se pudo actualizar la empresa");
+        await loadCompanies();
+        window.alert("Empresa actualizada correctamente");
+      } catch (err) {
+        const msg =
+          err?.response?.data?.message ||
+          err?.message ||
+          "Error al actualizar empresa";
+
+        window.alert(msg);
+      } finally {
+        setSaving(false);
       }
+    },
+    [loadCompanies]
+  );
 
-      await cargarCompanies();
-      window.alert("Empresa actualizada correctamente");
-    } catch (err) {
-      const msg =
-        err.response?.data?.message ||
-        err.message ||
-        "Error al actualizar empresa";
-      window.alert(msg);
-    } finally {
-      setSaving(false);
-    }
-  }
+  const handleDelete = useCallback(
+    async (id, companyName) => {
+      const ok = window.confirm(
+        `¿Seguro que deseas eliminar la empresa "${companyName}"?\nSolo se puede si no tiene usuarios asociados.`
+      );
 
-  async function handleDelete(id, companyName) {
-    const ok = window.confirm(
-      `¿Seguro que deseas eliminar la empresa "${companyName}"?\nSolo se puede si no tiene usuarios asociados.`
-    );
+      if (!ok) return;
 
-    if (!ok) return;
+      try {
+        setSaving(true);
 
-    try {
-      setSaving(true);
+        const res = await api.delete(`/companies/${id}`);
 
-      const res = await api.delete(`/companies/${id}`);
+        if (!res?.data) {
+          throw new Error("No se pudo eliminar la empresa");
+        }
 
-      if (!res?.data) {
-        throw new Error("No se pudo eliminar la empresa");
+        await loadCompanies();
+        window.alert("Empresa eliminada correctamente");
+      } catch (err) {
+        const msg =
+          err?.response?.data?.message ||
+          err?.message ||
+          "Error al eliminar empresa";
+
+        window.alert(msg);
+      } finally {
+        setSaving(false);
       }
+    },
+    [loadCompanies]
+  );
 
-      await cargarCompanies();
-      window.alert("Empresa eliminada correctamente");
-    } catch (err) {
-      const msg =
-        err.response?.data?.message ||
-        err.message ||
-        "Error al eliminar empresa";
-      window.alert(msg);
-    } finally {
-      setSaving(false);
-    }
-  }
-
-  const muestraPlan = useMemo(
-    () => companies.some((c) => c.plan),
+  const showPlan = useMemo(
+    () => companies.some((company) => company.plan),
     [companies]
   );
 
-  const muestraUsers = useMemo(
-    () => companies.some((c) => typeof c.users_count === "number"),
+  const showUsers = useMemo(
+    () => companies.some((company) => typeof company.users_count === "number"),
     [companies]
   );
 
-  const muestraFecha = useMemo(
-    () => companies.some((c) => c.created_at),
+  const showDate = useMemo(
+    () => companies.some((company) => company.created_at),
     [companies]
   );
 
-  const muestraDomain = useMemo(
-    () => companies.some((c) => c.domain),
+  const showDomain = useMemo(
+    () => companies.some((company) => company.domain),
     [companies]
   );
 
@@ -171,7 +197,9 @@ function CompaniesAdminView() {
     return (
       <div className="companies-admin-page">
         <div className="companies-admin-loading">
-          <p className="companies-admin-loading-text">Cargando empresas...</p>
+          <p className="companies-admin-loading-text">
+            Cargando empresas...
+          </p>
         </div>
       </div>
     );
@@ -187,7 +215,7 @@ function CompaniesAdminView() {
           <p className="companies-admin-error-text">{error}</p>
           <button
             className="btn-main btn-primary companies-admin-retry-btn"
-            onClick={cargarCompanies}
+            onClick={loadCompanies}
           >
             Reintentar
           </button>
@@ -214,12 +242,13 @@ function CompaniesAdminView() {
           >
             <input
               type="text"
-              className="form-input companies-admin-input"
+              className="input-field companies-admin-input"
               placeholder="Nombre de la nueva empresa"
               value={name}
               onChange={(e) => setName(e.target.value)}
               disabled={saving}
             />
+
             <button
               type="submit"
               className="btn-main btn-primary companies-admin-create-btn"
@@ -248,19 +277,27 @@ function CompaniesAdminView() {
                   <tr className="companies-admin-head-row">
                     <th className="col-company-id">ID</th>
                     <th className="col-company-name">Nombre</th>
-                    {muestraUsers && <th className="col-company-users">Usuarios</th>}
-                    {muestraPlan && <th className="col-company-plan">Plan</th>}
-                    {muestraFecha && <th className="col-company-date">Creada</th>}
+                    {showUsers && (
+                      <th className="col-company-users">Usuarios</th>
+                    )}
+                    {showPlan && (
+                      <th className="col-company-plan">Plan</th>
+                    )}
+                    {showDate && (
+                      <th className="col-company-date">Creada</th>
+                    )}
                     <th className="col-company-actions">Acciones</th>
                   </tr>
                 </thead>
 
                 <tbody>
-                  {companies.map((c, idx) => {
-                    const planLabel = getPlanLabel(c.plan);
-                    const planClass = getPlanClassName(c.plan);
+                  {companies.map((company, idx) => {
+                    const planLabel = getPlanLabel(company.plan);
+                    const planClass = getPlanClassName(company.plan);
                     const usersCount =
-                      typeof c.users_count === "number" ? c.users_count : 0;
+                      typeof company.users_count === "number"
+                        ? company.users_count
+                        : 0;
 
                     const rowClass =
                       idx % 2 === 0
@@ -268,36 +305,38 @@ function CompaniesAdminView() {
                         : "company-row company-row-odd";
 
                     return (
-                      <tr key={c.id} className={rowClass}>
-                        <td className="company-cell-id">{c.id}</td>
+                      <tr key={company.id} className={rowClass}>
+                        <td className="company-cell-id">{company.id}</td>
 
                         <td className="company-cell-name">
                           <div className="company-name-stack">
-                            <span className="company-name-text">{c.name}</span>
+                            <span className="company-name-text">
+                              {company.name}
+                            </span>
 
-                            {muestraDomain && c.domain && (
+                            {showDomain && company.domain && (
                               <span className="company-domain-text">
-                                {c.domain}
+                                {company.domain}
                               </span>
                             )}
                           </div>
                         </td>
 
-                        {muestraUsers && (
+                        {showUsers && (
                           <td className="company-cell-users">
                             <span className="doc-id-pill">{usersCount}</span>
                           </td>
                         )}
 
-                        {muestraPlan && (
+                        {showPlan && (
                           <td className="company-cell-plan">
                             <span className={planClass}>{planLabel}</span>
                           </td>
                         )}
 
-                        {muestraFecha && (
+                        {showDate && (
                           <td className="company-cell-date">
-                            {formatDate(c.created_at)}
+                            {formatDate(company.created_at)}
                           </td>
                         )}
 
@@ -306,7 +345,9 @@ function CompaniesAdminView() {
                             <button
                               type="button"
                               className="btn-main btn-primary btn-xs"
-                              onClick={() => handleRename(c.id, c.name)}
+                              onClick={() =>
+                                handleRename(company.id, company.name)
+                              }
                               disabled={saving}
                             >
                               Editar
@@ -315,7 +356,9 @@ function CompaniesAdminView() {
                             <button
                               type="button"
                               className="btn-main btn-secondary-danger btn-xs"
-                              onClick={() => handleDelete(c.id, c.name)}
+                              onClick={() =>
+                                handleDelete(company.id, company.name)
+                              }
                               disabled={saving}
                             >
                               Eliminar

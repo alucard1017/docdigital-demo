@@ -1,6 +1,8 @@
 // src/views/ForgotPasswordView.jsx
 import React, { useState } from "react";
 import api from "../api/client";
+import "../styles/authLegacy.css";
+import "../styles/auth.css";
 
 const ForgotPasswordView = () => {
   const [email, setEmail] = useState("");

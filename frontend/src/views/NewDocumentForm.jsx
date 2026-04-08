@@ -1,5 +1,6 @@
 import React, { useState } from "react";
 import api from "../api/client";
+import "../styles/newDocumentForm.css";
 
 const TIPOS_TRAMITE = [
   { value: "propio", label: "Trámite propio (sin notaría)" },

@@ -9,13 +9,16 @@ import {
 } from "react";
 import "./App.css";
 
+// Layout / UI base
 import { Sidebar } from "./components/Sidebar";
 import { DetailView } from "./components/DetailView";
 import { ListHeader } from "./components/ListHeader";
 import { DocumentRow } from "./components/DocumentRow";
 
+// Constantes
 import { DOC_STATUS, API_BASE_URL } from "./constants";
 
+// Vistas públicas / auth
 import { LoginView } from "./views/LoginView";
 import { PublicSignView } from "./views/PublicSignView";
 import { NewDocumentForm } from "./views/NewDocumentForm";
@@ -25,6 +28,7 @@ import ResetPasswordView from "./views/ResetPasswordView";
 import RegisterView from "./views/RegisterView";
 import ProfileView from "./views/ProfileView";
 
+// Utils
 import { getSubdomain } from "./utils/subdomain";
 import {
   getPath,
@@ -33,7 +37,9 @@ import {
   replaceTo,
 } from "./utils/router";
 import { isAnyAdmin, canViewAuditLogs } from "./utils/permissions";
+import { formatRun, formatRunDoc } from "./utils/formatters";
 
+// Hooks
 import { useSocket } from "./hooks/useSocket";
 import { useOnboardingStatus } from "./hooks/useOnboardingStatus";
 import { usePublicSign } from "./hooks/usePublicSign";
@@ -41,6 +47,7 @@ import { useDocuments } from "./hooks/useDocuments";
 import { useToast } from "./hooks/useToast";
 import { useAuth } from "./hooks/useAuth";
 
+// Lazy admin / dashboard views
 const OnboardingWizardLazy = lazy(
   () => import("./components/Onboarding/OnboardingWizard")
 );
@@ -50,11 +57,15 @@ const ProductTourLazy = lazy(
 
 const UsersAdminView = lazy(() => import("./views/UsersAdminView"));
 const DashboardView = lazy(() => import("./views/DashboardView"));
-const CompaniesAdminView = lazy(() => import("./views/CompaniesAdminView"));
+const CompaniesAdminView = lazy(
+  () => import("./views/CompaniesAdminView")
+);
 const StatusAdminView = lazy(() => import("./views/StatusAdminView"));
 const AuditLogsView = lazy(() => import("./views/AuditLogsView"));
 const AuthLogsView = lazy(() => import("./views/AuthLogsView"));
-const RemindersConfigView = lazy(() => import("./views/RemindersConfigView"));
+const RemindersConfigView = lazy(
+  () => import("./views/RemindersConfigView")
+);
 const EmailMetricsView = lazy(() => import("./views/EmailMetricsView"));
 const PricingView = lazy(() => import("./views/PricingView"));
 const TemplatesView = lazy(() => import("./views/TemplatesView"));
@@ -110,35 +121,6 @@ function getProtectedViewFromPath(path) {
   return ROUTE_MAP[path] || "list";
 }
 
-function formatRun(value) {
-  let clean = (value || "").replace(/[^0-9kK]/g, "");
-  if (!clean) return "";
-
-  const MAX_LEN = 10;
-  if (clean.length > MAX_LEN) clean = clean.slice(0, MAX_LEN);
-  if (clean.length < 2) return clean;
-
-  const body = clean.slice(0, -1);
-  const dv = clean.slice(-1);
-  const formattedBody = body.replace(/\B(?=(\d{3})+(?!\d))/g, ".");
-
-  if (!body) return dv;
-  return `${formattedBody}-${dv}`;
-}
-
-function formatRunDoc(value) {
-  let clean = (value || "").replace(/[^0-9kK]/g, "");
-  if (!clean) return "";
-  if (clean.length > 10) clean = clean.slice(0, 10);
-  if (clean.length <= 1) return clean;
-
-  const body = clean.slice(0, -1);
-  const dv = clean.slice(-1);
-
-  if (!body) return dv;
-  return `${body.replace(/\B(?=(\d{3})+(?!\d))/g, ".")}-${dv}`;
-}
-
 function getLocationSnapshot() {
   if (typeof window === "undefined") {
     return { pathname: "/", search: "" };
@@ -180,19 +162,11 @@ function getPublicAccess({
 }
 
 function ProtectedModuleFallback() {
-  return (
-    <div style={{ padding: 32, color: "#64748b" }}>
-      Cargando módulo…
-    </div>
-  );
+  return <div className="protected-fallback">Cargando módulo…</div>;
 }
 
 function SessionLoadingFallback() {
-  return (
-    <div style={{ padding: 40, textAlign: "center" }}>
-      Cargando sesión...
-    </div>
-  );
+  return <div className="session-loading">Cargando sesión...</div>;
 }
 
 function App() {
@@ -201,8 +175,11 @@ function App() {
   const isSigningPortal = subdomain === "firmar";
 
   const [path, setPath] = useState(() => getPath());
-  const [view, setView] = useState(() => getProtectedViewFromPath(getPath()));
+  const [view, setView] = useState(() =>
+    getProtectedViewFromPath(getPath())
+  );
 
+  // Login state
   const [identifier, setIdentifier] = useState("");
   const [password, setPassword] = useState("");
   const [isEmailMode, setIsEmailMode] = useState(false);
@@ -212,6 +189,7 @@ function App() {
   const [isLoggingIn, setIsLoggingIn] = useState(false);
   const [rememberMe, setRememberMe] = useState(false);
 
+  // NewDocumentForm state
   const [formErrors, setFormErrors] = useState({});
   const [tipoTramite, setTipoTramite] = useState("propio");
   const [showVisador, setShowVisador] = useState(false);
@@ -221,7 +199,8 @@ function App() {
 
   const apiRoot = API_BASE_URL;
 
-  const { user, token, login, logout, authLoading, isAuthenticated } = useAuth();
+  const { user, token, login, logout, authLoading, isAuthenticated } =
+    useAuth();
   const { addToast } = useToast();
 
   const locationSnapshot = useMemo(() => getLocationSnapshot(), [path]);
@@ -365,7 +344,6 @@ function App() {
     [cargarDocs, page, sort, statusFilter, search]
   );
 
-  // Sync router path → view
   useEffect(() => {
     const syncPath = () => {
       const nextPath = getPath();
@@ -390,7 +368,6 @@ function App() {
     };
   }, [isAuthenticated, selectedDoc]);
 
-  // Redirecciones de auth
   useEffect(() => {
     if (authLoading) return;
     if (isAnyPublicAccess) return;
@@ -407,9 +384,14 @@ function App() {
     if (PUBLIC_AUTH_PATHS.has(path)) {
       replaceTo("/documents");
     }
-  }, [authLoading, isAuthenticated, path, isAnyPublicAccess, setSelectedDoc]);
+  }, [
+    authLoading,
+    isAuthenticated,
+    path,
+    isAnyPublicAccess,
+    setSelectedDoc,
+  ]);
 
-  // Validar view protegida
   useEffect(() => {
     if (!isAuthenticated) return;
     if (view === "detail") return;
@@ -428,11 +410,11 @@ function App() {
     }
   }, [view, path, isAuthenticated, setSelectedDoc]);
 
-  // WebSocket → eventos de documentos
   useEffect(() => {
     if (!token) return;
-    if (typeof socketOn !== "function" || typeof socketOff !== "function")
+    if (typeof socketOn !== "function" || typeof socketOff !== "function") {
       return;
+    }
 
     const handleSent = (data) => {
       addToast({
@@ -467,7 +449,6 @@ function App() {
     };
   }, [token, socketOn, socketOff, addToast, refreshDocs]);
 
-  // WebSocket → toasts de error de conexión
   useEffect(() => {
     if (!socketLastError) return;
 
@@ -587,6 +568,122 @@ function App() {
     ]
   );
 
+  const renderListView = () => {
+    if (loadingDocs) {
+      return (
+        <div className="list-state list-state--loading">
+          <div className="list-state-title">
+            Cargando tu bandeja de documentos…
+          </div>
+          <p className="list-state-text">
+            Esto puede tardar unos segundos.
+          </p>
+          <div className="spinner" />
+        </div>
+      );
+    }
+
+    if (errorDocs) {
+      return (
+        <div className="list-state list-state--error">
+          <p className="list-state-title">
+            Ocurrió un problema al cargar la bandeja.
+          </p>
+          <p className="list-state-text list-state-text--strong">
+            {errorDocs ||
+              "Por favor, revisa tu conexión e inténtalo nuevamente."}
+          </p>
+          <button
+            className="btn-main btn-primary"
+            onClick={() => refreshDocs()}
+          >
+            Reintentar carga
+          </button>
+        </div>
+      );
+    }
+
+    if (safeDocsFiltrados.length === 0) {
+      return (
+        <div className="list-state list-state--empty">
+          <h3 className="list-state-title">
+            No encontramos documentos para mostrar.
+          </h3>
+          <p className="list-state-text">
+            Puede que no existan documentos con los filtros actuales.
+          </p>
+          <p className="list-state-text">
+            Ajusta los filtros o crea un nuevo flujo de firma digital.
+          </p>
+          <button
+            className="btn-main list-empty-cta"
+            onClick={() => handleNavigateProtected("upload")}
+          >
+            Crear nuevo trámite
+          </button>
+        </div>
+      );
+    }
+
+    return (
+      <>
+        <div className="table-wrapper">
+          <table className="doc-table">
+            <thead>
+              <tr>
+                <th className="col-title">Contrato / Documento</th>
+                <th className="col-type">Tipo</th>
+                <th className="col-status text-center">Estado</th>
+                <th className="col-party">Participante</th>
+                <th className="col-actions text-center">Acciones</th>
+              </tr>
+            </thead>
+            <tbody>
+              {safeDocsPaginados.map((doc) => (
+                <DocumentRow
+                  key={doc.id}
+                  doc={doc}
+                  onOpenDetail={handleOpenDetail}
+                />
+              ))}
+            </tbody>
+          </table>
+        </div>
+
+        <div className="list-pagination">
+          <span>
+            Página {safeCurrentPage} de {safeTotalPaginas} ·{" "}
+            {safeTotalFiltrado} documentos
+          </span>
+
+          <div className="list-pagination-controls">
+            <button
+              type="button"
+              className="btn-main"
+              disabled={safeCurrentPage <= 1 || loadingDocs}
+              onClick={() => setPage((prev) => Math.max(1, prev - 1))}
+            >
+              Anterior
+            </button>
+
+            <button
+              type="button"
+              className="btn-main"
+              disabled={
+                loadingDocs || safeCurrentPage >= safeTotalPaginas
+              }
+              onClick={() =>
+                setPage((prev) => Math.min(safeTotalPaginas, prev + 1))
+              }
+            >
+              Siguiente
+            </button>
+          </div>
+        </div>
+      </>
+    );
+  };
+
   const renderProtectedView = useCallback(() => {
     if (view === "list") {
       return (
@@ -619,8 +716,8 @@ function App() {
             <div className="inbox-header-main">
               <h2 className="inbox-title">Documentos recientes</h2>
               <p className="inbox-subtitle">
-                Revisa estados, abre contratos y gestiona tus trámites desde
-                esta bandeja.
+                Revisa estados, abre contratos y gestiona tus trámites
+                desde esta bandeja.
               </p>
             </div>
 
@@ -643,171 +740,7 @@ function App() {
             </div>
           </div>
 
-          {loadingDocs ? (
-            <div
-              style={{
-                padding: 40,
-                textAlign: "center",
-                color: "#64748b",
-              }}
-            >
-              <div style={{ marginBottom: 12, fontWeight: 600 }}>
-                Cargando tu bandeja de documentos…
-              </div>
-              <p
-                style={{
-                  fontSize: "0.9rem",
-                  color: "#9ca3af",
-                  marginTop: 4,
-                }}
-              >
-                Esto puede tardar unos segundos.
-              </p>
-              <div className="spinner" />
-            </div>
-          ) : errorDocs ? (
-            <div
-              style={{
-                padding: 40,
-                textAlign: "center",
-                color: "#b91c1c",
-              }}
-            >
-              <p style={{ marginBottom: 8, fontWeight: 700 }}>
-                Ocurrió un problema al cargar la bandeja.
-              </p>
-              <p
-                style={{
-                  marginBottom: 16,
-                  fontSize: "0.9rem",
-                  color: "#b91c1c",
-                }}
-              >
-                {errorDocs ||
-                  "Por favor, revisa tu conexión e inténtalo nuevamente."}
-              </p>
-              <button
-                className="btn-main btn-primary"
-                onClick={() => refreshDocs()}
-              >
-                Reintentar carga
-              </button>
-            </div>
-          ) : safeDocsFiltrados.length === 0 ? (
-            <div
-              style={{
-                padding: 40,
-                textAlign: "center",
-                color: "#64748b",
-              }}
-            >
-              <h3 style={{ marginBottom: 8 }}>
-                No encontramos documentos para mostrar.
-              </h3>
-              <p
-                style={{
-                  marginBottom: 4,
-                  fontSize: "0.9rem",
-                  color: "#94a3b8",
-                }}
-              >
-                Puede que no existan documentos con los filtros actuales.
-              </p>
-              <p
-                style={{
-                  marginBottom: 16,
-                  fontSize: "0.9rem",
-                  color: "#94a3b8",
-                }}
-              >
-                Ajusta los filtros o crea un nuevo flujo de firma digital.
-              </p>
-              <button
-                className="btn-main"
-                onClick={() => handleNavigateProtected("upload")}
-                style={{
-                  background: "#e2e8f0",
-                  color: "#1e293b",
-                }}
-              >
-                Crear nuevo trámite
-              </button>
-            </div>
-          ) : (
-            <>
-              <div className="table-wrapper">
-                <table className="doc-table">
-                  <thead>
-                    <tr>
-                      <th className="col-title">Contrato / Documento</th>
-                      <th className="col-type">Tipo</th>
-                      <th
-                        className="col-status"
-                        style={{ textAlign: "center" }}
-                      >
-                        Estado
-                      </th>
-                      <th className="col-party">Participante</th>
-                      <th
-                        className="col-actions"
-                        style={{ textAlign: "center" }}
-                      >
-                        Acciones
-                      </th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {safeDocsPaginados.map((doc) => (
-                      <DocumentRow
-                        key={doc.id}
-                        doc={doc}
-                        onOpenDetail={handleOpenDetail}
-                      />
-                    ))}
-                  </tbody>
-                </table>
-              </div>
-
-              <div
-                style={{
-                  display: "flex",
-                  justifyContent: "space-between",
-                  alignItems: "center",
-                  marginTop: 16,
-                  fontSize: "0.85rem",
-                }}
-              >
-                <span>
-                  Página {safeCurrentPage} de {safeTotalPaginas} ·{" "}
-                  {safeTotalFiltrado} documentos
-                </span>
-
-                <div style={{ display: "flex", gap: 8 }}>
-                  <button
-                    type="button"
-                    className="btn-main"
-                    disabled={safeCurrentPage <= 1 || loadingDocs}
-                    onClick={() => setPage((prev) => Math.max(1, prev - 1))}
-                  >
-                    Anterior
-                  </button>
-
-                  <button
-                    type="button"
-                    className="btn-main"
-                    disabled={
-                      loadingDocs || safeCurrentPage >= safeTotalPaginas
-                    }
-                    onClick={() =>
-                      setPage((prev) => Math.min(safeTotalPaginas, prev + 1))
-                    }
-                  >
-                    Siguiente
-                  </button>
-                </div>
-              </div>
-            </>
-          )}
+          {renderListView()}
         </>
       );
     }
@@ -835,7 +768,9 @@ function App() {
     }
 
     if (view === "users" && anyAdmin) return <UsersAdminView />;
-    if (view === "dashboard" && anyAdmin) return <DashboardView user={user} />;
+    if (view === "dashboard" && anyAdmin) {
+      return <DashboardView user={user} />;
+    }
     if (view === "companies" && anyAdmin) {
       return <CompaniesAdminView API_URL={apiRoot} />;
     }
@@ -861,11 +796,7 @@ function App() {
       return <CompanyAnalyticsView />;
     }
 
-    return (
-      <div style={{ padding: 40, textAlign: "center", color: "#64748b" }}>
-        Redirigiendo…
-      </div>
-    );
+    return <div className="redirect-fallback">Redirigiendo…</div>;
   }, [
     view,
     sort,
@@ -881,14 +812,6 @@ function App() {
     safeFirmados,
     safeRechazados,
     refreshDocs,
-    loadingDocs,
-    errorDocs,
-    safeDocsFiltrados.length,
-    safeDocsPaginados,
-    handleOpenDetail,
-    safeCurrentPage,
-    safeTotalPaginas,
-    handleNavigateProtected,
     tipoTramite,
     formErrors,
     showVisador,
@@ -1007,13 +930,7 @@ function App() {
       <Suspense
         fallback={
           showOnboarding ? (
-            <div
-              style={{
-                padding: 24,
-                textAlign: "center",
-                color: "#64748b",
-              }}
-            >
+            <div className="onboarding-fallback">
               Preparando guía interactiva…
             </div>
           ) : null
@@ -1050,13 +967,7 @@ function App() {
           <Suspense
             fallback={
               runProductTour ? (
-                <div
-                  style={{
-                    padding: 16,
-                    color: "#64748b",
-                    fontSize: "0.9rem",
-                  }}
-                >
+                <div className="product-tour-fallback">
                   Cargando tour interactivo…
                 </div>
               ) : null
@@ -1074,7 +985,11 @@ function App() {
           </Suspense>
 
           {import.meta.env.MODE !== "production" && (
-            <button type="button" onClick={handleTestError}>
+            <button
+              type="button"
+              className="sentry-test-button"
+              onClick={handleTestError}
+            >
               Probar error Sentry
             </button>
           )}

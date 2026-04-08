@@ -1,6 +1,7 @@
 // frontend/src/views/ResetPasswordView.jsx
 import { useState, useEffect } from "react";
 import axios from "axios";
+import "../styles/auth.css";
 
 export default function ResetPasswordView() {
   const [token, setToken] = useState("");

@@ -3,63 +3,20 @@ const db = require("../../db");
 const { getSignedUrl } = require("../../services/storageR2");
 const { sellarPdfConQr } = require("../../services/pdfSeal");
 const { logAudit } = require("../../utils/auditLog");
+const { formatDateSafe } = require("./documentEventUtils");
+const {
+  insertPublicEvent,
+  insertPublicStatusChangedEvent,
+} = require("./documentEventInserts");
+const {
+  validatePublicToken,
+  validatePublicRejectReason,
+  validatePublicAccess,
+  validatePublicSign,
+  validatePublicReject,
+  validatePublicVisar,
+} = require("./publicDocumentsValidations");
 
-/* ================================
-   Utilidades comunes
-   ================================ */
-
-function isExpired(dateLike) {
-  if (!dateLike) return false;
-  const d = new Date(dateLike);
-  return Number.isNaN(d.getTime()) ? false : d < new Date();
-}
-
-function formatDateSafe(dateLike) {
-  const d = new Date(dateLike);
-  return Number.isNaN(d.getTime()) ? null : d.toISOString();
-}
-
-function getClientIp(req) {
-  return (
-    (req.headers["x-real-ip"] ||
-      req.headers["x-forwarded-for"]?.toString().split(",").pop().trim() ||
-      req.ip ||
-      req.socket?.remoteAddress ||
-      null) || null
-  );
-}
-
-function getUserAgent(req) {
-  return req.headers["user-agent"] || null;
-}
-
-function getDocumentHash(docRow) {
-  if (!docRow) return null;
-  return (
-    docRow.final_hash_sha256 ||
-    docRow.sealed_hash_sha256 ||
-    docRow.hash_final_file ||
-    docRow.pdf_hash_final ||
-    docRow.hash_sha256 ||
-    docRow.hash_original_file ||
-    null
-  );
-}
-
-function buildPublicMetadataBase({ doc, extra = {} }) {
-  return {
-    source: "public_link",
-    document_id: doc?.id || null,
-    company_id: doc?.company_id || null,
-    numero_contrato_interno: doc?.numero_contrato_interno || null,
-    ...extra,
-  };
-}
-
-/**
- * Helper: busca documento + firmante asociado usando signature_token del DOCUMENTO.
- * Opcionalmente filtra por email (para amarrar firmante concreto).
- */
 async function getDocumentAndSignerByDocumentToken(
   documentToken,
   emailFromQuery = null
@@ -86,15 +43,13 @@ async function getDocumentAndSignerByDocumentToken(
   return docRes.rows[0];
 }
 
-/* ================================
-   GET: Datos + PDF para enlace público de FIRMA (por firmante, sign_token)
-   ================================ */
 async function getPublicDocBySignerToken(req, res) {
   try {
     const { token } = req.params;
 
-    if (!token || typeof token !== "string") {
-      return res.status(400).json({ message: "Token inválido" });
+    const tokenError = validatePublicToken(token);
+    if (tokenError) {
+      return res.status(tokenError.status).json(tokenError.body);
     }
 
     const result = await db.query(
@@ -136,10 +91,12 @@ async function getPublicDocBySignerToken(req, res) {
 
     const row = result.rows[0];
 
-    if (isExpired(row.signature_token_expires_at)) {
-      return res.status(410).json({
-        message: "El enlace público ha expirado. Solicita uno nuevo al emisor.",
-      });
+    const accessError = validatePublicAccess(
+      row,
+      "El enlace público ha expirado. Solicita uno nuevo al emisor."
+    );
+    if (accessError) {
+      return res.status(accessError.status).json(accessError.body);
     }
 
     const basePath =
@@ -153,64 +110,26 @@ async function getPublicDocBySignerToken(req, res) {
 
     const pdfUrl = await getSignedUrl(basePath, 3600);
 
-    // Registrar apertura específica de firmante
     try {
-      const ipAddress = getClientIp(req);
-      const userAgent = getUserAgent(req);
-      const hashDocument = getDocumentHash(row);
-
-      await db.query(
-        `
-        INSERT INTO document_events (
-          document_id,
-          participant_id,
-          actor,
-          action,
-          details,
-          from_status,
-          to_status,
-          event_type,
-          ip_address,
-          user_agent,
-          hash_document,
-          company_id,
-          user_id,
-          metadata
-        )
-        VALUES (
-          $1, $2, $3, $4, $5, $6, $7,
-          $8, $9, $10, $11, $12, $13, $14
-        )
-        `,
-        [
-          row.id,
-          row.signer_id || null,
-          row.signer_name || row.signer_email || "Firmante externo",
-          "PUBLIC_LINK_OPENED_SIGNER",
-          "Apertura de enlace público de firma por firmante",
-          row.status,
-          row.status,
-          "PUBLIC_LINK_OPENED_SIGNER",
-          ipAddress,
-          userAgent,
-          hashDocument,
-          row.company_id || null,
-          null,
-          JSON.stringify(
-            buildPublicMetadataBase({
-              doc: row,
-              extra: {
-                actor_type: "PUBLIC_SIGNER",
-                signer_id: row.signer_id,
-                signer_email: row.signer_email,
-                signer_name: row.signer_name,
-                opened_at: formatDateSafe(new Date()),
-                link_type: "signer_token",
-              },
-            })
-          ),
-        ]
-      );
+      await insertPublicEvent({
+        req,
+        doc: row,
+        participantId: row.signer_id || null,
+        actor: row.signer_name || row.signer_email || "Firmante externo",
+        action: "PUBLIC_LINK_OPENED_SIGNER",
+        details: "Apertura de enlace público de firma por firmante",
+        fromStatus: row.status,
+        toStatus: row.status,
+        eventType: "PUBLIC_LINK_OPENED_SIGNER",
+        extraMetadata: {
+          actor_type: "PUBLIC_SIGNER",
+          signer_id: row.signer_id,
+          signer_email: row.signer_email,
+          signer_name: row.signer_name,
+          opened_at: formatDateSafe(new Date()),
+          link_type: "signer_token",
+        },
+      });
     } catch (eventErr) {
       console.error(
         "⚠️ Error registrando PUBLIC_LINK_OPENED_SIGNER:",
@@ -249,16 +168,13 @@ async function getPublicDocBySignerToken(req, res) {
   }
 }
 
-/* ================================
-   GET: Datos + PDF usando signature_token del DOCUMENTO
-   (enlace genérico, sin firmante concreto)
-   ================================ */
 async function getPublicDocByDocumentToken(req, res) {
   try {
     const { token } = req.params;
 
-    if (!token || typeof token !== "string") {
-      return res.status(400).json({ message: "Token inválido" });
+    const tokenError = validatePublicToken(token);
+    if (tokenError) {
+      return res.status(tokenError.status).json(tokenError.body);
     }
 
     const result = await db.query(
@@ -295,10 +211,12 @@ async function getPublicDocByDocumentToken(req, res) {
 
     const doc = result.rows[0];
 
-    if (isExpired(doc.signature_token_expires_at)) {
-      return res.status(410).json({
-        message: "El enlace público ha expirado. Solicita uno nuevo al emisor.",
-      });
+    const accessError = validatePublicAccess(
+      doc,
+      "El enlace público ha expirado. Solicita uno nuevo al emisor."
+    );
+    if (accessError) {
+      return res.status(accessError.status).json(accessError.body);
     }
 
     const basePath =
@@ -312,61 +230,23 @@ async function getPublicDocByDocumentToken(req, res) {
 
     const pdfUrl = await getSignedUrl(basePath, 3600);
 
-    // Registrar apertura de invitación genérica
     try {
-      const ipAddress = getClientIp(req);
-      const userAgent = getUserAgent(req);
-      const hashDocument = getDocumentHash(doc);
-
-      await db.query(
-        `
-        INSERT INTO document_events (
-          document_id,
-          participant_id,
-          actor,
-          action,
-          details,
-          from_status,
-          to_status,
-          event_type,
-          ip_address,
-          user_agent,
-          hash_document,
-          company_id,
-          user_id,
-          metadata
-        )
-        VALUES (
-          $1, $2, $3, $4, $5, $6, $7,
-          $8, $9, $10, $11, $12, $13, $14
-        )
-        `,
-        [
-          doc.id,
-          null,
-          "PUBLIC_USER",
-          "INVITATION_OPENED",
-          "Apertura de invitación pública de documento",
-          doc.status,
-          doc.status,
-          "INVITATION_OPENED",
-          ipAddress,
-          userAgent,
-          hashDocument,
-          doc.company_id || null,
-          null,
-          JSON.stringify(
-            buildPublicMetadataBase({
-              doc,
-              extra: {
-                actor_type: "PUBLIC_VIEWER",
-                opened_at: formatDateSafe(new Date()),
-                link_type: "document_token",
-              },
-            })
-          ),
-        ]
-      );
+      await insertPublicEvent({
+        req,
+        doc,
+        participantId: null,
+        actor: "PUBLIC_USER",
+        action: "INVITATION_OPENED",
+        details: "Apertura de invitación pública de documento",
+        fromStatus: doc.status,
+        toStatus: doc.status,
+        eventType: "INVITATION_OPENED",
+        extraMetadata: {
+          actor_type: "PUBLIC_VIEWER",
+          opened_at: formatDateSafe(new Date()),
+          link_type: "document_token",
+        },
+      });
     } catch (eventErr) {
       console.error(
         "⚠️ Error registrando INVITATION_OPENED (document_events):",
@@ -400,16 +280,13 @@ async function getPublicDocByDocumentToken(req, res) {
   }
 }
 
-/* ================================
-   POST: Firmar documento por token (firmante externo)
-   Prioridad: 1) sign_token (document_signers) 2) signature_token (documents)
-   ================================ */
 async function publicSignDocument(req, res) {
   try {
     const { token } = req.params;
 
-    if (!token || typeof token !== "string") {
-      return res.status(400).json({ message: "Token inválido" });
+    const tokenError = validatePublicToken(token);
+    if (tokenError) {
+      return res.status(tokenError.status).json(tokenError.body);
     }
 
     let current = await db.query(
@@ -439,31 +316,11 @@ async function publicSignDocument(req, res) {
 
     const row = current.rows[0];
 
-    if (isExpired(row.signature_token_expires_at)) {
-      return res
-        .status(410)
-        .json({ message: "El enlace de firma ha expirado" });
+    const validationError = validatePublicSign(row);
+    if (validationError) {
+      return res.status(validationError.status).json(validationError.body);
     }
 
-    if (row.status === "RECHAZADO") {
-      return res
-        .status(400)
-        .json({ message: "Documento rechazado, no se puede firmar" });
-    }
-
-    if (row.requires_visado === true && row.status === "PENDIENTE_VISADO") {
-      return res.status(400).json({
-        message: "Este documento requiere visación antes de firmar",
-      });
-    }
-
-    if (row.signer_status === "FIRMADO") {
-      return res
-        .status(400)
-        .json({ message: "Este firmante ya firmó el documento" });
-    }
-
-    // Marcar firmante (document_signers)
     await db.query(
       `
       UPDATE document_signers
@@ -474,7 +331,6 @@ async function publicSignDocument(req, res) {
       [row.signer_id]
     );
 
-    // Sincronizar con document_participants
     try {
       await db.query(
         `
@@ -494,7 +350,6 @@ async function publicSignDocument(req, res) {
       );
     }
 
-    // Contar firmantes
     const countRes = await db.query(
       `
       SELECT 
@@ -509,7 +364,6 @@ async function publicSignDocument(req, res) {
     const { signed_count, total_signers } = countRes.rows[0];
     const allSigned = Number(signed_count) >= Number(total_signers);
 
-    // Debug paralelo
     try {
       const dpCountRes = await db.query(
         `
@@ -556,7 +410,6 @@ async function publicSignDocument(req, res) {
     );
     const doc = docUpdateRes.rows[0];
 
-    // Sincronizar con tabla legacy documentos/firmantes
     if (doc.nuevo_documento_id) {
       try {
         await db.query(
@@ -589,119 +442,44 @@ async function publicSignDocument(req, res) {
       }
     }
 
-    const ipAddress = getClientIp(req);
-    const userAgent = getUserAgent(req);
-    const hashDocument = getDocumentHash(doc);
-
     const fromStatus = row.status;
     const toStatus = newDocStatus;
 
-    // Evento principal de firma pública
-    await db.query(
-      `
-      INSERT INTO document_events (
-        document_id,
-        participant_id,
-        actor,
-        action,
-        details,
-        from_status,
-        to_status,
-        event_type,
-        ip_address,
-        user_agent,
-        hash_document,
-        company_id,
-        user_id,
-        metadata
-      )
-      VALUES (
-        $1, $2, $3, $4, $5, $6, $7,
-        $8, $9, $10, $11, $12, $13, $14
-      )
-      `,
-      [
-        doc.id,
-        row.signer_id || null,
-        row.signer_name || row.signer_email || "Firmante externo",
-        "SIGNED_PUBLIC",
-        allSigned
-          ? "Documento firmado por todos los firmantes desde enlace público"
-          : `Firma registrada para firmante ${row.signer_email}`,
-        fromStatus,
-        toStatus,
-        "SIGNED_PUBLIC",
-        ipAddress,
-        userAgent,
-        hashDocument,
-        doc.company_id || null,
-        null,
-        JSON.stringify(
-          buildPublicMetadataBase({
-            doc,
-            extra: {
-              actor_type: "PUBLIC_SIGNER",
-              signer_id: row.signer_id,
-              signer_email: row.signer_email,
-              signer_name: row.signer_name,
-              all_signed: allSigned,
-            },
-          })
-        ),
-      ]
-    );
+    await insertPublicEvent({
+      req,
+      doc,
+      participantId: row.signer_id || null,
+      actor: row.signer_name || row.signer_email || "Firmante externo",
+      action: "SIGNED_PUBLIC",
+      details: allSigned
+        ? "Documento firmado por todos los firmantes desde enlace público"
+        : `Firma registrada para firmante ${row.signer_email}`,
+      fromStatus,
+      toStatus,
+      eventType: "SIGNED_PUBLIC",
+      extraMetadata: {
+        actor_type: "PUBLIC_SIGNER",
+        signer_id: row.signer_id,
+        signer_email: row.signer_email,
+        signer_name: row.signer_name,
+        all_signed: allSigned,
+      },
+    });
 
-    // Evento STATUS_CHANGED si corresponde
     if (fromStatus !== toStatus) {
       try {
-        await db.query(
-          `
-          INSERT INTO document_events (
-            document_id,
-            participant_id,
-            actor,
-            action,
-            details,
-            from_status,
-            to_status,
-            event_type,
-            ip_address,
-            user_agent,
-            hash_document,
-            company_id,
-            user_id,
-            metadata
-          )
-          VALUES (
-            $1, NULL, $2, $3, $4, $5, $6,
-            $7, $8, $9, $10, $11, $12, $13, $14
-          )
-          `,
-          [
-            doc.id,
-            "system",
-            "STATUS_CHANGED",
-            "Cambio de estado por firma pública",
-            fromStatus,
-            toStatus,
-            "STATUS_CHANGED",
-            ipAddress,
-            userAgent,
-            hashDocument,
-            doc.company_id || null,
-            null,
-            JSON.stringify(
-              buildPublicMetadataBase({
-                doc,
-                extra: {
-                  reason: "all_signers_completed_public",
-                  signer_email: row.signer_email,
-                  signer_name: row.signer_name,
-                },
-              })
-            ),
-          ]
-        );
+        await insertPublicStatusChangedEvent({
+          req,
+          doc,
+          fromStatus,
+          toStatus,
+          details: "Cambio de estado por firma pública",
+          extraMetadata: {
+            reason: "all_signers_completed_public",
+            signer_email: row.signer_email,
+            signer_name: row.signer_name,
+          },
+        });
       } catch (eventErr) {
         console.error(
           "⚠️ Error registrando STATUS_CHANGED (publicSignDocument):",
@@ -726,7 +504,6 @@ async function publicSignDocument(req, res) {
       req,
     });
 
-    // Sellar PDF con QR cuando todos firmaron
     if (allSigned && doc.nuevo_documento_id) {
       try {
         const docNuevoRes = await db.query(
@@ -796,22 +573,19 @@ async function publicSignDocument(req, res) {
   }
 }
 
-/* ================================
-   POST: Rechazar documento por token (firmante externo)
-   ================================ */
 async function publicRejectDocument(req, res) {
   try {
     const { token } = req.params;
     const { motivo } = req.body || {};
 
-    if (!token || typeof token !== "string") {
-      return res.status(400).json({ message: "Token inválido" });
+    const tokenError = validatePublicToken(token);
+    if (tokenError) {
+      return res.status(tokenError.status).json(tokenError.body);
     }
 
-    if (!motivo || !motivo.trim()) {
-      return res
-        .status(400)
-        .json({ message: "Debes indicar un motivo de rechazo." });
+    const reasonError = validatePublicRejectReason(motivo);
+    if (reasonError) {
+      return res.status(reasonError.status).json(reasonError.body);
     }
 
     let current = await db.query(
@@ -841,38 +615,11 @@ async function publicRejectDocument(req, res) {
 
     const row = current.rows[0];
 
-    if (isExpired(row.signature_token_expires_at)) {
-      return res
-        .status(410)
-        .json({ message: "El enlace de firma ha expirado" });
+    const validationError = validatePublicReject(row);
+    if (validationError) {
+      return res.status(validationError.status).json(validationError.body);
     }
 
-    if (row.status === "FIRMADO") {
-      return res
-        .status(400)
-        .json({ message: "Documento ya firmado, no se puede rechazar" });
-    }
-
-    if (row.status === "RECHAZADO") {
-      return res
-        .status(400)
-        .json({ message: "Documento ya fue rechazado anteriormente" });
-    }
-
-    if (row.signer_status === "FIRMADO") {
-      return res.status(400).json({
-        message:
-          "Este firmante ya firmó el documento, no puede rechazarlo ahora",
-      });
-    }
-
-    if (row.signer_status === "RECHAZADO") {
-      return res
-        .status(400)
-        .json({ message: "Este firmante ya rechazó el documento" });
-    }
-
-    // Rechazar firmante
     await db.query(
       `
       UPDATE document_signers
@@ -884,7 +631,6 @@ async function publicRejectDocument(req, res) {
       [row.signer_id, motivo]
     );
 
-    // Sincronizar con document_participants
     try {
       await db.query(
         `
@@ -903,7 +649,6 @@ async function publicRejectDocument(req, res) {
       );
     }
 
-    // Rechazar documento
     const docUpdateRes = await db.query(
       `
       UPDATE documents
@@ -918,7 +663,6 @@ async function publicRejectDocument(req, res) {
     );
     const doc = docUpdateRes.rows[0];
 
-    // Sincronizar con legacy
     if (doc.nuevo_documento_id) {
       try {
         await db.query(
@@ -949,116 +693,41 @@ async function publicRejectDocument(req, res) {
       }
     }
 
-    const ipAddress = getClientIp(req);
-    const userAgent = getUserAgent(req);
-    const hashDocument = getDocumentHash(doc);
-
     const fromStatus = row.status;
     const toStatus = "RECHAZADO";
 
-    // Evento principal de rechazo público
-    await db.query(
-      `
-      INSERT INTO document_events (
-        document_id,
-        participant_id,
-        actor,
-        action,
-        details,
-        from_status,
-        to_status,
-        event_type,
-        ip_address,
-        user_agent,
-        hash_document,
-        company_id,
-        user_id,
-        metadata
-      )
-      VALUES (
-        $1, $2, $3, $4, $5, $6, $7,
-        $8, $9, $10, $11, $12, $13, $14
-      )
-      `,
-      [
-        doc.id,
-        row.signer_id || null,
-        row.signer_name || row.signer_email || "Firmante externo",
-        "REJECTED_PUBLIC",
-        `Documento rechazado desde enlace público. Motivo: ${motivo}`,
+    await insertPublicEvent({
+      req,
+      doc,
+      participantId: row.signer_id || null,
+      actor: row.signer_name || row.signer_email || "Firmante externo",
+      action: "REJECTED_PUBLIC",
+      details: `Documento rechazado desde enlace público. Motivo: ${motivo}`,
+      fromStatus,
+      toStatus,
+      eventType: "REJECTED_PUBLIC",
+      extraMetadata: {
+        actor_type: "PUBLIC_SIGNER",
+        signer_id: row.signer_id,
+        signer_email: row.signer_email,
+        signer_name: row.signer_name,
+        reason: motivo,
+      },
+    });
+
+    try {
+      await insertPublicStatusChangedEvent({
+        req,
+        doc,
         fromStatus,
         toStatus,
-        "REJECTED_PUBLIC",
-        ipAddress,
-        userAgent,
-        hashDocument,
-        doc.company_id || null,
-        null,
-        JSON.stringify(
-          buildPublicMetadataBase({
-            doc,
-            extra: {
-              actor_type: "PUBLIC_SIGNER",
-              signer_id: row.signer_id,
-              signer_email: row.signer_email,
-              signer_name: row.signer_name,
-              reason: motivo,
-            },
-          })
-        ),
-      ]
-    );
-
-    // STATUS_CHANGED por rechazo
-    try {
-      await db.query(
-        `
-        INSERT INTO document_events (
-          document_id,
-          participant_id,
-          actor,
-          action,
-          details,
-          from_status,
-          to_status,
-          event_type,
-          ip_address,
-          user_agent,
-          hash_document,
-          company_id,
-          user_id,
-          metadata
-        )
-        VALUES (
-          $1, NULL, $2, $3, $4, $5, $6,
-          $7, $8, $9, $10, $11, $12, $13, $14
-        )
-        `,
-        [
-          doc.id,
-          "system",
-          "STATUS_CHANGED",
-          "Cambio de estado por rechazo público",
-          fromStatus,
-          toStatus,
-          "STATUS_CHANGED",
-          ipAddress,
-          userAgent,
-          hashDocument,
-          doc.company_id || null,
-          null,
-          JSON.stringify(
-            buildPublicMetadataBase({
-              doc,
-              extra: {
-                reason: "public_reject",
-                signer_email: row.signer_email,
-                signer_name: row.signer_name,
-              },
-            })
-          ),
-        ]
-      );
+        details: "Cambio de estado por rechazo público",
+        extraMetadata: {
+          reason: "public_reject",
+          signer_email: row.signer_email,
+          signer_name: row.signer_name,
+        },
+      });
     } catch (eventErr) {
       console.error(
         "⚠️ Error registrando STATUS_CHANGED (publicRejectDocument):",
@@ -1094,15 +763,13 @@ async function publicRejectDocument(req, res) {
   }
 }
 
-/* ================================
-   POST: Visar documento por token (visador externo)
-   ================================ */
 async function publicVisarDocument(req, res) {
   try {
     const { token } = req.params;
 
-    if (!token || typeof token !== "string") {
-      return res.status(400).json({ message: "Token inválido" });
+    const tokenError = validatePublicToken(token);
+    if (tokenError) {
+      return res.status(tokenError.status).json(tokenError.body);
     }
 
     const current = await db.query(
@@ -1122,28 +789,9 @@ async function publicVisarDocument(req, res) {
 
     const docActual = current.rows[0];
 
-    if (isExpired(docActual.signature_token_expires_at)) {
-      return res
-        .status(410)
-        .json({ message: "El enlace de visado ha expirado" });
-    }
-
-    if (docActual.status === "RECHAZADO") {
-      return res
-        .status(400)
-        .json({ message: "Documento rechazado, no se puede visar" });
-    }
-
-    if (docActual.requires_visado !== true) {
-      return res
-        .status(400)
-        .json({ message: "Este documento no requiere visación" });
-    }
-
-    if (docActual.status !== "PENDIENTE_VISADO") {
-      return res.status(400).json({
-        message: "Solo se pueden visar documentos en estado PENDIENTE_VISADO",
-      });
+    const validationError = validatePublicVisar(docActual);
+    if (validationError) {
+      return res.status(validationError.status).json(validationError.body);
     }
 
     const result = await db.query(
@@ -1158,109 +806,36 @@ async function publicVisarDocument(req, res) {
     );
     const doc = result.rows[0];
 
-    const ipAddress = getClientIp(req);
-    const userAgent = getUserAgent(req);
-    const hashDocument = getDocumentHash(doc);
-
     const fromStatus = docActual.status;
     const toStatus = "PENDIENTE_FIRMA";
 
-    // Evento principal de visado público
-    await db.query(
-      `
-      INSERT INTO document_events (
-        document_id,
-        participant_id,
-        actor,
-        action,
-        details,
-        from_status,
-        to_status,
-        event_type,
-        ip_address,
-        user_agent,
-        hash_document,
-        company_id,
-        user_id,
-        metadata
-      )
-      VALUES (
-        $1, $2, $3, $4, $5, $6, $7,
-        $8, $9, $10, $11, $12, $13, $14
-      )
-      `,
-      [
-        doc.id,
-        null,
-        doc.visador_nombre || "Visador externo",
-        "VISADO_PUBLIC",
-        "Documento visado desde enlace público",
+    await insertPublicEvent({
+      req,
+      doc,
+      participantId: null,
+      actor: doc.visador_nombre || "Visador externo",
+      action: "VISADO_PUBLIC",
+      details: "Documento visado desde enlace público",
+      fromStatus,
+      toStatus,
+      eventType: "VISADO_PUBLIC",
+      extraMetadata: {
+        actor_type: "PUBLIC_VISADOR",
+        visador_nombre: doc.visador_nombre || "Visador externo",
+      },
+    });
+
+    try {
+      await insertPublicStatusChangedEvent({
+        req,
+        doc,
         fromStatus,
         toStatus,
-        "VISADO_PUBLIC",
-        ipAddress,
-        userAgent,
-        hashDocument,
-        doc.company_id || null,
-        null,
-        JSON.stringify(
-          buildPublicMetadataBase({
-            doc,
-            extra: {
-              actor_type: "PUBLIC_VISADOR",
-              visador_nombre: doc.visador_nombre || "Visador externo",
-            },
-          })
-        ),
-      ]
-    );
-
-    // STATUS_CHANGED por visado público
-    try {
-      await db.query(
-        `
-        INSERT INTO document_events (
-          document_id,
-          participant_id,
-          actor,
-          action,
-          details,
-          from_status,
-          to_status,
-          event_type,
-          ip_address,
-          user_agent,
-          hash_document,
-          company_id,
-          user_id,
-          metadata
-        )
-        VALUES (
-          $1, NULL, $2, $3, $4, $5, $6,
-          $7, $8, $9, $10, $11, $12, $13, $14
-        )
-        `,
-        [
-          doc.id,
-          "system",
-          "STATUS_CHANGED",
-          "Cambio de estado por visado público",
-          fromStatus,
-          toStatus,
-          "STATUS_CHANGED",
-          ipAddress,
-          userAgent,
-          hashDocument,
-          doc.company_id || null,
-          null,
-          JSON.stringify(
-            buildPublicMetadataBase({
-              doc,
-              extra: { reason: "public_visado" },
-            })
-          ),
-        ]
-      );
+        details: "Cambio de estado por visado público",
+        extraMetadata: {
+          reason: "public_visado",
+        },
+      });
     } catch (eventErr) {
       console.error(
         "⚠️ Error registrando STATUS_CHANGED (publicVisarDocument):",
@@ -1294,9 +869,6 @@ async function publicVisarDocument(req, res) {
   }
 }
 
-/* ================================
-   GET: Verificación por código (QR / código verificación)
-   ================================ */
 async function verifyByCode(req, res) {
   try {
     const { codigo } = req.params;
@@ -1440,61 +1012,24 @@ async function verifyByCode(req, res) {
       descripcion: e.tipo_evento,
     }));
 
-    // Registrar verificación por código como evento público (si tenemos documents espejo)
     if (relatedDocument) {
       try {
-        const ipAddress = getClientIp(req);
-        const userAgent = getUserAgent(req);
-        const hashDocument = getDocumentHash(relatedDocument);
-
-        await db.query(
-          `
-          INSERT INTO document_events (
-            document_id,
-            participant_id,
-            actor,
-            action,
-            details,
-            from_status,
-            to_status,
-            event_type,
-            ip_address,
-            user_agent,
-            hash_document,
-            company_id,
-            user_id,
-            metadata
-          )
-          VALUES (
-            $1, $2, $3, $4, $5, $6, $7,
-            $8, $9, $10, $11, $12, $13, $14
-          )
-          `,
-          [
-            relatedDocument.id,
-            null,
-            "PUBLIC_VERIFY",
-            "VERIFY_PUBLIC_CODE",
+        await insertPublicEvent({
+          req,
+          doc: relatedDocument,
+          participantId: null,
+          actor: "PUBLIC_VERIFY",
+          action: "VERIFY_PUBLIC_CODE",
+          details:
             "Verificación de documento mediante código de verificación público",
-            relatedDocument.status || null,
-            relatedDocument.status || null,
-            "VERIFY_PUBLIC_CODE",
-            ipAddress,
-            userAgent,
-            hashDocument,
-            relatedDocument.company_id || null,
-            null,
-            JSON.stringify(
-              buildPublicMetadataBase({
-                doc: relatedDocument,
-                extra: {
-                  source: "public_verify",
-                  codigo_verificacion: codigo,
-                },
-              })
-            ),
-          ]
-        );
+          fromStatus: relatedDocument.status || null,
+          toStatus: relatedDocument.status || null,
+          eventType: "VERIFY_PUBLIC_CODE",
+          extraMetadata: {
+            source: "public_verify",
+            codigo_verificacion: codigo,
+          },
+        });
       } catch (eventErr) {
         console.error(
           "⚠️ Error registrando VERIFY_PUBLIC_CODE en document_events:",

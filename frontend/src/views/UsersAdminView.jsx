@@ -5,30 +5,17 @@ import { UserForm } from "../components/UserForm";
 import ConfirmDialog from "../components/feedback/ConfirmDialog";
 import { useToast } from "../hooks/useToast";
 import { useAuth } from "../hooks/useAuth";
+import "../styles/usersAdmin.css";
+import {
+  normalizeRun,
+  formatRun,
+  getRoleLabel,
+  isAdminLikeRole,
+} from "../utils/formatters";
 
-function normalizeRun(run) {
-  return (run || "").replace(/[.\-]/g, "");
-}
-
-function formatRunVisual(value) {
-  const clean = (value || "").replace(/[^0-9kK]/g, "");
-  if (!clean) return "";
-  if (clean.length < 2) return clean;
-  const body = clean.slice(0, -1);
-  const dv = clean.slice(-1);
-  const formattedBody = body.replace(/\B(?=(\d{3})+(?!\d))/g, ".");
-  return `${formattedBody}-${dv}`;
-}
-
-function esAdminPotente(role) {
-  return role === "ADMIN" || role === "ADMIN_GLOBAL" || role === "SUPER_ADMIN";
-}
-
-function getRoleLabel(role) {
-  if (role === "SUPER_ADMIN") return "Super admin";
-  if (role === "ADMIN_GLOBAL") return "Admin global";
-  if (role === "ADMIN") return "Admin";
-  return "Usuario";
+function getPlanBadgeClass(plan) {
+  const normalized = String(plan || "").toLowerCase();
+  return normalized === "pro" ? "badge-plan is-pro" : "badge-plan is-basic";
 }
 
 const initialConfirmState = {
@@ -72,42 +59,46 @@ function UsersAdminView() {
     });
   }, []);
 
-  async function cargarUsuarios() {
+  const loadUsers = useCallback(async () => {
     setLoading(true);
     setError("");
 
     try {
       const params =
         roleFilter && roleFilter !== "todos" ? { role: roleFilter } : {};
+
       const res = await api.get("/users", { params });
-      const data = res.data;
+      const data = res?.data;
+
       setUsers(Array.isArray(data) ? data : []);
     } catch (err) {
       const msg =
-        err.response?.data?.message ||
-        err.message ||
+        err?.response?.data?.message ||
+        err?.message ||
         "No se pudieron cargar los usuarios";
+
       setError(msg);
+      setUsers([]);
     } finally {
       setLoading(false);
     }
-  }
-
-  async function cargarStats() {
-    try {
-      const res = await api.get("/stats");
-      setStats(res.data);
-    } catch (e) {
-      console.error("Error cargando stats:", e);
-    }
-  }
-
-  useEffect(() => {
-    cargarUsuarios();
-    cargarStats();
   }, [roleFilter]);
 
-  function handleNewUser() {
+  const loadStats = useCallback(async () => {
+    try {
+      const res = await api.get("/stats");
+      setStats(res?.data || null);
+    } catch (err) {
+      console.error("Error cargando stats:", err);
+    }
+  }, []);
+
+  useEffect(() => {
+    loadUsers();
+    loadStats();
+  }, [loadUsers, loadStats]);
+
+  const openCreateUser = useCallback(() => {
     if (!canManage) {
       addToast({
         type: "error",
@@ -119,254 +110,281 @@ function UsersAdminView() {
 
     setEditingUser(null);
     setShowForm(true);
-  }
+  }, [canManage, addToast]);
 
-  function handleEditUser(user) {
-    if (!canManage) {
-      addToast({
-        type: "error",
-        title: "Acceso denegado",
-        message: "No tienes permisos para editar usuarios.",
-      });
-      return;
-    }
-
-    const isTargetOwner = normalizeRun(user.run) === OWNER_RUN;
-    const isTargetAdminLike = esAdminPotente(user.role);
-
-    if (isTargetOwner && !isOwner) {
-      addToast({
-        type: "error",
-        title: "Acción no permitida",
-        message: "No puedes modificar la cuenta principal del sistema.",
-      });
-      return;
-    }
-
-    if (isTargetAdminLike && !isOwner && !isSuper) {
-      addToast({
-        type: "error",
-        title: "Acción restringida",
-        message:
-          "Solo el dueño o el super admin pueden modificar otros administradores.",
-      });
-      return;
-    }
-
-    setEditingUser(user);
-    setShowForm(true);
-  }
-
-  function handleUserSaved() {
-    setShowForm(false);
-    setEditingUser(null);
-    cargarUsuarios();
-
-    addToast({
-      type: "success",
-      title: "Usuario guardado",
-      message: "Los cambios se guardaron correctamente.",
-    });
-  }
-
-  async function toggleActive(user) {
-    if (!canManage) {
-      addToast({
-        type: "error",
-        title: "Acceso denegado",
-        message: "No tienes permisos para cambiar el estado de usuarios.",
-      });
-      return;
-    }
-
-    const isTargetOwner = normalizeRun(user.run) === OWNER_RUN;
-    const isTargetAdminLike = esAdminPotente(user.role);
-
-    if (isTargetOwner) {
-      addToast({
-        type: "error",
-        title: "Acción no permitida",
-        message: "No puedes desactivar la cuenta principal del sistema.",
-      });
-      return;
-    }
-
-    if (isTargetAdminLike && !isOwner && !isSuper) {
-      addToast({
-        type: "error",
-        title: "Acción restringida",
-        message:
-          "Solo el dueño o el super admin pueden desactivar administradores.",
-      });
-      return;
-    }
-
-    try {
-      setSaving(true);
-
-      const res = await api.put(`/users/${user.id}`, {
-        active: !user.active,
-      });
-
-      if (!res?.data) {
-        throw new Error("No se pudo actualizar el estado");
+  const openEditUser = useCallback(
+    (targetUser) => {
+      if (!canManage) {
+        addToast({
+          type: "error",
+          title: "Acceso denegado",
+          message: "No tienes permisos para editar usuarios.",
+        });
+        return;
       }
 
-      setUsers((prev) =>
-        prev.map((u) => (u.id === user.id ? { ...u, active: !u.active } : u))
-      );
+      const isTargetOwner = normalizeRun(targetUser.run) === OWNER_RUN;
+      const isTargetAdminLike = isAdminLikeRole(targetUser.role);
+
+      if (isTargetOwner && !isOwner) {
+        addToast({
+          type: "error",
+          title: "Acción no permitida",
+          message: "No puedes modificar la cuenta principal del sistema.",
+        });
+        return;
+      }
+
+      if (isTargetAdminLike && !isOwner && !isSuper) {
+        addToast({
+          type: "error",
+          title: "Acción restringida",
+          message:
+            "Solo el dueño o el super admin pueden modificar otros administradores.",
+        });
+        return;
+      }
+
+      setEditingUser(targetUser);
+      setShowForm(true);
+    },
+    [canManage, addToast, OWNER_RUN, isOwner, isSuper]
+  );
+
+  const handleUserSaved = useCallback(
+    async () => {
+      setShowForm(false);
+      setEditingUser(null);
+      await loadUsers();
 
       addToast({
         type: "success",
-        title: "Estado actualizado",
-        message: `El usuario ahora está ${!user.active ? "activo" : "inactivo"}.`,
+        title: "Usuario guardado",
+        message: "Los cambios se guardaron correctamente.",
       });
-    } catch (err) {
-      const msg =
-        err.response?.data?.message ||
-        err.message ||
-        "Error al cambiar estado del usuario";
+    },
+    [loadUsers, addToast]
+  );
 
-      addToast({
-        type: "error",
-        title: "No se pudo actualizar",
-        message: msg,
-      });
-    } finally {
-      setSaving(false);
-    }
-  }
-
-  function openResetPasswordDialog(user) {
-    if (!canManage) {
-      addToast({
-        type: "error",
-        title: "Acceso denegado",
-        message: "No tienes permisos para resetear contraseñas.",
-      });
-      return;
-    }
-
-    setConfirmState({
-      open: true,
-      action: "reset-password",
-      user,
-      loading: false,
-    });
-  }
-
-  function openDeleteUserDialog(user) {
-    if (!canManage) {
-      addToast({
-        type: "error",
-        title: "Acceso denegado",
-        message: "No tienes permisos para eliminar usuarios.",
-      });
-      return;
-    }
-
-    const isTargetOwner = normalizeRun(user.run) === OWNER_RUN;
-    const isTargetAdminLike = esAdminPotente(user.role);
-
-    if (isTargetOwner) {
-      addToast({
-        type: "error",
-        title: "Acción no permitida",
-        message: "No puedes eliminar la cuenta principal del sistema.",
-      });
-      return;
-    }
-
-    if (isTargetAdminLike && !isOwner && !isSuper && !isGlobal) {
-      addToast({
-        type: "error",
-        title: "Acción restringida",
-        message:
-          "Solo el dueño, super admin o admin global pueden eliminar administradores.",
-      });
-      return;
-    }
-
-    setConfirmState({
-      open: true,
-      action: "delete",
-      user,
-      loading: false,
-    });
-  }
-
-  async function handleConfirmAction() {
-    const { action, user } = confirmState;
-    if (!action || !user) return;
-
-    try {
-      setConfirmState((prev) => ({ ...prev, loading: true }));
-      setSaving(true);
-
-      if (action === "reset-password") {
-        const res = await api.post(`/users/${user.id}/reset-password`);
-        const data = res.data;
-
+  const toggleActive = useCallback(
+    async (targetUser) => {
+      if (!canManage) {
         addToast({
-          type: "success",
-          title: "Contraseña reseteada",
+          type: "error",
+          title: "Acceso denegado",
+          message: "No tienes permisos para cambiar el estado de usuarios.",
+        });
+        return;
+      }
+
+      const isTargetOwner = normalizeRun(targetUser.run) === OWNER_RUN;
+      const isTargetAdminLike = isAdminLikeRole(targetUser.role);
+
+      if (isTargetOwner) {
+        addToast({
+          type: "error",
+          title: "Acción no permitida",
+          message: "No puedes desactivar la cuenta principal del sistema.",
+        });
+        return;
+      }
+
+      if (isTargetAdminLike && !isOwner && !isSuper) {
+        addToast({
+          type: "error",
+          title: "Acción restringida",
           message:
-            data?.message ||
-            "Contraseña temporal generada. El usuario debe revisar su correo.",
+            "Solo el dueño o el super admin pueden desactivar administradores.",
         });
+        return;
       }
 
-      if (action === "delete") {
-        const res = await api.delete(`/users/${user.id}`);
-        const data = res.data;
+      try {
+        setSaving(true);
 
-        setUsers((prev) => prev.filter((u) => u.id !== user.id));
+        const res = await api.put(`/users/${targetUser.id}`, {
+          active: !targetUser.active,
+        });
+
+        if (!res?.data) {
+          throw new Error("No se pudo actualizar el estado");
+        }
+
+        setUsers((prev) =>
+          prev.map((user) =>
+            user.id === targetUser.id
+              ? { ...user, active: !user.active }
+              : user
+          )
+        );
 
         addToast({
           type: "success",
-          title: "Usuario eliminado",
-          message: data?.message || "Usuario eliminado correctamente.",
+          title: "Estado actualizado",
+          message: `El usuario ahora está ${
+            !targetUser.active ? "activo" : "inactivo"
+          }.`,
         });
+      } catch (err) {
+        const msg =
+          err?.response?.data?.message ||
+          err?.message ||
+          "Error al cambiar estado del usuario";
+
+        addToast({
+          type: "error",
+          title: "No se pudo actualizar",
+          message: msg,
+        });
+      } finally {
+        setSaving(false);
+      }
+    },
+    [canManage, addToast, OWNER_RUN, isOwner, isSuper]
+  );
+
+  const openResetPasswordDialog = useCallback(
+    (targetUser) => {
+      if (!canManage) {
+        addToast({
+          type: "error",
+          title: "Acceso denegado",
+          message: "No tienes permisos para resetear contraseñas.",
+        });
+        return;
       }
 
-      setConfirmState(initialConfirmState);
-    } catch (err) {
-      const msg =
-        err.response?.data?.message ||
-        err.message ||
-        (action === "delete"
-          ? "Error al eliminar usuario"
-          : "Error al resetear la contraseña.");
-
-      addToast({
-        type: "error",
-        title: "No se pudo completar la acción",
-        message: msg,
+      setConfirmState({
+        open: true,
+        action: "reset-password",
+        user: targetUser,
+        loading: false,
       });
+    },
+    [canManage, addToast]
+  );
 
-      setConfirmState((prev) => ({ ...prev, loading: false }));
-    } finally {
-      setSaving(false);
-    }
-  }
+  const openDeleteUserDialog = useCallback(
+    (targetUser) => {
+      if (!canManage) {
+        addToast({
+          type: "error",
+          title: "Acceso denegado",
+          message: "No tienes permisos para eliminar usuarios.",
+        });
+        return;
+      }
 
-  const titulo = useMemo(() => {
+      const isTargetOwner = normalizeRun(targetUser.run) === OWNER_RUN;
+      const isTargetAdminLike = isAdminLikeRole(targetUser.role);
+
+      if (isTargetOwner) {
+        addToast({
+          type: "error",
+          title: "Acción no permitida",
+          message: "No puedes eliminar la cuenta principal del sistema.",
+        });
+        return;
+      }
+
+      if (isTargetAdminLike && !isOwner && !isSuper && !isGlobal) {
+        addToast({
+          type: "error",
+          title: "Acción restringida",
+          message:
+            "Solo el dueño, super admin o admin global pueden eliminar administradores.",
+        });
+        return;
+      }
+
+      setConfirmState({
+        open: true,
+        action: "delete",
+        user: targetUser,
+        loading: false,
+      });
+    },
+    [canManage, addToast, OWNER_RUN, isOwner, isSuper, isGlobal]
+  );
+
+  const handleConfirmAction = useCallback(
+    async () => {
+      const { action, user } = confirmState;
+      if (!action || !user) return;
+
+      try {
+        setConfirmState((prev) => ({ ...prev, loading: true }));
+        setSaving(true);
+
+        if (action === "reset-password") {
+          const res = await api.post(`/users/${user.id}/reset-password`);
+          const data = res?.data;
+
+          addToast({
+            type: "success",
+            title: "Contraseña reseteada",
+            message:
+              data?.message ||
+              "Contraseña temporal generada. El usuario debe revisar su correo.",
+          });
+        }
+
+        if (action === "delete") {
+          const res = await api.delete(`/users/${user.id}`);
+          const data = res?.data;
+
+          setUsers((prev) => prev.filter((u) => u.id !== user.id));
+
+          addToast({
+            type: "success",
+            title: "Usuario eliminado",
+            message: data?.message || "Usuario eliminado correctamente.",
+          });
+        }
+
+        setConfirmState(initialConfirmState);
+      } catch (err) {
+        const msg =
+          err?.response?.data?.message ||
+          err?.message ||
+          (action === "delete"
+            ? "Error al eliminar usuario"
+            : "Error al resetear la contraseña.");
+
+        addToast({
+          type: "error",
+          title: "No se pudo completar la acción",
+          message: msg,
+        });
+
+        setConfirmState((prev) => ({ ...prev, loading: false }));
+      } finally {
+        setSaving(false);
+      }
+    },
+    [confirmState, addToast]
+  );
+
+  const title = useMemo(() => {
     if (isSuper) return "Panel maestro de usuarios";
     if (isGlobal) return "Panel global de usuarios";
     if (isAdmin) return "Usuarios de tu empresa";
     return "Usuarios";
   }, [isSuper, isGlobal, isAdmin]);
 
-  const descripcionPermisos = useMemo(() => {
+  const permissionsDescription = useMemo(() => {
     if (isOwner || isSuper) {
       return "Puedes ver y administrar todos los usuarios y roles del sistema.";
     }
+
     if (isGlobal) {
       return "Puedes ver todos los usuarios y administrar sus cuentas, excepto la cuenta principal.";
     }
+
     if (isAdmin) {
       return "Puedes ver y administrar solo los usuarios de tu empresa.";
     }
+
     return "Solo lectura sobre usuarios asignados.";
   }, [isOwner, isSuper, isGlobal, isAdmin]);
 
@@ -391,7 +409,7 @@ function UsersAdminView() {
           Ocurrió un problema al cargar los usuarios.
         </p>
         <p className="users-admin-state-text">{error}</p>
-        <button className="btn-main btn-primary" onClick={cargarUsuarios}>
+        <button className="btn-main btn-primary" onClick={loadUsers}>
           Reintentar carga
         </button>
       </div>
@@ -402,14 +420,17 @@ function UsersAdminView() {
     <div className="card-premium users-admin-card">
       <div className="users-admin-header">
         <div className="users-admin-header-main">
-          <h2 className="users-admin-title">{titulo}</h2>
+          <h2 className="users-admin-title">{title}</h2>
 
           {currentUser && (
             <>
               <p className="users-admin-session">
-                Sesión: {currentUser.email} · Rol: {getRoleLabel(currentUser.role)}
+                Sesión: {currentUser.email} · Rol:{" "}
+                {getRoleLabel(currentUser.role)}
               </p>
-              <p className="users-admin-permissions">{descripcionPermisos}</p>
+              <p className="users-admin-permissions">
+                {permissionsDescription}
+              </p>
             </>
           )}
         </div>
@@ -417,7 +438,7 @@ function UsersAdminView() {
         {canManage && (
           <button
             className="btn-main btn-primary"
-            onClick={handleNewUser}
+            onClick={openCreateUser}
             disabled={saving}
             aria-label="Crear nuevo usuario"
           >
@@ -434,19 +455,27 @@ function UsersAdminView() {
           </div>
           <div className="kpi-card">
             <div className="kpi-label">Pendientes</div>
-            <div className="kpi-value">{stats.documentos.pendientes || 0}</div>
+            <div className="kpi-value">
+              {stats.documentos.pendientes || 0}
+            </div>
           </div>
           <div className="kpi-card">
             <div className="kpi-label">Firmados</div>
-            <div className="kpi-value">{stats.documentos.firmados || 0}</div>
+            <div className="kpi-value">
+              {stats.documentos.firmados || 0}
+            </div>
           </div>
           <div className="kpi-card">
             <div className="kpi-label">Visados</div>
-            <div className="kpi-value">{stats.documentos.visados || 0}</div>
+            <div className="kpi-value">
+              {stats.documentos.visados || 0}
+            </div>
           </div>
           <div className="kpi-card">
             <div className="kpi-label">Rechazados</div>
-            <div className="kpi-value">{stats.documentos.rechazados || 0}</div>
+            <div className="kpi-value">
+              {stats.documentos.rechazados || 0}
+            </div>
           </div>
         </div>
       )}
@@ -476,7 +505,9 @@ function UsersAdminView() {
 
       {users.length === 0 ? (
         <div className="users-admin-state is-empty">
-          <h3 className="users-admin-state-title">No hay usuarios para mostrar.</h3>
+          <h3 className="users-admin-state-title">
+            No hay usuarios para mostrar.
+          </h3>
           <p className="users-admin-state-text">
             Cuando registres nuevos usuarios, aparecerán en este panel.
           </p>
@@ -501,10 +532,13 @@ function UsersAdminView() {
                 </thead>
 
                 <tbody>
-                  {users.map((u) => {
-                    const isInactive = u.active === false;
-                    const isTargetOwner = normalizeRun(u.run) === OWNER_RUN;
-                    const isTargetAdminLike = esAdminPotente(u.role);
+                  {users.map((targetUser) => {
+                    const isInactive = targetUser.active === false;
+                    const isTargetOwner =
+                      normalizeRun(targetUser.run) === OWNER_RUN;
+                    const isTargetAdminLike = isAdminLikeRole(
+                      targetUser.role
+                    );
 
                     const canToggle =
                       canManage &&
@@ -521,40 +555,42 @@ function UsersAdminView() {
                     const canDelete =
                       canManage &&
                       !isTargetOwner &&
-                      (isOwner || isSuper || isGlobal || !isTargetAdminLike);
+                      (isOwner ||
+                        isSuper ||
+                        isGlobal ||
+                        !isTargetAdminLike);
 
                     return (
                       <tr
-                        key={u.id}
+                        key={targetUser.id}
                         className={isInactive ? "row-inactive" : ""}
                       >
-                        <td>{u.id}</td>
-                        <td>{formatRunVisual(u.run) || "-"}</td>
-                        <td>{u.name || "-"}</td>
-                        <td className="col-user-email">{u.email || "-"}</td>
+                        <td>{targetUser.id}</td>
+                        <td>{formatRun(targetUser.run) || "-"}</td>
+                        <td>{targetUser.name || "-"}</td>
+                        <td className="col-user-email">
+                          {targetUser.email || "-"}
+                        </td>
 
                         <td className="col-user-company">
                           <span className="badge-plan is-basic users-company-badge">
-                            {u.company_id ?? "-"}
+                            {targetUser.company_id ?? "-"}
                           </span>
                         </td>
 
                         <td className="col-user-role">
-                          <span className="badge-role" data-role={u.role || "USER"}>
-                            {u.role || "USER"}
+                          <span
+                            className="badge-role"
+                            data-role={targetUser.role || "USER"}
+                          >
+                            {targetUser.role || "USER"}
                           </span>
                         </td>
 
                         <td className="col-user-plan">
-                          {u.plan ? (
-                            <span
-                              className={`badge-plan ${
-                                u.plan.toLowerCase() === "pro"
-                                  ? "is-pro"
-                                  : "is-basic"
-                              }`}
-                            >
-                              {u.plan.toUpperCase()}
+                          {targetUser.plan ? (
+                            <span className={getPlanBadgeClass(targetUser.plan)}>
+                              {targetUser.plan.toUpperCase()}
                             </span>
                           ) : (
                             "-"
@@ -565,21 +601,25 @@ function UsersAdminView() {
                           {canToggle ? (
                             <button
                               type="button"
-                              onClick={() => toggleActive(u)}
+                              onClick={() => toggleActive(targetUser)}
                               className={`btn-pill ${
-                                u.active ? "is-active" : "is-inactive"
+                                targetUser.active
+                                  ? "is-active"
+                                  : "is-inactive"
                               }`}
                               disabled={saving}
                             >
-                              {u.active ? "ACTIVO" : "INACTIVO"}
+                              {targetUser.active ? "ACTIVO" : "INACTIVO"}
                             </button>
                           ) : (
                             <span
                               className={`badge-status ${
-                                u.active ? "is-active" : "is-inactive"
+                                targetUser.active
+                                  ? "is-active"
+                                  : "is-inactive"
                               }`}
                             >
-                              {u.active ? "ACTIVO" : "INACTIVO"}
+                              {targetUser.active ? "ACTIVO" : "INACTIVO"}
                             </span>
                           )}
                         </td>
@@ -590,7 +630,7 @@ function UsersAdminView() {
                               <button
                                 type="button"
                                 className="btn-main btn-secondary btn-xs"
-                                onClick={() => handleEditUser(u)}
+                                onClick={() => openEditUser(targetUser)}
                                 disabled={saving}
                               >
                                 Editar
@@ -601,7 +641,9 @@ function UsersAdminView() {
                               <button
                                 type="button"
                                 className="btn-main btn-ghost btn-xs"
-                                onClick={() => openResetPasswordDialog(u)}
+                                onClick={() =>
+                                  openResetPasswordDialog(targetUser)
+                                }
                                 disabled={saving}
                               >
                                 Reset clave
@@ -612,7 +654,9 @@ function UsersAdminView() {
                               <button
                                 type="button"
                                 className="btn-main btn-secondary-danger btn-xs"
-                                onClick={() => openDeleteUserDialog(u)}
+                                onClick={() =>
+                                  openDeleteUserDialog(targetUser)
+                                }
                                 disabled={saving}
                               >
                                 Eliminar
@@ -653,7 +697,9 @@ function UsersAdminView() {
           confirmState.action === "delete"
             ? `¿Seguro que deseas eliminar al usuario "${
                 confirmState.user?.name || "-"
-              }" (${confirmState.user?.email || confirmState.user?.run})? Esta acción no se puede deshacer.`
+              }" (${
+                confirmState.user?.email || confirmState.user?.run
+              })? Esta acción no se puede deshacer.`
             : `¿Seguro que deseas resetear la contraseña de ${
                 confirmState.user?.name ||
                 confirmState.user?.email ||
@@ -661,7 +707,9 @@ function UsersAdminView() {
               }?`
         }
         confirmLabel={
-          confirmState.action === "delete" ? "Sí, eliminar" : "Sí, resetear"
+          confirmState.action === "delete"
+            ? "Sí, eliminar"
+            : "Sí, resetear"
         }
         cancelLabel="Cancelar"
         confirmVariant={

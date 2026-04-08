@@ -482,12 +482,12 @@ export function useDocuments(token) {
 
   const docsPaginados = useMemo(() => docsFiltrados, [docsFiltrados]);
 
-  // estos conteos son solo de la página actual (útiles para vista actual)
+  // conteos SOLO de la página actual
   const {
-    pendientesCount,
-    visados,
-    firmados,
-    rechazados,
+    pendientesPagina,
+    visadosPagina,
+    firmadosPagina,
+    rechazadosPagina,
   } = useMemo(() => {
     const safeDocs = Array.isArray(docs) ? docs : [];
 
@@ -513,10 +513,10 @@ export function useDocuments(token) {
     ).length;
 
     return {
-      pendientesCount: pendientes,
-      visados: visadosCount,
-      firmados: firmadosCount,
-      rechazados: rechazadosCount,
+      pendientesPagina: pendientes,
+      visadosPagina: visadosCount,
+      firmadosPagina: firmadosCount,
+      rechazadosPagina: rechazadosCount,
     };
   }, [docs]);
 
@@ -552,17 +552,20 @@ export function useDocuments(token) {
     manejarAccionDocumento,
     docsFiltrados,
     docsPaginados,
+
     // conteos de la página actual
-    pendientes: pendientesCount,
-    visados,
-    firmados,
-    rechazados,
-    // paginación y totales filtrados
+    pendientesPagina,
+    visadosPagina,
+    firmadosPagina,
+    rechazadosPagina,
+
+    // paginación y totales filtrados (globales al filtro actual)
     totalFiltrado,
     totalPaginas,
     pagination,
     debouncedSearch,
-    // nuevos totales globales (desde backend.stats)
+
+    // totales globales de la bandeja (stats desde backend)
     totalGlobal,
     pendientesGlobal,
     visadosGlobal,

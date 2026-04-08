@@ -3,228 +3,30 @@ import React, { useCallback, useEffect, useMemo, useRef, useState } from "react"
 import { Timeline } from "./Timeline";
 import { EventList } from "./EventList";
 import { DetailActions } from "./DetailActions";
-import { DOC_STATUS } from "../constants";
 import api, { getDocumentTimeline } from "../api/client";
 import { ElectronicSignatureNotice } from "./Legal/ElectronicSignatureNotice";
 import { useToast } from "../hooks/useToast";
-
-function getTramiteLabel(value) {
-  if (value === "notaria") return "Notaría";
-  if (value === "propio") return "Propio";
-  return "N/D";
-}
-
-function getDocumentoLabel(value) {
-  if (value === "poderes") return "Poderes y autorizaciones";
-  if (value === "contratos") return "Solo contratos";
-  return "N/D";
-}
-
-function getErrorMessage(err, fallback) {
-  return err?.response?.data?.message || err?.message || fallback;
-}
-
-function normalizeText(value) {
-  return typeof value === "string" ? value.trim().toLowerCase() : "";
-}
-
-function buildUserDisplayName(currentUser) {
-  const rawName =
-    currentUser?.name ||
-    currentUser?.fullName ||
-    currentUser?.username ||
-    "Usuario";
-
-  const normalizedName = normalizeText(currentUser?.name);
-  const normalizedFullName = normalizeText(currentUser?.fullName);
-  const normalizedEmail = normalizeText(currentUser?.email);
-
-  const isJean =
-    normalizedName === "jean" ||
-    normalizedFullName === "jean" ||
-    normalizedFullName.includes("jean") ||
-    normalizedEmail === "tu-correo@loqueuses.com";
-
-  return isJean ? "Alucard" : rawName;
-}
-
-function isAbortLikeError(err) {
-  return (
-    err?.name === "CanceledError" ||
-    err?.name === "AbortError" ||
-    err?.code === "ERR_CANCELED"
-  );
-}
-
-function formatDateTime(value) {
-  if (!value) return "";
-  const date = value instanceof Date ? value : new Date(value);
-  if (Number.isNaN(date.getTime())) return "";
-  return date.toLocaleString("es-CO", {
-    day: "2-digit",
-    month: "2-digit",
-    year: "numeric",
-    hour: "2-digit",
-    minute: "2-digit",
-  });
-}
-
-function normalizeParticipantRole(value = "") {
-  const role = String(value || "").trim().toLowerCase();
-
-  if (role.includes("vis")) {
-    return {
-      key: "visador",
-      label: "Visador",
-      badgeClass: "detail-flow-badge detail-flow-badge--warning",
-    };
-  }
-
-  if (role.includes("firma") || role.includes("sign")) {
-    return {
-      key: "firmante",
-      label: "Firmante",
-      badgeClass: "detail-flow-badge detail-flow-badge--info",
-    };
-  }
-
-  if (role.includes("represent")) {
-    return {
-      key: "representante",
-      label: "Representante",
-      badgeClass: "detail-flow-badge detail-flow-badge--neutral",
-    };
-  }
-
-  return {
-    key: "participante",
-    label: "Participante",
-    badgeClass: "detail-flow-badge detail-flow-badge--neutral",
-  };
-}
-
-function normalizeFlowStatus(value = "") {
-  const status = String(value || "").trim().toUpperCase();
-
-  if (status === "FIRMADO") {
-    return {
-      key: "done",
-      label: "Firmado",
-      className: "detail-flow-status detail-flow-status--success",
-    };
-  }
-
-  if (status === "VISADO") {
-    return {
-      key: "done",
-      label: "Visado",
-      className: "detail-flow-status detail-flow-status--warning",
-    };
-  }
-
-  if (status === "RECHAZADO") {
-    return {
-      key: "rejected",
-      label: "Rechazado",
-      className: "detail-flow-status detail-flow-status--danger",
-    };
-  }
-
-  if (
-    status === "PENDIENTE" ||
-    status === "PENDIENTE_FIRMA" ||
-    status === "PENDIENTE_VISADO"
-  ) {
-    return {
-      key: "pending",
-      label: "Pendiente",
-      className: "detail-flow-status detail-flow-status--pending",
-    };
-  }
-
-  return {
-    key: "unknown",
-    label: status || "Sin estado",
-    className: "detail-flow-status detail-flow-status--neutral",
-  };
-}
-
-function buildFlowParticipants(participants = [], signers = []) {
-  const signerMap = new Map(
-    (Array.isArray(signers) ? signers : []).map((signer) => [String(signer.id), signer])
-  );
-
-  return (Array.isArray(participants) ? participants : [])
-    .slice()
-    .sort((a, b) => {
-      const aOrder = Number.isFinite(Number(a?.flow_order)) ? Number(a.flow_order) : 9999;
-      const bOrder = Number.isFinite(Number(b?.flow_order)) ? Number(b.flow_order) : 9999;
-      return aOrder - bOrder;
-    })
-    .map((participant, index) => {
-      const roleInfo = normalizeParticipantRole(participant?.role_in_doc);
-      const statusInfo = normalizeFlowStatus(participant?.status);
-      const signer = signerMap.get(String(participant?.signer_id || participant?.id));
-
-      return {
-        id: participant?.id || `${participant?.email || "participant"}-${index}`,
-        order: Number.isFinite(Number(participant?.flow_order))
-          ? Number(participant.flow_order)
-          : index + 1,
-        name: participant?.name || signer?.name || "Participante",
-        email: participant?.email || signer?.email || "Sin correo",
-        roleLabel: roleInfo.label,
-        roleBadgeClass: roleInfo.badgeClass,
-        roleKey: roleInfo.key,
-        statusKey: statusInfo.key,
-        statusLabel: statusInfo.label,
-        statusClassName: statusInfo.className,
-        signedAt: participant?.signed_at || signer?.signed_at || null,
-      };
-    });
-}
-
-function buildDocumentStateMeta(status) {
-  const normalized = String(status || "").trim().toUpperCase();
-
-  if (normalized === DOC_STATUS.FIRMADO) {
-    return {
-      label: "Firmado",
-      className: "detail-doc-state detail-doc-state--success",
-      helper: "El flujo del documento ya fue completado.",
-    };
-  }
-
-  if (normalized === DOC_STATUS.RECHAZADO) {
-    return {
-      label: "Rechazado",
-      className: "detail-doc-state detail-doc-state--danger",
-      helper: "El documento fue rechazado y el flujo quedó cerrado.",
-    };
-  }
-
-  if (normalized === DOC_STATUS.PENDIENTE_VISADO) {
-    return {
-      label: "Pendiente de visado",
-      className: "detail-doc-state detail-doc-state--warning",
-      helper: "Aún falta la aprobación o revisión previa antes de completar la firma.",
-    };
-  }
-
-  if (normalized === DOC_STATUS.PENDIENTE_FIRMA) {
-    return {
-      label: "Pendiente de firma",
-      className: "detail-doc-state detail-doc-state--info",
-      helper: "El documento sigue esperando firmas pendientes.",
-    };
-  }
-
-  return {
-    label: normalized || "Sin estado",
-    className: "detail-doc-state detail-doc-state--neutral",
-    helper: "Estado actual del documento.",
-  };
-}
+import "../styles/detailView.css";
+import {
+  DETAIL_POLL_INTERVAL_MS,
+  FLOW_ROLE_KEYS,
+  REMINDER_TYPES,
+} from "./detailView.constants";
+import {
+  buildDocumentStateMeta,
+  buildFlowParticipants,
+  buildUserDisplayName,
+  formatDateTime,
+  getDocumentLabel,
+  getDocumentNumber,
+  getDocumentTitle,
+  getErrorMessage,
+  getTimelineEvents,
+  getTramiteLabel,
+  isAbortLikeError,
+  shouldShowGlobalReminder,
+  shouldShowVisadoReminder,
+} from "./detailView.helpers";
 
 export function DetailView({
   selectedDoc,
@@ -264,69 +66,67 @@ export function DetailView({
   const timelineToastShownRef = useRef(false);
   const signersToastShownRef = useRef(false);
 
-  const safeEvents = useMemo(
-    () => (Array.isArray(events) ? events : []),
-    [events]
-  );
+  const safeEvents = useMemo(() => {
+    return getTimelineEvents(timeline, events);
+  }, [timeline, events]);
 
-  const displayName = useMemo(
-    () => buildUserDisplayName(currentUser),
-    [currentUser]
-  );
+  const displayName = useMemo(() => {
+    return buildUserDisplayName(currentUser);
+  }, [currentUser]);
 
   const numeroInterno = useMemo(() => {
-    return (
-      timeline?.document?.numero_contrato_interno ||
-      selectedDoc?.numero_contrato_interno ||
-      null
+    return getDocumentNumber(selectedDoc, timeline);
+  }, [selectedDoc, timeline]);
+
+  const titleDocumento = useMemo(() => {
+    return getDocumentTitle(selectedDoc, timeline);
+  }, [selectedDoc, timeline]);
+
+  const tramiteLabel = useMemo(() => {
+    return getTramiteLabel(
+      timeline?.document?.tipo_tramite ||
+        selectedDoc?.tipo_tramite ||
+        selectedDoc?.tipoTramite
     );
   }, [timeline, selectedDoc]);
 
-  const tramiteLabel = useMemo(
-    () =>
-      getTramiteLabel(selectedDoc?.tipo_tramite || selectedDoc?.tipoTramite),
-    [selectedDoc]
-  );
+  const documentoLabel = useMemo(() => {
+    return getDocumentLabel(
+      timeline?.document?.tipo_documento ||
+        selectedDoc?.tipo_documento ||
+        selectedDoc?.tipoDocumento
+    );
+  }, [timeline, selectedDoc]);
 
-  const documentoLabel = useMemo(
-    () =>
-      getDocumentoLabel(
-        selectedDoc?.tipo_documento || selectedDoc?.tipoDocumento
-      ),
-    [selectedDoc]
-  );
+  const currentStatus = selectedDoc?.status || timeline?.document?.status || null;
 
-  const isSigned = selectedDoc?.status === DOC_STATUS.FIRMADO;
-  const isRejected = selectedDoc?.status === DOC_STATUS.RECHAZADO;
+  const isSigned = currentStatus === "FIRMADO";
+  const isRejected = currentStatus === "RECHAZADO";
 
-  const mostrarBotonReenvioVisado =
-    selectedDoc?.requires_visado === true &&
-    selectedDoc?.status === DOC_STATUS.PENDIENTE_VISADO &&
-    !!selectedDoc?.visador_email;
+  const mostrarBotonReenvioVisado = useMemo(() => {
+    return shouldShowVisadoReminder(selectedDoc, currentStatus);
+  }, [selectedDoc, currentStatus]);
 
-  const mostrarBotonRecordatorio =
-    selectedDoc?.status === DOC_STATUS.PENDIENTE_VISADO ||
-    selectedDoc?.status === DOC_STATUS.PENDIENTE_FIRMA;
+  const mostrarBotonRecordatorio = useMemo(() => {
+    return shouldShowGlobalReminder(currentStatus);
+  }, [currentStatus]);
 
   const baseUrl = api.defaults.baseURL || "";
   const downloadUrl = selectedDoc
     ? `${baseUrl}/documents/${selectedDoc.id}/download`
     : null;
 
-  const documentStateMeta = useMemo(
-    () => buildDocumentStateMeta(selectedDoc?.status),
-    [selectedDoc?.status]
-  );
+  const documentStateMeta = useMemo(() => {
+    return buildDocumentStateMeta(currentStatus);
+  }, [currentStatus]);
 
-  const flowParticipants = useMemo(
-    () => buildFlowParticipants(participants, signers),
-    [participants, signers]
-  );
+  const flowParticipants = useMemo(() => {
+    return buildFlowParticipants(participants, signers);
+  }, [participants, signers]);
 
-  const nextPendingParticipant = useMemo(
-    () => flowParticipants.find((p) => p.statusKey === "pending") || null,
-    [flowParticipants]
-  );
+  const nextPendingParticipant = useMemo(() => {
+    return flowParticipants.find((p) => p.statusKey === "pending") || null;
+  }, [flowParticipants]);
 
   const fetchTimelineAndParticipants = useCallback(
     async (docId) => {
@@ -371,9 +171,7 @@ export function DetailView({
         setLoadingSigners(true);
 
         const res = await api.get(`/documents/${docId}/signers`, { signal });
-        const data = res.data;
-
-        setSigners(Array.isArray(data) ? data : []);
+        setSigners(Array.isArray(res.data) ? res.data : []);
         signersToastShownRef.current = false;
       } catch (err) {
         if (isAbortLikeError(err)) return;
@@ -411,13 +209,13 @@ export function DetailView({
     fetchTimelineAndParticipants(docId);
     fetchSigners(docId, controller.signal);
 
-    const interval = window.setInterval(() => {
+    const intervalId = window.setInterval(() => {
       fetchTimelineAndParticipants(docId);
-    }, 5000);
+    }, DETAIL_POLL_INTERVAL_MS);
 
     return () => {
       controller.abort();
-      window.clearInterval(interval);
+      window.clearInterval(intervalId);
     };
   }, [selectedDoc?.id, fetchTimelineAndParticipants, fetchSigners]);
 
@@ -433,7 +231,7 @@ export function DetailView({
       setReenviarLoadingVisado(true);
 
       const res = await api.post(`/documents/${selectedDoc.id}/reenviar`, {
-        tipo: "VISADO",
+        tipo: REMINDER_TYPES.VISADO,
       });
 
       addToast({
@@ -466,7 +264,7 @@ export function DetailView({
         setReenviarSignerId(signerId);
 
         const res = await api.post(`/documents/${selectedDoc.id}/reenviar`, {
-          tipo: "FIRMA",
+          tipo: REMINDER_TYPES.FIRMA,
           signerId,
         });
 
@@ -561,11 +359,7 @@ export function DetailView({
       <aside className="detail-sidebar">
         <h2 className="detail-sidebar-header">VeriFirma</h2>
 
-        <button
-          type="button"
-          className="nav-item"
-          onClick={handleBackToList}
-        >
+        <button type="button" className="nav-item" onClick={handleBackToList}>
           <span>⬅️</span> Volver a la bandeja
         </button>
 
@@ -583,7 +377,7 @@ export function DetailView({
           <span className="detail-topbar-title">
             Revisión de documento{" "}
             {numeroInterno ? `(${numeroInterno})` : `#${selectedDoc.id}`} · Estado{" "}
-            {selectedDoc.status}
+            {currentStatus || "Sin estado"}
           </span>
 
           <span className="detail-topbar-user">
@@ -595,19 +389,14 @@ export function DetailView({
           <div className="detail-card">
             <div className="detail-header-block">
               <div>
-                <h1 className="detail-title">
-                  {selectedDoc.title || "Documento sin título"}
-                </h1>
+                <h1 className="detail-title">{titleDocumento}</h1>
 
                 <div className="detail-meta">
                   <p>
                     N° interno: <strong>{numeroInterno || `#${selectedDoc.id}`}</strong>
                   </p>
                   <p>
-                    Tipo de trámite:{" "}
-                    <strong>
-                      {tramiteLabel} – {documentoLabel}
-                    </strong>
+                    Tipo de trámite: <strong>{tramiteLabel} – {documentoLabel}</strong>
                   </p>
                 </div>
               </div>
@@ -624,12 +413,11 @@ export function DetailView({
               </div>
             )}
 
-            {selectedDoc.status === DOC_STATUS.RECHAZADO &&
-              selectedDoc.reject_reason && (
-                <div className="detail-reject-box">
-                  <strong>Motivo de rechazo:</strong> {selectedDoc.reject_reason}
-                </div>
-              )}
+            {isRejected && selectedDoc.reject_reason && (
+              <div className="detail-reject-box">
+                <strong>Motivo de rechazo:</strong> {selectedDoc.reject_reason}
+              </div>
+            )}
 
             <section className="detail-section">
               <div className="detail-section__header">
@@ -734,9 +522,7 @@ export function DetailView({
                       checked={acceptedLegalSign}
                       onChange={setAcceptedLegalSign}
                     />
-                    {signError && (
-                      <p className="detail-inline-error">{signError}</p>
-                    )}
+                    {signError && <p className="detail-inline-error">{signError}</p>}
                   </>
                 )}
 
@@ -747,9 +533,7 @@ export function DetailView({
                       checked={acceptedLegalVisado}
                       onChange={setAcceptedLegalVisado}
                     />
-                    {visadoError && (
-                      <p className="detail-inline-error">{visadoError}</p>
-                    )}
+                    {visadoError && <p className="detail-inline-error">{visadoError}</p>}
                   </>
                 )}
               </section>
@@ -785,7 +569,7 @@ export function DetailView({
                   <ul className="detail-flow-list">
                     {flowParticipants.map((participant) => {
                       const canRemind =
-                        participant.roleKey === "firmante" &&
+                        participant.roleKey === FLOW_ROLE_KEYS.FIRMANTE &&
                         participant.statusKey === "pending";
 
                       const signerMatch = signers.find(
@@ -806,12 +590,8 @@ export function DetailView({
                           <div className="detail-flow-item__body">
                             <div className="detail-flow-item__top">
                               <div>
-                                <div className="detail-signer-main">
-                                  {participant.name}
-                                </div>
-                                <div className="detail-signer-sub">
-                                  {participant.email}
-                                </div>
+                                <div className="detail-signer-main">{participant.name}</div>
+                                <div className="detail-signer-sub">{participant.email}</div>
                               </div>
 
                               <div className="detail-flow-item__badges">
@@ -872,9 +652,7 @@ export function DetailView({
 
               <div className="detail-timeline-wrapper">
                 {loadingTimeline ? (
-                  <div className="detail-timeline-loading">
-                    Cargando progreso...
-                  </div>
+                  <div className="detail-timeline-loading">Cargando progreso...</div>
                 ) : timeline ? (
                   <Timeline timeline={timeline} />
                 ) : (
@@ -894,11 +672,7 @@ export function DetailView({
               </div>
 
               <div className="detail-history">
-                {timeline?.events?.length > 0 ? (
-                  <EventList events={timeline.events} />
-                ) : (
-                  <EventList events={safeEvents} />
-                )}
+                <EventList events={safeEvents} />
               </div>
             </section>
 

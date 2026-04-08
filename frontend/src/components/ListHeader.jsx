@@ -1,5 +1,6 @@
 import React, { useCallback, useMemo } from "react";
 import { API_BASE_URL } from "../constants";
+import "../styles/decorativeTabs.css";
 
 const API_URL = API_BASE_URL;
 

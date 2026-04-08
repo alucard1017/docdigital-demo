@@ -1,0 +1,103 @@
+/* Cabecera bandeja documentos */
+
+.inbox-header-card {
+  margin-bottom: 16px;
+  padding: 14px 16px;
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  border-radius: 16px;
+  border: 1px solid var(--border-soft);
+  background: linear-gradient(
+    180deg,
+    rgba(15, 23, 42, 0.92),
+    rgba(2, 6, 23, 0.96)
+  );
+  box-shadow: 0 10px 30px rgba(2, 6, 23, 0.22);
+}
+
+.inbox-header-main {
+  flex: 1 1 320px;
+  min-width: 220px;
+}
+
+.inbox-title {
+  margin: 0;
+  font-size: 1rem;
+  font-weight: 800;
+  color: #f8fafc;
+}
+
+.inbox-subtitle {
+  margin: 4px 0 0;
+  font-size: 0.84rem;
+  color: #94a3b8;
+}
+
+.inbox-header-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+  align-items: center;
+}
+
+/* Hero dashboard */
+
+.hero-dashboard {
+  margin-bottom: 24px;
+  padding: 28px 32px;
+  color: var(--text-main);
+  border-radius: 24px;
+  border: 1px solid rgba(59, 130, 246, 0.7);
+  background:
+    radial-gradient(circle at top left, rgba(59, 130, 246, 0.5) 0, transparent 55%),
+    radial-gradient(circle at bottom right, rgba(14, 165, 233, 0.45) 0, transparent 55%),
+    linear-gradient(135deg, #020617, #020617);
+  box-shadow:
+    0 26px 70px rgba(15, 23, 42, 0.95),
+    0 0 0 1px rgba(15, 23, 42, 0.9);
+}
+
+.hero-dashboard-inner {
+  max-width: 720px;
+  margin: 0 auto;
+  width: 100%;
+  text-align: center;
+}
+
+.hero-dashboard-title {
+  margin-bottom: 6px;
+  font-size: 1.7rem;
+  font-weight: 800;
+  color: #f9fafb;
+}
+
+.hero-dashboard-text {
+  margin-bottom: 14px;
+  font-size: 1rem;
+  line-height: 1.5;
+  color: #cbd5f5;
+}
+
+.hero-dashboard-actions {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: center;
+  gap: 10px;
+}
+
+@media (max-width: 768px) {
+  .hero-dashboard {
+    padding: 20px 16px;
+  }
+
+  .hero-dashboard-title {
+    font-size: 1.4rem;
+  }
+
+  .hero-dashboard-text {
+    font-size: 0.9rem;
+  }
+}

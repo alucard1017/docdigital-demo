@@ -1,0 +1,215 @@
+/* Tabla usuarios / empresas – contenedor y acciones */
+
+.table-scroll-container {
+  max-height: 500px;
+  overflow-y: auto;
+  overflow-x: auto;
+}
+
+.table-scroll-container::-webkit-scrollbar {
+  width: 8px;
+  height: 8px;
+}
+
+.table-scroll-container::-webkit-scrollbar-track {
+  background: #1f2937;
+  border-radius: 4px;
+}
+
+.table-scroll-container::-webkit-scrollbar-thumb {
+  background: #4b5563;
+  border-radius: 4px;
+}
+
+.table-scroll-container::-webkit-scrollbar-thumb:hover {
+  background: #6b7280;
+}
+
+.user-actions,
+.company-actions {
+  display: inline-flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+}
+
+.user-actions .btn-main,
+.company-actions .btn-main {
+  min-width: 110px;
+  min-height: 32px;
+  padding: 6px 12px;
+  font-size: 0.76rem;
+  line-height: 1;
+}
+
+.user-actions .btn-secondary,
+.company-actions .btn-secondary {
+  background: #0f172a;
+  border-color: #334155;
+  color: #e5e7eb;
+  box-shadow: none;
+}
+
+.user-actions .btn-secondary:hover:not(:disabled),
+.company-actions .btn-secondary:hover:not(:disabled) {
+  background: #111c31;
+  border-color: #475569;
+}
+
+.user-actions .btn-secondary-danger,
+.company-actions .btn-secondary-danger {
+  background: rgba(127, 29, 29, 0.14);
+  color: #fca5a5;
+  border-color: rgba(239, 68, 68, 0.35);
+  box-shadow: none;
+}
+
+.user-actions .btn-secondary-danger:hover:not(:disabled),
+.company-actions .btn-secondary-danger:hover:not(:disabled) {
+  background: rgba(127, 29, 29, 0.22);
+  color: #fecaca;
+  border-color: rgba(248, 113, 113, 0.45);
+}
+
+/* Tabla users – columnas */
+
+.doc-table.doc-table-users {
+  min-width: 900px;
+}
+
+.col-user-id { width: 40px; }
+.col-user-run { width: 130px; }
+.col-user-name { width: 180px; }
+.col-user-email { width: 220px; text-align: center; }
+.col-user-company { width: 80px; text-align: center; }
+.col-user-role { width: 120px; text-align: center; }
+.col-user-plan { width: 90px; text-align: center; }
+.col-user-status { width: 90px; text-align: center; }
+.col-user-actions { width: 220px; text-align: center; }
+
+/* Badges de rol */
+
+.badge-role {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  padding: 2px 8px;
+  border-radius: 9999px;
+  font-size: 0.75rem;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.03em;
+}
+
+.badge-role[data-role="SUPER_ADMIN"],
+.badge-role[data-role="ADMIN_GLOBAL"] {
+  background: #7c2d12;
+  color: #fed7aa;
+}
+
+.badge-role[data-role="ADMIN"] {
+  background: #1d4ed8;
+  color: #e5e7eb;
+}
+
+.badge-role[data-role="USER"] {
+  background: #111827;
+  color: #e5e7eb;
+}
+
+/* Badges de plan (compartido users / companies) */
+
+.badge-plan {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 78px;
+  padding: 2px 10px;
+  border-radius: 9999px;
+  font-size: 0.75rem;
+  font-weight: 600;
+  letter-spacing: 0.02em;
+}
+
+.badge-plan-basic {
+  background: #111827;
+  color: #e5e7eb;
+}
+
+.badge-plan-pro {
+  background: #1d4ed8;
+  color: #e5e7eb;
+}
+
+.badge-plan-enterprise {
+  background: #7c2d12;
+  color: #fed7aa;
+}
+
+/* Estado activo / inactivo */
+
+.btn-pill {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 80px;
+  padding: 4px 10px;
+  border-radius: 9999px;
+  font-size: 0.75rem;
+  font-weight: 600;
+  border: 1px solid transparent;
+  cursor: pointer;
+  transition:
+    background-color 0.15s ease,
+    border-color 0.15s ease,
+    color 0.15s ease,
+    transform 0.1s ease;
+}
+
+.btn-pill.is-active {
+  background: #022c22;
+  color: #6ee7b7;
+  border-color: #059669;
+}
+
+.btn-pill.is-inactive {
+  background: #111827;
+  color: #9ca3af;
+  border-color: #4b5563;
+}
+
+.btn-pill:disabled {
+  opacity: 0.6;
+  cursor: not-allowed;
+}
+
+.badge-status {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 80px;
+  padding: 2px 8px;
+  border-radius: 9999px;
+  font-size: 0.75rem;
+  font-weight: 600;
+}
+
+.badge-status.is-active {
+  background: #022c22;
+  color: #6ee7b7;
+}
+
+.badge-status.is-inactive {
+  background: #111827;
+  color: #9ca3af;
+}
+
+.row-inactive {
+  opacity: 0.6;
+  background-color: #020617;
+}
+
+.users-company-badge {
+  min-width: 36px;
+}

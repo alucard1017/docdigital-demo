@@ -1,0 +1,49 @@
+/* Estados de la bandeja (loading / error / empty) y paginación */
+
+.list-state {
+  padding: 40px;
+  text-align: center;
+}
+
+.list-state--loading {
+  color: #64748b;
+}
+
+.list-state--error {
+  color: #b91c1c;
+}
+
+.list-state--empty {
+  color: #64748b;
+}
+
+.list-state-title {
+  margin-bottom: 8px;
+  font-weight: 700;
+}
+
+.list-state-text {
+  margin-bottom: 4px;
+  font-size: 0.9rem;
+  color: #94a3b8;
+}
+
+.list-state-text--strong {
+  margin-bottom: 16px;
+  font-size: 0.9rem;
+}
+
+/* Paginación inferior de la bandeja */
+
+.list-pagination {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-top: 16px;
+  font-size: 0.85rem;
+}
+
+.list-pagination-controls {
+  display: flex;
+  gap: 8px;
+}

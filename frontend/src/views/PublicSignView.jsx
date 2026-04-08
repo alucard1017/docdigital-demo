@@ -1,4 +1,3 @@
-// frontend/src/views/PublicSignView.jsx
 import React, { useMemo, useState, useCallback, useEffect } from "react";
 import "./PublicSignView.css";
 import { PublicHeader } from "../components/PublicHeader";
@@ -19,6 +18,10 @@ function normalizePublicApiBase(API_URL) {
 
 function normalizeStatus(value = "") {
   return String(value || "").trim().toUpperCase();
+}
+
+function normalizeText(value = "") {
+  return String(value || "").trim().toLowerCase();
 }
 
 function pickFirstNonEmpty(...values) {
@@ -69,7 +72,7 @@ function classifyPublicError(error) {
       kind: "expired",
       title: "Este enlace venció",
       message:
-        "Este enlace de firma ya no está disponible. Solicita un nuevo enlace a la empresa que te envió el documento.",
+        "Este enlace ya no está disponible. Solicita un nuevo enlace a la empresa que te envió el documento.",
       canRetry: false,
     };
   }
@@ -254,6 +257,51 @@ function buildRejectErrorMessage(responseMessage) {
   );
 }
 
+function getTramiteLabel(value) {
+  const v = normalizeText(value);
+  if (!v) return "";
+  if (v.includes("notaria") || v.includes("notaría")) return "Con notaría";
+  if (v.includes("sin notaria") || v.includes("sin notaría")) {
+    return "Sin notaría";
+  }
+  if (v === "propio") return "Propio";
+  return String(value || "").trim();
+}
+
+function getDocumentoLabel(value) {
+  const v = normalizeText(value);
+  if (!v) return "";
+  if (v === "poder" || v === "poderes") return "Poder";
+  if (v === "contrato" || v === "contratos") return "Contrato";
+  if (v === "autorizacion" || v === "autorización" || v === "autorizaciones") {
+    return "Autorización";
+  }
+  return String(value || "").trim();
+}
+
+function buildTipoLabel(tipoTramite, tipoDocumento) {
+  const tramite = getTramiteLabel(tipoTramite);
+  const documento = getDocumentoLabel(tipoDocumento);
+
+  if (tramite && documento) return `${tramite} · ${documento}`;
+  if (documento) return documento;
+  if (tramite) return tramite;
+  return "General";
+}
+
+function resolveSignerRoleLabel(signer, isVisado) {
+  const rawRole = normalizeText(
+    signer?.role || signer?.rol || signer?.signer_role || signer?.participant_role
+  );
+
+  if (rawRole.includes("vis")) return "Visador";
+  if (rawRole.includes("firm")) return "Firmante";
+  if (rawRole.includes("revi")) return "Revisor";
+  if (rawRole.includes("owner") || rawRole.includes("prop")) return "Propietario";
+
+  return isVisado ? "Visador" : "Firmante";
+}
+
 export function PublicSignView({
   publicSignLoading,
   publicSignError,
@@ -350,14 +398,18 @@ export function PublicSignView({
       document?.company_name,
       document?.companyName,
       document?.razon_social,
+      document?.empresa,
       documentMeta?.destinatario_nombre,
       documentMeta?.empresa_nombre,
       documentMeta?.nombre_empresa,
       documentMeta?.company_name,
       documentMeta?.companyName,
       documentMeta?.razon_social,
+      documentMeta?.empresa,
       signedDocument?.destinatario_nombre,
       signedDocument?.empresa_nombre,
+      signedDocument?.nombre_empresa,
+      signedDocument?.razon_social,
       publicSignDoc?.destinatario_nombre,
       publicSignDoc?.empresa_nombre,
       publicSignDoc?.nombre_empresa,
@@ -374,16 +426,20 @@ export function PublicSignView({
       document?.rut_empresa,
       document?.company_rut,
       document?.companyRut,
+      document?.rut,
       documentMeta?.empresa_rut,
       documentMeta?.rut_empresa,
       documentMeta?.company_rut,
       documentMeta?.companyRut,
+      documentMeta?.rut,
       signedDocument?.empresa_rut,
       signedDocument?.rut_empresa,
+      signedDocument?.rut,
       publicSignDoc?.empresa_rut,
       publicSignDoc?.rut_empresa,
       publicSignDoc?.company_rut,
       publicSignDoc?.companyRut,
+      publicSignDoc?.rut,
       "No informado"
     );
   }, [document, documentMeta, signedDocument, publicSignDoc]);
@@ -393,15 +449,45 @@ export function PublicSignView({
       document?.numero_contrato_interno,
       document?.numero_contrato,
       document?.numeroContrato,
+      document?.contract_number,
+      document?.n_contrato,
       documentMeta?.numeroContratoInterno,
       documentMeta?.numero_contrato_interno,
       documentMeta?.numero_contrato,
       documentMeta?.numeroContrato,
+      documentMeta?.contract_number,
       signedDocument?.numero_contrato_interno,
       signedDocument?.numero_contrato,
+      signedDocument?.contract_number,
       publicSignDoc?.numero_contrato_interno,
       publicSignDoc?.numero_contrato,
-      "---------"
+      publicSignDoc?.contract_number,
+      "Sin número"
+    );
+  }, [document, documentMeta, signedDocument, publicSignDoc]);
+
+  const tipoDocumentoLabel = useMemo(() => {
+    return buildTipoLabel(
+      pickFirstNonEmpty(
+        document?.tipo_tramite,
+        document?.tramite_tipo,
+        document?.tipoTramite,
+        documentMeta?.tipo_tramite,
+        documentMeta?.tramite_tipo,
+        documentMeta?.tipoTramite,
+        signedDocument?.tipo_tramite,
+        publicSignDoc?.tipo_tramite
+      ),
+      pickFirstNonEmpty(
+        document?.tipo_documento,
+        document?.document_type,
+        document?.tipoDocumento,
+        documentMeta?.tipo_documento,
+        documentMeta?.document_type,
+        documentMeta?.tipoDocumento,
+        signedDocument?.tipo_documento,
+        publicSignDoc?.tipo_documento
+      )
     );
   }, [document, documentMeta, signedDocument, publicSignDoc]);
 
@@ -412,7 +498,7 @@ export function PublicSignView({
       signer?.signer_name,
       signer?.full_name,
       signer?.fullname,
-      isVisado ? "Revisor" : "Firmante"
+      isVisado ? "Visador" : "Firmante"
     );
   }, [signer, isVisado]);
 
@@ -425,6 +511,11 @@ export function PublicSignView({
       "Sin correo disponible"
     );
   }, [signer]);
+
+  const signerRoleLabel = useMemo(
+    () => resolveSignerRoleLabel(signer, isVisado),
+    [signer, isVisado]
+  );
 
   const signerStatus = normalizeStatus(
     signer?.status || signer?.signer_status || signer?.estado
@@ -522,9 +613,7 @@ export function PublicSignView({
       setActionMessageType("success");
       window.scrollTo({ top: 0, behavior: "smooth" });
     } catch (err) {
-      setActionMessage(
-        buildActionErrorMessage(isVisado, err?.message)
-      );
+      setActionMessage(buildActionErrorMessage(isVisado, err?.message));
       setActionMessageType("error");
     } finally {
       setSigning(false);
@@ -652,8 +741,8 @@ export function PublicSignView({
             {signing
               ? "Procesando..."
               : isVisado
-              ? "Visar documento"
-              : "Firmar documento"}
+              ? "Registrar visado"
+              : "Registrar firma"}
           </button>
 
           {!isVisado && (
@@ -766,9 +855,7 @@ export function PublicSignView({
               : flowState.title}
           </div>
 
-          <div className="public-sign-intro__text">
-            {flowState.message}
-          </div>
+          <div className="public-sign-intro__text">{flowState.message}</div>
         </section>
 
         {actionMessage && (
@@ -840,6 +927,15 @@ export function PublicSignView({
                   </div>
                 </div>
 
+                <div className="public-sign-meta-card">
+                  <div className="public-sign-meta-card__label">
+                    Tipo de trámite
+                  </div>
+                  <div className="public-sign-meta-card__value">
+                    {tipoDocumentoLabel}
+                  </div>
+                </div>
+
                 {signer && (
                   <div className="public-sign-meta-card">
                     <div className="public-sign-meta-card__label">
@@ -847,7 +943,7 @@ export function PublicSignView({
                     </div>
                     <div className="public-sign-meta-card__value">{signerName}</div>
                     <div className="public-sign-meta-card__subvalue">
-                      {signerEmail}
+                      {signerRoleLabel} · {signerEmail}
                     </div>
                   </div>
                 )}

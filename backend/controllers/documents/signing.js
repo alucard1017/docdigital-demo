@@ -1,67 +1,19 @@
+// backend/controllers/documents/signing.js
+
 const { db, sellarPdfConQr, DOCUMENT_STATES } = require("./common");
 const { logAudit } = require("../../utils/auditLog");
-
-/* ================================
-   Helpers internos
-   ================================ */
+const { insertOwnerEvent } = require("./documentEventInserts");
+const {
+  validateSign,
+  validateVisar,
+  validateReject,
+} = require("./signingValidations");
 
 const parseId = (raw) => {
   const id = Number(raw);
   return Number.isFinite(id) ? id : null;
 };
 
-function getClientIp(req) {
-  return (
-    (req.headers["x-real-ip"] ||
-      req.headers["x-forwarded-for"]?.toString().split(",").pop().trim() ||
-      req.ip ||
-      req.socket?.remoteAddress ||
-      null) || null
-  );
-}
-
-function getUserAgent(req) {
-  return req.headers["user-agent"] || null;
-}
-
-function getDocumentHash(doc) {
-  return (
-    doc.final_hash_sha256 ||
-    doc.sealed_hash_sha256 ||
-    doc.hash_final_file ||
-    doc.pdf_hash_final ||
-    doc.hash_sha256 ||
-    doc.hash_original_file ||
-    null
-  );
-}
-
-function buildOwnerMetadata({
-  doc,
-  req,
-  fromStatus,
-  toStatus,
-  eventType,
-  extra = {},
-}) {
-  return {
-    source: "owner_panel",
-    actor_type: "OWNER",
-    owner_id: req?.user?.id || null,
-    owner_name: req?.user?.name || null,
-    document_title: doc.title || null,
-    document_id: doc.id,
-    company_id: doc.company_id || null,
-    from_status: fromStatus,
-    to_status: toStatus,
-    event_type: eventType,
-    ...extra,
-  };
-}
-
-/* ================================
-   POST: Firmar documento (propietario)
-   ================================ */
 async function signDocument(req, res) {
   try {
     const id = parseId(req.params.id);
@@ -86,21 +38,9 @@ async function signDocument(req, res) {
 
     const docActual = current.rows[0];
 
-    if (docActual.status === DOCUMENT_STATES.SIGNED) {
-      return res.status(400).json({ message: "El documento ya está firmado" });
-    }
-
-    if (docActual.status === DOCUMENT_STATES.REJECTED) {
-      return res.status(400).json({ message: "Documento rechazado" });
-    }
-
-    if (
-      docActual.requires_visado === true &&
-      docActual.status === "PENDIENTE_VISADO"
-    ) {
-      return res.status(400).json({
-        message: "Este documento requiere visación antes de firmar",
-      });
+    const validationError = validateSign(docActual);
+    if (validationError) {
+      return res.status(validationError.status).json(validationError.body);
     }
 
     const updateRes = await db.query(
@@ -116,55 +56,20 @@ async function signDocument(req, res) {
 
     const doc = updateRes.rows[0];
 
-    const ipAddress = getClientIp(req);
-    const userAgent = getUserAgent(req);
-    const hashDocument = getDocumentHash(doc);
-
     const fromStatus = docActual.status;
     const toStatus = DOCUMENT_STATES.SIGNED;
     const eventType = "SIGNED_OWNER";
 
-    await db.query(
-      `
-      INSERT INTO document_events (
-        document_id,
-        participant_id,
-        actor,
-        action,
-        details,
-        from_status,
-        to_status,
-        event_type,
-        ip_address,
-        user_agent,
-        hash_document,
-        company_id,
-        user_id,
-        metadata
-      )
-      VALUES (
-        $1, NULL, $2, $3, $4, $5, $6,
-        $7, $8, $9, $10, $11, $12, $13
-      )
-      `,
-      [
-        doc.id,
-        req.user.name || "Propietario",
-        "DOCUMENT_SIGNED_OWNER",
+    await insertOwnerEvent({
+      req,
+      doc,
+      fromStatus,
+      toStatus,
+      eventType,
+      action: "DOCUMENT_SIGNED_OWNER",
+      details:
         "Firmado por propietario (aceptó aviso legal de uso de firma electrónica simple, con equivalencia a firma manuscrita conforme a la Ley N° 19.799).",
-        fromStatus,
-        toStatus,
-        eventType,
-        ipAddress,
-        userAgent,
-        hashDocument,
-        doc.company_id || null,
-        req.user.id || null,
-        JSON.stringify(
-          buildOwnerMetadata({ doc, req, fromStatus, toStatus, eventType })
-        ),
-      ]
-    );
+    });
 
     await logAudit({
       user: req.user,
@@ -178,7 +83,6 @@ async function signDocument(req, res) {
       req,
     });
 
-    // Sellar PDF con QR / código y actualizar pdf_final_url si aplica
     try {
       if (doc.nuevo_documento_id) {
         const docNuevoRes = await db.query(
@@ -233,10 +137,6 @@ async function signDocument(req, res) {
   }
 }
 
-/* ================================
-   POST: Visar documento (propietario)
-   ================================ */
-
 async function viserDocumentInternalUpdate(id, userId, req = null) {
   const numericId = parseId(id);
 
@@ -261,35 +161,9 @@ async function viserDocumentInternalUpdate(id, userId, req = null) {
 
   const docActual = current.rows[0];
 
-  if (docActual.status === DOCUMENT_STATES.SIGNED) {
-    return { error: { status: 400, body: { message: "Ya firmado" } } };
-  }
-
-  if (docActual.status === DOCUMENT_STATES.REJECTED) {
-    return {
-      error: { status: 400, body: { message: "Documento rechazado" } },
-    };
-  }
-
-  if (docActual.requires_visado !== true) {
-    return {
-      error: {
-        status: 400,
-        body: { message: "Este documento no requiere visación" },
-      },
-    };
-  }
-
-  if (docActual.status !== "PENDIENTE_VISADO") {
-    return {
-      error: {
-        status: 400,
-        body: {
-          message:
-            "Solo se pueden visar documentos en estado PENDIENTE_VISADO",
-        },
-      },
-    };
+  const validationError = validateVisar(docActual);
+  if (validationError) {
+    return { error: validationError };
   }
 
   const result = await db.query(
@@ -305,55 +179,15 @@ async function viserDocumentInternalUpdate(id, userId, req = null) {
 
   const doc = result.rows[0];
 
-  const ipAddress = req ? getClientIp(req) : null;
-  const userAgent = req ? getUserAgent(req) : null;
-  const hashDocument = getDocumentHash(doc);
-
-  const fromStatus = docActual.status;
-  const toStatus = "PENDIENTE_FIRMA";
-  const eventType = "VISADO_OWNER";
-
-  await db.query(
-    `
-    INSERT INTO document_events (
-      document_id,
-      participant_id,
-      actor,
-      action,
-      details,
-      from_status,
-      to_status,
-      event_type,
-      ip_address,
-      user_agent,
-      hash_document,
-      company_id,
-      user_id,
-      metadata
-    )
-    VALUES (
-      $1, NULL, $2, $3, $4, $5, $6,
-      $7, $8, $9, $10, $11, $12, $13
-    )
-    `,
-    [
-      doc.id,
-      req?.user?.name || "Propietario",
-      "DOCUMENT_VISADO_OWNER",
-      "Documento visado por el propietario",
-      fromStatus,
-      toStatus,
-      eventType,
-      ipAddress,
-      userAgent,
-      hashDocument,
-      doc.company_id || null,
-      req?.user?.id || null,
-      JSON.stringify(
-        buildOwnerMetadata({ doc, req, fromStatus, toStatus, eventType })
-      ),
-    ]
-  );
+  await insertOwnerEvent({
+    req,
+    doc,
+    fromStatus: docActual.status,
+    toStatus: "PENDIENTE_FIRMA",
+    eventType: "VISADO_OWNER",
+    action: "DOCUMENT_VISADO_OWNER",
+    details: "Documento visado por el propietario",
+  });
 
   return { doc, docActual };
 }
@@ -393,9 +227,6 @@ async function visarDocument(req, res) {
   }
 }
 
-/* ================================
-   POST: Rechazar documento (propietario)
-   ================================ */
 async function rejectDocument(req, res) {
   try {
     const id = parseId(req.params.id);
@@ -427,14 +258,9 @@ async function rejectDocument(req, res) {
 
     const docActual = current.rows[0];
 
-    if (docActual.status === DOCUMENT_STATES.SIGNED) {
-      return res.status(400).json({
-        message: "Ya firmado, no se puede rechazar",
-      });
-    }
-
-    if (docActual.status === DOCUMENT_STATES.REJECTED) {
-      return res.status(400).json({ message: "Ya rechazado" });
+    const validationError = validateReject(docActual);
+    if (validationError) {
+      return res.status(validationError.status).json(validationError.body);
     }
 
     const rejectReason = motivo.trim();
@@ -453,62 +279,16 @@ async function rejectDocument(req, res) {
 
     const doc = result.rows[0];
 
-    const ipAddress = getClientIp(req);
-    const userAgent = getUserAgent(req);
-    const hashDocument = getDocumentHash(doc);
-
-    const fromStatus = docActual.status;
-    const toStatus = DOCUMENT_STATES.REJECTED;
-    const eventType = "REJECTED_OWNER";
-
-    await db.query(
-      `
-      INSERT INTO document_events (
-        document_id,
-        participant_id,
-        actor,
-        action,
-        details,
-        from_status,
-        to_status,
-        event_type,
-        ip_address,
-        user_agent,
-        hash_document,
-        company_id,
-        user_id,
-        metadata
-      )
-      VALUES (
-        $1, NULL, $2, $3, $4, $5, $6,
-        $7, $8, $9, $10, $11, $12, $13
-      )
-      `,
-      [
-        doc.id,
-        req.user.name || "Propietario",
-        "DOCUMENT_REJECTED_OWNER",
-        `Documento rechazado: ${rejectReason}`,
-        fromStatus,
-        toStatus,
-        eventType,
-        ipAddress,
-        userAgent,
-        hashDocument,
-        doc.company_id || null,
-        req.user.id || null,
-        JSON.stringify(
-          buildOwnerMetadata({
-            doc,
-            req,
-            fromStatus,
-            toStatus,
-            eventType,
-            extra: { reason: rejectReason },
-          })
-        ),
-      ]
-    );
+    await insertOwnerEvent({
+      req,
+      doc,
+      fromStatus: docActual.status,
+      toStatus: DOCUMENT_STATES.REJECTED,
+      eventType: "REJECTED_OWNER",
+      action: "DOCUMENT_REJECTED_OWNER",
+      details: "Documento rechazado",
+      extraMetadata: { reason: rejectReason },
+    });
 
     await logAudit({
       user: req.user,
@@ -517,8 +297,8 @@ async function rejectDocument(req, res) {
       entityId: doc.id,
       metadata: {
         motivo: rejectReason,
-        from_status: fromStatus,
-        to_status: toStatus,
+        from_status: docActual.status,
+        to_status: DOCUMENT_STATES.REJECTED,
       },
       req,
     });

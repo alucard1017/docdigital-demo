@@ -10,13 +10,16 @@ function normalize(value) {
 
 function getTramiteLabel(value) {
   const v = normalize(value);
+  if (!v) return "";
   if (v === "notaria" || v === "notaría") return "Notaría";
+  if (v.includes("sin notaria") || v.includes("sin notaría")) return "Sin notaría";
   if (v === "propio") return "Propio";
   return "";
 }
 
 function getDocumentoLabel(value) {
   const v = normalize(value);
+  if (!v) return "";
   if (v === "poder" || v === "poderes") return "Poder";
   if (v === "contrato" || v === "contratos") return "Contrato";
   if (v === "autorizacion" || v === "autorización" || v === "autorizaciones") {
@@ -119,10 +122,12 @@ export function DocumentRow({ doc, onOpenDetail }) {
     [doc?.status]
   );
 
-  // Participante: prioriza firmante, luego empresa, luego fallback único
+  // Participante: prioriza firmante (incluyendo variantes), luego empresa/destinatario
   const displayFirmante = useMemo(
     () =>
       doc?.firmante_nombre ||
+      doc?.participant_nombre ||
+      doc?.participant_name ||
       doc?.signer_name ||
       doc?.signer ||
       null,
@@ -134,14 +139,14 @@ export function DocumentRow({ doc, onOpenDetail }) {
       doc?.destinatario_nombre ||
       doc?.empresa_nombre ||
       doc?.company_name ||
+      doc?.razon_social ||
       null,
     [doc]
   );
 
   const displayParticipantePrincipal = displayFirmante || displayEmpresa;
-  const displayParticipanteSecundario = displayFirmante && displayEmpresa
-    ? displayEmpresa
-    : "";
+  const displayParticipanteSecundario =
+    displayFirmante && displayEmpresa ? displayEmpresa : "";
 
   const participanteFallback = "Pendiente de asignar";
 

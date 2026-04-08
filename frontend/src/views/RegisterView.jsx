@@ -1,6 +1,7 @@
 // src/views/RegisterView.jsx
 import React, { useState } from "react";
 import api from "../api/client";
+import "../styles/auth.css";
 
 const RegisterView = () => {
   const [name, setName] = useState("");
