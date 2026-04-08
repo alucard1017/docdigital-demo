@@ -1,6 +1,5 @@
 import React, { useState } from "react";
 import api from "../api/client";
-import "../styles/newDocumentForm.css";
 
 const TIPOS_TRAMITE = [
   { value: "propio", label: "Trámite propio (sin notaría)" },
@@ -65,10 +64,12 @@ export function NewDocumentForm({
   };
 
   const removeExtraSigner = (id) => {
-    setExtraSigners((prev) => prev.filter((signer) => signer.id !== id));
+    const nextSigners = extraSigners.filter((signer) => signer.id !== id);
+
+    setExtraSigners(nextSigners);
+
     setFormErrors((prev) => {
       const next = { ...prev };
-      const nextSigners = extraSigners.filter((signer) => signer.id !== id);
 
       Object.keys(next).forEach((key) => {
         if (key.startsWith("extra_nombre_") || key.startsWith("extra_email_")) {
@@ -79,6 +80,7 @@ export function NewDocumentForm({
       nextSigners.forEach((_, index) => {
         const oldNameKey = `extra_nombre_${index}`;
         const oldEmailKey = `extra_email_${index}`;
+
         if (prev[oldNameKey]) next[oldNameKey] = prev[oldNameKey];
         if (prev[oldEmailKey]) next[oldEmailKey] = prev[oldEmailKey];
       });
@@ -123,6 +125,7 @@ export function NewDocumentForm({
     }
 
     const title = titleRaw || (file?.name || "").replace(/\.pdf$/i, "").trim();
+
     if (!title || title.length < 2) {
       newErrors.title = "El título debe tener al menos 2 caracteres.";
     } else if (title.length > 255) {
