@@ -25,7 +25,19 @@ import "./styles/decorativeTabs.css";
 import { AuthProvider } from "./context/AuthContext.jsx";
 import { ToastProvider } from "./components/feedback/ToastProvider.jsx";
 
-ReactDOM.createRoot(document.getElementById("root")).render(
+window.addEventListener("vite:preloadError", (event) => {
+  console.warn("[VITE] Error cargando chunk dinámico. Recargando app...", event);
+  event.preventDefault();
+  window.location.reload();
+});
+
+const rootElement = document.getElementById("root");
+
+if (!rootElement) {
+  throw new Error('No se encontró el elemento raíz con id="root".');
+}
+
+const appTree = (
   <React.StrictMode>
     <ToastProvider>
       <AuthProvider>
@@ -34,3 +46,5 @@ ReactDOM.createRoot(document.getElementById("root")).render(
     </ToastProvider>
   </React.StrictMode>
 );
+
+ReactDOM.createRoot(rootElement).render(appTree);
