@@ -1,3 +1,4 @@
+// backend/jobs/reminderScheduler.js
 const cron = require("node-cron");
 const {
   enviarRecordatoriosAutomaticos,
@@ -6,6 +7,9 @@ const {
 const REMINDER_CRON = process.env.REMINDER_CRON || "15 * * * *";
 const REMINDER_TIMEZONE = process.env.TZ || "America/Bogota";
 const RUN_ON_START = process.env.REMINDER_RUN_ON_START === "true";
+const ENABLE_REMINDER_SCHEDULER =
+  String(process.env.ENABLE_REMINDER_SCHEDULER || "true")
+    .toLowerCase() === "true";
 
 let isRunning = false;
 let lastRunAt = null;
@@ -15,6 +19,17 @@ let lastStatus = "idle";
 let lastError = null;
 
 async function ejecutarRecordatorios({ source = "cron" } = {}) {
+  if (!ENABLE_REMINDER_SCHEDULER) {
+    console.log(
+      `ℹ️ Reminder scheduler deshabilitado (ENABLE_REMINDER_SCHEDULER=false, source=${source})`
+    );
+    return {
+      ok: false,
+      skipped: true,
+      reason: "scheduler_disabled",
+    };
+  }
+
   if (isRunning) {
     console.log(
       `⏭️ Reminder scheduler omitido: ya hay una ejecución en curso (source=${source})`
@@ -83,10 +98,18 @@ function getReminderSchedulerStatus() {
     lastDurationMs,
     lastStatus,
     lastError,
+    enabled: ENABLE_REMINDER_SCHEDULER,
   };
 }
 
 function iniciarReminderScheduler() {
+  if (!ENABLE_REMINDER_SCHEDULER) {
+    console.log(
+      "ℹ️ Reminder scheduler deshabilitado. No se registrará ningún cron (ENABLE_REMINDER_SCHEDULER=false)"
+    );
+    return;
+  }
+
   if (!cron.validate(REMINDER_CRON)) {
     throw new Error(
       `Expresión CRON inválida para reminder scheduler: ${REMINDER_CRON}`
@@ -110,7 +133,10 @@ function iniciarReminderScheduler() {
   if (RUN_ON_START) {
     setTimeout(() => {
       ejecutarRecordatorios({ source: "startup" }).catch((err) => {
-        console.error("❌ Error en ejecución inicial del reminder scheduler:", err);
+        console.error(
+          "❌ Error en ejecución inicial del reminder scheduler:",
+          err
+        );
       });
     }, 5000);
   }

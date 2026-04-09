@@ -20,9 +20,20 @@ const sslEnabled =
     ? { rejectUnauthorized: false }
     : undefined;
 
+// Sanitizar para log (evitar credenciales y espacios raros)
+let sanitizedConnectionString = connectionString;
+try {
+  sanitizedConnectionString = connectionString.replace(
+    /:\/\/.*@(.+?)\//,
+    "://***@$1/"
+  );
+} catch {
+  // si falla el replace, dejamos el original sin tocar
+}
+
 console.log("🔌 Configuración PostgreSQL:", {
   NODE_ENV,
-  connectionStringHost: connectionString.replace(/:\/\/.*@(.+?)\//, "://***@ $1/"),
+  connectionStringHost: sanitizedConnectionString,
   ssl: sslEnabled ? "enabled" : "disabled",
 });
 
@@ -31,6 +42,7 @@ const pool = new Pool({
   ssl: sslEnabled,
   max: Number(process.env.DB_POOL_MAX || 10),
   idleTimeoutMillis: Number(process.env.DB_IDLE_TIMEOUT || 30000),
+  connectionTimeoutMillis: Number(process.env.DB_CONNECT_TIMEOUT || 10000),
 });
 
 // Log de errores del pool
@@ -40,7 +52,9 @@ pool.on("error", (err) => {
 
 // Test inicial de conexión (no bloqueante) + info de DB real
 pool
-  .query("SELECT current_database(), inet_server_addr()::text AS host, inet_server_port() AS port")
+  .query(
+    "SELECT current_database(), inet_server_addr()::text AS host, inet_server_port() AS port"
+  )
   .then((r) => {
     const info = r.rows[0];
     console.log(

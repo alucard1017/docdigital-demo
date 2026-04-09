@@ -31,10 +31,19 @@ const { isNonExpiringUser } = require("./utils/billing");
 /* ================================
    INICIALIZAR WORKERS / SCHEDULERS
    ================================ */
+/**
+ * Nota: en Render, si quieres que los recordatorios corran aunque
+ * el web service se quede sin tráfico, lo ideal es mover esto
+ * a un servicio tipo "Background Worker". Aquí lo dejamos,
+ * pero envuelto para evitar que rompa el arranque si falla.
+ */
 try {
   console.log("✓ Worker de recordatorios inicializado");
 } catch (err) {
-  console.warn("⚠️ No se pudo iniciar worker de recordatorios:", err.message);
+  console.warn(
+    "⚠️ No se pudo iniciar worker de recordatorios:",
+    err?.message || err
+  );
 }
 
 try {
@@ -42,7 +51,10 @@ try {
   iniciarReminderScheduler();
   console.log("✓ Scheduler de recordatorios iniciado");
 } catch (err) {
-  console.warn("⚠️ No se pudo iniciar reminderScheduler:", err.message);
+  console.warn(
+    "⚠️ No se pudo iniciar reminderScheduler:",
+    err?.message || err
+  );
 }
 
 /* ================================
@@ -70,11 +82,15 @@ const notaryRouter = require("./routes/notary");
    ================================ */
 console.log("=====================================");
 console.log("🚀 INICIANDO SERVER.JS");
-console.log("NODE_ENV:", process.env.NODE_ENV);
+console.log("NODE_ENV:", process.env.NODE_ENV || "no definido");
 console.log("Usando archivo de entorno:", envFile);
 console.log("=====================================");
 
 const app = express();
+
+/* ================================
+   CONFIG BÁSICA EXPRESS
+   ================================ */
 
 // Confiar en proxy (Render/Nginx) para X-Forwarded-For
 app.set("trust proxy", 1);
@@ -90,6 +106,7 @@ app.use(
     limit: "2mb",
   })
 );
+
 app.use(
   express.urlencoded({
     extended: true,
@@ -144,8 +161,9 @@ const requiredEnvVars = [
 const missingVars = requiredEnvVars.filter((v) => !process.env[v]);
 if (missingVars.length > 0) {
   console.warn("⚠️  Variables de entorno faltantes:", missingVars.join(", "));
+} else {
+  console.log("✓ Variables de entorno validadas");
 }
-console.log("✓ Variables de entorno validadas");
 
 /* ================================
    RATE LIMITING GLOBAL
@@ -349,7 +367,7 @@ console.log("✓ Rutas /api/status registradas");
 app.use("/api/logs", requireAuth, logsRoutes);
 console.log("✓ Rutas /api/logs registradas");
 
-// Documentos
+// Documentos (alias /api/docs)
 app.use(
   "/api/docs",
   requireAuth,
@@ -361,6 +379,7 @@ app.use(
   docRoutes
 );
 
+// Documentos principal
 app.use(
   "/api/documents",
   requireAuth,
@@ -372,6 +391,7 @@ app.use(
   docRoutes
 );
 console.log("✓ Rutas /api/docs y /api/documents registradas");
+
 // Público (firma, verificación, etc.)
 app.use(
   "/api/public",
@@ -629,7 +649,7 @@ console.log("✓ Middleware 404 registrado");
 /* ================================
    INICIAR SERVIDOR HTTP + SOCKET.IO
    ================================ */
-const PORT = process.env.PORT || 4000;
+const PORT = Number(process.env.PORT) || 4000;
 const { initializeSocketIO } = require("./services/socketService");
 
 const server = http.createServer(app);
@@ -663,9 +683,12 @@ try {
   initializeSocketIO(server);
   console.log("✓ Socket.IO inicializado sobre servidor HTTP");
 } catch (err) {
-  console.error("❌ Error inicializando Socket.IO:", err.message);
+  console.error("❌ Error inicializando Socket.IO:", err.message || err);
 }
 
+/* ================================
+   MANEJO GLOBAL DE ERRORES NODE
+   ================================ */
 process.on("unhandledRejection", (reason, promise) => {
   console.error("❌ Unhandled Rejection at:", promise, "reason:", reason);
 });

@@ -2,7 +2,27 @@
 const Queue = require("bull");
 const nodemailer = require("nodemailer");
 
+const ENABLE_EMAIL_QUEUE =
+  String(process.env.ENABLE_EMAIL_QUEUE || "true").toLowerCase() === "true";
+
 const redisUrl = process.env.REDIS_URL;
+
+if (!ENABLE_EMAIL_QUEUE) {
+  console.warn("ℹ️ [EMAIL QUEUE] Cola de emails deshabilitada (ENABLE_EMAIL_QUEUE=false)");
+
+  module.exports = {
+    emailQueue: {
+      add: async (data) => {
+        console.log(
+          "ℹ️ [EMAIL QUEUE] add() llamado pero la cola está deshabilitada.",
+          data.to || data
+        );
+      },
+    },
+  };
+
+  return;
+}
 
 if (!redisUrl) {
   console.warn(
@@ -13,7 +33,7 @@ if (!redisUrl) {
     emailQueue: {
       add: async (data) => {
         console.log(
-          "⚠️ [EMAIL QUEUE] add() llamado pero la cola está desactivada. Datos:",
+          "⚠️ [EMAIL QUEUE] add() llamado pero la cola está desactivada (sin REDIS_URL). Datos:",
           data.to || data
         );
       },
@@ -45,8 +65,8 @@ const transporter = nodemailer.createTransport({
     user: process.env.SMTP_USER,
     pass: process.env.SMTP_PASS,
   },
-  connectionTimeout: 5000,
-  socketTimeout: 5000,
+  connectionTimeout: Number(process.env.SMTP_CONN_TIMEOUT || 5000),
+  socketTimeout: Number(process.env.SMTP_SOCKET_TIMEOUT || 5000),
 });
 
 emailQueue.process(async (job) => {
@@ -55,7 +75,7 @@ emailQueue.process(async (job) => {
   try {
     console.log(`📧 [EMAIL QUEUE] Enviando a: ${to}`);
     const result = await transporter.sendMail({
-      from: process.env.SMTP_FROM || "noreply@verifirma.com",
+      from: process.env.SMTP_FROM || process.env.SMTP_FROM_EMAIL || "noreply@verifirma.com",
       to,
       subject,
       html,
