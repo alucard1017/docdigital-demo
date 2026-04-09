@@ -133,13 +133,54 @@ export function getTimelineEvents(timeline, fallbackEvents) {
   return Array.isArray(fallbackEvents) ? fallbackEvents : [];
 }
 
+/**
+ * Normaliza el rol del participante (Visador / Firmante / Firmante final / etc.).
+ */
 export function normalizeParticipantRole(value = "") {
-  const role = String(value || "").trim().toLowerCase();
+  const roleRaw = String(value || "").trim().toLowerCase();
 
-  if (role.includes("vis")) return FLOW_ROLE_BADGES.visador;
-  if (role.includes("firma") || role.includes("sign")) return FLOW_ROLE_BADGES.firmante;
-  if (role.includes("represent")) return FLOW_ROLE_BADGES.representante;
-  if (role.includes("owner") || role.includes("propiet")) return FLOW_ROLE_BADGES.propietario;
+  // Casos explícitos
+  if (roleRaw === "visador" || roleRaw === "visor") {
+    return FLOW_ROLE_BADGES.visador;
+  }
+
+  if (
+    roleRaw === "firmante_final" ||
+    roleRaw === "firmante final" ||
+    roleRaw === "final" ||
+    roleRaw === "signer_final"
+  ) {
+    return {
+      ...FLOW_ROLE_BADGES.firmante,
+      label: "Firmante final",
+      key: "firmante_final",
+    };
+  }
+
+  // Heurísticas
+  if (roleRaw.includes("vis")) {
+    return FLOW_ROLE_BADGES.visador;
+  }
+
+  if (roleRaw.includes("final")) {
+    return {
+      ...FLOW_ROLE_BADGES.firmante,
+      label: "Firmante final",
+      key: "firmante_final",
+    };
+  }
+
+  if (roleRaw.includes("firma") || roleRaw.includes("sign")) {
+    return FLOW_ROLE_BADGES.firmante;
+  }
+
+  if (roleRaw.includes("represent")) {
+    return FLOW_ROLE_BADGES.representante;
+  }
+
+  if (roleRaw.includes("owner") || roleRaw.includes("propiet")) {
+    return FLOW_ROLE_BADGES.propietario;
+  }
 
   return FLOW_ROLE_BADGES.participante;
 }

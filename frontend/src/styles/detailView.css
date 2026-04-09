@@ -117,9 +117,23 @@
   color: #475569;
 }
 
+/* Valor de metadatos (incluye N° interno / número de contrato) */
 .detail-meta-value {
+  display: inline-block;
+  min-width: 0;
+  max-width: 100%;
   color: #0f172a;
+  overflow-wrap: anywhere;
   word-break: break-word;
+}
+
+/* Variante opcional: una sola línea con scroll horizontal */
+.detail-meta-value--mono {
+  display: inline-block;
+  max-width: 100%;
+  white-space: nowrap;
+  overflow-x: auto;
+  scrollbar-width: thin;
 }
 
 /* Estado global del documento */
