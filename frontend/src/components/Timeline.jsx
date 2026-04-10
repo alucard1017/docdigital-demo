@@ -1,11 +1,24 @@
-// src/components/Timeline.jsx
 import React, { useMemo } from "react";
 import "./Timeline.css";
 
-function formatTimestamp(ts) {
-  if (!ts) return "";
-  const date = ts instanceof Date ? ts : new Date(ts);
-  if (Number.isNaN(date.getTime())) return "";
+function normalizeText(value = "") {
+  return String(value ?? "").trim();
+}
+
+function normalizeUpper(value = "") {
+  return normalizeText(value).toUpperCase();
+}
+
+function toValidDate(value) {
+  if (!value) return null;
+  const date = value instanceof Date ? value : new Date(value);
+  return Number.isNaN(date.getTime()) ? null : date;
+}
+
+function formatTimestamp(value) {
+  const date = toValidDate(value);
+  if (!date) return "";
+
   return date.toLocaleString("es-CO", {
     day: "2-digit",
     month: "2-digit",
@@ -15,85 +28,171 @@ function formatTimestamp(ts) {
   });
 }
 
+function clampProgress(value) {
+  const parsed =
+    typeof value === "number"
+      ? value
+      : typeof value === "string"
+      ? Number(value)
+      : NaN;
+
+  if (!Number.isFinite(parsed)) return 0;
+  return Math.max(0, Math.min(100, parsed));
+}
+
+function isObject(value) {
+  return !!value && typeof value === "object" && !Array.isArray(value);
+}
+
+function isAuditEvent(event) {
+  return normalizeText(event?.source).toLowerCase() === "audit_log";
+}
+
+function getEventAction(event) {
+  return normalizeUpper(event?.action);
+}
+
 function getEventIcon(event) {
-  const action = String(event.action || "").toUpperCase();
-  const source = event.source;
+  const action = getEventAction(event);
 
-  if (action === "CREADO") return "📄";
-  if (action === "VISADO") return "✓";
-  if (action === "FIRMADO") return "✓";
-  if (action === "FIRMADO_PUBLICO") return "✓";
-  if (action === "FIRMADO_REPRESENTANTE") return "✓";
-  if (action === "RECHAZADO") return "✕";
-
-  if (source === "audit_log") return "📝";
-
-  return "◉";
+  switch (action) {
+    case "CREADO":
+      return "📄";
+    case "VISADO":
+    case "FIRMADO":
+    case "FIRMADO_PUBLICO":
+    case "FIRMADO_REPRESENTANTE":
+      return "✓";
+    case "RECHAZADO":
+      return "✕";
+    default:
+      return isAuditEvent(event) ? "📝" : "◉";
+  }
 }
 
 function getEventTitle(event) {
-  const action = String(event.action || "").toUpperCase();
-  const source = event.source;
+  const action = getEventAction(event);
+  const audit = isAuditEvent(event);
 
-  if (action === "CREADO") return "📄 Documento creado";
-  if (action === "VISADO") return "✓ Documento visado";
-  if (action === "FIRMADO") return "✓ Documento firmado";
-  if (action === "FIRMADO_PUBLICO")
-    return "✓ Documento firmado desde enlace público";
-  if (action === "FIRMADO_REPRESENTANTE")
-    return "✓ Firmado por representante";
-  if (action === "RECHAZADO") return "✕ Documento rechazado";
-
-  if (source === "audit_log") return `📝 Registro de auditoría (${action})`;
-
-  return action || "Evento";
+  switch (action) {
+    case "CREADO":
+      return "Documento creado";
+    case "VISADO":
+      return "Documento visado";
+    case "FIRMADO":
+      return "Documento firmado";
+    case "FIRMADO_PUBLICO":
+      return "Documento firmado desde enlace público";
+    case "FIRMADO_REPRESENTANTE":
+      return "Firmado por representante";
+    case "RECHAZADO":
+      return "Documento rechazado";
+    default:
+      return audit && action ? `Registro de auditoría (${action})` : action || "Evento";
+  }
 }
 
 function getEventStatus(index, total) {
+  if (!Number.isFinite(index) || !Number.isFinite(total) || total <= 0) {
+    return "pending";
+  }
+
   if (index < total - 1) return "completed";
   if (index === total - 1) return "active";
   return "pending";
 }
 
-function formatDetails(event) {
-  if (event.details) return String(event.details);
-
-  if (event.metadata && typeof event.metadata === "object") {
-    const { document_id, title, status, ...rest } = event.metadata;
-    const extras =
-      Object.keys(rest).length > 0 ? JSON.stringify(rest) : "";
-    return `Documento: ${title || document_id || "-"} · Estado: ${
-      status || "-"
-    }${extras ? ` · Extra: ${extras}` : ""}`;
+function safeJsonPreview(value, maxLength = 220) {
+  try {
+    const text = JSON.stringify(value);
+    if (!text) return "";
+    return text.length > maxLength ? `${text.slice(0, maxLength)}…` : text;
+  } catch {
+    return "";
   }
+}
 
+function buildMetadataSummary(metadata) {
+  if (!isObject(metadata)) return "";
+
+  const {
+    document_id,
+    documentId,
+    title,
+    documentTitle,
+    status,
+    documentStatus,
+    ...rest
+  } = metadata;
+
+  const resolvedDocument = normalizeText(
+    title || documentTitle || document_id || documentId || "-"
+  );
+  const resolvedStatus = normalizeText(status || documentStatus || "-");
+  const extras = Object.keys(rest).length > 0 ? safeJsonPreview(rest) : "";
+
+  return `Documento: ${resolvedDocument} · Estado: ${resolvedStatus}${
+    extras ? ` · Extra: ${extras}` : ""
+  }`;
+}
+
+function formatDetails(event) {
+  const directDetails = normalizeText(event?.details);
+  if (directDetails) return directDetails;
+
+  return buildMetadataSummary(event?.metadata);
+}
+
+function getActorLabel(event) {
+  const actor = normalizeText(event?.actor);
+  if (actor) return actor;
+  if (isAuditEvent(event)) return "Sistema / Auditoría";
   return "";
 }
 
-export function Timeline({ timeline }) {
-  const hasEvents = !!timeline && Array.isArray(timeline.events);
+function getAuditMeta(event) {
+  return {
+    ip: normalizeText(event?.ip),
+    userAgent: normalizeText(event?.userAgent),
+    requestId: normalizeText(event?.requestId),
+  };
+}
 
-  const { events, progress, currentStep, nextStep } = useMemo(
-    () => ({
-      events: hasEvents ? timeline.events : [],
-      progress: Number.isFinite(timeline?.progress)
-        ? Math.max(0, Math.min(100, timeline.progress))
-        : 0,
-      currentStep: timeline?.currentStep || "En curso",
-      nextStep: timeline?.nextStep || "Por definir",
-    }),
-    [timeline, hasEvents]
+function getStableEventKey(event, index) {
+  const parts = [
+    normalizeText(event?.source) || "event",
+    normalizeText(event?.id) || "no-id",
+    normalizeText(event?.timestamp) || "no-ts",
+    normalizeText(event?.action) || "no-action",
+    String(index),
+  ];
+
+  return parts.join("-");
+}
+
+function normalizeTimeline(rawTimeline) {
+  const events = Array.isArray(rawTimeline?.events) ? rawTimeline.events : [];
+
+  return {
+    events,
+    hasEvents: events.length > 0,
+    progress: clampProgress(rawTimeline?.progress),
+    currentStep: normalizeText(rawTimeline?.currentStep) || "En curso",
+    nextStep: normalizeText(rawTimeline?.nextStep) || "Por definir",
+  };
+}
+
+export function Timeline({ timeline }) {
+  const hasTimelineObject = isObject(timeline);
+
+  const { events, hasEvents, progress, currentStep, nextStep } = useMemo(
+    () => normalizeTimeline(timeline),
+    [timeline]
   );
 
-  if (!hasEvents) {
+  if (!hasTimelineObject) {
     return (
-      <div
-        style={{
-          padding: "20px",
-          textAlign: "center",
-          color: "#94a3b8",
-        }}
-      >
+      <div className="timeline-empty-state">
         Cargando historial del documento…
       </div>
     );
@@ -101,192 +200,123 @@ export function Timeline({ timeline }) {
 
   return (
     <div className="timeline-container">
-      {/* Header con progreso */}
       <div className="timeline-header">
-        <h3
-          style={{
-            margin: "0 0 16px 0",
-            color: "#1e293b",
-            fontSize: "1.2rem",
-            fontWeight: 800,
-          }}
-        >
-          Progreso del documento
-        </h3>
+        <h3 className="timeline-heading">Progreso del documento</h3>
 
         <div className="progress-bar-wrapper">
-          <div className="progress-bar-background">
+          <div className="progress-bar-background" aria-hidden="true">
             <div
               className="progress-bar-fill"
               style={{ width: `${progress}%` }}
             />
           </div>
 
-          <div
-            style={{
-              display: "flex",
-              justifyContent: "space-between",
-              marginTop: "8px",
-              fontSize: "0.75rem",
-              color: "#64748b",
-            }}
-          >
+          <div className="timeline-progress-meta" aria-label={`Progreso ${progress}%`}>
             <span>Inicio</span>
-            <span style={{ fontWeight: 700, color: "#2563eb" }}>
-              {progress}%
-            </span>
+            <span className="timeline-progress-value">{progress}%</span>
             <span>Completado</span>
           </div>
         </div>
 
-        <div
-          style={{
-            marginTop: "16px",
-            padding: "12px 16px",
-            background: "#f0f9ff",
-            borderRadius: "12px",
-            border: "1px solid #bae6fd",
-          }}
-        >
+        <div className="timeline-current-state-card">
+          <div className="timeline-current-state-card__label">Estado actual</div>
+
           <div
-            style={{
-              fontSize: "0.85rem",
-              color: "#64748b",
-              marginBottom: "4px",
-            }}
-          >
-            Estado actual
-          </div>
-          <div
-            style={{
-              fontSize: "1rem",
-              fontWeight: 700,
-              color: "#0369a1",
-            }}
+            className="timeline-current-state-card__value"
+            title={currentStep}
           >
             {currentStep}
           </div>
-          <div
-            style={{
-              fontSize: "0.85rem",
-              color: "#64748b",
-              marginTop: "6px",
-            }}
-          >
-            Próximo paso:{" "}
-            <span style={{ fontWeight: 600 }}>{nextStep}</span>
+
+          <div className="timeline-current-state-card__hint">
+            Próximo paso: <span title={nextStep}>{nextStep}</span>
           </div>
         </div>
       </div>
 
-      {/* Timeline de eventos */}
       <div className="timeline-events">
-        {events.map((event, index) => {
-          const status = getEventStatus(index, events.length);
-          const isLast = index === events.length - 1;
-          const detailsText = formatDetails(event);
-          const timestampText = formatTimestamp(event.timestamp);
-          const isAudit = event.source === "audit_log";
+        {!hasEvents ? (
+          <div className="timeline-empty-state">
+            Este documento todavía no tiene eventos para mostrar.
+          </div>
+        ) : (
+          events.map((event, index) => {
+            const status = getEventStatus(index, events.length);
+            const isLast = index === events.length - 1;
+            const title = getEventTitle(event);
+            const detailsText = formatDetails(event);
+            const timestampText = formatTimestamp(event?.timestamp);
+            const audit = isAuditEvent(event);
+            const actorLabel = getActorLabel(event);
+            const { ip, userAgent, requestId } = getAuditMeta(event);
 
-          return (
-            <div
-              key={`${event.source || "event"}-${event.id || index}`}
-              className="timeline-event-wrapper"
-            >
-              {!isLast && (
-                <div
-                  className={`timeline-line timeline-line-${status}`}
-                />
-              )}
-
-              <div className={`timeline-dot timeline-dot-${status}`}>
-                <span className="timeline-icon">
-                  {getEventIcon(event)}
-                </span>
-              </div>
-
+            return (
               <div
-                className={`timeline-content timeline-content-${status}`}
+                key={getStableEventKey(event, index)}
+                className="timeline-event-wrapper"
               >
-                <h4
-                  style={{
-                    margin: "0 0 6px 0",
-                    fontSize: "0.95rem",
-                    fontWeight: 700,
-                    color: "#1e293b",
-                  }}
-                >
-                  {getEventTitle(event)}
-                </h4>
-
-                {detailsText && (
-                  <p
-                    style={{
-                      margin: "4px 0",
-                      fontSize: "0.85rem",
-                      color: "#475569",
-                    }}
-                  >
-                    {detailsText}
-                  </p>
-                )}
-
-                {timestampText && (
-                  <p
-                    style={{
-                      margin: "8px 0 0 0",
-                      fontSize: "0.75rem",
-                      color: "#94a3b8",
-                    }}
-                  >
-                    {timestampText}
-                  </p>
-                )}
-
-                {event.actor && (
-                  <p
-                    style={{
-                      margin: "4px 0 0 0",
-                      fontSize: "0.75rem",
-                      color: isAudit ? "#0f766e" : "#7c3aed",
-                      fontWeight: 600,
-                    }}
-                  >
-                    {isAudit ? "Sistema / Auditoría" : "Por:"}{" "}
-                    {event.actor}
-                  </p>
-                )}
-
-                {isAudit && (
+                {!isLast && (
                   <div
-                    style={{
-                      marginTop: "6px",
-                      fontSize: "0.75rem",
-                      color: "#64748b",
-                    }}
-                  >
-                    {event.ip && <div>IP: {event.ip}</div>}
-                    {event.userAgent && (
-                      <div
-                        style={{
-                          whiteSpace: "nowrap",
-                          overflow: "hidden",
-                          textOverflow: "ellipsis",
-                        }}
-                        title={event.userAgent}
-                      >
-                        Agente: {event.userAgent}
-                      </div>
-                    )}
-                    {event.requestId && (
-                      <div>Req ID: {event.requestId}</div>
-                    )}
-                  </div>
+                    className={`timeline-line timeline-line-${status}`}
+                    aria-hidden="true"
+                  />
                 )}
+
+                <div
+                  className={`timeline-dot timeline-dot-${status}`}
+                  aria-hidden="true"
+                >
+                  <span className="timeline-icon">{getEventIcon(event)}</span>
+                </div>
+
+                <div className={`timeline-content timeline-content-${status}`}>
+                  <h4 className="timeline-event-title" title={title}>
+                    {title}
+                  </h4>
+
+                  {detailsText && (
+                    <p className="timeline-event-details" title={detailsText}>
+                      {detailsText}
+                    </p>
+                  )}
+
+                  {timestampText && (
+                    <p className="timeline-event-timestamp">{timestampText}</p>
+                  )}
+
+                  {actorLabel && (
+                    <p
+                      className={`timeline-event-actor ${
+                        audit
+                          ? "timeline-event-actor--audit"
+                          : "timeline-event-actor--user"
+                      }`}
+                      title={actorLabel}
+                    >
+                      {audit ? "Sistema / Auditoría:" : "Por:"} {actorLabel}
+                    </p>
+                  )}
+
+                  {audit && (ip || userAgent || requestId) && (
+                    <div className="timeline-audit-meta">
+                      {ip && <div title={ip}>IP: {ip}</div>}
+
+                      {userAgent && (
+                        <div className="timeline-ellipsis" title={userAgent}>
+                          Agente: {userAgent}
+                        </div>
+                      )}
+
+                      {requestId && (
+                        <div title={requestId}>Req ID: {requestId}</div>
+                      )}
+                    </div>
+                  )}
+                </div>
               </div>
-            </div>
-          );
-        })}
+            );
+          })
+        )}
       </div>
     </div>
   );

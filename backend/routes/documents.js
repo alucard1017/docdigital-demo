@@ -1,4 +1,5 @@
 // backend/routes/documents.js
+
 const express = require("express");
 const Sentry = require("@sentry/node");
 
@@ -36,7 +37,7 @@ const {
 const router = express.Router();
 
 /* ================================
-   HELPERS DE PERMISOS / MULTI‑TENANT
+   Helpers comunes / permisos
    ================================ */
 
 const isGlobalAdmin = (user) =>
@@ -183,7 +184,7 @@ async function checkDocumentOwnership(req, res, next) {
 }
 
 /* ================================
-   HOOK DE AUDITORÍA
+   Hook de auditoría
    ================================ */
 
 function withDocumentAudit(action) {
@@ -231,7 +232,7 @@ function withDocumentAudit(action) {
 }
 
 /* ================================
-   RUTAS GET - STATS / ANALYTICS
+   Rutas GET - stats / analytics
    ================================ */
 
 if (typeof documentsController.getDocumentStats === "function") {
@@ -251,7 +252,7 @@ if (typeof getDocumentAnalytics === "function") {
 }
 
 /* ================================
-   RUTAS GET - AUDITORÍA LEGACY
+   Rutas GET - auditoría legacy
    ================================ */
 
 router.get("/audit", requireAuth, async (req, res) => {
@@ -315,7 +316,7 @@ router.get("/audit", requireAuth, async (req, res) => {
 });
 
 /* ================================
-   RUTAS GET - LISTADO DOCUMENTOS
+   Rutas GET - listado documentos
    ================================ */
 
 router.get("/", requireAuth, documentsController.getUserDocuments);
@@ -526,7 +527,7 @@ router.post("/multi-party", requireAuth, async (req, res) => {
 });
 
 /* ================================
-   RUTAS POST - RECORDATORIOS AUTO
+   Rutas POST - recordatorios auto
    ================================ */
 
 router.post(
@@ -559,7 +560,7 @@ router.post(
 );
 
 /* ================================
-   RUTAS DE FLUJO LEGACY
+   Rutas de flujo legacy
    ================================ */
 
 router.post(
@@ -577,13 +578,10 @@ router.post(
   documentsController.sendFlow
 );
 
-router.post(
-  "/firmar-flujo/:firmanteId",
-  documentsController.signFlow
-);
+router.post("/firmar-flujo/:firmanteId", documentsController.signFlow);
 
 /* ================================
-   RUTAS GET - CON :id
+   Rutas GET - con :id
    ================================ */
 
 if (typeof documentsController.getDocumentPdf === "function") {
@@ -611,6 +609,7 @@ if (typeof downloadDocument === "function") {
 }
 
 if (typeof documentsController.getTimeline === "function") {
+  // IMPORTANTE: aquí NO hay requireAuth/checkDocumentCompanyScope
   router.get("/:id/timeline", documentsController.getTimeline);
 } else {
   console.warn(
@@ -645,7 +644,7 @@ if (typeof documentsController.getSigners === "function") {
 }
 
 /* ================================
-   RUTAS POST - ACCIONES SOBRE :id
+   Rutas POST - acciones sobre :id
    ================================ */
 
 router.post(
@@ -673,7 +672,7 @@ router.post(
 );
 
 /* ================================
-   RUTAS POST - RECORDATORIOS MANUALES
+   Rutas POST - recordatorios manuales
    ================================ */
 
 router.post(
@@ -730,7 +729,7 @@ router.post(
 );
 
 /* ================================
-   RUTAS ADMIN - RECORDATORIOS
+   Rutas admin - recordatorios
    ================================ */
 
 router.get("/recordatorios/status", requireAuth, getReminderStatus);
@@ -783,7 +782,7 @@ router.post(
 );
 
 /* ================================
-   NUEVO: INVITAR A UN SIGNER (multi‑party)
+   Nuevo: invitar a un signer (multi‑party)
    ================================ */
 
 router.post(
@@ -877,7 +876,7 @@ router.post(
         )
         RETURNING id, token, expires_at, sent_at;
         `,
-        [signer.id, expiresAt ? token : token, expiresAt.toISOString()]
+        [signer.id, token, expiresAt.toISOString()]
       );
 
       const invitation = inviteRes.rows[0];

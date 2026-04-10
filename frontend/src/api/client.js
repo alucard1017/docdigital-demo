@@ -1,12 +1,11 @@
-// src/api/client.js
 import axios from "axios";
 import { getStoredToken } from "../utils/session";
 
 const DEFAULT_API_BASE_URL = "http://localhost:4000/api";
 
-// =============================
-// Normalización de texto / URLs
-// =============================
+/* ============================
+   Normalización de texto / URLs
+   ============================ */
 
 const normalizeText = (value) =>
   typeof value === "string" ? value.trim() : "";
@@ -29,9 +28,9 @@ const ensureApiSuffix = (value = "") => {
   return clean.endsWith("/api") ? clean : `${clean}/api`;
 };
 
-// =============================
-// Base URL / helpers
-// =============================
+/* ============================
+   Base URL / helpers
+   ============================ */
 
 export const getApiBaseUrl = () => {
   const raw = import.meta.env.VITE_API_URL;
@@ -55,9 +54,9 @@ if (import.meta.env.DEV) {
   console.log("[API] Base URL:", API_BASE_URL);
 }
 
-// =============================
-// Instancia Axios
-// =============================
+/* ============================
+   Instancia Axios
+   ============================ */
 
 const api = axios.create({
   baseURL: API_BASE_URL,
@@ -65,9 +64,9 @@ const api = axios.create({
   withCredentials: true,
 });
 
-// =============================
-// Flags / sets de códigos
-// =============================
+/* ============================
+   Flags / sets de códigos
+   ============================ */
 
 let authExpiredDispatched = false;
 
@@ -115,9 +114,14 @@ const PUBLIC_PATH_PREFIXES = [
   "/auth/reset-password",
 ];
 
-// =============================
-// Helpers de request / response
-// =============================
+// rutas donde un 401 NO debe provocar logout global
+const AUTH_IGNORED_401_PATHS = [
+  /^\/documents\/\d+\/timeline$/i,
+];
+
+/* ============================
+   Helpers de request / response
+   ============================ */
 
 const normalizeUrlPath = (url = "") => {
   const value = normalizeText(url);
@@ -175,21 +179,31 @@ const extractErrorMeta = (error) => {
   const url = getRequestUrl(error);
   const fullUrl = getFullRequestUrl(error);
   const publicRequest = isPublicRequest(url);
+  const path = normalizeUrlPath(url);
 
-  return { status, data, message, code, method, url, fullUrl, publicRequest };
+  return { status, data, message, code, method, url, fullUrl, publicRequest, path };
 };
 
-// =============================
-// Detección de auth expirado
-// =============================
+/* ============================
+   Detección de auth expirado
+   ============================ */
 
-export const isAuthFailure = (status, message, code) => {
+const isIgnoredAuth401 = (path = "") =>
+  AUTH_IGNORED_401_PATHS.some((re) => re.test(path));
+
+export const isAuthFailure = (status, message, code, path = "") => {
   const normalizedCode = normalizeUpper(code);
   const normalizedMessage = normalizeLower(message);
 
   if (status === 401) {
+    // excepciones: 401 que no deben provocar logout global
+    if (isIgnoredAuth401(path)) {
+      return false;
+    }
+
     if (AUTH_FAILURE_CODES.has(normalizedCode)) return true;
     if (AUTH_FAILURE_MESSAGES.has(normalizedMessage)) return true;
+    // Por diseño original: cualquier 401 no público se trata como fallo de auth
     return true;
   }
 
@@ -211,20 +225,22 @@ export const dispatchAuthExpired = (detail = {}) => {
 
   authExpiredDispatched = true;
 
+  const safeDetail = {
+    source: detail.source ?? "http",
+    status: detail.status ?? 401,
+    code: detail.code ?? null,
+    message:
+      detail.message ||
+      "Tu sesión expiró o ya no es válida. Debes iniciar sesión nuevamente.",
+    url: detail.url ?? null,
+    fullUrl: detail.fullUrl ?? null,
+    method: detail.method ?? null,
+  };
+
   try {
     window.dispatchEvent(
       new CustomEvent("auth:expired", {
-        detail: {
-          source: detail.source ?? "http",
-          status: detail.status ?? 401,
-          code: detail.code ?? null,
-          message:
-            detail.message ||
-            "Tu sesión expiró o ya no es válida. Debes iniciar sesión nuevamente.",
-          url: detail.url ?? null,
-          fullUrl: detail.fullUrl ?? null,
-          method: detail.method ?? null,
-        },
+        detail: safeDetail,
       })
     );
 
@@ -245,9 +261,9 @@ export const resetAuthExpiredDispatch = () => {
   authExpiredDispatched = false;
 };
 
-// =============================
-// Interceptor de request
-// =============================
+/* ============================
+   Interceptor de request
+   ============================ */
 
 api.interceptors.request.use(
   (config) => {
@@ -287,9 +303,9 @@ api.interceptors.request.use(
   }
 );
 
-// =============================
-// Interceptor de response
-// =============================
+/* ============================
+   Interceptor de response
+   ============================ */
 
 api.interceptors.response.use(
   (response) => response,
@@ -314,6 +330,7 @@ api.interceptors.response.use(
       url,
       fullUrl,
       publicRequest,
+      path,
     } = extractErrorMeta(error);
 
     if (import.meta.env.DEV) {
@@ -330,7 +347,7 @@ api.interceptors.response.use(
       });
     }
 
-    if (!publicRequest && isAuthFailure(status, message, code)) {
+    if (!publicRequest && isAuthFailure(status, message, code, path)) {
       dispatchAuthExpired({
         source: "http",
         status,
@@ -346,9 +363,9 @@ api.interceptors.response.use(
   }
 );
 
-// =============================
-// Helpers REST específicos
-// =============================
+/* ============================
+   Helpers REST específicos
+   ============================ */
 
 // /docs → { data, pagination, stats }
 export async function getDocuments(params = {}, config = {}) {
@@ -387,9 +404,9 @@ export async function getDocumentTimeline(id, config = {}) {
   return res.data;
 }
 
-// =============================
-// Público (token de firma / verificación)
-// =============================
+/* ============================
+   Público (token de firma / verificación)
+   ============================ */
 
 export async function getPublicVerificationByCode(code, config = {}) {
   const res = await api.get(

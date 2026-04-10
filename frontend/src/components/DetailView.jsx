@@ -74,35 +74,53 @@ export function DetailView({
     return buildUserDisplayName(currentUser);
   }, [currentUser]);
 
+  const currentTimelineDoc = timeline?.document || null;
+
+  const currentDocId = useMemo(() => {
+    return selectedDoc?.id ?? currentTimelineDoc?.id ?? null;
+  }, [selectedDoc, currentTimelineDoc]);
+
   const numeroInterno = useMemo(() => {
     return getDocumentNumber(selectedDoc, timeline);
   }, [selectedDoc, timeline]);
+
+  const numeroInternoDisplay = useMemo(() => {
+    return numeroInterno || (currentDocId ? `#${currentDocId}` : "N/D");
+  }, [numeroInterno, currentDocId]);
 
   const titleDocumento = useMemo(() => {
     return getDocumentTitle(selectedDoc, timeline);
   }, [selectedDoc, timeline]);
 
   const tramiteLabel = useMemo(() => {
-    return getTramiteLabel(
-      timeline?.document?.tipo_tramite ??
-        selectedDoc?.tipo_tramite ??
-        selectedDoc?.tipoTramite
-    );
-  }, [timeline, selectedDoc]);
+    const rawValue =
+      currentTimelineDoc?.tipo_tramite ??
+      selectedDoc?.tipo_tramite ??
+      selectedDoc?.tipoTramite ??
+      selectedDoc?.tramite ??
+      selectedDoc?.tipoTramiteLabel ??
+      null;
+
+    const label = getTramiteLabel(rawValue);
+    return label || "N/D";
+  }, [currentTimelineDoc, selectedDoc]);
 
   const documentoLabel = useMemo(() => {
-    return getDocumentLabel(
-      timeline?.document?.tipo_documento ??
-        selectedDoc?.tipo_documento ??
-        selectedDoc?.tipoDocumento
-    );
-  }, [timeline, selectedDoc]);
+    const rawValue =
+      currentTimelineDoc?.tipo_documento ??
+      selectedDoc?.tipo_documento ??
+      selectedDoc?.tipoDocumento ??
+      selectedDoc?.document_type ??
+      selectedDoc?.tipo ??
+      null;
+
+    const label = getDocumentLabel(rawValue);
+    return label || "N/D";
+  }, [currentTimelineDoc, selectedDoc]);
 
   const currentStatus = useMemo(() => {
-    return timeline?.document?.status ?? selectedDoc?.status ?? null;
-  }, [timeline, selectedDoc]);
-
-  const currentDocId = selectedDoc?.id ?? timeline?.document?.id ?? null;
+    return currentTimelineDoc?.status ?? selectedDoc?.status ?? null;
+  }, [currentTimelineDoc, selectedDoc]);
 
   const isSigned = currentStatus === "FIRMADO";
   const isRejected = currentStatus === "RECHAZADO";
@@ -399,19 +417,23 @@ export function DetailView({
                 <div className="detail-meta">
                   <p>
                     <span className="detail-meta-label">N° interno:</span>{" "}
-                    <span className="detail-meta-value">
-                      {numeroInterno || (currentDocId ? `#${currentDocId}` : "N/D")}
+                    <span className="detail-meta-value" title={numeroInternoDisplay}>
+                      {numeroInternoDisplay}
                     </span>
                   </p>
 
                   <p>
                     <span className="detail-meta-label">Tipo de trámite:</span>{" "}
-                    <span className="detail-meta-value">{tramiteLabel}</span>
+                    <span className="detail-meta-value" title={tramiteLabel}>
+                      {tramiteLabel}
+                    </span>
                   </p>
 
                   <p>
                     <span className="detail-meta-label">Tipo de documento:</span>{" "}
-                    <span className="detail-meta-value">{documentoLabel}</span>
+                    <span className="detail-meta-value" title={documentoLabel}>
+                      {documentoLabel}
+                    </span>
                   </p>
                 </div>
               </div>

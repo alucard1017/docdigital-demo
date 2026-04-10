@@ -1,3 +1,4 @@
+// src/components/DocumentRow.jsx
 import React, { useCallback, useMemo } from "react";
 import { DOC_STATUS } from "../constants";
 import api from "../api/client";
@@ -22,7 +23,11 @@ function getDocumentoLabel(value) {
   if (!v) return "";
   if (v === "poder" || v === "poderes") return "Poder";
   if (v === "contrato" || v === "contratos") return "Contrato";
-  if (v === "autorizacion" || v === "autorización" || v === "autorizaciones") {
+  if (
+    v === "autorizacion" ||
+    v === "autorización" ||
+    v === "autorizaciones"
+  ) {
     return "Autorización";
   }
   return "";
@@ -36,7 +41,6 @@ function buildTipoLabel(tipoTramite, tipoDocumento) {
   if (documento) return documento;
   if (tramite) return tramite;
 
-  // Si no tenemos nada, usamos un genérico corto pero no “Documento” redundante
   return "General";
 }
 
@@ -46,6 +50,7 @@ function getContractNumber(doc) {
     doc?.numero_contrato ||
     doc?.contract_number ||
     doc?.n_contrato ||
+    doc?.numerocontratointerno || // por si viene ya mapeado así
     "Sin número"
   );
 }
@@ -122,10 +127,10 @@ export function DocumentRow({ doc, onOpenDetail }) {
     [doc?.status]
   );
 
-  // Participante: prioriza firmante (incluyendo variantes), luego empresa/destinatario
   const displayFirmante = useMemo(
     () =>
       doc?.firmante_nombre ||
+      doc?.firmanteName ||
       doc?.participant_nombre ||
       doc?.participant_name ||
       doc?.signer_name ||

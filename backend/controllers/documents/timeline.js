@@ -18,9 +18,23 @@ function safeJson(value, fallback = null) {
   }
 }
 
+function toNumber(value) {
+  const n = Number(value);
+  return Number.isFinite(n) ? n : null;
+}
+
+function normalizeBoolean(value) {
+  if (value === true || value === "true" || value === 1 || value === "1") {
+    return true;
+  }
+  if (value === false || value === "false" || value === 0 || value === "0") {
+    return false;
+  }
+  return Boolean(value);
+}
+
 function normalizeDocumentEvent(evt) {
   const metadata = safeJson(evt.metadata, null);
-
   const eventType = evt.event_type || evt.action || "UNKNOWN";
   const action = evt.action || evt.event_type || "UNKNOWN";
 
@@ -48,7 +62,6 @@ function normalizeDocumentEvent(evt) {
 
 function normalizeAuditEvent(evt) {
   const metadata = safeJson(evt.metadata, null);
-
   const eventType = evt.action || "AUDIT_LOG";
   const action = evt.action || "AUDIT_LOG";
 
@@ -111,10 +124,11 @@ function buildTimelineProgress(status, requiresVisado) {
 /* ================================
    GET: URL firmada para ver PDF
    ================================ */
+
 async function getDocumentPdf(req, res) {
   try {
-    const docId = Number(req.params.id);
-    if (!Number.isFinite(docId)) {
+    const docId = toNumber(req.params.id);
+    if (!docId) {
       return res.status(400).json({ message: "ID de documento inválido" });
     }
 
@@ -262,55 +276,12 @@ async function getDocumentPdf(req, res) {
 
 /* ================================
    GET: Timeline del documento (UI)
-   CONTRATO FRONTEND (getDocumentTimeline):
-   {
-     document: {
-       id, title, status, company_id,
-       destinatario_nombre, empresa_rut,
-       created_at, updated_at,
-       requires_visado: boolean,
-       firmante_nombre, visador_nombre,
-       numero_contrato_interno,
-       tipo_documento
-     },
-     participants: [
-       {
-         id,
-         role_in_doc,
-         status,
-         step_order,
-         flow_order,
-         flow_group,
-         name,
-         email,
-         signed_at
-       }
-     ],
-     timeline: {
-       currentStep,
-       nextStep,
-       progress,
-       events: [
-         {
-           id,
-           eventType,
-           action,
-           actor,
-           fromStatus,
-           toStatus,
-           ip,
-           userAgent,
-           createdAt,
-           metadata
-         }
-       ]
-     }
-   }
    ================================ */
+
 async function getTimeline(req, res) {
   try {
-    const docId = Number(req.params.id);
-    if (!Number.isFinite(docId)) {
+    const docId = toNumber(req.params.id);
+    if (!docId) {
       return res.status(400).json({ message: "ID de documento inválido" });
     }
 
@@ -419,10 +390,7 @@ async function getTimeline(req, res) {
       ...auditEvents.map(normalizeAuditEvent),
     ].sort((a, b) => new Date(a.createdAt) - new Date(b.createdAt));
 
-    const requiresVisadoBool =
-      doc.requires_visado === true ||
-      doc.requires_visado === "true" ||
-      doc.requires_visado === 1;
+    const requiresVisadoBool = normalizeBoolean(doc.requires_visado);
 
     const { currentStep, nextStep, progress } = buildTimelineProgress(
       doc.status,
@@ -462,10 +430,11 @@ async function getTimeline(req, res) {
 /* ================================
    GET: Timeline legal (solo document_events)
    ================================ */
+
 async function getLegalTimeline(req, res) {
   try {
-    const docId = Number(req.params.id);
-    if (!Number.isFinite(docId)) {
+    const docId = toNumber(req.params.id);
+    if (!docId) {
       return res.status(400).json({ message: "ID de documento inválido" });
     }
 
@@ -547,10 +516,11 @@ async function getLegalTimeline(req, res) {
 /* ================================
    GET: Firmantes de un documento
    ================================ */
+
 async function getSigners(req, res) {
   try {
-    const docId = Number(req.params.id);
-    if (!Number.isFinite(docId)) {
+    const docId = toNumber(req.params.id);
+    if (!docId) {
       return res.status(400).json({ message: "ID de documento inválido" });
     }
 

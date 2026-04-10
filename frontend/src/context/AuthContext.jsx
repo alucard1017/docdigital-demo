@@ -1,4 +1,3 @@
-// frontend/src/context/AuthContext.jsx
 import {
   createContext,
   useCallback,
@@ -20,20 +19,23 @@ import { navigateTo, replaceTo } from "../utils/router";
 export const AuthContext = createContext(null);
 
 function normalizeToken(value) {
-  return typeof value === "string" ? value.trim() : "";
+  if (!value || typeof value !== "string") return "";
+  const trimmed = value.trim();
+  return trimmed || "";
 }
 
 function normalizeUser(value) {
-  return value && typeof value === "object" ? value : null;
-}
-
-function getCurrentPath() {
-  if (typeof window === "undefined") return "";
-  return window.location?.pathname || "";
+  if (!value || typeof value !== "object") return null;
+  return value;
 }
 
 function isBrowser() {
   return typeof window !== "undefined";
+}
+
+function getCurrentPath() {
+  if (!isBrowser()) return "";
+  return window.location?.pathname || "";
 }
 
 export function AuthProvider({ children }) {
@@ -80,7 +82,7 @@ export function AuthProvider({ children }) {
         { withCredentials: true }
       );
 
-      const data = res.data;
+      const data = res?.data;
 
       if (!data?.user || !data?.accessToken) {
         throw new Error("Respuesta inesperada del servidor de autenticación");
@@ -97,6 +99,7 @@ export function AuthProvider({ children }) {
       setUserState(nextUser);
       setTokenState(nextToken);
 
+      // Reset flags de eventos de expiración
       authEventHandledRef.current = false;
       logoutInProgressRef.current = false;
       resetAuthExpiredDispatch();
@@ -122,6 +125,7 @@ export function AuthProvider({ children }) {
     resetAuthExpiredDispatch();
 
     if (import.meta.env.DEV) {
+      // eslint-disable-next-line no-console
       console.warn("[AUTH] logout ejecutado", {
         redirectTo,
         currentPath,
@@ -141,9 +145,13 @@ export function AuthProvider({ children }) {
       clearTimeout(logoutReleaseTimerRef.current);
     }
 
-    logoutReleaseTimerRef.current = window.setTimeout(() => {
+    if (isBrowser()) {
+      logoutReleaseTimerRef.current = window.setTimeout(() => {
+        logoutInProgressRef.current = false;
+      }, 500);
+    } else {
       logoutInProgressRef.current = false;
-    }, 500);
+    }
   }, []);
 
   useEffect(() => {
@@ -156,21 +164,24 @@ export function AuthProvider({ children }) {
 
       authEventHandledRef.current = true;
 
+      const detail = event?.detail ?? null;
+
       if (import.meta.env.DEV) {
+        // eslint-disable-next-line no-console
         console.warn("[AUTH] sesión invalidada por evento global:", {
-          source: event?.detail?.source,
-          message: event?.detail?.message,
-          code: event?.detail?.code,
-          status: event?.detail?.status,
-          url: event?.detail?.url,
-          method: event?.detail?.method,
+          source: detail?.source,
+          message: detail?.message,
+          code: detail?.code,
+          status: detail?.status,
+          url: detail?.url,
+          method: detail?.method,
         });
       }
 
       logout({
         redirectTo: "/login",
         replace: true,
-        reason: event?.detail || null,
+        reason: detail,
       });
 
       if (authResetTimerRef.current) {
@@ -201,6 +212,7 @@ export function AuthProvider({ children }) {
       }
 
       if (!normalizedUser && import.meta.env.DEV) {
+        // eslint-disable-next-line no-console
         console.warn("[AUTH] updateUser recibió usuario inválido/null");
       }
     },

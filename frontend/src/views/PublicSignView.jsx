@@ -260,10 +260,10 @@ function buildRejectErrorMessage(responseMessage) {
 function getTramiteLabel(value) {
   const v = normalizeText(value);
   if (!v) return "";
-  if (v.includes("notaria") || v.includes("notaría")) return "Con notaría";
   if (v.includes("sin notaria") || v.includes("sin notaría")) {
     return "Sin notaría";
   }
+  if (v.includes("notaria") || v.includes("notaría")) return "Con notaría";
   if (v === "propio") return "Propio";
   return String(value || "").trim();
 }
@@ -300,6 +300,15 @@ function resolveSignerRoleLabel(signer, isVisado) {
   if (rawRole.includes("owner") || rawRole.includes("prop")) return "Propietario";
 
   return isVisado ? "Visador" : "Firmante";
+}
+
+function buildMetaTitle(label, value, extra = "") {
+  const main = String(value || "").trim();
+  const secondary = String(extra || "").trim();
+
+  if (main && secondary) return `${label}: ${main} · ${secondary}`;
+  if (main) return `${label}: ${main}`;
+  return label;
 }
 
 export function PublicSignView({
@@ -447,19 +456,23 @@ export function PublicSignView({
   const contractNumber = useMemo(() => {
     return pickFirstNonEmpty(
       document?.numero_contrato_interno,
+      document?.numerocontratointerno,
       document?.numero_contrato,
       document?.numeroContrato,
       document?.contract_number,
       document?.n_contrato,
       documentMeta?.numeroContratoInterno,
       documentMeta?.numero_contrato_interno,
+      documentMeta?.numerocontratointerno,
       documentMeta?.numero_contrato,
       documentMeta?.numeroContrato,
       documentMeta?.contract_number,
       signedDocument?.numero_contrato_interno,
+      signedDocument?.numerocontratointerno,
       signedDocument?.numero_contrato,
       signedDocument?.contract_number,
       publicSignDoc?.numero_contrato_interno,
+      publicSignDoc?.numerocontratointerno,
       publicSignDoc?.numero_contrato,
       publicSignDoc?.contract_number,
       "Sin número"
@@ -705,7 +718,7 @@ export function PublicSignView({
     !publicSignLoading &&
     flowState.kind !== "pending";
 
-  const ActionBlock = canActOnDocument ? (
+  const actionBlock = canActOnDocument ? (
     <div className="public-sign-action-block">
       <ElectronicSignatureNotice
         mode={isVisado ? "visado" : "firma"}
@@ -903,7 +916,12 @@ export function PublicSignView({
             <aside className="public-sign-sidebar">
               <div className="public-sign-summary">
                 <div className="public-sign-section-label">Resumen</div>
-                <div className="public-sign-summary__title">{documentTitle}</div>
+                <div
+                  className="public-sign-summary__title"
+                  title={documentTitle}
+                >
+                  {documentTitle}
+                </div>
                 <div className="public-sign-summary__text">
                   Revisa la información principal antes de abrir el documento completo.
                 </div>
@@ -912,8 +930,16 @@ export function PublicSignView({
               <div className="public-sign-meta-grid">
                 <div className="public-sign-meta-card">
                   <div className="public-sign-meta-card__label">Empresa</div>
-                  <div className="public-sign-meta-card__value">{companyName}</div>
-                  <div className="public-sign-meta-card__subvalue">
+                  <div
+                    className="public-sign-meta-card__value"
+                    title={buildMetaTitle("Empresa", companyName, `RUT: ${companyRut}`)}
+                  >
+                    {companyName}
+                  </div>
+                  <div
+                    className="public-sign-meta-card__subvalue"
+                    title={`RUT: ${companyRut}`}
+                  >
                     RUT: {companyRut}
                   </div>
                 </div>
@@ -922,7 +948,10 @@ export function PublicSignView({
                   <div className="public-sign-meta-card__label">
                     Número de contrato
                   </div>
-                  <div className="public-sign-meta-card__value public-sign-meta-card__value--contract">
+                  <div
+                    className="public-sign-meta-card__value public-sign-meta-card__value--contract"
+                    title={contractNumber}
+                  >
                     {contractNumber}
                   </div>
                 </div>
@@ -931,7 +960,10 @@ export function PublicSignView({
                   <div className="public-sign-meta-card__label">
                     Tipo de trámite
                   </div>
-                  <div className="public-sign-meta-card__value">
+                  <div
+                    className="public-sign-meta-card__value"
+                    title={tipoDocumentoLabel}
+                  >
                     {tipoDocumentoLabel}
                   </div>
                 </div>
@@ -941,8 +973,20 @@ export function PublicSignView({
                     <div className="public-sign-meta-card__label">
                       {isVisado ? "Revisando como" : "Firmando como"}
                     </div>
-                    <div className="public-sign-meta-card__value">{signerName}</div>
-                    <div className="public-sign-meta-card__subvalue">
+                    <div
+                      className="public-sign-meta-card__value"
+                      title={buildMetaTitle(
+                        isVisado ? "Revisando como" : "Firmando como",
+                        signerName,
+                        `${signerRoleLabel} · ${signerEmail}`
+                      )}
+                    >
+                      {signerName}
+                    </div>
+                    <div
+                      className="public-sign-meta-card__subvalue"
+                      title={`${signerRoleLabel} · ${signerEmail}`}
+                    >
                       {signerRoleLabel} · {signerEmail}
                     </div>
                   </div>
@@ -972,7 +1016,7 @@ export function PublicSignView({
               )}
 
               <div className="public-sign-desktop-actions">
-                {ActionBlock}
+                {actionBlock}
               </div>
             </aside>
 
@@ -980,7 +1024,12 @@ export function PublicSignView({
               <div className="public-sign-document-panel__header">
                 <div>
                   <div className="public-sign-section-label">Documento</div>
-                  <div className="public-sign-document-title">{documentTitle}</div>
+                  <div
+                    className="public-sign-document-title"
+                    title={documentTitle}
+                  >
+                    {documentTitle}
+                  </div>
                 </div>
               </div>
 
@@ -996,7 +1045,7 @@ export function PublicSignView({
                 )}
               </div>
 
-              <div className="public-sign-mobile-actions">{ActionBlock}</div>
+              <div className="public-sign-mobile-actions">{actionBlock}</div>
             </section>
           </div>
         )}

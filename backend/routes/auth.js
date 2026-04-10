@@ -10,7 +10,8 @@ const router = express.Router();
 
 /* ========= Configuración JWT ========= */
 
-const JWT_ACCESS_SECRET = process.env.JWT_ACCESS_SECRET || process.env.JWT_SECRET;
+const JWT_ACCESS_SECRET =
+  process.env.JWT_ACCESS_SECRET || process.env.JWT_SECRET;
 const JWT_REFRESH_SECRET = process.env.JWT_REFRESH_SECRET;
 
 if (!JWT_ACCESS_SECRET) {
@@ -42,12 +43,10 @@ function setAuthCookies(res, accessToken, refreshToken, rememberMe) {
     sameSite: "strict",
   };
 
-  // Access token: cookie de sesión (sin maxAge)
   res.cookie("access_token", accessToken, {
     ...commonOptions,
   });
 
-  // Refresh token: si rememberMe => persistente, si no => sesión
   const refreshOptions = { ...commonOptions };
   if (rememberMe) {
     refreshOptions.maxAge = 30 * 24 * 60 * 60 * 1000; // 30 días
@@ -192,6 +191,9 @@ function requireRole(requiredRole) {
 /* ========= POST /api/auth/login ========= */
 
 router.post("/login", async (req, res) => {
+  const startedAt = Date.now();
+  const requestId = req.requestId || "no-request-id";
+
   try {
     if (!JWT_ACCESS_SECRET || !JWT_REFRESH_SECRET) {
       console.error("❌ Intento de login sin secretos JWT configurados");
@@ -216,7 +218,8 @@ router.post("/login", async (req, res) => {
       : normalizeRun(rawIdentifier);
 
     if (process.env.NODE_ENV !== "production") {
-      console.log("DEBUG /api/auth/login body:", {
+      console.log("[LOGIN] body", {
+        requestId,
         rawIdentifier,
         normalizedIdentifier,
         isEmail,
@@ -225,58 +228,93 @@ router.post("/login", async (req, res) => {
     }
 
     if (!db || typeof db.query !== "function") {
-      console.error("❌ db.query no está disponible");
+      console.error("❌ db.query no está disponible en /api/auth/login");
       return res
         .status(500)
         .json({ message: "Error de conexión con la base de datos" });
     }
 
-    const query = isEmail
-      ? `SELECT * FROM public.users WHERE email = $1`
-      : `SELECT * FROM public.users WHERE run = $1`;
+    // SELECT solo columnas necesarias + LIMIT 1
+    const baseSelect = `
+      SELECT 
+        id,
+        run,
+        email,
+        name,
+        role,
+        company_id,
+        active,
+        password_hash
+      FROM public.users
+    `;
 
+    const query = isEmail
+      ? `${baseSelect} WHERE email = $1 LIMIT 1`
+      : `${baseSelect} WHERE run = $1 LIMIT 1`;
+
+    const tQueryStart = Date.now();
     let result;
     try {
       result = await db.query(query, [normalizedIdentifier]);
     } catch (dbErr) {
-      console.error("❌ Error ejecutando query en /api/auth/login:", dbErr);
+      console.error("❌ Error ejecutando query en /api/auth/login:", {
+        requestId,
+        error: dbErr.message,
+      });
       Sentry.captureException(dbErr);
       return res
         .status(500)
         .json({ message: "Error de base de datos en login" });
     }
+    const queryMs = Date.now() - tQueryStart;
 
     const user = result.rows[0];
 
+    if (process.env.NODE_ENV !== "production") {
+      console.log("[LOGIN] query result", {
+        requestId,
+        rows: result.rowCount,
+        queryMs,
+      });
+    }
+
     if (!user) {
       if (process.env.NODE_ENV !== "production") {
-        console.warn(
-          "Login fallido: usuario no encontrado",
-          isEmail
-            ? { by: "email", email: normalizedIdentifier }
-            : { by: "run", run: normalizedIdentifier }
-        );
+        console.warn("[LOGIN] user not found", {
+          requestId,
+          by: isEmail ? "email" : "run",
+          identifier: normalizedIdentifier,
+        });
       }
 
-      await logAuth({
-        userId: null,
-        run: isEmail ? null : normalizedIdentifier,
-        action: "LOGIN_FAILED",
-        metadata: { reason: "user_not_found", isEmail },
-        req,
-      });
+      // no bloquees la respuesta si el log se cae
+      try {
+        await logAuth({
+          userId: null,
+          run: isEmail ? null : normalizedIdentifier,
+          action: "LOGIN_FAILED",
+          metadata: { reason: "user_not_found", isEmail },
+          req,
+        });
+      } catch (logErr) {
+        console.error("[LOGIN] logAuth user_not_found error:", logErr.message);
+      }
 
       return res.status(401).json({ message: "Credenciales inválidas" });
     }
 
     if (user.active === false) {
-      await logAuth({
-        userId: user.id,
-        run: user.run,
-        action: "LOGIN_FAILED",
-        metadata: { reason: "user_inactive" },
-        req,
-      });
+      try {
+        await logAuth({
+          userId: user.id,
+          run: user.run,
+          action: "LOGIN_FAILED",
+          metadata: { reason: "user_inactive" },
+          req,
+        });
+      } catch (logErr) {
+        console.error("[LOGIN] logAuth user_inactive error:", logErr.message);
+      }
 
       return res
         .status(401)
@@ -284,45 +322,65 @@ router.post("/login", async (req, res) => {
     }
 
     if (!user.password_hash) {
-      console.warn("Usuario sin password_hash, id:", user.id);
-
-      await logAuth({
+      console.warn("[LOGIN] missing password_hash", {
+        requestId,
         userId: user.id,
-        run: user.run,
-        action: "LOGIN_FAILED",
-        metadata: { reason: "missing_password_hash" },
-        req,
       });
+
+      try {
+        await logAuth({
+          userId: user.id,
+          run: user.run,
+          action: "LOGIN_FAILED",
+          metadata: { reason: "missing_password_hash" },
+          req,
+        });
+      } catch (logErr) {
+        console.error(
+          "[LOGIN] logAuth missing_password_hash error:",
+          logErr.message
+        );
+      }
 
       return res.status(401).json({ message: "Credenciales inválidas" });
     }
 
+    const tBcryptStart = Date.now();
     let ok;
     try {
       ok = await bcrypt.compare(password, user.password_hash);
     } catch (cmpErr) {
-      console.error("❌ Error comparando password en /api/auth/login:", cmpErr);
+      console.error("❌ Error comparando password en /api/auth/login:", {
+        requestId,
+        error: cmpErr.message,
+      });
       Sentry.captureException(cmpErr);
       return res
         .status(500)
         .json({ message: "Error interno al validar la contraseña" });
     }
+    const bcryptMs = Date.now() - tBcryptStart;
 
     if (!ok) {
       if (process.env.NODE_ENV !== "production") {
-        console.warn(
-          "Login fallido: contraseña incorrecta para usuario id:",
-          user.id
-        );
+        console.warn("[LOGIN] bad password", {
+          requestId,
+          userId: user.id,
+          bcryptMs,
+        });
       }
 
-      await logAuth({
-        userId: user.id,
-        run: user.run,
-        action: "LOGIN_FAILED",
-        metadata: { reason: "bad_password" },
-        req,
-      });
+      try {
+        await logAuth({
+          userId: user.id,
+          run: user.run,
+          action: "LOGIN_FAILED",
+          metadata: { reason: "bad_password" },
+          req,
+        });
+      } catch (logErr) {
+        console.error("[LOGIN] logAuth bad_password error:", logErr.message);
+      }
 
       return res.status(401).json({ message: "Credenciales inválidas" });
     }
@@ -336,41 +394,65 @@ router.post("/login", async (req, res) => {
       company_id: user.company_id ?? null,
     };
 
+    const tJwtStart = Date.now();
     let accessToken;
     let refreshToken;
     try {
       accessToken = signAccessToken(tokenPayload);
       refreshToken = signRefreshToken({ id: user.id });
     } catch (err) {
-      console.error("❌ Error firmando JWT en /api/auth/login:", err);
+      console.error("❌ Error firmando JWT en /api/auth/login:", {
+        requestId,
+        error: err.message,
+      });
       Sentry.captureException(err);
       return res
         .status(500)
         .json({ message: "Error interno al generar los tokens" });
     }
+    const jwtMs = Date.now() - tJwtStart;
 
-    // Opcional: guardar refreshToken o jti en BD para revocación
-
+    const tCookiesStart = Date.now();
     setAuthCookies(res, accessToken, refreshToken, !!rememberMe);
+    const cookiesMs = Date.now() - tCookiesStart;
 
-    await logAuth({
-      userId: user.id,
-      run: user.run,
-      action: "LOGIN_SUCCESS",
-      metadata: {
-        role: user.role,
-        company_id: user.company_id ?? null,
-        rememberMe: !!rememberMe,
-      },
-      req,
-    });
+    try {
+      await logAuth({
+        userId: user.id,
+        run: user.run,
+        action: "LOGIN_SUCCESS",
+        metadata: {
+          role: user.role,
+          company_id: user.company_id ?? null,
+          rememberMe: !!rememberMe,
+        },
+        req,
+      });
+    } catch (logErr) {
+      console.error("[LOGIN] logAuth LOGIN_SUCCESS error:", logErr.message);
+    }
+
+    const totalMs = Date.now() - startedAt;
+    if (process.env.NODE_ENV !== "production") {
+      console.log("[LOGIN] success timings", {
+        requestId,
+        queryMs,
+        bcryptMs,
+        jwtMs,
+        cookiesMs,
+        totalMs,
+      });
+    }
 
     return res.json({
       user: tokenPayload,
       accessToken,
     });
   } catch (err) {
-    console.error("❌ Error inesperado en /api/auth/login:", err);
+    console.error("❌ Error inesperado en /api/auth/login:", {
+      requestId,
+      error: err.message,
+    });
     Sentry.captureException(err);
     return res
       .status(500)
@@ -402,8 +484,6 @@ router.post("/refresh", async (req, res) => {
       return res.status(401).json({ message: "Refresh token inválido" });
     }
 
-    // Aquí podrías comprobar en BD que el refresh token no esté revocado.
-
     const userRes = await db.query(
       `SELECT id, run, email, name, role, company_id FROM public.users WHERE id = $1`,
       [payload.id]
@@ -425,7 +505,6 @@ router.post("/refresh", async (req, res) => {
     const newAccessToken = signAccessToken(tokenPayload);
     const newRefreshToken = signRefreshToken({ id: user.id });
 
-    // Aquí asumimos que el usuario ya eligió "recordarme" en su momento
     setAuthCookies(res, newAccessToken, newRefreshToken, true);
 
     return res.json({ user: tokenPayload });
@@ -443,7 +522,6 @@ router.post("/refresh", async (req, res) => {
 router.post("/logout", async (req, res) => {
   try {
     clearAuthCookies(res);
-    // aquí podrías marcar el refresh token como revocado en BD
     return res.json({ message: "Sesión cerrada correctamente" });
   } catch (err) {
     console.error("❌ Error en /api/auth/logout:", err);

@@ -9,7 +9,8 @@ import {
 } from "./detailView.constants";
 
 export function normalizeText(value) {
-  return typeof value === "string" ? value.trim().toLowerCase() : "";
+  if (value == null) return "";
+  return String(value).trim().toLowerCase();
 }
 
 export function getErrorMessage(err, fallback) {
@@ -54,11 +55,21 @@ export function buildUserDisplayName(currentUser) {
 export function getTramiteLabel(value) {
   const normalized = normalizeText(value);
 
+  if (!normalized) return "N/D";
+
   if (normalized === "notaria" || normalized === "notaría") return "Notaría";
   if (normalized === "propio") return "Propio";
-  if (normalized.includes("sin notaria") || normalized.includes("sin notaría")) {
+
+  if (
+    normalized.includes("sin notaria") ||
+    normalized.includes("sin notaría") ||
+    normalized === "sinnotaria"
+  ) {
     return "Sin notaría";
   }
+
+  // variantes genéricas que indiquen notaría
+  if (normalized.includes("notar")) return "Notaría";
 
   return "N/D";
 }
@@ -69,10 +80,13 @@ export function getTramiteLabel(value) {
 export function getDocumentLabel(value) {
   const normalized = normalizeText(value);
 
+  if (!normalized) return "N/D";
+
   if (
     normalized === "poder" ||
     normalized === "poderes" ||
-    normalized === "poderes y autorizaciones"
+    normalized === "poderes y autorizaciones" ||
+    normalized === "poderes_autorizaciones"
   ) {
     return "Poderes y autorizaciones";
   }
@@ -80,7 +94,8 @@ export function getDocumentLabel(value) {
   if (
     normalized === "contrato" ||
     normalized === "contratos" ||
-    normalized === "solo contratos"
+    normalized === "solo contratos" ||
+    normalized === "contrato_solo"
   ) {
     return "Solo contratos";
   }
@@ -93,6 +108,11 @@ export function getDocumentLabel(value) {
     return "Autorizaciones";
   }
 
+  // genéricos
+  if (normalized.includes("poder")) return "Poderes y autorizaciones";
+  if (normalized.includes("contrato")) return "Solo contratos";
+  if (normalized.includes("autoriz")) return "Autorizaciones";
+
   return "N/D";
 }
 
@@ -104,6 +124,7 @@ export function getDocumentNumber(selectedDoc, timeline) {
   const fromTimeline =
     timeline?.document?.numero_contrato_interno ??
     timeline?.document?.numerocontratointerno ??
+    timeline?.document?.numero_contrato ??
     null;
 
   if (fromTimeline) return fromTimeline;
@@ -112,6 +133,8 @@ export function getDocumentNumber(selectedDoc, timeline) {
     selectedDoc?.numero_contrato_interno ||
     selectedDoc?.numerocontratointerno ||
     selectedDoc?.numero_contrato ||
+    selectedDoc?.contract_number ||
+    selectedDoc?.n_contrato ||
     null;
 
   return fromSelected;
@@ -121,6 +144,7 @@ export function getDocumentTitle(selectedDoc, timeline) {
   return (
     timeline?.document?.title ||
     selectedDoc?.title ||
+    selectedDoc?.nombre ||
     "Documento sin título"
   );
 }
@@ -139,8 +163,7 @@ export function getTimelineEvents(timeline, fallbackEvents) {
 export function normalizeParticipantRole(value = "") {
   const roleRaw = String(value || "").trim().toLowerCase();
 
-  // Casos explícitos
-  if (roleRaw === "visador" || roleRaw === "visor") {
+  if (roleRaw === "visador" || roleRaw === "visor" || roleRaw === "visador_final") {
     return FLOW_ROLE_BADGES.visador;
   }
 
@@ -155,6 +178,18 @@ export function normalizeParticipantRole(value = "") {
       label: "Firmante final",
       key: "firmante_final",
     };
+  }
+
+  if (roleRaw === "firmante" || roleRaw === "signer") {
+    return FLOW_ROLE_BADGES.firmante;
+  }
+
+  if (roleRaw === "representante" || roleRaw === "representante legal") {
+    return FLOW_ROLE_BADGES.representante;
+  }
+
+  if (roleRaw === "propietario" || roleRaw === "owner") {
+    return FLOW_ROLE_BADGES.propietario;
   }
 
   // Heurísticas
@@ -229,7 +264,7 @@ export function buildFlowParticipants(participants = [], signers = []) {
   const signerMapById = new Map(
     safeSigners
       .filter((s) => s?.id != null)
-      .map((signer) => [String(signer.id), signer])
+      .map((signer) => [String(s.id), signer])
   );
 
   return safeParticipants
@@ -286,7 +321,7 @@ export function buildFlowParticipants(participants = [], signers = []) {
         "Participante";
 
       const resolvedEmail =
-        participant?.email || signer?.email || "Sin correo";
+        participant?.email || signer?.email || "Sin correo registrado";
 
       const resolvedSignedAt =
         participant?.signed_at ||
