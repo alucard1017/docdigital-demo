@@ -4,7 +4,7 @@ const authSocketMiddleware = require("../socket/authSocketMiddleware");
 
 let io = null;
 
-function getAllowedOrigins() {
+function buildAllowedOrigins(extraOrigins = []) {
   return [
     process.env.FRONTEND_URL,
     "https://www.verifirma.cl",
@@ -17,6 +17,7 @@ function getAllowedOrigins() {
     "http://localhost:5173",
     "http://localhost:5174",
     "http://localhost:3000",
+    ...extraOrigins,
   ].filter(Boolean);
 }
 
@@ -43,8 +44,9 @@ function safeError(...args) {
 /**
  * Inicializa Socket.IO sobre el servidor HTTP
  * @param {import("http").Server} server
+ * @param {{ allowedOrigins?: string[] }} options
  */
-function initializeSocketIO(server) {
+function initializeSocketIO(server, options = {}) {
   if (!server) {
     throw new Error("Servidor HTTP no proporcionado para Socket.IO");
   }
@@ -54,18 +56,31 @@ function initializeSocketIO(server) {
     return io;
   }
 
-  const allowedOrigins = getAllowedOrigins();
+  const allowedOrigins = buildAllowedOrigins(options.allowedOrigins || []);
+  const allowedOriginSet = new Set(allowedOrigins);
 
   io = new Server(server, {
     cors: {
-      origin: allowedOrigins,
+      origin: (origin, callback) => {
+        if (!origin) {
+          return callback(null, true);
+        }
+
+        if (allowedOriginSet.has(origin)) {
+          return callback(null, true);
+        }
+
+        safeWarn(`⛔ Socket.IO CORS bloqueado para origin: ${origin}`);
+        return callback(new Error(`Socket.IO CORS bloqueado para origin: ${origin}`));
+      },
       credentials: true,
       methods: ["GET", "POST"],
     },
     transports: ["websocket", "polling"],
+    allowEIO3: false,
   });
 
-  safeLog("✅ Socket.IO inicializado con CORS:", allowedOrigins);
+  safeLog("✅ Socket.IO inicializado con allowed origins:", [...allowedOriginSet]);
 
   io.use(authSocketMiddleware);
 
@@ -75,8 +90,12 @@ function initializeSocketIO(server) {
     const userEmail = user.email || "desconocido";
     const companyId = user.company_id ?? null;
     const socketId = socket.id;
+    const handshakeOrigin = socket.handshake.headers?.origin || "sin-origin";
+    const transport = socket.conn?.transport?.name || "unknown";
 
-    safeLog(`✅ Cliente WebSocket conectado: ${userEmail} (${socketId})`);
+    safeLog(
+      `✅ Cliente WebSocket conectado: ${userEmail} (${socketId}) origin=${handshakeOrigin} transport=${transport}`
+    );
 
     if (userId) {
       const userRoom = getUserRoom(userId);
@@ -98,9 +117,7 @@ function initializeSocketIO(server) {
       try {
         safeLog(
           `ℹ️ Cliente WebSocket desconectándose (${reason}): ${userEmail} (${socketId})`,
-          {
-            rooms: Array.from(socket.rooms || []),
-          }
+          { rooms: Array.from(socket.rooms || []) }
         );
       } catch (err) {
         safeWarn("⚠️ Error leyendo rooms en disconnecting:", err.message);

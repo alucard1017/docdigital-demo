@@ -137,40 +137,43 @@ const allowedOrigins = [
 
 const allowedOriginSet = new Set(allowedOrigins);
 
+const baseCorsConfig = {
+  credentials: true,
+  methods: ["GET", "HEAD", "PUT", "PATCH", "POST", "DELETE", "OPTIONS"],
+  allowedHeaders: ["Content-Type", "Authorization"],
+  optionsSuccessStatus: 204,
+};
+
 const corsOptionsDelegate = (req, callback) => {
   const origin = req.header("Origin");
 
-  const baseConfig = {
-    credentials: true,
-    methods: ["GET", "HEAD", "PUT", "PATCH", "POST", "DELETE", "OPTIONS"],
-    allowedHeaders: ["Content-Type", "Authorization"],
-    optionsSuccessStatus: 204,
-  };
-
   if (!origin) {
+    // Postman, curl, healthchecks, etc.
     return callback(null, {
-      ...baseConfig,
+      ...baseCorsConfig,
       origin: true,
     });
   }
 
   if (allowedOriginSet.has(origin)) {
     return callback(null, {
-      ...baseConfig,
-      origin: true,
+      ...baseCorsConfig,
+      origin: origin,
     });
   }
 
   console.warn(`⛔ CORS bloqueado para origin: ${origin}`);
   return callback(null, {
+    ...baseCorsConfig,
     origin: false,
   });
 };
 
-// CORS global + preflight explícito
+// CORS global + preflight explícito para TODAS las rutas /api
 app.use(cors(corsOptionsDelegate));
 app.options("*", cors(corsOptionsDelegate));
 console.log("✓ CORS configurado con whitelist dinámica");
+console.log("✓ Allowed origins:", [...allowedOriginSet]);
 
 /* ================================
    BODY PARSERS
@@ -432,11 +435,11 @@ app.use(
 );
 console.log("✓ Rutas /api/public registradas");
 
-// Registro público (alta de usuarios / empresas por invitación, etc.)
+// Registro público
 app.use("/api/public", publicRegisterRoutes);
 console.log("✓ Rutas /api/public/register registradas");
 
-// Docs públicos (verificación, descarga, etc.)
+// Docs públicos
 app.use("/api/public", publicDocsRouter);
 console.log("✓ Rutas /api/public/documents y /api/public/verificar registradas");
 
@@ -444,43 +447,33 @@ console.log("✓ Rutas /api/public/documents y /api/public/verificar registradas
    RUTAS PRIVADAS ADICIONALES
    ================================ */
 
-// Empresas
 app.use("/api/companies", requireAuth, requireActivePlan, companiesRoutes);
 console.log("✓ Rutas /api/companies registradas");
 
-// Recordatorios
 app.use("/api/reminders", requireAuth, requireActivePlan, remindersRoutes);
 console.log("✓ Rutas /api/reminders registradas");
 
-// Analytics
 app.use("/api/analytics", requireAuth, requireActivePlan, analyticsRoutes);
 console.log("✓ Rutas /api/analytics registradas");
 
-// Planes
 app.use("/api/plans", requireAuth, plansRoutes);
 console.log("✓ Rutas /api/plans registradas");
 
-// Templates
 app.use("/api/templates", requireAuth, requireActivePlan, templatesRoutes);
 console.log("✓ Rutas /api/templates registradas");
 
-// Notificaciones
 app.use("/api/notifications", requireAuth, notificationsRoutes);
 console.log("✓ Rutas /api/notifications registradas");
 
-// Admin
 app.use("/api/admin", requireAuth, adminRoutes);
 console.log("✓ Rutas /api/admin registradas");
 
-// Onboarding
 app.use("/api/onboarding", requireAuth, onboardingRoutes);
 console.log("✓ Rutas /api/onboarding registradas");
 
-// Billing
 app.use("/api/billing", requireAuth, billingRoutes);
 console.log("✓ Rutas /api/billing registradas");
 
-// Notaría
 app.use("/api/notary", notaryRouter);
 console.log("✓ Rutas /api/notary registradas");
 
@@ -716,7 +709,8 @@ server.listen(PORT, HOST, () => {
 });
 
 try {
-  initializeSocketIO(server);
+  // Pasa allowedOrigins para configurar CORS también en Socket.IO
+  initializeSocketIO(server, { allowedOrigins: [...allowedOriginSet] });
   console.log("✓ Socket.IO inicializado sobre servidor HTTP");
 } catch (err) {
   console.error("❌ Error inicializando Socket.IO:", err.message || err);
