@@ -82,7 +82,9 @@ function classifyPublicError(error) {
     text.includes("already used") ||
     text.includes("ya fue usado") ||
     text.includes("ya fue firmado") ||
-    text.includes("ya fue rechazado")
+    text.includes("ya fue rechazado") ||
+    text.includes("ya no requiere acción") ||
+    text.includes("ya no admite acciones")
   ) {
     return {
       kind: "used",
@@ -291,10 +293,15 @@ function buildTipoLabel(tipoTramite, tipoDocumento) {
 
 function resolveSignerRoleLabel(signer, isVisado) {
   const rawRole = normalizeText(
-    signer?.role || signer?.rol || signer?.signer_role || signer?.participant_role
+    signer?.role ||
+      signer?.rol ||
+      signer?.signer_role ||
+      signer?.participant_role
   );
 
   if (rawRole.includes("vis")) return "Visador";
+  if (rawRole.includes("firmante_final")) return "Firmante final";
+  if (rawRole.includes("final")) return "Firmante final";
   if (rawRole.includes("firm")) return "Firmante";
   if (rawRole.includes("revi")) return "Revisor";
   if (rawRole.includes("owner") || rawRole.includes("prop")) return "Propietario";
@@ -309,6 +316,50 @@ function buildMetaTitle(label, value, extra = "") {
   if (main && secondary) return `${label}: ${main} · ${secondary}`;
   if (main) return `${label}: ${main}`;
   return label;
+}
+
+function getReadableParticipantLabel({ signer, isVisado, document }) {
+  const roleLabel = resolveSignerRoleLabel(signer, isVisado);
+  const signerName = pickFirstNonEmpty(
+    signer?.name,
+    signer?.nombre,
+    signer?.signer_name,
+    signer?.full_name,
+    signer?.fullname
+  );
+
+  const signerEmail = pickFirstNonEmpty(
+    signer?.email,
+    signer?.signer_email,
+    signer?.correo,
+    signer?.mail
+  );
+
+  if (signerName && signerEmail) {
+    return {
+      title: isVisado ? "Revisando como" : "Firmando como",
+      primary: signerName,
+      secondary: `${roleLabel} · ${signerEmail}`,
+    };
+  }
+
+  if (signerName) {
+    return {
+      title: isVisado ? "Revisando como" : "Firmando como",
+      primary: signerName,
+      secondary: roleLabel,
+    };
+  }
+
+  const fallbackName = isVisado
+    ? pickFirstNonEmpty(document?.visador_nombre, "Visador")
+    : pickFirstNonEmpty(document?.firmante_nombre, "Firmante");
+
+  return {
+    title: isVisado ? "Revisando como" : "Firmando como",
+    primary: fallbackName,
+    secondary: roleLabel,
+  };
 }
 
 export function PublicSignView({
@@ -504,32 +555,6 @@ export function PublicSignView({
     );
   }, [document, documentMeta, signedDocument, publicSignDoc]);
 
-  const signerName = useMemo(() => {
-    return pickFirstNonEmpty(
-      signer?.name,
-      signer?.nombre,
-      signer?.signer_name,
-      signer?.full_name,
-      signer?.fullname,
-      isVisado ? "Visador" : "Firmante"
-    );
-  }, [signer, isVisado]);
-
-  const signerEmail = useMemo(() => {
-    return pickFirstNonEmpty(
-      signer?.email,
-      signer?.signer_email,
-      signer?.correo,
-      signer?.mail,
-      "Sin correo disponible"
-    );
-  }, [signer]);
-
-  const signerRoleLabel = useMemo(
-    () => resolveSignerRoleLabel(signer, isVisado),
-    [signer, isVisado]
-  );
-
   const signerStatus = normalizeStatus(
     signer?.status || signer?.signer_status || signer?.estado
   );
@@ -540,6 +565,16 @@ export function PublicSignView({
       document?.estado ||
       signedDocument?.status ||
       signedDocument?.estado
+  );
+
+  const signerRoleLabel = useMemo(
+    () => resolveSignerRoleLabel(signer, isVisado),
+    [signer, isVisado]
+  );
+
+  const participantInfo = useMemo(
+    () => getReadableParticipantLabel({ signer, isVisado, document }),
+    [signer, isVisado, document]
   );
 
   const flowState = useMemo(
@@ -734,9 +769,8 @@ export function PublicSignView({
       )}
 
       <p className="public-sign-helper-text">
-        Al continuar, registrarás tu{" "}
-        {isVisado ? "visado" : "firma electrónica"}. Esta acción no se puede
-        deshacer.
+        Al continuar, registrarás tu {isVisado ? "visado" : "firma electrónica"}.
+        Esta acción no se puede deshacer.
       </p>
 
       {!showReject && (
@@ -755,6 +789,8 @@ export function PublicSignView({
               ? "Procesando..."
               : isVisado
               ? "Registrar visado"
+              : signerRoleLabel === "Firmante final"
+              ? "Registrar firma final"
               : "Registrar firma"}
           </button>
 
@@ -864,6 +900,8 @@ export function PublicSignView({
             {flowState.kind === "pending"
               ? isVisado
                 ? "Revisa este documento para registrar tu visado"
+                : signerRoleLabel === "Firmante final"
+                ? "Revisa este documento para registrar tu firma final"
                 : "Revisa este documento para registrar tu firma"
               : flowState.title}
           </div>
@@ -968,29 +1006,27 @@ export function PublicSignView({
                   </div>
                 </div>
 
-                {signer && (
-                  <div className="public-sign-meta-card">
-                    <div className="public-sign-meta-card__label">
-                      {isVisado ? "Revisando como" : "Firmando como"}
-                    </div>
-                    <div
-                      className="public-sign-meta-card__value"
-                      title={buildMetaTitle(
-                        isVisado ? "Revisando como" : "Firmando como",
-                        signerName,
-                        `${signerRoleLabel} · ${signerEmail}`
-                      )}
-                    >
-                      {signerName}
-                    </div>
-                    <div
-                      className="public-sign-meta-card__subvalue"
-                      title={`${signerRoleLabel} · ${signerEmail}`}
-                    >
-                      {signerRoleLabel} · {signerEmail}
-                    </div>
+                <div className="public-sign-meta-card">
+                  <div className="public-sign-meta-card__label">
+                    {participantInfo.title}
                   </div>
-                )}
+                  <div
+                    className="public-sign-meta-card__value"
+                    title={buildMetaTitle(
+                      participantInfo.title,
+                      participantInfo.primary,
+                      participantInfo.secondary
+                    )}
+                  >
+                    {participantInfo.primary}
+                  </div>
+                  <div
+                    className="public-sign-meta-card__subvalue"
+                    title={participantInfo.secondary}
+                  >
+                    {participantInfo.secondary}
+                  </div>
+                </div>
               </div>
 
               {pdfUrl && (

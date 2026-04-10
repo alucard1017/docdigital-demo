@@ -213,6 +213,8 @@
   line-height: 1.65;
 }
 
+/* Grid de meta */
+
 .public-sign-meta-grid {
   display: grid;
   gap: 12px;
@@ -223,7 +225,7 @@
 
 .public-sign-meta-card {
   border-radius: 16px;
-  padding: 12px;
+  padding: 10px 14px;
   background: rgba(15, 23, 42, 0.82);
   border: 1px solid rgba(148, 163, 184, 0.14);
   min-width: 0;
@@ -251,13 +253,25 @@
   font-weight: 700;
 }
 
-/* El número de contrato puede ser largo: permitimos wrap controlado. */
+/* Número de contrato: tamaño menor + wrap correcto */
+
 .public-sign-meta-card__value--contract {
-  font-size: 0.8rem;
-  line-height: 1.3;
+  font-size: 0.78rem;
+  line-height: 1.35;
   word-break: break-word;
   overflow-wrap: anywhere;
   white-space: normal;
+  max-width: 100%;
+}
+
+/* Limitamos a 2 líneas donde line-clamp esté soportado */
+@supports (-webkit-line-clamp: 2) {
+  .public-sign-meta-card__value--contract {
+    display: -webkit-box;
+    -webkit-line-clamp: 2;
+    -webkit-box-orient: vertical;
+    overflow: hidden;
+  }
 }
 
 .public-sign-meta-card__subvalue {
@@ -554,6 +568,11 @@
     padding: 22px 20px 22px;
   }
 
+  /* Grid meta en 2 columnas en desktop */
+  .public-sign-meta-grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
   .public-sign-document-panel__header {
     padding: 16px 20px;
   }
@@ -578,6 +597,11 @@
 
   .public-sign-mobile-actions {
     display: none;
+  }
+
+  /* Número de contrato aún más discreto en desktop */
+  .public-sign-meta-card__value--contract {
+    font-size: 0.75rem;
   }
 }
 

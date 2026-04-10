@@ -17,6 +17,12 @@ const {
   validatePublicVisar,
 } = require("./publicDocumentsValidations");
 
+/**
+ * Nota importante:
+ *  - getDocumentAndSignerByDocumentToken se mantiene SOLO para usos de lectura.
+ *  - NO se usa para firmar ni rechazar, para evitar firmar con el token genérico
+ *    del documento y mezclar firmantes incorrectos.
+ */
 async function getDocumentAndSignerByDocumentToken(
   documentToken,
   emailFromQuery = null
@@ -42,6 +48,10 @@ async function getDocumentAndSignerByDocumentToken(
   if (docRes.rowCount === 0) return null;
   return docRes.rows[0];
 }
+
+/* ================================
+   GET por token de firmante (sign_token)
+   ================================ */
 
 async function getPublicDocBySignerToken(req, res) {
   try {
@@ -149,7 +159,8 @@ async function getPublicDocBySignerToken(req, res) {
         firmante_nombre: row.firmante_nombre,
         firmante_run: row.firmante_run,
         numero_contrato_interno: row.numero_contrato_interno,
-        numero_contrato: row.numero_contrato || row.numero_contrato_interno || "",
+        numero_contrato:
+          row.numero_contrato || row.numero_contrato_interno || "",
         pdf_final_url: row.pdf_final_url || null,
         pdf_original_url: row.pdf_original_url || null,
       },
@@ -167,6 +178,10 @@ async function getPublicDocBySignerToken(req, res) {
     return res.status(500).json({ message: "Error interno del servidor" });
   }
 }
+
+/* ================================
+   GET por token de documento (signature_token)
+   ================================ */
 
 async function getPublicDocByDocumentToken(req, res) {
   try {
@@ -266,7 +281,8 @@ async function getPublicDocByDocumentToken(req, res) {
         firmante_nombre: doc.firmante_nombre,
         firmante_run: doc.firmante_run,
         numero_contrato_interno: doc.numero_contrato_interno,
-        numero_contrato: doc.numero_contrato || doc.numero_contrato_interno || "",
+        numero_contrato:
+          doc.numero_contrato || doc.numero_contrato_interno || "",
         visador_nombre: doc.visador_nombre,
         pdf_final_url: doc.pdf_final_url || null,
         pdf_original_url: doc.pdf_original_url || null,
@@ -280,6 +296,10 @@ async function getPublicDocByDocumentToken(req, res) {
   }
 }
 
+/* ================================
+   POST: Firmar documento (solo sign_token)
+   ================================ */
+
 async function publicSignDocument(req, res) {
   try {
     const { token } = req.params;
@@ -289,13 +309,15 @@ async function publicSignDocument(req, res) {
       return res.status(tokenError.status).json(tokenError.body);
     }
 
-    let current = await db.query(
+    // IMPORTANTE: solo se permite firmar por sign_token del firmante.
+    const current = await db.query(
       `
       SELECT 
         s.id     AS signer_id,
         s.status AS signer_status,
         s.name   AS signer_name,
         s.email  AS signer_email,
+        s.role   AS signer_role,
         d.*
       FROM document_signers s
       JOIN documents d ON d.id = s.document_id
@@ -305,13 +327,9 @@ async function publicSignDocument(req, res) {
     );
 
     if (current.rowCount === 0) {
-      const rowByDoc = await getDocumentAndSignerByDocumentToken(token);
-      if (!rowByDoc) {
-        return res
-          .status(404)
-          .json({ message: "Enlace inválido o documento no encontrado" });
-      }
-      current = { rows: [rowByDoc], rowCount: 1 };
+      return res
+        .status(404)
+        .json({ message: "Enlace inválido o documento no encontrado" });
     }
 
     const row = current.rows[0];
@@ -319,6 +337,14 @@ async function publicSignDocument(req, res) {
     const validationError = validatePublicSign(row);
     if (validationError) {
       return res.status(validationError.status).json(validationError.body);
+    }
+
+    // Blindaje adicional: evitar que un VISADOR firme aquí por error,
+    // la lógica de visado está en publicVisarDocument.
+    if (row.signer_role && row.signer_role.toUpperCase() === "VISADOR") {
+      return res
+        .status(400)
+        .json({ message: "Este enlace corresponde a un visador, no a firma" });
     }
 
     await db.query(
@@ -573,6 +599,10 @@ async function publicSignDocument(req, res) {
   }
 }
 
+/* ================================
+   POST: Rechazar documento (solo sign_token)
+   ================================ */
+
 async function publicRejectDocument(req, res) {
   try {
     const { token } = req.params;
@@ -588,13 +618,15 @@ async function publicRejectDocument(req, res) {
       return res.status(reasonError.status).json(reasonError.body);
     }
 
-    let current = await db.query(
+    // IMPORTANTE: solo se permite rechazar por sign_token del firmante.
+    const current = await db.query(
       `
       SELECT 
         s.id     AS signer_id,
         s.status AS signer_status,
         s.name   AS signer_name,
         s.email  AS signer_email,
+        s.role   AS signer_role,
         d.*
       FROM document_signers s
       JOIN documents d ON d.id = s.document_id
@@ -604,13 +636,9 @@ async function publicRejectDocument(req, res) {
     );
 
     if (current.rowCount === 0) {
-      const rowByDoc = await getDocumentAndSignerByDocumentToken(token);
-      if (!rowByDoc) {
-        return res
-          .status(404)
-          .json({ message: "Enlace inválido o documento no encontrado" });
-      }
-      current = { rows: [rowByDoc], rowCount: 1 };
+      return res
+        .status(404)
+        .json({ message: "Enlace inválido o documento no encontrado" });
     }
 
     const row = current.rows[0];
@@ -763,6 +791,10 @@ async function publicRejectDocument(req, res) {
   }
 }
 
+/* ================================
+   POST: Visar documento (signature_token)
+   ================================ */
+
 async function publicVisarDocument(req, res) {
   try {
     const { token } = req.params;
@@ -868,6 +900,10 @@ async function publicVisarDocument(req, res) {
     return res.status(500).json({ message: "Error interno del servidor" });
   }
 }
+
+/* ================================
+   GET: Verificación por código
+   ================================ */
 
 async function verifyByCode(req, res) {
   try {
