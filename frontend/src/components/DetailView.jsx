@@ -1,5 +1,11 @@
 // src/components/DetailView.jsx
-import React, { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import React, {
+  useCallback,
+  useEffect,
+  useMemo,
+  useRef,
+  useState,
+} from "react";
 import { Timeline } from "./Timeline";
 import { EventList } from "./EventList";
 import { DetailActions } from "./DetailActions";
@@ -66,31 +72,37 @@ export function DetailView({
   const timelineToastShownRef = useRef(false);
   const signersToastShownRef = useRef(false);
 
-  const safeEvents = useMemo(() => {
-    return getTimelineEvents(timeline, events);
-  }, [timeline, events]);
+  const safeEvents = useMemo(
+    () => getTimelineEvents(timeline, events),
+    [timeline, events]
+  );
 
-  const displayName = useMemo(() => {
-    return buildUserDisplayName(currentUser);
-  }, [currentUser]);
+  const displayName = useMemo(
+    () => buildUserDisplayName(currentUser),
+    [currentUser]
+  );
 
   const currentTimelineDoc = timeline?.document || null;
 
-  const currentDocId = useMemo(() => {
-    return selectedDoc?.id ?? currentTimelineDoc?.id ?? null;
-  }, [selectedDoc, currentTimelineDoc]);
+  const currentDocId = useMemo(
+    () => selectedDoc?.id ?? currentTimelineDoc?.id ?? null,
+    [selectedDoc, currentTimelineDoc]
+  );
 
-  const numeroInterno = useMemo(() => {
-    return getDocumentNumber(selectedDoc, timeline);
-  }, [selectedDoc, timeline]);
+  const numeroInterno = useMemo(
+    () => getDocumentNumber(selectedDoc, timeline),
+    [selectedDoc, timeline]
+  );
 
-  const numeroInternoDisplay = useMemo(() => {
-    return numeroInterno || (currentDocId ? `#${currentDocId}` : "N/D");
-  }, [numeroInterno, currentDocId]);
+  const numeroInternoDisplay = useMemo(
+    () => numeroInterno || (currentDocId ? `#${currentDocId}` : "N/D"),
+    [numeroInterno, currentDocId]
+  );
 
-  const titleDocumento = useMemo(() => {
-    return getDocumentTitle(selectedDoc, timeline);
-  }, [selectedDoc, timeline]);
+  const titleDocumento = useMemo(
+    () => getDocumentTitle(selectedDoc, timeline),
+    [selectedDoc, timeline]
+  );
 
   const tramiteLabel = useMemo(() => {
     const rawValue =
@@ -118,37 +130,44 @@ export function DetailView({
     return label || "N/D";
   }, [currentTimelineDoc, selectedDoc]);
 
-  const currentStatus = useMemo(() => {
-    return currentTimelineDoc?.status ?? selectedDoc?.status ?? null;
-  }, [currentTimelineDoc, selectedDoc]);
+  const currentStatus = useMemo(
+    () => currentTimelineDoc?.status ?? selectedDoc?.status ?? null,
+    [currentTimelineDoc, selectedDoc]
+  );
 
   const isSigned = currentStatus === "FIRMADO";
   const isRejected = currentStatus === "RECHAZADO";
 
-  const mostrarBotonReenvioVisado = useMemo(() => {
-    return shouldShowVisadoReminder(selectedDoc, currentStatus);
-  }, [selectedDoc, currentStatus]);
+  const mostrarBotonReenvioVisado = useMemo(
+    () => shouldShowVisadoReminder(selectedDoc, currentStatus),
+    [selectedDoc, currentStatus]
+  );
 
-  const mostrarBotonRecordatorio = useMemo(() => {
-    return shouldShowGlobalReminder(currentStatus);
-  }, [currentStatus]);
+  const mostrarBotonRecordatorio = useMemo(
+    () => shouldShowGlobalReminder(currentStatus),
+    [currentStatus]
+  );
 
   const baseUrl = api.defaults.baseURL || "";
   const downloadUrl = currentDocId
     ? `${baseUrl}/documents/${currentDocId}/download`
     : null;
 
-  const documentStateMeta = useMemo(() => {
-    return buildDocumentStateMeta(currentStatus);
-  }, [currentStatus]);
+  const documentStateMeta = useMemo(
+    () => buildDocumentStateMeta(currentStatus),
+    [currentStatus]
+  );
 
-  const flowParticipants = useMemo(() => {
-    return buildFlowParticipants(participants, signers);
-  }, [participants, signers]);
+  const flowParticipants = useMemo(
+    () => buildFlowParticipants(participants, signers),
+    [participants, signers]
+  );
 
-  const nextPendingParticipant = useMemo(() => {
-    return flowParticipants.find((p) => p.statusKey === "pending") || null;
-  }, [flowParticipants]);
+  const nextPendingParticipant = useMemo(
+    () =>
+      flowParticipants.find((p) => p.statusKey === "pending") || null,
+    [flowParticipants]
+  );
 
   const fetchTimelineAndParticipants = useCallback(
     async (docId) => {
@@ -158,8 +177,11 @@ export function DetailView({
 
         const data = await getDocumentTimeline(docId);
 
-        setTimeline(data?.timeline || null);
-        setParticipants(Array.isArray(data?.participants) ? data.participants : []);
+        // el backend devuelve { document, participants, timeline }
+        setTimeline(data || null);
+        setParticipants(
+          Array.isArray(data?.participants) ? data.participants : []
+        );
         timelineToastShownRef.current = false;
       } catch (err) {
         if (isAbortLikeError(err)) return;

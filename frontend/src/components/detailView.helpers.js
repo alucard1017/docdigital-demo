@@ -1,4 +1,3 @@
-// src/components/detailView.helpers.js
 import { DOC_STATUS } from "../constants";
 import {
   DOCUMENT_STATE_META,
@@ -68,7 +67,6 @@ export function getTramiteLabel(value) {
     return "Sin notaría";
   }
 
-  // variantes genéricas que indiquen notaría
   if (normalized.includes("notar")) return "Notaría";
 
   return "N/D";
@@ -108,7 +106,6 @@ export function getDocumentLabel(value) {
     return "Autorizaciones";
   }
 
-  // genéricos
   if (normalized.includes("poder")) return "Poderes y autorizaciones";
   if (normalized.includes("contrato")) return "Solo contratos";
   if (normalized.includes("autoriz")) return "Autorizaciones";
@@ -118,7 +115,6 @@ export function getDocumentLabel(value) {
 
 /**
  * Número interno / número de contrato.
- * Usa primero el número de contrato interno moderno, luego fallback legacy.
  */
 export function getDocumentNumber(selectedDoc, timeline) {
   const fromTimeline =
@@ -150,15 +146,22 @@ export function getDocumentTitle(selectedDoc, timeline) {
 }
 
 export function getTimelineEvents(timeline, fallbackEvents) {
-  if (Array.isArray(timeline?.events) && timeline.events.length > 0) {
-    return timeline.events;
+  // admite timeline plano o timeline anidado
+  const events =
+    (Array.isArray(timeline?.events) && timeline.events) ||
+    (Array.isArray(timeline?.timeline?.events) &&
+      timeline.timeline.events) ||
+    [];
+
+  if (Array.isArray(events) && events.length > 0) {
+    return events;
   }
 
   return Array.isArray(fallbackEvents) ? fallbackEvents : [];
 }
 
 /**
- * Normaliza el rol del participante (Visador / Firmante / Firmante final / etc.).
+ * Normaliza el rol del participante.
  */
 export function normalizeParticipantRole(value = "") {
   const roleRaw = String(value || "").trim().toLowerCase();
@@ -192,7 +195,6 @@ export function normalizeParticipantRole(value = "") {
     return FLOW_ROLE_BADGES.propietario;
   }
 
-  // Heurísticas
   if (roleRaw.includes("vis")) {
     return FLOW_ROLE_BADGES.visador;
   }
@@ -254,8 +256,7 @@ export function normalizeFlowStatus(value = "") {
 }
 
 /**
- * Construye el flujo de participantes mezclando document_participants + document_signers
- * y normalizando rol, estado, orden y fechas.
+ * Construye el flujo de participantes.
  */
 export function buildFlowParticipants(participants = [], signers = []) {
   const safeParticipants = Array.isArray(participants) ? participants : [];
@@ -263,8 +264,8 @@ export function buildFlowParticipants(participants = [], signers = []) {
 
   const signerMapById = new Map(
     safeSigners
-      .filter((s) => s?.id != null)
-      .map((signer) => [String(s.id), signer])
+      .filter((signer) => signer?.id != null)
+      .map((signer) => [String(signer.id), signer])
   );
 
   return safeParticipants
@@ -297,8 +298,9 @@ export function buildFlowParticipants(participants = [], signers = []) {
       const statusInfo = normalizeFlowStatus(participant?.status);
 
       const signerFromId =
-        signerMapById.get(String(participant?.signer_id || participant?.id)) ||
-        null;
+        signerMapById.get(
+          String(participant?.signer_id || participant?.id)
+        ) || null;
 
       const normalizedParticipantEmail = String(
         participant?.email || ""
@@ -308,7 +310,8 @@ export function buildFlowParticipants(participants = [], signers = []) {
         !signerFromId && normalizedParticipantEmail
           ? safeSigners.find(
               (s) =>
-                String(s?.email || "").toLowerCase() === normalizedParticipantEmail
+                String(s?.email || "").toLowerCase() ===
+                normalizedParticipantEmail
             )
           : null;
 

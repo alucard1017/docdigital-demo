@@ -45,7 +45,13 @@ function isObject(value) {
 }
 
 function isAuditEvent(event) {
-  return normalizeText(event?.source).toLowerCase() === "audit_log";
+  // la fuente real viene en metadata.source desde el backend
+  const directSource = normalizeText(event?.source);
+  const metaSource = normalizeText(event?.metadata?.source);
+  return (
+    directSource.toLowerCase() === "audit_log" ||
+    metaSource.toLowerCase() === "audit_log"
+  );
 }
 
 function getEventAction(event) {
@@ -93,7 +99,11 @@ function getEventTitle(event) {
 }
 
 function getEventStatus(index, total) {
-  if (!Number.isFinite(index) || !Number.isFinite(total) || total <= 0) {
+  if (
+    !Number.isFinite(index) ||
+    !Number.isFinite(total) ||
+    total <= 0
+  ) {
     return "pending";
   }
 
@@ -158,11 +168,18 @@ function getAuditMeta(event) {
   };
 }
 
+function getEventTimestamp(event) {
+  // el backend manda createdAt; el frontend antes usaba timestamp
+  return event?.timestamp || event?.createdAt || null;
+}
+
 function getStableEventKey(event, index) {
   const parts = [
-    normalizeText(event?.source) || "event",
+    normalizeText(event?.source) ||
+      normalizeText(event?.metadata?.source) ||
+      "event",
     normalizeText(event?.id) || "no-id",
-    normalizeText(event?.timestamp) || "no-ts",
+    normalizeText(getEventTimestamp(event)) || "no-ts",
     normalizeText(event?.action) || "no-action",
     String(index),
   ];
@@ -171,14 +188,29 @@ function getStableEventKey(event, index) {
 }
 
 function normalizeTimeline(rawTimeline) {
-  const events = Array.isArray(rawTimeline?.events) ? rawTimeline.events : [];
+  // admite timeline directo o timeline anidado
+  const rawEvents =
+    (Array.isArray(rawTimeline?.events) && rawTimeline.events) ||
+    (Array.isArray(rawTimeline?.timeline?.events) &&
+      rawTimeline.timeline.events) ||
+    [];
+
+  const events = Array.isArray(rawEvents) ? rawEvents : [];
 
   return {
     events,
     hasEvents: events.length > 0,
-    progress: clampProgress(rawTimeline?.progress),
-    currentStep: normalizeText(rawTimeline?.currentStep) || "En curso",
-    nextStep: normalizeText(rawTimeline?.nextStep) || "Por definir",
+    progress: clampProgress(
+      rawTimeline?.progress ?? rawTimeline?.timeline?.progress
+    ),
+    currentStep:
+      normalizeText(
+        rawTimeline?.currentStep ?? rawTimeline?.timeline?.currentStep
+      ) || "En curso",
+    nextStep:
+      normalizeText(
+        rawTimeline?.nextStep ?? rawTimeline?.timeline?.nextStep
+      ) || "Por definir",
   };
 }
 
@@ -186,7 +218,7 @@ export function Timeline({ timeline }) {
   const hasTimelineObject = isObject(timeline);
 
   const { events, hasEvents, progress, currentStep, nextStep } = useMemo(
-    () => normalizeTimeline(timeline),
+    () => normalizeTimeline(timeline || {}),
     [timeline]
   );
 
@@ -211,7 +243,10 @@ export function Timeline({ timeline }) {
             />
           </div>
 
-          <div className="timeline-progress-meta" aria-label={`Progreso ${progress}%`}>
+          <div
+            className="timeline-progress-meta"
+            aria-label={`Progreso ${progress}%`}
+          >
             <span>Inicio</span>
             <span className="timeline-progress-value">{progress}%</span>
             <span>Completado</span>
@@ -219,7 +254,9 @@ export function Timeline({ timeline }) {
         </div>
 
         <div className="timeline-current-state-card">
-          <div className="timeline-current-state-card__label">Estado actual</div>
+          <div className="timeline-current-state-card__label">
+            Estado actual
+          </div>
 
           <div
             className="timeline-current-state-card__value"
@@ -245,7 +282,9 @@ export function Timeline({ timeline }) {
             const isLast = index === events.length - 1;
             const title = getEventTitle(event);
             const detailsText = formatDetails(event);
-            const timestampText = formatTimestamp(event?.timestamp);
+            const timestampText = formatTimestamp(
+              getEventTimestamp(event)
+            );
             const audit = isAuditEvent(event);
             const actorLabel = getActorLabel(event);
             const { ip, userAgent, requestId } = getAuditMeta(event);
@@ -266,22 +305,31 @@ export function Timeline({ timeline }) {
                   className={`timeline-dot timeline-dot-${status}`}
                   aria-hidden="true"
                 >
-                  <span className="timeline-icon">{getEventIcon(event)}</span>
+                  <span className="timeline-icon">
+                    {getEventIcon(event)}
+                  </span>
                 </div>
 
-                <div className={`timeline-content timeline-content-${status}`}>
+                <div
+                  className={`timeline-content timeline-content-${status}`}
+                >
                   <h4 className="timeline-event-title" title={title}>
                     {title}
                   </h4>
 
                   {detailsText && (
-                    <p className="timeline-event-details" title={detailsText}>
+                    <p
+                      className="timeline-event-details"
+                      title={detailsText}
+                    >
                       {detailsText}
                     </p>
                   )}
 
                   {timestampText && (
-                    <p className="timeline-event-timestamp">{timestampText}</p>
+                    <p className="timeline-event-timestamp">
+                      {timestampText}
+                    </p>
                   )}
 
                   {actorLabel && (
@@ -293,7 +341,8 @@ export function Timeline({ timeline }) {
                       }`}
                       title={actorLabel}
                     >
-                      {audit ? "Sistema / Auditoría:" : "Por:"} {actorLabel}
+                      {audit ? "Sistema / Auditoría:" : "Por:"}{" "}
+                      {actorLabel}
                     </p>
                   )}
 
@@ -302,13 +351,18 @@ export function Timeline({ timeline }) {
                       {ip && <div title={ip}>IP: {ip}</div>}
 
                       {userAgent && (
-                        <div className="timeline-ellipsis" title={userAgent}>
+                        <div
+                          className="timeline-ellipsis"
+                          title={userAgent}
+                        >
                           Agente: {userAgent}
                         </div>
                       )}
 
                       {requestId && (
-                        <div title={requestId}>Req ID: {requestId}</div>
+                        <div title={requestId}>
+                          Req ID: {requestId}
+                        </div>
                       )}
                     </div>
                   )}
