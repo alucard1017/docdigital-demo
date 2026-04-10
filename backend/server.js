@@ -31,12 +31,6 @@ const { isNonExpiringUser } = require("./utils/billing");
 /* ================================
    INICIALIZAR WORKERS / SCHEDULERS
    ================================ */
-/**
- * Nota: en Render, si quieres que los recordatorios corran aunque
- * el web service se quede sin tráfico, lo ideal es mover esto
- * a un servicio tipo "Background Worker". Aquí lo dejamos,
- * pero envuelto para evitar que rompa el arranque si falla.
- */
 try {
   console.log("✓ Worker de recordatorios inicializado");
 } catch (err) {
@@ -197,8 +191,9 @@ const publicLimiter = rateLimit({
 app.use(generalLimiter);
 
 /* ================================
-   CORS MANUAL
+   CORS MANUAL (ROBUSTO)
    ================================ */
+
 const allowedOrigins = [
   process.env.FRONTEND_URL,
   "https://verifirma-frontend.onrender.com",
@@ -217,6 +212,7 @@ app.use((req, res, next) => {
   const origin = req.headers.origin || "";
 
   if (origin) {
+    // Para que los proxies/browsers sepan que la respuesta varía según Origin
     res.header("Vary", "Origin");
   }
 
@@ -234,7 +230,7 @@ app.use((req, res, next) => {
   }
 
   if (req.method === "OPTIONS") {
-    // Responder siempre al preflight
+    // Preflight: siempre responder algo rápido
     return res.sendStatus(204);
   }
 
