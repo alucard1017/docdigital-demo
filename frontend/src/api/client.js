@@ -1,5 +1,10 @@
+// frontend/src/api/client.js
 import axios from "axios";
 import { getStoredToken } from "../utils/session";
+
+/* ============================
+   Constantes base
+   ============================ */
 
 const DEFAULT_API_BASE_URL = "http://localhost:4000/api";
 
@@ -115,9 +120,7 @@ const PUBLIC_PATH_PREFIXES = [
 ];
 
 // rutas donde un 401 NO debe provocar logout global
-const AUTH_IGNORED_401_PATHS = [
-  /^\/documents\/\d+\/timeline$/i,
-];
+const AUTH_IGNORED_401_PATHS = [/^\/documents\/\d+\/timeline$/i];
 
 /* ============================
    Helpers de request / response
@@ -132,7 +135,6 @@ const normalizeUrlPath = (url = "") => {
       const parsed = new URL(value);
       return parsed.pathname || "";
     }
-
     return ensureLeadingSlash(value);
   } catch {
     return ensureLeadingSlash(value);
@@ -161,7 +163,6 @@ export const isPublicRequest = (url = "") => {
 
 export const isRequestCanceled = (error) => {
   if (!error) return false;
-
   return (
     axios.isCancel(error) ||
     error?.code === "ERR_CANCELED" ||
@@ -181,7 +182,17 @@ const extractErrorMeta = (error) => {
   const publicRequest = isPublicRequest(url);
   const path = normalizeUrlPath(url);
 
-  return { status, data, message, code, method, url, fullUrl, publicRequest, path };
+  return {
+    status,
+    data,
+    message,
+    code,
+    method,
+    url,
+    fullUrl,
+    publicRequest,
+    path,
+  };
 };
 
 /* ============================
@@ -196,14 +207,12 @@ export const isAuthFailure = (status, message, code, path = "") => {
   const normalizedMessage = normalizeLower(message);
 
   if (status === 401) {
-    // excepciones: 401 que no deben provocar logout global
     if (isIgnoredAuth401(path)) {
       return false;
     }
-
     if (AUTH_FAILURE_CODES.has(normalizedCode)) return true;
     if (AUTH_FAILURE_MESSAGES.has(normalizedMessage)) return true;
-    // Por diseño original: cualquier 401 no público se trata como fallo de auth
+    // Por diseño: cualquier 401 no público se trata como fallo de auth
     return true;
   }
 
@@ -212,7 +221,6 @@ export const isAuthFailure = (status, message, code, path = "") => {
     if (AUTH_FAILURE_MESSAGES.has(normalizedMessage)) return true;
 
     if (FORBIDDEN_MESSAGES.has(normalizedMessage)) return false;
-
     return false;
   }
 
@@ -243,7 +251,6 @@ export const dispatchAuthExpired = (detail = {}) => {
         detail: safeDetail,
       })
     );
-
     return true;
   } catch (err) {
     authExpiredDispatched = false;
@@ -269,6 +276,7 @@ api.interceptors.request.use(
   (config) => {
     const token = getStoredToken();
 
+    // Forzar path relativo limpio
     config.url = ensureLeadingSlash(config.url || "");
 
     if (token && !isPublicRequest(config.url)) {
@@ -333,6 +341,20 @@ api.interceptors.response.use(
       path,
     } = extractErrorMeta(error);
 
+    // Errores de red / CORS (sin status): ayuda a depurar en prod
+    if (status == null) {
+      if (!import.meta.env.DEV) {
+        // eslint-disable-next-line no-console
+        console.error("[API RES NETWORK ERROR]", {
+          method,
+          url,
+          fullUrl,
+          message,
+          code,
+        });
+      }
+    }
+
     if (import.meta.env.DEV) {
       // eslint-disable-next-line no-console
       console.error("[API RES ERROR]", {
@@ -396,7 +418,7 @@ export async function getDocumentPdfUrl(id, config = {}) {
  * {
  *   document: {...},
  *   participants: [...],
- *   events: [...]
+ *   events: [...],
  * }
  */
 export async function getDocumentTimeline(id, config = {}) {
