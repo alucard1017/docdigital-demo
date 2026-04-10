@@ -13,7 +13,9 @@ function getClientIp(req) {
     (req.headers["x-forwarded-for"] || "")
       .toString()
       .split(",")[0]
-      .trim() || req.socket.remoteAddress || null
+      .trim() ||
+    req.socket?.remoteAddress ||
+    null
   );
 }
 
@@ -63,10 +65,12 @@ async function createDocumentEvent(client, payload) {
       company_id,
       user_id,
       created_at
-    ) VALUES (
+    )
+    VALUES (
       $1, $2, $3, $4, $5,
       $6, $7, $8, $9,
-      $10, $11, $12, $13, $14, now()
+      $10, $11, $12, $13, $14,
+      now()
     )
     `,
     [
@@ -115,26 +119,23 @@ async function getPendingPreviousParticipants(client, documentId, flowOrder) {
 
 /* ================================
    GET /api/public/docs/:token
-   - document (legacy o moderno)
-   - signer legacy
-   - participant moderno (si existe)
-   - invitation
-   - flow
+   Carga datos para enlace público de firma
    ================================ */
 
 router.get("/docs/:token", async (req, res) => {
   const { token } = req.params;
 
-  if (!token || typeof token !== "string") {
+  if (!token || typeof token !== "string" || !token.trim()) {
     return res.status(400).json({ message: "Token inválido" });
   }
 
+  const cleanToken = token.trim();
   const client = await db.connect();
 
   try {
     await client.query("BEGIN");
 
-    // 1) Invitación legacy
+    // 1) Buscar invitación legacy por token
     const inviteRes = await client.query(
       `
       SELECT
@@ -168,22 +169,26 @@ router.get("/docs/:token", async (req, res) => {
       WHERE si.token = $1
       LIMIT 1
       `,
-      [token]
+      [cleanToken]
     );
 
     if (inviteRes.rowCount === 0) {
       await client.query("ROLLBACK");
-      return res.status(404).json({ message: "Invitación no encontrada" });
+      return res
+        .status(404)
+        .json({ message: "Invitación no encontrada" });
     }
 
     const row = inviteRes.rows[0];
 
     if (isExpired(row.invitation_expires_at)) {
       await client.query("ROLLBACK");
-      return res.status(410).json({ message: "Esta invitación ha expirado" });
+      return res
+        .status(410)
+        .json({ message: "Esta invitación ha expirado" });
     }
 
-    // 2) Documento moderno (documents/document_participants)
+    // 2) Intentar mapear a documento moderno
     const modernDocRes = await client.query(
       `
       SELECT
@@ -261,11 +266,11 @@ router.get("/docs/:token", async (req, res) => {
     const ipAddress = getClientIp(req);
     const userAgent = getUserAgent(req);
 
-    // 3) Actualizar estado legacy invited -> opened
     const fromStatus = row.signer_status;
     const toStatus =
       row.signer_status === "invited" ? "opened" : row.signer_status;
 
+    // Marcar invitación legacy como abierta
     if (fromStatus === "invited") {
       await client.query(
         `
@@ -277,8 +282,15 @@ router.get("/docs/:token", async (req, res) => {
       );
     }
 
-    // 4) Evento moderno (si hay documento moderno)
+    // Registrar evento en documents modernos si existe espejo
     if (modernDoc) {
+      const effectiveHash =
+        modernDoc.final_hash_sha256 ||
+        modernDoc.hash_final_file ||
+        modernDoc.hash_sha256 ||
+        row.legacy_hash_document ||
+        null;
+
       await createDocumentEvent(client, {
         documentId: modernDoc.id,
         participantId: participant?.id || null,
@@ -289,7 +301,7 @@ router.get("/docs/:token", async (req, res) => {
         eventType: "INVITATION_OPENED",
         details: "El firmante abrió el enlace público de firma.",
         metadata: {
-          token,
+          token: cleanToken,
           signerId: row.signer_id,
           invitationId: row.invitation_id,
           signerEmail: row.signer_email,
@@ -305,19 +317,14 @@ router.get("/docs/:token", async (req, res) => {
         },
         ipAddress,
         userAgent,
-        hashDocument:
-          modernDoc.final_hash_sha256 ||
-          modernDoc.hash_final_file ||
-          modernDoc.hash_sha256 ||
-          row.legacy_hash_document ||
-          null,
+        hashDocument: effectiveHash,
         companyId: modernDoc.company_id || row.legacy_company_id || null,
       });
     }
 
     await client.query("COMMIT");
 
-    // 5) Normalizar documento devuelto
+    // Normalizar payload para el frontend
     const effectiveDocument = modernDoc
       ? {
           id: modernDoc.id,
@@ -404,8 +411,12 @@ router.get("/docs/:token", async (req, res) => {
       },
     });
   } catch (err) {
-    await client.query("ROLLBACK");
-    console.error("❌ Error en GET /public/docs/:token:", err);
+    try {
+      await client.query("ROLLBACK");
+    } catch {
+      // ignore rollback error
+    }
+    console.error("❌ Error en GET /api/public/docs/:token:", err);
     return res.status(500).json({ message: "Error interno" });
   } finally {
     client.release();

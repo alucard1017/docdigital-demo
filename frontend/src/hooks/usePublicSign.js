@@ -236,7 +236,8 @@ export function usePublicSign({
         setPublicSignLoading(true);
         setPublicSignError("");
 
-        const path = `/public/docs/document/${encodeURIComponent(token)}`;
+        // Carga de datos → GET /api/public/docs/:token
+        const path = `/public/docs/${encodeURIComponent(token)}`;
         const res = await fetch(`${apiBase}${path}`, {
           signal: controller.signal,
         });
@@ -301,11 +302,13 @@ export function usePublicSign({
       setPublicView(snapshot.publicView);
 
       if (snapshot.publicView === "public-sign") {
-        setPublicSignToken(snapshot.token);
-        setPublicSignMode(snapshot.isFirmaPublicaPath ? snapshot.mode : null);
-        cargarFirmaPublica(snapshot.token, {
-          mode: snapshot.isFirmaPublicaPath ? snapshot.mode : null,
-        });
+        const nextToken = snapshot.token;
+        const nextMode = snapshot.isFirmaPublicaPath ? snapshot.mode : null;
+
+        setPublicSignToken(nextToken);
+        setPublicSignMode(nextMode);
+
+        cargarFirmaPublica(nextToken, { mode: nextMode });
         return;
       }
 
