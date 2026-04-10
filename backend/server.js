@@ -7,7 +7,7 @@ const envFile =
   process.env.NODE_ENV === "development" ? ".env.development" : ".env";
 
 require("dotenv").config({ path: envFile });
-require("./instrument"); // Inicializa Sentry antes de todo
+require("./instrument");
 
 /* ================================
    IMPORTS PRINCIPALES
@@ -17,6 +17,8 @@ const path = require("path");
 const fs = require("fs");
 const rateLimit = require("express-rate-limit");
 const helmet = require("helmet");
+const cors = require("cors");
+const cookieParser = require("cookie-parser");
 const Sentry = require("@sentry/node");
 const http = require("http");
 
@@ -85,12 +87,89 @@ const app = express();
 /* ================================
    CONFIG BÁSICA EXPRESS
    ================================ */
-
-// Confiar en proxy (Render/Nginx) para X-Forwarded-For
 app.set("trust proxy", 1);
-
-// Metadatos de request (requestId, ip, userAgent)
 app.use(requestMeta);
+
+/* ================================
+   COOKIE PARSER
+   ================================ */
+app.use(cookieParser());
+
+/* ================================
+   VALIDAR VARIABLES DE ENTORNO
+   ================================ */
+const requiredEnvVars = [
+  "DATABASE_URL",
+  "SMTP_HOST",
+  "SMTP_USER",
+  "SMTP_PASS",
+  "SMTP_FROM_EMAIL",
+  "R2_ACCOUNT_ID",
+  "R2_BUCKET",
+  "R2_ACCESS_KEY_ID",
+  "R2_SECRET_ACCESS_KEY",
+  "R2_ENDPOINT",
+];
+
+const missingVars = requiredEnvVars.filter((v) => !process.env[v]);
+if (missingVars.length > 0) {
+  console.warn("⚠️ Variables de entorno faltantes:", missingVars.join(", "));
+} else {
+  console.log("✓ Variables de entorno validadas");
+}
+
+/* ================================
+   CORS OFICIAL (DEFINITIVO)
+   ================================ */
+const allowedOrigins = [
+  process.env.FRONTEND_URL,
+  "https://www.verifirma.cl",
+  "https://verifirma.cl",
+  "https://app.verifirma.cl",
+  "https://firmar.verifirma.cl",
+  "https://verificar.verifirma.cl",
+  "https://verifirma-frontend.onrender.com",
+  "https://docdigital.vercel.app",
+  "http://localhost:5173",
+  "http://localhost:5174",
+  "http://localhost:3000",
+].filter(Boolean);
+
+const allowedOriginSet = new Set(allowedOrigins);
+
+const corsOptionsDelegate = function (req, callback) {
+  const origin = req.header("Origin");
+
+  const baseConfig = {
+    credentials: true,
+    methods: ["GET", "HEAD", "PUT", "PATCH", "POST", "DELETE", "OPTIONS"],
+    allowedHeaders: ["Content-Type", "Authorization"],
+    optionsSuccessStatus: 204,
+  };
+
+  if (!origin) {
+    return callback(null, {
+      ...baseConfig,
+      origin: true,
+    });
+  }
+
+  if (allowedOriginSet.has(origin)) {
+    return callback(null, {
+      ...baseConfig,
+      origin: true,
+    });
+  }
+
+  console.warn(`⛔ CORS bloqueado para origin: ${origin}`);
+  return callback(null, {
+    origin: false,
+  });
+};
+
+app.use(cors(corsOptionsDelegate));
+app.options("*", cors(corsOptionsDelegate));
+console.log("✓ CORS configurado con whitelist dinámica");
 
 /* ================================
    BODY PARSERS
@@ -137,44 +216,25 @@ if (process.env.NODE_ENV === "production") {
 }
 
 /* ================================
-   VALIDAR VARIABLES DE ENTORNO
-   ================================ */
-const requiredEnvVars = [
-  "DATABASE_URL",
-  "SMTP_HOST",
-  "SMTP_USER",
-  "SMTP_PASS",
-  "SMTP_FROM_EMAIL",
-  "R2_ACCOUNT_ID",
-  "R2_BUCKET",
-  "R2_ACCESS_KEY_ID",
-  "R2_SECRET_ACCESS_KEY",
-  "R2_ENDPOINT",
-];
-
-const missingVars = requiredEnvVars.filter((v) => !process.env[v]);
-if (missingVars.length > 0) {
-  console.warn("⚠️  Variables de entorno faltantes:", missingVars.join(", "));
-} else {
-  console.log("✓ Variables de entorno validadas");
-}
-
-/* ================================
    RATE LIMITING GLOBAL
    ================================ */
+const skipPreflight = (req) => req.method === "OPTIONS";
+
 const generalLimiter = rateLimit({
   windowMs: 15 * 60 * 1000,
   max: 100,
   standardHeaders: true,
   legacyHeaders: false,
+  skip: skipPreflight,
   message: { message: "Demasiadas solicitudes, intenta después" },
 });
 
 const loginLimiter = rateLimit({
   windowMs: 15 * 60 * 1000,
-  max: 5,
+  max: 10,
   standardHeaders: true,
   legacyHeaders: false,
+  skip: skipPreflight,
   message: { message: "Demasiados intentos de login, intenta después" },
 });
 
@@ -183,6 +243,7 @@ const publicLimiter = rateLimit({
   max: 60,
   standardHeaders: true,
   legacyHeaders: false,
+  skip: skipPreflight,
   message: {
     message: "Demasiadas solicitudes desde este origen. Intenta más tarde.",
   },
@@ -191,49 +252,14 @@ const publicLimiter = rateLimit({
 app.use(generalLimiter);
 
 /* ================================
-   CORS MANUAL (ROBUSTO)
+   DEBUG PRE-ROUTES
    ================================ */
-
-const allowedOrigins = [
-  process.env.FRONTEND_URL,
-  "https://verifirma-frontend.onrender.com",
-  "https://www.verifirma.cl",
-  "https://verifirma.cl",
-  "https://app.verifirma.cl",
-  "https://firmar.verifirma.cl",
-  "https://verificar.verifirma.cl",
-  "https://docdigital.vercel.app",
-  "http://localhost:5173",
-  "http://localhost:5174",
-  "http://localhost:3000",
-].filter(Boolean);
-
 app.use((req, res, next) => {
-  const origin = req.headers.origin || "";
-
-  if (origin) {
-    // Para que los proxies/browsers sepan que la respuesta varía según Origin
-    res.header("Vary", "Origin");
-  }
-
-  if (allowedOrigins.includes(origin)) {
-    res.header("Access-Control-Allow-Origin", origin);
-    res.header(
-      "Access-Control-Allow-Methods",
-      "GET,HEAD,PUT,PATCH,POST,DELETE,OPTIONS"
+  if (req.path.startsWith("/api")) {
+    console.log(
+      `[REQ] ${req.method} ${req.originalUrl} origin=${req.headers.origin || "none"}`
     );
-    res.header(
-      "Access-Control-Allow-Headers",
-      "Content-Type, Authorization"
-    );
-    res.header("Access-Control-Allow-Credentials", "true");
   }
-
-  if (req.method === "OPTIONS") {
-    // Preflight: siempre responder algo rápido
-    return res.sendStatus(204);
-  }
-
   next();
 });
 
@@ -311,9 +337,6 @@ app.get("/api/info", (req, res) => {
 });
 console.log("✓ Ruta GET /api/info registrada");
 
-/* ================================
-   RUTA DE PRUEBA SENTRY
-   ================================ */
 app.get("/api/sentry-test", (req, res) => {
   throw new Error("Sentry test error");
 });
@@ -392,7 +415,7 @@ app.use(
 );
 console.log("✓ Rutas /api/docs y /api/documents registradas");
 
-// Público (firma, verificación, etc.)
+// Público
 app.use(
   "/api/public",
   publicLimiter,
@@ -450,6 +473,7 @@ console.log("✓ Rutas /api/public/documents y /api/public/verificar registradas
 
 // Notaría
 app.use("/api/notary", notaryRouter);
+console.log("✓ Rutas /api/notary registradas");
 
 /* ================================
    RUTA STORAGE / URLs FIRMADAS
@@ -543,7 +567,7 @@ app.post(
           if (ok) enviados++;
         } catch (emailError) {
           console.error(
-            `⚠️  Error enviando recordatorio para doc ${doc.id}:`,
+            `⚠️ Error enviando recordatorio para doc ${doc.id}:`,
             emailError.message
           );
           errores++;
@@ -624,7 +648,7 @@ if (fs.existsSync(frontendDir)) {
 
   console.log("✓ Frontend estático servido desde", frontendDir);
 } else {
-  console.warn("⚠️  Frontend no encontrado en", frontendDir);
+  console.warn("⚠️ Frontend no encontrado en", frontendDir);
 }
 
 /* ================================
@@ -651,13 +675,14 @@ console.log("✓ Middleware 404 registrado");
    INICIAR SERVIDOR HTTP + SOCKET.IO
    ================================ */
 const PORT = Number(process.env.PORT) || 4000;
+const HOST = "0.0.0.0";
 const { initializeSocketIO } = require("./services/socketService");
 
 const server = http.createServer(app);
 
-server.listen(PORT, () => {
+server.listen(PORT, HOST, () => {
   console.log("=====================================");
-  console.log(`✅ API ESCUCHANDO EN PUERTO ${PORT}`);
+  console.log(`✅ API ESCUCHANDO EN ${HOST}:${PORT}`);
   console.log("=====================================");
   console.log("📋 Rutas principales:");
   console.log("   GET  /api-docs");
@@ -675,8 +700,9 @@ server.listen(PORT, () => {
   console.log("=====================================");
   console.log(`🌍 FRONTEND_URL: ${process.env.FRONTEND_URL || "no configurada"}`);
   console.log(
-    `☁️  STORAGE (R2_BUCKET): ${process.env.R2_BUCKET || "no configurado"}`
+    `☁️ STORAGE (R2_BUCKET): ${process.env.R2_BUCKET || "no configurado"}`
   );
+  console.log("✅ Allowed origins:", [...allowedOriginSet]);
   console.log("=====================================");
 });
 

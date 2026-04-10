@@ -25,38 +25,59 @@ if (!JWT_REFRESH_SECRET) {
 
 const normalizeRun = (run) => (run || "").replace(/[.\-]/g, "");
 
-// Access token corto (15 min)
+/**
+ * Access token corto (15 min)
+ */
 function signAccessToken(payload) {
   return jwt.sign(payload, JWT_ACCESS_SECRET, { expiresIn: "15m" });
 }
 
-// Refresh token (~30 días)
+/**
+ * Refresh token (~30 días)
+ */
 function signRefreshToken(payload) {
   return jwt.sign(payload, JWT_REFRESH_SECRET, { expiresIn: "30d" });
 }
 
-// Cookies httpOnly para tokens
-function setAuthCookies(res, accessToken, refreshToken, rememberMe) {
-  const commonOptions = {
-    httpOnly: true,
-    secure: process.env.NODE_ENV === "production",
-    sameSite: "strict",
-  };
+/**
+ * Cookies httpOnly para tokens
+ * - sameSite: "none" para permitir envío desde front en dominio distinto
+ * - secure: true en producción (obligatorio con SameSite=None) [web:439][web:453]
+ * - NO usar domain mientras tengas vercel.app + onrender.com mezclados [web:444]
+ */
+function buildCookieBaseOptions() {
+  const isProd = process.env.NODE_ENV === "production";
 
+  return {
+    httpOnly: true,
+    secure: isProd,
+    sameSite: "none",
+    path: "/",
+  };
+}
+
+function setAuthCookies(res, accessToken, refreshToken, rememberMe) {
+  const base = buildCookieBaseOptions();
+
+  // access_token: solo sesión
   res.cookie("access_token", accessToken, {
-    ...commonOptions,
+    ...base,
   });
 
-  const refreshOptions = { ...commonOptions };
+  // refresh_token: sesión o 30 días según rememberMe
+  const refreshOptions = { ...base };
   if (rememberMe) {
     refreshOptions.maxAge = 30 * 24 * 60 * 60 * 1000; // 30 días
   }
+
   res.cookie("refresh_token", refreshToken, refreshOptions);
 }
 
 function clearAuthCookies(res) {
-  res.clearCookie("access_token");
-  res.clearCookie("refresh_token");
+  const base = buildCookieBaseOptions();
+
+  res.clearCookie("access_token", base);
+  res.clearCookie("refresh_token", base);
 }
 
 /* ========= Middleware requireAuth ========= */
@@ -234,7 +255,6 @@ router.post("/login", async (req, res) => {
         .json({ message: "Error de conexión con la base de datos" });
     }
 
-    // SELECT solo columnas necesarias + LIMIT 1
     const baseSelect = `
       SELECT 
         id,
@@ -287,7 +307,6 @@ router.post("/login", async (req, res) => {
         });
       }
 
-      // no bloquees la respuesta si el log se cae
       try {
         await logAuth({
           userId: null,

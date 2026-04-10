@@ -66,7 +66,7 @@ if (import.meta.env.DEV) {
 const api = axios.create({
   baseURL: API_BASE_URL,
   timeout: 30000,
-  withCredentials: true,
+  withCredentials: true, // crítico para cookies HttpOnly
 });
 
 /* ============================
@@ -341,7 +341,7 @@ api.interceptors.response.use(
       path,
     } = extractErrorMeta(error);
 
-    // Errores de red / CORS (sin status): ayuda a depurar en prod
+    // Errores de red / CORS (sin status)
     if (status == null) {
       if (!import.meta.env.DEV) {
         // eslint-disable-next-line no-console
