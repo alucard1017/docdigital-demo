@@ -137,7 +137,7 @@ const allowedOrigins = [
 
 const allowedOriginSet = new Set(allowedOrigins);
 
-const corsOptionsDelegate = function (req, callback) {
+const corsOptionsDelegate = (req, callback) => {
   const origin = req.header("Origin");
 
   const baseConfig = {
@@ -167,6 +167,7 @@ const corsOptionsDelegate = function (req, callback) {
   });
 };
 
+// CORS global + preflight explícito
 app.use(cors(corsOptionsDelegate));
 app.options("*", cors(corsOptionsDelegate));
 console.log("✓ CORS configurado con whitelist dinámica");
