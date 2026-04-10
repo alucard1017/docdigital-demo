@@ -72,41 +72,37 @@ export function DetailView({
   const timelineToastShownRef = useRef(false);
   const signersToastShownRef = useRef(false);
 
-  const safeEvents = useMemo(
-    () => getTimelineEvents(timeline, events),
-    [timeline, events]
-  );
+  const safeEvents = useMemo(() => {
+    return getTimelineEvents(timeline, events);
+  }, [timeline, events]);
 
-  const displayName = useMemo(
-    () => buildUserDisplayName(currentUser),
-    [currentUser]
-  );
+  const displayName = useMemo(() => {
+    return buildUserDisplayName(currentUser);
+  }, [currentUser]);
 
   const currentTimelineDoc = timeline?.document || null;
 
-  const currentDocId = useMemo(
-    () => selectedDoc?.id ?? currentTimelineDoc?.id ?? null,
-    [selectedDoc, currentTimelineDoc]
-  );
+  const currentDocId = useMemo(() => {
+    return selectedDoc?.id ?? currentTimelineDoc?.id ?? null;
+  }, [selectedDoc, currentTimelineDoc]);
 
-  const numeroInterno = useMemo(
-    () => getDocumentNumber(selectedDoc, timeline),
-    [selectedDoc, timeline]
-  );
+  const numeroInterno = useMemo(() => {
+    return getDocumentNumber(selectedDoc, timeline);
+  }, [selectedDoc, timeline]);
 
-  const numeroInternoDisplay = useMemo(
-    () => numeroInterno || (currentDocId ? `#${currentDocId}` : "N/D"),
-    [numeroInterno, currentDocId]
-  );
+  const numeroInternoDisplay = useMemo(() => {
+    return numeroInterno || (currentDocId ? `#${currentDocId}` : "N/D");
+  }, [numeroInterno, currentDocId]);
 
-  const titleDocumento = useMemo(
-    () => getDocumentTitle(selectedDoc, timeline),
-    [selectedDoc, timeline]
-  );
+  const titleDocumento = useMemo(() => {
+    return getDocumentTitle(selectedDoc, timeline);
+  }, [selectedDoc, timeline]);
 
   const tramiteLabel = useMemo(() => {
     const rawValue =
       currentTimelineDoc?.tipo_tramite ??
+      currentTimelineDoc?.tipoTramite ??
+      currentTimelineDoc?.tramite ??
       selectedDoc?.tipo_tramite ??
       selectedDoc?.tipoTramite ??
       selectedDoc?.tramite ??
@@ -120,6 +116,9 @@ export function DetailView({
   const documentoLabel = useMemo(() => {
     const rawValue =
       currentTimelineDoc?.tipo_documento ??
+      currentTimelineDoc?.tipoDocumento ??
+      currentTimelineDoc?.document_type ??
+      currentTimelineDoc?.tipo ??
       selectedDoc?.tipo_documento ??
       selectedDoc?.tipoDocumento ??
       selectedDoc?.document_type ??
@@ -130,44 +129,37 @@ export function DetailView({
     return label || "N/D";
   }, [currentTimelineDoc, selectedDoc]);
 
-  const currentStatus = useMemo(
-    () => currentTimelineDoc?.status ?? selectedDoc?.status ?? null,
-    [currentTimelineDoc, selectedDoc]
-  );
+  const currentStatus = useMemo(() => {
+    return currentTimelineDoc?.status ?? selectedDoc?.status ?? null;
+  }, [currentTimelineDoc, selectedDoc]);
 
   const isSigned = currentStatus === "FIRMADO";
   const isRejected = currentStatus === "RECHAZADO";
 
-  const mostrarBotonReenvioVisado = useMemo(
-    () => shouldShowVisadoReminder(selectedDoc, currentStatus),
-    [selectedDoc, currentStatus]
-  );
+  const mostrarBotonReenvioVisado = useMemo(() => {
+    return shouldShowVisadoReminder(selectedDoc, currentStatus);
+  }, [selectedDoc, currentStatus]);
 
-  const mostrarBotonRecordatorio = useMemo(
-    () => shouldShowGlobalReminder(currentStatus),
-    [currentStatus]
-  );
+  const mostrarBotonRecordatorio = useMemo(() => {
+    return shouldShowGlobalReminder(currentStatus);
+  }, [currentStatus]);
 
   const baseUrl = api.defaults.baseURL || "";
   const downloadUrl = currentDocId
     ? `${baseUrl}/documents/${currentDocId}/download`
     : null;
 
-  const documentStateMeta = useMemo(
-    () => buildDocumentStateMeta(currentStatus),
-    [currentStatus]
-  );
+  const documentStateMeta = useMemo(() => {
+    return buildDocumentStateMeta(currentStatus);
+  }, [currentStatus]);
 
-  const flowParticipants = useMemo(
-    () => buildFlowParticipants(participants, signers),
-    [participants, signers]
-  );
+  const flowParticipants = useMemo(() => {
+    return buildFlowParticipants(participants, signers);
+  }, [participants, signers]);
 
-  const nextPendingParticipant = useMemo(
-    () =>
-      flowParticipants.find((p) => p.statusKey === "pending") || null,
-    [flowParticipants]
-  );
+  const nextPendingParticipant = useMemo(() => {
+    return flowParticipants.find((p) => p.statusKey === "pending") || null;
+  }, [flowParticipants]);
 
   const fetchTimelineAndParticipants = useCallback(
     async (docId) => {
@@ -177,11 +169,8 @@ export function DetailView({
 
         const data = await getDocumentTimeline(docId);
 
-        // el backend devuelve { document, participants, timeline }
         setTimeline(data || null);
-        setParticipants(
-          Array.isArray(data?.participants) ? data.participants : []
-        );
+        setParticipants(Array.isArray(data?.participants) ? data.participants : []);
         timelineToastShownRef.current = false;
       } catch (err) {
         if (isAbortLikeError(err)) return;
@@ -419,10 +408,8 @@ export function DetailView({
       <main className="main-area">
         <header className="detail-topbar">
           <span className="detail-topbar-title">
-            Revisión de documento{" "}
-            {numeroInterno ? `(${numeroInterno})` : currentDocId ? `#${currentDocId}` : ""}
-            {" · "}
-            Estado {currentStatus || "Sin estado"}
+            Revisión de documento ({numeroInternoDisplay}) · Estado{" "}
+            {currentStatus || "Sin estado"}
           </span>
 
           <span className="detail-topbar-user">
@@ -439,7 +426,10 @@ export function DetailView({
                 <div className="detail-meta">
                   <p>
                     <span className="detail-meta-label">N° interno:</span>{" "}
-                    <span className="detail-meta-value" title={numeroInternoDisplay}>
+                    <span
+                      className="detail-meta-value detail-meta-value--code"
+                      title={numeroInternoDisplay}
+                    >
                       {numeroInternoDisplay}
                     </span>
                   </p>
@@ -532,7 +522,12 @@ export function DetailView({
                   )}
 
                   {downloadUrl && (
-                    <a href={downloadUrl} className="btn-main detail-btn-download">
+                    <a
+                      href={downloadUrl}
+                      className="btn-main detail-btn-download"
+                      target="_blank"
+                      rel="noopener noreferrer"
+                    >
                       📥 Descargar PDF
                     </a>
                   )}
