@@ -35,14 +35,31 @@ console.log("🔌 Configuración PostgreSQL:", {
   NODE_ENV,
   connectionStringHost: sanitizedConnectionString,
   ssl: sslEnabled ? "enabled" : "disabled",
+  max: Number(process.env.DB_POOL_MAX || 10),
+  idleTimeoutMillis: Number(process.env.DB_IDLE_TIMEOUT || 30000),
+  connectionTimeoutMillis: Number(process.env.DB_CONNECT_TIMEOUT || 15000),
 });
 
+// Pool endurecido para evitar timeouts esporádicos
 const pool = new Pool({
   connectionString,
   ssl: sslEnabled,
   max: Number(process.env.DB_POOL_MAX || 10),
+  min: Number(process.env.DB_POOL_MIN || 0),
   idleTimeoutMillis: Number(process.env.DB_IDLE_TIMEOUT || 30000),
-  connectionTimeoutMillis: Number(process.env.DB_CONNECT_TIMEOUT || 10000),
+  connectionTimeoutMillis: Number(process.env.DB_CONNECT_TIMEOUT || 15000),
+  keepAlive: true,
+  keepAliveInitialDelayMillis: 10000,
+  allowExitOnIdle: false,
+});
+
+// Opcional: ajustar statement_timeout en cada conexión nueva
+pool.on("connect", async (client) => {
+  try {
+    await client.query("SET statement_timeout TO 30000");
+  } catch (err) {
+    console.warn("⚠️ No se pudo aplicar statement_timeout:", err.message);
+  }
 });
 
 // Log de errores del pool
