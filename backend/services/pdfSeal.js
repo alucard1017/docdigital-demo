@@ -44,9 +44,7 @@ async function sellarPdfConQr({
   const fontBold = await pdfDoc.embedFont(StandardFonts.HelveticaBold);
 
   const numeroInternoTexto =
-    numeroContratoInterno != null
-      ? String(numeroContratoInterno)
-      : "—";
+    numeroContratoInterno != null ? String(numeroContratoInterno) : "—";
 
   /* ========= 1) Footer en todas las páginas ========= */
   const footerFontSize = 8;
@@ -70,21 +68,25 @@ async function sellarPdfConQr({
     });
   });
 
-  /* ========= 2) Última página: logo, QR, barra lateral, bloque legal ========= */
+  /* ========= 2) Última página: logo, N° interno, QR, barra lateral, bloque legal ========= */
   const lastPage = pages[pages.length - 1];
   const { width, height } = lastPage.getSize();
 
-  // Logo
+  // Logo + N° interno (más elegante, menos pegado al borde)
   try {
     const logoPngBytes = await fs.promises.readFile(
       path.join(__dirname, "../assets/verifirma-logo.png")
     );
     const logoImage = await pdfDoc.embedPng(logoPngBytes);
-    const logoWidth = 90;
+
+    const logoWidth = 78; // un poco más pequeño
     const logoHeight = (logoImage.height / logoImage.width) * logoWidth;
 
-    const logoX = width - logoWidth - 15;
-    const logoY = height - logoHeight - 40;
+    const marginRight = 32; // más separado del borde
+    const marginTop = 52;
+
+    const logoX = width - logoWidth - marginRight;
+    const logoY = height - logoHeight - marginTop;
 
     lastPage.drawImage(logoImage, {
       x: logoX,
@@ -93,11 +95,22 @@ async function sellarPdfConQr({
       height: logoHeight,
     });
 
-    lastPage.drawText(`N° interno: ${numeroInternoTexto}`, {
+    // N° interno debajo del logo, alineado al borde izquierdo del logo
+    const internalFontSize = 8.2;
+
+    lastPage.drawText(`N° interno`, {
       x: logoX,
-      y: logoY - 16,
-      size: 9,
+      y: logoY - 14,
+      size: internalFontSize,
       font,
+      color: rgb(0.35, 0.35, 0.35),
+    });
+
+    lastPage.drawText(`${numeroInternoTexto}`, {
+      x: logoX,
+      y: logoY - 26,
+      size: internalFontSize + 0.4,
+      font: fontBold,
       color: rgb(0.1, 0.1, 0.1),
     });
   } catch (err) {

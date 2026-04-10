@@ -416,7 +416,11 @@ app.use(
 );
 console.log("✓ Rutas /api/docs y /api/documents registradas");
 
-// Público
+/* ================================
+   RUTAS PÚBLICAS (sin auth)
+   ================================ */
+
+// Público principal (links de firma / visado / etc.)
 app.use(
   "/api/public",
   publicLimiter,
@@ -428,9 +432,17 @@ app.use(
 );
 console.log("✓ Rutas /api/public registradas");
 
-// Registro público
+// Registro público (alta de usuarios / empresas por invitación, etc.)
 app.use("/api/public", publicRegisterRoutes);
 console.log("✓ Rutas /api/public/register registradas");
+
+// Docs públicos (verificación, descarga, etc.)
+app.use("/api/public", publicDocsRouter);
+console.log("✓ Rutas /api/public/documents y /api/public/verificar registradas");
+
+/* ================================
+   RUTAS PRIVADAS ADICIONALES
+   ================================ */
 
 // Empresas
 app.use("/api/companies", requireAuth, requireActivePlan, companiesRoutes);
@@ -467,10 +479,6 @@ console.log("✓ Rutas /api/onboarding registradas");
 // Billing
 app.use("/api/billing", requireAuth, billingRoutes);
 console.log("✓ Rutas /api/billing registradas");
-
-// Docs públicos
-app.use("/api/public", publicDocsRouter);
-console.log("✓ Rutas /api/public/documents y /api/public/verificar registradas");
 
 // Notaría
 app.use("/api/notary", notaryRouter);

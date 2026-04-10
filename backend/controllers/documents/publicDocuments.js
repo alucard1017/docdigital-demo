@@ -309,7 +309,7 @@ async function publicSignDocument(req, res) {
       return res.status(tokenError.status).json(tokenError.body);
     }
 
-    // IMPORTANTE: solo se permite firmar por sign_token del firmante.
+    // Solo se permite firmar por sign_token del firmante
     const current = await db.query(
       `
       SELECT 
@@ -339,12 +339,11 @@ async function publicSignDocument(req, res) {
       return res.status(validationError.status).json(validationError.body);
     }
 
-    // Blindaje adicional: evitar que un VISADOR firme aquí por error,
-    // la lógica de visado está en publicVisarDocument.
+    // Blindaje: evitar que un VISADOR firme por aquí
     if (row.signer_role && row.signer_role.toUpperCase() === "VISADOR") {
       return res
         .status(400)
-        .json({ message: "Este enlace corresponde a un visador, no a firma" });
+        .json({ message: "Este enlace corresponde a visado, no a firma" });
     }
 
     await db.query(
@@ -618,7 +617,6 @@ async function publicRejectDocument(req, res) {
       return res.status(reasonError.status).json(reasonError.body);
     }
 
-    // IMPORTANTE: solo se permite rechazar por sign_token del firmante.
     const current = await db.query(
       `
       SELECT 

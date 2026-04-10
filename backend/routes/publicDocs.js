@@ -89,7 +89,8 @@ async function createDocumentEvent(client, payload) {
 }
 
 async function getPendingPreviousParticipants(client, documentId, flowOrder) {
-  if (!Number.isFinite(flowOrder)) return [];
+  const parsedOrder = Number(flowOrder);
+  if (!Number.isFinite(parsedOrder)) return [];
 
   const res = await client.query(
     `
@@ -106,17 +107,17 @@ async function getPendingPreviousParticipants(client, documentId, flowOrder) {
       AND status NOT IN ('FIRMADO', 'VISADO', 'COMPLETADO')
     ORDER BY flow_order ASC, id ASC
     `,
-    [documentId, flowOrder]
+    [documentId, parsedOrder]
   );
 
   return res.rows;
 }
 
 /* ================================
-   GET /public/docs/:token
-   Resuelve invitación pública y devuelve:
-   - document
-   - participant/signer actual
+   GET /api/public/docs/:token
+   - document (legacy o moderno)
+   - signer legacy
+   - participant moderno (si existe)
    - invitation
    - flow
    ================================ */
@@ -133,7 +134,7 @@ router.get("/docs/:token", async (req, res) => {
   try {
     await client.query("BEGIN");
 
-    // 1) Resolver invitación legacy (signer_invitations + signers + documentos)
+    // 1) Invitación legacy
     const inviteRes = await client.query(
       `
       SELECT
@@ -182,7 +183,7 @@ router.get("/docs/:token", async (req, res) => {
       return res.status(410).json({ message: "Esta invitación ha expirado" });
     }
 
-    // 2) Intentar vincular con modelo moderno (documents/document_participants)
+    // 2) Documento moderno (documents/document_participants)
     const modernDocRes = await client.query(
       `
       SELECT
@@ -242,7 +243,8 @@ router.get("/docs/:token", async (req, res) => {
         [modernDoc.id, row.signer_email]
       );
 
-      participant = participantRes.rowCount > 0 ? participantRes.rows[0] : null;
+      participant =
+        participantRes.rowCount > 0 ? participantRes.rows[0] : null;
 
       if (
         participant &&
@@ -251,7 +253,7 @@ router.get("/docs/:token", async (req, res) => {
         blockedBy = await getPendingPreviousParticipants(
           client,
           modernDoc.id,
-          Number(participant.flow_order)
+          participant.flow_order
         );
       }
     }
@@ -259,9 +261,10 @@ router.get("/docs/:token", async (req, res) => {
     const ipAddress = getClientIp(req);
     const userAgent = getUserAgent(req);
 
-    // 3) Actualizar estado del signer legacy: invited -> opened
+    // 3) Actualizar estado legacy invited -> opened
     const fromStatus = row.signer_status;
-    const toStatus = row.signer_status === "invited" ? "opened" : row.signer_status;
+    const toStatus =
+      row.signer_status === "invited" ? "opened" : row.signer_status;
 
     if (fromStatus === "invited") {
       await client.query(
@@ -274,7 +277,7 @@ router.get("/docs/:token", async (req, res) => {
       );
     }
 
-    // 4) Registrar evento en modelo moderno (si existe)
+    // 4) Evento moderno (si hay documento moderno)
     if (modernDoc) {
       await createDocumentEvent(client, {
         documentId: modernDoc.id,
@@ -314,7 +317,7 @@ router.get("/docs/:token", async (req, res) => {
 
     await client.query("COMMIT");
 
-    // 5) Normalizar documento efectivo a devolver (prioriza documents)
+    // 5) Normalizar documento devuelto
     const effectiveDocument = modernDoc
       ? {
           id: modernDoc.id,
@@ -329,7 +332,8 @@ router.get("/docs/:token", async (req, res) => {
             modernDoc.file_url ||
             row.legacy_file_url ||
             null,
-          expiresAt: modernDoc.fecha_expiracion || row.legacy_document_expires_at,
+          expiresAt:
+            modernDoc.fecha_expiracion || row.legacy_document_expires_at,
           hash:
             modernDoc.final_hash_sha256 ||
             modernDoc.hash_final_file ||
@@ -384,7 +388,10 @@ router.get("/docs/:token", async (req, res) => {
         sentAt: row.invitation_sent_at,
       },
       flow: {
-        mode: modernDoc?.sign_flow_type || row.legacy_document_flow_type || "SEQUENTIAL",
+        mode:
+          modernDoc?.sign_flow_type ||
+          row.legacy_document_flow_type ||
+          "SEQUENTIAL",
         canActNow: blockedBy.length === 0,
         blockedBy: blockedBy.map((p) => ({
           id: p.id,
