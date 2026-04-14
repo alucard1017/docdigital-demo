@@ -18,16 +18,11 @@ const {
 } = require("./publicDocumentsValidations");
 
 /**
- * Nota importante:
- *  - getDocumentAndSignerByDocumentToken se mantiene SOLO para usos de lectura.
- *  - NO se usa para firmar ni rechazar, para evitar firmar con el token genérico
- *    del documento y mezclar firmantes incorrectos.
+ * SOLO lectura por token de documento.
+ * No usar para firmar/rechazar (se debe usar siempre sign_token).
  */
-async function getDocumentAndSignerByDocumentToken(
-  documentToken,
-  emailFromQuery = null
-) {
-  const docRes = await db.query(
+async function getDocumentAndSignerByDocumentToken(documentToken, emailFromQuery = null) {
+  const { rows } = await db.query(
     `
     SELECT
       d.*,
@@ -45,12 +40,12 @@ async function getDocumentAndSignerByDocumentToken(
     [documentToken, emailFromQuery]
   );
 
-  if (docRes.rowCount === 0) return null;
-  return docRes.rows[0];
+  return rows[0] || null;
 }
 
 /* ================================
    GET por token de firmante (sign_token)
+   /api/public/docs/:token   (ruta de firma)
    ================================ */
 
 async function getPublicDocBySignerToken(req, res) {
@@ -62,7 +57,7 @@ async function getPublicDocBySignerToken(req, res) {
       return res.status(tokenError.status).json(tokenError.body);
     }
 
-    const result = await db.query(
+    const { rows } = await db.query(
       `
       SELECT 
         d.*,
@@ -93,13 +88,13 @@ async function getPublicDocBySignerToken(req, res) {
       [token]
     );
 
-    if (result.rowCount === 0) {
+    if (!rows.length) {
       return res
         .status(404)
         .json({ message: "Enlace inválido o documento no encontrado" });
     }
 
-    const row = result.rows[0];
+    const row = rows[0];
 
     const accessError = validatePublicAccess(
       row,
@@ -120,6 +115,7 @@ async function getPublicDocBySignerToken(req, res) {
 
     const pdfUrl = await getSignedUrl(basePath, 3600);
 
+    // Audit de apertura
     try {
       await insertPublicEvent({
         req,
@@ -141,10 +137,7 @@ async function getPublicDocBySignerToken(req, res) {
         },
       });
     } catch (eventErr) {
-      console.error(
-        "⚠️ Error registrando PUBLIC_LINK_OPENED_SIGNER:",
-        eventErr
-      );
+      console.error("⚠️ Error registrando PUBLIC_LINK_OPENED_SIGNER:", eventErr);
     }
 
     return res.json({
@@ -181,6 +174,7 @@ async function getPublicDocBySignerToken(req, res) {
 
 /* ================================
    GET por token de documento (signature_token)
+   /api/public/docs/document/:token  (según rutas)
    ================================ */
 
 async function getPublicDocByDocumentToken(req, res) {
@@ -192,7 +186,7 @@ async function getPublicDocByDocumentToken(req, res) {
       return res.status(tokenError.status).json(tokenError.body);
     }
 
-    const result = await db.query(
+    const { rows } = await db.query(
       `
       SELECT 
         d.*,
@@ -218,13 +212,13 @@ async function getPublicDocByDocumentToken(req, res) {
       [token]
     );
 
-    if (result.rowCount === 0) {
+    if (!rows.length) {
       return res
         .status(404)
         .json({ message: "Enlace inválido o documento no encontrado" });
     }
 
-    const doc = result.rows[0];
+    const doc = rows[0];
 
     const accessError = validatePublicAccess(
       doc,
@@ -245,6 +239,7 @@ async function getPublicDocByDocumentToken(req, res) {
 
     const pdfUrl = await getSignedUrl(basePath, 3600);
 
+    // Audit de invitación abierta
     try {
       await insertPublicEvent({
         req,
@@ -309,8 +304,7 @@ async function publicSignDocument(req, res) {
       return res.status(tokenError.status).json(tokenError.body);
     }
 
-    // Solo se permite firmar por sign_token del firmante
-    const current = await db.query(
+    const currentRes = await db.query(
       `
       SELECT 
         s.id     AS signer_id,
@@ -326,26 +320,26 @@ async function publicSignDocument(req, res) {
       [token]
     );
 
-    if (current.rowCount === 0) {
+    if (!currentRes.rows.length) {
       return res
         .status(404)
         .json({ message: "Enlace inválido o documento no encontrado" });
     }
 
-    const row = current.rows[0];
+    const row = currentRes.rows[0];
 
     const validationError = validatePublicSign(row);
     if (validationError) {
       return res.status(validationError.status).json(validationError.body);
     }
 
-    // Blindaje: evitar que un VISADOR firme por aquí
     if (row.signer_role && row.signer_role.toUpperCase() === "VISADOR") {
       return res
         .status(400)
         .json({ message: "Este enlace corresponde a visado, no a firma" });
     }
 
+    // Firmar signer
     await db.query(
       `
       UPDATE document_signers
@@ -356,6 +350,7 @@ async function publicSignDocument(req, res) {
       [row.signer_id]
     );
 
+    // Actualizar participants en paralelo (no bloquea flujo)
     try {
       await db.query(
         `
@@ -375,6 +370,7 @@ async function publicSignDocument(req, res) {
       );
     }
 
+    // Recalcular estado global
     const countRes = await db.query(
       `
       SELECT 
@@ -435,6 +431,7 @@ async function publicSignDocument(req, res) {
     );
     const doc = docUpdateRes.rows[0];
 
+    // Sincronizar con tablas legacy si aplica
     if (doc.nuevo_documento_id) {
       try {
         await db.query(
@@ -529,6 +526,7 @@ async function publicSignDocument(req, res) {
       req,
     });
 
+    // Sellado QR si aplica
     if (allSigned && doc.nuevo_documento_id) {
       try {
         const docNuevoRes = await db.query(
@@ -575,10 +573,7 @@ async function publicSignDocument(req, res) {
           }
         }
       } catch (sealError) {
-        console.error(
-          "⚠️ Error sellando PDF con QR (firma pública):",
-          sealError
-        );
+        console.error("⚠️ Error sellando PDF con QR (firma pública):", sealError);
       }
     }
 
@@ -633,7 +628,7 @@ async function publicRejectDocument(req, res) {
       [token]
     );
 
-    if (current.rowCount === 0) {
+    if (!current.rows.length) {
       return res
         .status(404)
         .json({ message: "Enlace inválido o documento no encontrado" });
@@ -811,7 +806,7 @@ async function publicVisarDocument(req, res) {
       [token]
     );
 
-    if (current.rowCount === 0) {
+    if (!current.rows.length) {
       return res
         .status(404)
         .json({ message: "Enlace inválido o documento no encontrado" });
@@ -922,7 +917,7 @@ async function verifyByCode(req, res) {
       [codigo]
     );
 
-    if (docResult.rowCount === 0) {
+    if (!docResult.rows.length) {
       return res
         .status(404)
         .json({ message: "Documento no encontrado para este código" });

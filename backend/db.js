@@ -1,4 +1,4 @@
-// backend/db.js - conexión robusta a PostgreSQL (local y producción)
+// backend/db.js
 const { Pool } = require("pg");
 
 const NODE_ENV = process.env.NODE_ENV || "development";
@@ -11,38 +11,30 @@ if (!connectionString) {
   throw new Error("DATABASE_URL no definido");
 }
 
-/**
- * SSL
- * - En Render / producción normalmente necesitas SSL
- * - DB_SSL=true fuerza SSL
- * - DB_SSL=false lo desactiva explícitamente
- * - Si no viene definido, en producción lo activamos automáticamente
- */
-function resolveSslConfig() {
-  if (process.env.DB_SSL === "false") return false;
-  if (process.env.DB_SSL === "true") {
-    return { rejectUnauthorized: false };
-  }
-  if (isProd) {
-    return { rejectUnauthorized: false };
-  }
-  return false;
-}
-
-const ssl = resolveSslConfig();
-
-/**
- * Sanitizar para log
- */
 function sanitizeConnectionString(value = "") {
   try {
-    return String(value).replace(/:\/\/.*@(.+?)\//, "://***@$1/");
+    return String(value).replace(/:\/\/([^:@/]+)(?::[^@/]*)?@/, "://***:***@");
   } catch {
     return value;
   }
 }
 
-const sanitizedConnectionString = sanitizeConnectionString(connectionString);
+function resolveSslConfig() {
+  const raw = String(process.env.DB_SSL || "").toLowerCase().trim();
+
+  if (raw === "false" || raw === "0" || raw === "off") return false;
+  if (raw === "true" || raw === "1" || raw === "on") {
+    return { rejectUnauthorized: false };
+  }
+
+  if (isProd) {
+    return { rejectUnauthorized: false };
+  }
+
+  return false;
+}
+
+const ssl = resolveSslConfig();
 
 const poolConfig = {
   connectionString,
@@ -50,7 +42,7 @@ const poolConfig = {
   max: Number(process.env.DB_POOL_MAX || 10),
   min: Number(process.env.DB_POOL_MIN || 0),
   idleTimeoutMillis: Number(process.env.DB_IDLE_TIMEOUT || 30000),
-  connectionTimeoutMillis: Number(process.env.DB_CONNECT_TIMEOUT || 10000),
+  connectionTimeoutMillis: Number(process.env.DB_CONNECT_TIMEOUT || 15000),
   keepAlive: true,
   keepAliveInitialDelayMillis: 10000,
   allowExitOnIdle: false,
@@ -59,7 +51,7 @@ const poolConfig = {
 
 console.log("🔌 Configuración PostgreSQL:", {
   NODE_ENV,
-  connectionStringHost: sanitizedConnectionString,
+  connectionStringHost: sanitizeConnectionString(connectionString),
   ssl: ssl ? "enabled" : "disabled",
   max: poolConfig.max,
   min: poolConfig.min,
@@ -70,55 +62,41 @@ console.log("🔌 Configuración PostgreSQL:", {
 
 const pool = new Pool(poolConfig);
 
-/**
- * Hook al conectar un cliente nuevo
- */
-pool.on("connect", async (client) => {
-  try {
-    await client.query("SET statement_timeout TO 30000");
-    await client.query("SET idle_in_transaction_session_timeout TO 30000");
-  } catch (err) {
-    console.warn("⚠️ No se pudieron aplicar timeouts de sesión:", err.message);
-  }
+pool.on("connect", (client) => {
+  client
+    .query("SET statement_timeout TO 30000")
+    .then(() => client.query("SET idle_in_transaction_session_timeout TO 30000"))
+    .catch((err) => {
+      console.warn("⚠️ No se pudieron aplicar timeouts de sesión:", err.message);
+    });
 });
 
-/**
- * Errores inesperados del pool
- */
 pool.on("error", (err) => {
-  console.error("❌ Error inesperado en el pool de PostgreSQL:", err);
+  console.error("❌ Error inesperado en el pool de PostgreSQL:", err.message);
 });
 
-/**
- * Test inicial de conexión (no bloqueante)
- */
-(async () => {
+async function testConnection() {
   try {
-    const r = await pool.query(
-      `
+    const { rows } = await pool.query(`
       SELECT
         current_database() AS db,
         inet_server_addr()::text AS host,
         inet_server_port() AS port,
         now() AS server_time
-      `
-    );
+    `);
 
-    const info = r.rows[0];
+    const info = rows[0];
     console.log(
       `✅ Conexión a PostgreSQL OK → db=${info.db}, host=${info.host}, port=${info.port}, server_time=${info.server_time}`
     );
   } catch (err) {
     console.error("❌ No se pudo conectar a PostgreSQL:", err.message);
-    if (!isProd) {
-      console.error(err);
-    }
+    if (!isProd) console.error(err);
   }
-})();
+}
 
-/**
- * Wrapper query con timing
- */
+void testConnection();
+
 async function query(text, params) {
   const startedAt = Date.now();
 
@@ -131,7 +109,9 @@ async function query(text, params) {
         durationMs: duration,
         rowCount: result.rowCount,
         text:
-          typeof text === "string" ? text.replace(/\s+/g, " ").trim() : "unknown",
+          typeof text === "string"
+            ? text.replace(/\s+/g, " ").trim()
+            : "unknown",
       });
     }
 
@@ -142,18 +122,16 @@ async function query(text, params) {
       durationMs: duration,
       message: err.message,
       text:
-        typeof text === "string" ? text.replace(/\s+/g, " ").trim() : "unknown",
+        typeof text === "string"
+          ? text.replace(/\s+/g, " ").trim()
+          : "unknown",
     });
     throw err;
   }
 }
 
-/**
- * Obtener cliente para transacciones manuales
- */
 async function getClient() {
-  const client = await pool.connect();
-  return client;
+  return pool.connect();
 }
 
 module.exports = {
