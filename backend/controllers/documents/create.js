@@ -87,7 +87,7 @@ function getSafeBaseFileName(filename) {
 
 function sanitizeFileName(value, fallback = "documento") {
   const normalized = normalizeText(value)
-    .replace(/[<>:"/\\|?*\x00-\x1F]/g, "-")
+    .replace(/[<>:"/\\|?\*\x00-\x1F]/g, "-")
     .replace(/\.+$/g, "")
     .replace(/^\.+/g, "")
     .replace(/\s+/g, "-")
@@ -238,6 +238,19 @@ function sanitizeSigners(rawSigners = []) {
     signers.sort((a, b) => a.orden - b.orden),
     (s) => `${safeLower(s.email)}|${s.orden}|${s.tipo}`
   );
+}
+
+/* ================================
+   TOKEN DE FIRMANTE (sign_token)
+   ================================ */
+
+function generarSignToken() {
+  const chars = "ABCDEFGHJKLMNPQRSTUVWXYZ23456789";
+  let token = "";
+  for (let i = 0; i < 8; i++) {
+    token += chars.charAt(Math.floor(Math.random() * chars.length));
+  }
+  return token;
 }
 
 /* ================================
@@ -474,6 +487,8 @@ async function createCanonicalSigners(client, { documentId, companyId, signers }
   const inserted = [];
 
   for (const signer of signers) {
+    const signToken = generarSignToken();
+
     const { rows } = await client.query(
       `
       INSERT INTO document_signers (
@@ -488,11 +503,16 @@ async function createCanonicalSigners(client, { documentId, companyId, signers }
         must_sign,
         must_review,
         metadata,
+        sign_token,
         created_at,
         updated_at
       )
       VALUES (
-        $1, $2, $3, $4, $5, $6, $7, 'PENDIENTE', $8, $9, $10::jsonb, NOW(), NOW()
+        $1, $2, $3, $4, $5, $6, $7,
+        'PENDIENTE',
+        $8, $9, $10::jsonb,
+        $11,
+        NOW(), NOW()
       )
       RETURNING *
       `,
@@ -507,6 +527,7 @@ async function createCanonicalSigners(client, { documentId, companyId, signers }
         signer.debe_firmar,
         signer.debe_visar,
         toJson({ mensaje_personalizado: signer.mensaje_personalizado }, "{}"),
+        signToken,
       ]
     );
 
@@ -609,27 +630,35 @@ async function sendInvitationsInBackground({
   documentoId,
   docTitle,
   code,
-  signers,
-  publicUrl,
+  signers, // canonicalSigners con sign_token
   actorName,
 }) {
+  const SIGNING_PORTAL_URL =
+    process.env.SIGNING_PORTAL_URL || "https://firmar.verifirma.cl";
+
   const jobs = signers.map(async (signer) => {
     try {
+      const signerPublicUrl = `${SIGNING_PORTAL_URL}/?token=${signer.sign_token}`;
+
       const payload = {
         companyId,
         documentId,
         documentoId,
         docTitle,
-        signerName: signer.nombre,
+        signerName: signer.name || signer.nombre,
         signerEmail: signer.email,
-        signerPhone: signer.telefono,
+        signerPhone: signer.phone || signer.telefono,
         verificationCode: code,
-        publicUrl,
+        publicUrl: signerPublicUrl,
         actorName,
-        signerOrder: signer.orden,
+        signerOrder: signer.signer_order || signer.orden,
       };
 
-      if (signer.debe_visar) {
+      const isVisador =
+        (signer.role || signer.tipo || "").toUpperCase() === "VISADOR" ||
+        signer.debe_visar;
+
+      if (isVisador) {
         await sendVisadoInvitation(
           payload.signerEmail,
           payload.docTitle,
@@ -1019,11 +1048,6 @@ async function createDocument(req, res) {
     await client.query("COMMIT");
     client.release();
 
-    const SIGNING_PORTAL_URL =
-      process.env.SIGNING_PORTAL_URL || "https://firmar.verifirma.cl";
-
-    const publicUrl = `${SIGNING_PORTAL_URL}/?token=${verificationCode}`;
-
     try {
       const sealResult = await sellarPdfConQr({
         s3Key: storageKey,
@@ -1058,8 +1082,7 @@ async function createDocument(req, res) {
         documentoId: documentoNuevo.id,
         docTitle: titulo,
         code: verificationCode,
-        signers,
-        publicUrl,
+        signers: canonicalSigners, // aquí van con sign_token
         actorName: req.user?.nombre || req.user?.name || "Sistema",
       });
     }

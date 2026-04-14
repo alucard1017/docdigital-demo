@@ -61,10 +61,18 @@ async function resendReminder(req, res) {
       });
     }
 
+    // VISADO por signature_token del documento
     if (tipo === "VISADO") {
       if (!doc.requires_visado || !doc.visador_email) {
         return res.status(400).json({
           message: "Este documento no tiene visador configurado",
+        });
+      }
+
+      if (!doc.signature_token) {
+        return res.status(400).json({
+          message:
+            "El documento no tiene signature_token configurado para visado",
         });
       }
 
@@ -108,6 +116,7 @@ async function resendReminder(req, res) {
       return res.json({ message: "Recordatorio de visado reenviado" });
     }
 
+    // FIRMA por sign_token del firmante
     if (tipo === "FIRMA") {
       if (!signerId) {
         return res
@@ -131,6 +140,13 @@ async function resendReminder(req, res) {
       if (["FIRMADO", "RECHAZADO"].includes(signer.status)) {
         return res.status(400).json({
           message: "No se pueden enviar recordatorios a firmantes ya cerrados",
+        });
+      }
+
+      if (!signer.sign_token) {
+        return res.status(400).json({
+          message:
+            "Este firmante no tiene sign_token configurado para firma pública",
         });
       }
 
@@ -183,7 +199,7 @@ async function resendReminder(req, res) {
 }
 
 /* ================================
-   POST: Enviar recordatorios automáticos
+   POST: Enviar recordatorios automáticos (por usuario)
    ================================ */
 async function sendAutomaticReminders(req, res) {
   try {
@@ -224,28 +240,33 @@ async function sendAutomaticReminders(req, res) {
 
     for (const doc of docs) {
       try {
-        if (doc.requires_visado && doc.status === "PENDIENTE_VISADO") {
-          if (doc.visador_email) {
-            const urlVisado = buildVisadoUrl(doc.signature_token);
+        // Visado automático por signature_token
+        if (
+          doc.requires_visado &&
+          doc.status === "PENDIENTE_VISADO" &&
+          doc.visador_email &&
+          doc.signature_token
+        ) {
+          const urlVisado = buildVisadoUrl(doc.signature_token);
 
-            await sendVisadoInvitation(
-              doc.visador_email,
-              doc.title,
-              urlVisado,
-              "Visador"
-            );
+          await sendVisadoInvitation(
+            doc.visador_email,
+            doc.title,
+            urlVisado,
+            "Visador"
+          );
 
-            remindersCount++;
+          remindersCount++;
 
-            await db.query(
-              `UPDATE documents
-               SET last_reminder_sent_at = NOW()
-               WHERE id = $1`,
-              [doc.id]
-            );
-          }
+          await db.query(
+            `UPDATE documents
+             SET last_reminder_sent_at = NOW()
+             WHERE id = $1`,
+            [doc.id]
+          );
         }
 
+        // Firma automática por sign_token de cada firmante pendiente
         if (doc.status === "PENDIENTE_FIRMA") {
           const signersRes = await db.query(
             `SELECT *
@@ -257,6 +278,13 @@ async function sendAutomaticReminders(req, res) {
 
           for (const signer of signersRes.rows) {
             try {
+              if (!signer.sign_token) {
+                console.warn(
+                  `⚠️ Firmante ${signer.id} sin sign_token en documento ${doc.id}`
+                );
+                continue;
+              }
+
               const urlFirma = buildPublicSignUrl(signer.sign_token);
 
               await sendSigningInvitation(

@@ -51,7 +51,7 @@ async function getPendingSigners(documentoId) {
     SELECT id, email, name, status, sign_token
     FROM document_signers
     WHERE document_id = $1
-      AND COALESCE(status, '') NOT IN ('FIRMADO', 'SIGNED', 'COMPLETED')
+      AND COALESCE(status, '') NOT IN ('FIRMADO', 'SIGNED', 'COMPLETED', 'RECHAZADO')
     `,
     [documentoId]
   );
@@ -97,11 +97,16 @@ async function registrarEventoRecordatorio({
   );
 }
 
+/* ================================
+   RECORDATORIO MANUAL
+   ================================ */
+
 async function enviarRecordatorioManual(documentoId) {
   try {
     const doc = await getDocumentById(documentoId);
     const reminders = [];
 
+    // Visado manual por signature_token
     if (
       doc.requires_visado === true &&
       doc.status === "PENDIENTE_VISADO" &&
@@ -128,21 +133,21 @@ async function enviarRecordatorioManual(documentoId) {
       );
     }
 
+    // Firma manual por sign_token de cada firmante pendiente
     if (doc.status === "PENDIENTE_FIRMA") {
       const signers = await getPendingSigners(documentoId);
 
       for (const signer of signers) {
         if (!signer.email) continue;
 
-        const token = signer.sign_token || doc.signature_token;
-        if (!token) {
+        if (!signer.sign_token) {
           console.warn(
-            `⚠️ Firmante ${signer.id} sin token de firma en documento ${documentoId}`
+            `⚠️ Firmante ${signer.id} sin sign_token en documento ${documentoId}`
           );
           continue;
         }
 
-        const urlFirma = buildFirmaUrl(token);
+        const urlFirma = buildFirmaUrl(signer.sign_token);
 
         await sendSigningInvitation(
           signer.email,
@@ -182,9 +187,14 @@ async function enviarRecordatorioManual(documentoId) {
   }
 }
 
+/* ================================
+   RECORDATORIO AUTOMÁTICO POR DOCUMENTO
+   ================================ */
+
 async function enviarRecordatorioAutomaticoDocumento(doc, step) {
   const reminders = [];
 
+  // Visado automático por signature_token
   if (
     doc.requires_visado === true &&
     doc.status === "PENDIENTE_VISADO" &&
@@ -211,21 +221,21 @@ async function enviarRecordatorioAutomaticoDocumento(doc, step) {
     );
   }
 
+  // Firma automática por sign_token
   if (doc.status === "PENDIENTE_FIRMA") {
     const signers = await getPendingSigners(doc.id);
 
     for (const signer of signers) {
       if (!signer.email) continue;
 
-      const token = signer.sign_token || doc.signature_token;
-      if (!token) {
+      if (!signer.sign_token) {
         console.warn(
-          `⚠️ Firmante ${signer.id} sin token de firma en documento ${doc.id}`
+          `⚠️ Firmante ${signer.id} sin sign_token en documento ${doc.id}`
         );
         continue;
       }
 
-      const urlFirma = buildFirmaUrl(token);
+      const urlFirma = buildFirmaUrl(signer.sign_token);
 
       await sendSigningInvitation(
         signer.email,
