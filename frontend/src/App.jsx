@@ -57,9 +57,7 @@ const ProductTourLazy = lazy(
 
 const UsersAdminView = lazy(() => import("./views/UsersAdminView"));
 const DashboardView = lazy(() => import("./views/DashboardView"));
-const CompaniesAdminView = lazy(
-  () => import("./views/CompaniesAdminView")
-);
+const CompaniesAdminView = lazy(() => import("./views/CompaniesAdminView"));
 const StatusAdminView = lazy(() => import("./views/StatusAdminView"));
 const AuditLogsView = lazy(() => import("./views/AuditLogsView"));
 const AuthLogsView = lazy(() => import("./views/AuthLogsView"));
@@ -132,14 +130,14 @@ function getLocationSnapshot() {
   };
 }
 
-function getPublicAccess({
+function getPublicAccessSnapshot({
   pathname,
   search,
   isSigningPortal,
   isVerificationPortal,
 }) {
   const params = new URLSearchParams(search || "");
-  const token = params.get("token") || "";
+  const token = (params.get("token") || "").trim();
 
   const isPublicSigningAccess =
     !!token &&
@@ -170,14 +168,13 @@ function SessionLoadingFallback() {
 }
 
 function App() {
+  // Portales dedicados (subdominio)
   const subdomain = getSubdomain();
   const isVerificationPortal = subdomain === "verificar";
   const isSigningPortal = subdomain === "firmar";
 
   const [path, setPath] = useState(() => getPath());
-  const [view, setView] = useState(() =>
-    getProtectedViewFromPath(getPath())
-  );
+  const [view, setView] = useState(() => getProtectedViewFromPath(getPath()));
 
   // Login state
   const [identifier, setIdentifier] = useState("");
@@ -212,7 +209,7 @@ function App() {
     isAnyPublicAccess,
   } = useMemo(
     () =>
-      getPublicAccess({
+      getPublicAccessSnapshot({
         pathname: locationSnapshot.pathname,
         search: locationSnapshot.search,
         isSigningPortal,
@@ -272,6 +269,7 @@ function App() {
     publicSignPdfUrl,
     publicSignMode,
     publicView,
+    publicTokenKind,
     cargarFirmaPublica,
   } = usePublicSign({
     apiRoot,
@@ -344,6 +342,7 @@ function App() {
     [cargarDocs, page, sort, statusFilter, search]
   );
 
+  // Sincroniza path interno con router (popstate / navigateTo)
   useEffect(() => {
     const syncPath = () => {
       const nextPath = getPath();
@@ -368,6 +367,7 @@ function App() {
     };
   }, [isAuthenticated, selectedDoc]);
 
+  // Redirecciones básicas de auth vs. rutas protegidas
   useEffect(() => {
     if (authLoading) return;
     if (isAnyPublicAccess) return;
@@ -392,6 +392,7 @@ function App() {
     setSelectedDoc,
   ]);
 
+  // Mantener view protegida consistente con path
   useEffect(() => {
     if (!isAuthenticated) return;
     if (view === "detail") return;
@@ -410,6 +411,7 @@ function App() {
     }
   }, [view, path, isAuthenticated, setSelectedDoc]);
 
+  // Socket: feedback de documentos enviados/firmados
   useEffect(() => {
     if (!token) return;
     if (typeof socketOn !== "function" || typeof socketOff !== "function") {
@@ -449,6 +451,7 @@ function App() {
     };
   }, [token, socketOn, socketOff, addToast, refreshDocs]);
 
+  // Socket: errores visibles en UI
   useEffect(() => {
     if (!socketLastError) return;
 
@@ -669,9 +672,7 @@ function App() {
             <button
               type="button"
               className="btn-main"
-              disabled={
-                loadingDocs || safeCurrentPage >= safeTotalPaginas
-              }
+              disabled={loadingDocs || safeCurrentPage >= safeTotalPaginas}
               onClick={() =>
                 setPage((prev) => Math.min(safeTotalPaginas, prev + 1))
               }
@@ -826,14 +827,17 @@ function App() {
     apiRoot,
   ]);
 
+  // 1) Mientras cargamos la sesión
   if (authLoading) {
     return <SessionLoadingFallback />;
   }
 
+  // 2) Portales públicos: verificación
   if (isPublicVerificationAccess || publicView === "verification") {
     return <VerificationView API_URL={apiRoot} />;
   }
 
+  // 3) Portales públicos: firma / visado
   if (isPublicSigningAccess || publicView === "public-sign") {
     return (
       <PublicSignView
@@ -843,12 +847,14 @@ function App() {
         publicSignPdfUrl={publicSignPdfUrl}
         publicSignToken={publicSignToken || tokenFromUrl}
         publicSignMode={publicSignMode}
+        publicTokenKind={publicTokenKind}
         API_URL={apiRoot}
         cargarFirmaPublica={cargarFirmaPublica}
       />
     );
   }
 
+  // 4) Rutas públicas de auth
   if (!isAuthenticated && path === "/forgot-password") {
     return <ForgotPasswordView />;
   }
@@ -861,6 +867,7 @@ function App() {
     return <RegisterView />;
   }
 
+  // 5) Login (app principal)
   if (!isAuthenticated) {
     const displayIdentifier =
       isEmailMode || identifier.includes("@")
@@ -894,6 +901,7 @@ function App() {
     );
   }
 
+  // 6) Vista de detalle
   if (view === "detail" && selectedDoc) {
     const requiereVisado = selectedDoc.requires_visado === true;
 
@@ -925,6 +933,7 @@ function App() {
     );
   }
 
+  // 7) Dashboard protegido
   return (
     <div className="dashboard-root">
       <Suspense

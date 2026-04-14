@@ -1,7 +1,7 @@
 // backend/routes/documents.js
-
 const express = require("express");
 const Sentry = require("@sentry/node");
+const crypto = require("crypto");
 
 const db = require("../db");
 const { requireAuth } = require("./auth");
@@ -229,6 +229,19 @@ function withDocumentAudit(action) {
 
     return next();
   };
+}
+
+/* ================================
+   Helpers específicos de invitación
+   ================================ */
+
+function buildPublicSigningUrl(token) {
+  const base = (process.env.APP_PUBLIC_URL || "").trim().replace(/\/+$/, "");
+  if (!base) {
+    // fallback conservador si la env var no está, evita romper envío
+    return `/public/docs/${token}`;
+  }
+  return `${base}/public/docs/${token}`;
 }
 
 /* ================================
@@ -859,7 +872,6 @@ router.post(
           .json({ message: "No tienes permisos sobre este firmante" });
       }
 
-      const crypto = require("crypto");
       const token = crypto.randomBytes(24).toString("hex");
       const expiresAt = new Date(Date.now() + 7 * 24 * 60 * 60 * 1000);
 
@@ -876,7 +888,7 @@ router.post(
         )
         RETURNING id, token, expires_at, sent_at;
         `,
-        [signer.id, token, expiresAt.toISOString()]
+        [signer.id, expiresAt.toISOString(), token]
       );
 
       const invitation = inviteRes.rows[0];
@@ -945,7 +957,7 @@ router.post(
             signerEmail: signer.email,
             signerName: signer.full_name,
             documentoTitulo: documento.titulo,
-            signingUrl: `${process.env.APP_PUBLIC_URL}/public/docs/${invitation.token}`,
+            signingUrl: buildPublicSigningUrl(invitation.token),
           });
         }
       } catch (mailErr) {

@@ -66,7 +66,7 @@ if (import.meta.env.DEV) {
 const api = axios.create({
   baseURL: API_BASE_URL,
   timeout: 30000,
-  withCredentials: true, // crítico para cookies HttpOnly
+  withCredentials: true,
 });
 
 /* ============================
@@ -119,7 +119,6 @@ const PUBLIC_PATH_PREFIXES = [
   "/auth/reset-password",
 ];
 
-// rutas donde un 401 NO debe provocar logout global
 const AUTH_IGNORED_401_PATHS = [/^\/documents\/\d+\/timeline$/i];
 
 /* ============================
@@ -207,19 +206,16 @@ export const isAuthFailure = (status, message, code, path = "") => {
   const normalizedMessage = normalizeLower(message);
 
   if (status === 401) {
-    if (isIgnoredAuth401(path)) {
-      return false;
-    }
+    if (isIgnoredAuth401(path)) return false;
     if (AUTH_FAILURE_CODES.has(normalizedCode)) return true;
     if (AUTH_FAILURE_MESSAGES.has(normalizedMessage)) return true;
-    // Por diseño: cualquier 401 no público se trata como fallo de auth
+    // Cualquier 401 no público se trata como fallo de auth
     return true;
   }
 
   if (status === 403) {
     if (AUTH_FAILURE_CODES.has(normalizedCode)) return true;
     if (AUTH_FAILURE_MESSAGES.has(normalizedMessage)) return true;
-
     if (FORBIDDEN_MESSAGES.has(normalizedMessage)) return false;
     return false;
   }
@@ -276,7 +272,6 @@ api.interceptors.request.use(
   (config) => {
     const token = getStoredToken();
 
-    // Forzar path relativo limpio
     config.url = ensureLeadingSlash(config.url || "");
 
     if (token && !isPublicRequest(config.url)) {
@@ -341,7 +336,6 @@ api.interceptors.response.use(
       path,
     } = extractErrorMeta(error);
 
-    // Errores de red / CORS (sin status)
     if (status == null) {
       if (!import.meta.env.DEV) {
         // eslint-disable-next-line no-console
@@ -438,12 +432,27 @@ export async function getPublicVerificationByCode(code, config = {}) {
   return res.data;
 }
 
-export async function getPublicDocumentByToken(token, config = {}) {
+// Token de firmante (sign_token / invitación)
+export async function getPublicDocumentBySignerToken(token, config = {}) {
   const res = await api.get(
     `/public/docs/${encodeURIComponent(token)}`,
     config
   );
   return res.data;
+}
+
+// Token de documento (signature_token)
+export async function getPublicDocumentByDocumentToken(token, config = {}) {
+  const res = await api.get(
+    `/public/docs/document/${encodeURIComponent(token)}`,
+    config
+  );
+  return res.data;
+}
+
+// Alias conservador: por defecto usamos token de documento
+export async function getPublicDocumentByToken(token, config = {}) {
+  return getPublicDocumentByDocumentToken(token, config);
 }
 
 export async function publicSignDocument(token, config = {}) {
@@ -457,7 +466,7 @@ export async function publicSignDocument(token, config = {}) {
 
 export async function publicVisarDocument(token, config = {}) {
   const res = await api.post(
-    `/public/docs/${encodeURIComponent(token)}/visar`,
+    `/public/docs/document/${encodeURIComponent(token)}/visar`,
     {},
     config
   );

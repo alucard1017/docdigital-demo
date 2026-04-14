@@ -5,7 +5,7 @@ const db = require("../db");
 const router = express.Router();
 
 /* ================================
-   HELPERS
+   HELPERS GENERALES
    ================================ */
 
 function getClientIp(req) {
@@ -92,9 +92,9 @@ async function createDocumentEvent(client, payload) {
   );
 }
 
-async function getPendingPreviousParticipants(client, documentId, flowOrder) {
-  const parsedOrder = Number(flowOrder);
-  if (!Number.isFinite(parsedOrder)) return [];
+async function getPendingPreviousParticipants(client, documentId, flowOrderRaw) {
+  const flowOrder = Number(flowOrderRaw);
+  if (!Number.isFinite(flowOrder)) return [];
 
   const res = await client.query(
     `
@@ -111,7 +111,7 @@ async function getPendingPreviousParticipants(client, documentId, flowOrder) {
       AND status NOT IN ('FIRMADO', 'VISADO', 'COMPLETADO')
     ORDER BY flow_order ASC, id ASC
     `,
-    [documentId, parsedOrder]
+    [documentId, flowOrder]
   );
 
   return res.rows;
@@ -119,7 +119,7 @@ async function getPendingPreviousParticipants(client, documentId, flowOrder) {
 
 /* ================================
    GET /api/public/docs/:token
-   Carga datos para enlace público de firma
+   Carga datos para enlace público de firma (legacy + espejo moderno)
    ================================ */
 
 router.get("/docs/:token", async (req, res) => {
@@ -135,7 +135,7 @@ router.get("/docs/:token", async (req, res) => {
   try {
     await client.query("BEGIN");
 
-    // 1) Buscar invitación legacy por token
+    // 1) Buscar invitación legacy
     const inviteRes = await client.query(
       `
       SELECT
@@ -174,21 +174,27 @@ router.get("/docs/:token", async (req, res) => {
 
     if (inviteRes.rowCount === 0) {
       await client.query("ROLLBACK");
-      return res
-        .status(404)
-        .json({ message: "Invitación no encontrada" });
+      console.warn(
+        "[PUBLIC DOCS] /docs/:token → invitación no encontrada",
+        cleanToken
+      );
+      return res.status(404).json({ message: "Invitación no encontrada" });
     }
 
     const row = inviteRes.rows[0];
 
     if (isExpired(row.invitation_expires_at)) {
       await client.query("ROLLBACK");
+      console.info(
+        "[PUBLIC DOCS] /docs/:token → invitación expirada",
+        cleanToken
+      );
       return res
         .status(410)
         .json({ message: "Esta invitación ha expirado" });
     }
 
-    // 2) Intentar mapear a documento moderno
+    // 2) Intentar mapear a documento moderno por company + numero_contrato_interno
     const modernDocRes = await client.query(
       `
       SELECT
@@ -222,6 +228,7 @@ router.get("/docs/:token", async (req, res) => {
     let blockedBy = [];
 
     if (modernDoc) {
+      // 2.a) Buscar participante moderno equivalente
       const participantRes = await client.query(
         `
         SELECT
@@ -251,6 +258,7 @@ router.get("/docs/:token", async (req, res) => {
       participant =
         participantRes.rowCount > 0 ? participantRes.rows[0] : null;
 
+      // 2.b) Si el flujo moderno es secuencial, ver participantes anteriores pendientes
       if (
         participant &&
         String(modernDoc.sign_flow_type || "").toUpperCase() === "SEQUENTIAL"
@@ -270,7 +278,7 @@ router.get("/docs/:token", async (req, res) => {
     const toStatus =
       row.signer_status === "invited" ? "opened" : row.signer_status;
 
-    // Marcar invitación legacy como abierta
+    // 3) Marcar invitación legacy como abierta
     if (fromStatus === "invited") {
       await client.query(
         `
@@ -282,7 +290,7 @@ router.get("/docs/:token", async (req, res) => {
       );
     }
 
-    // Registrar evento en documents modernos si existe espejo
+    // 4) Registrar evento en documento moderno (si existe espejo)
     if (modernDoc) {
       const effectiveHash =
         modernDoc.final_hash_sha256 ||
@@ -324,7 +332,7 @@ router.get("/docs/:token", async (req, res) => {
 
     await client.query("COMMIT");
 
-    // Normalizar payload para el frontend
+    // 5) Normalizar payload para el frontend
     const effectiveDocument = modernDoc
       ? {
           id: modernDoc.id,

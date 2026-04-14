@@ -362,6 +362,23 @@ function getReadableParticipantLabel({ signer, isVisado, document }) {
   };
 }
 
+function buildActionEndpoint({ apiBase, token, isVisado, tokenKind }) {
+  const encoded = encodeURIComponent(token);
+
+  if (isVisado || tokenKind === "document") {
+    return isVisado
+      ? `${apiBase}/public/docs/document/${encoded}/visar`
+      : `${apiBase}/public/docs/${encoded}/sign`;
+  }
+
+  return `${apiBase}/public/docs/${encoded}/sign`;
+}
+
+function buildRejectEndpoint({ apiBase, token }) {
+  const encoded = encodeURIComponent(token);
+  return `${apiBase}/public/docs/${encoded}/reject`;
+}
+
 export function PublicSignView({
   publicSignLoading,
   publicSignError,
@@ -369,6 +386,7 @@ export function PublicSignView({
   publicSignPdfUrl,
   publicSignToken,
   publicSignMode,
+  publicTokenKind,
   API_URL,
   cargarFirmaPublica,
 }) {
@@ -615,8 +633,18 @@ export function PublicSignView({
 
   const handleRetryLoad = useCallback(() => {
     if (!publicSignToken || typeof cargarFirmaPublica !== "function") return;
-    cargarFirmaPublica(publicSignToken);
-  }, [cargarFirmaPublica, publicSignToken]);
+
+    cargarFirmaPublica(publicSignToken, {
+      mode: publicSignMode,
+      tokenKind: publicTokenKind || (isVisado ? "document" : "signer"),
+    });
+  }, [
+    cargarFirmaPublica,
+    publicSignMode,
+    publicSignToken,
+    publicTokenKind,
+    isVisado,
+  ]);
 
   const handleConfirm = useCallback(async () => {
     if (signing || rejecting || !canActOnDocument) return;
@@ -636,8 +664,12 @@ export function PublicSignView({
       setLegalError("");
       setSigning(true);
 
-      const actionPath = isVisado ? "visar" : "firmar";
-      const endpoint = `${API_BASE}/public/docs/${publicSignToken}/${actionPath}`;
+      const endpoint = buildActionEndpoint({
+        apiBase: API_BASE,
+        token: publicSignToken,
+        isVisado,
+        tokenKind: publicTokenKind || (isVisado ? "document" : "signer"),
+      });
 
       const res = await fetch(endpoint, {
         method: "POST",
@@ -655,7 +687,10 @@ export function PublicSignView({
         throw new Error(buildActionErrorMessage(isVisado, data?.message));
       }
 
-      await cargarFirmaPublica(publicSignToken);
+      await cargarFirmaPublica(publicSignToken, {
+        mode: publicSignMode,
+        tokenKind: publicTokenKind || (isVisado ? "document" : "signer"),
+      });
 
       setActionMessage(buildActionSuccessMessage(isVisado, data?.message));
       setActionMessageType("success");
@@ -674,6 +709,8 @@ export function PublicSignView({
     isVisado,
     API_BASE,
     publicSignToken,
+    publicSignMode,
+    publicTokenKind,
     cargarFirmaPublica,
   ]);
 
@@ -694,7 +731,10 @@ export function PublicSignView({
       setRejecting(true);
 
       const res = await fetch(
-        `${API_BASE}/public/docs/${publicSignToken}/rechazar`,
+        buildRejectEndpoint({
+          apiBase: API_BASE,
+          token: publicSignToken,
+        }),
         {
           method: "POST",
           headers: { "Content-Type": "application/json" },
@@ -713,7 +753,10 @@ export function PublicSignView({
         throw new Error(buildRejectErrorMessage(data?.message));
       }
 
-      await cargarFirmaPublica(publicSignToken);
+      await cargarFirmaPublica(publicSignToken, {
+        mode: publicSignMode,
+        tokenKind: publicTokenKind || "signer",
+      });
 
       setActionMessage(
         sanitizePublicMessage(
@@ -738,6 +781,8 @@ export function PublicSignView({
     rejectReason,
     API_BASE,
     publicSignToken,
+    publicSignMode,
+    publicTokenKind,
     cargarFirmaPublica,
   ]);
 

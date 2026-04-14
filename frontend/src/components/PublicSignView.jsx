@@ -1,13 +1,24 @@
-// src/views/PublicSignView.jsx
+// src/components/PublicSignView.jsx
 import React, { useState } from "react";
+
+function stripTrailingSlashes(value = "") {
+  return String(value || "").trim().replace(/\/+$/, "");
+}
+
+function ensureApiBase(value = "") {
+  const clean = stripTrailingSlashes(value);
+  if (!clean) return "";
+  return clean.endsWith("/api") ? clean : `${clean}/api`;
+}
 
 export function PublicSignView({
   publicSignLoading,
   publicSignError,
-  publicSignDoc,      // { document, signer } o { document, signer: null }
+  publicSignDoc,
   publicSignPdfUrl,
-  publicSignToken,    // token de firma/visado
-  publicSignMode,     // "visado" o null
+  publicSignToken,
+  publicSignMode,
+  publicTokenKind,
   API_URL,
   cargarFirmaPublica,
 }) {
@@ -25,6 +36,8 @@ export function PublicSignView({
   const [showLegal, setShowLegal] = useState(false);
   const [accepted, setAccepted] = useState(false);
   const [signing, setSigning] = useState(false);
+
+  const apiBase = ensureApiBase(API_URL);
 
   const alreadySignedByThisSigner =
     !isVisado && signer && signer.status === "FIRMADO";
@@ -49,6 +62,24 @@ export function PublicSignView({
     return "No se pudo registrar la firma.";
   }
 
+  function getActionEndpoint(actionPath) {
+    const encodedToken = encodeURIComponent(publicSignToken);
+
+    if (actionPath === "visar") {
+      return `${apiBase}/public/docs/document/${encodedToken}/visar`;
+    }
+
+    if (actionPath === "firmar") {
+      return `${apiBase}/public/docs/${encodedToken}/firmar`;
+    }
+
+    if (actionPath === "rechazar") {
+      return `${apiBase}/public/docs/${encodedToken}/rechazar`;
+    }
+
+    return `${apiBase}/public/docs/${encodedToken}/${actionPath}`;
+  }
+
   async function handleConfirm() {
     if (!accepted) {
       alert("Debes aceptar la declaración para continuar.");
@@ -58,14 +89,12 @@ export function PublicSignView({
     try {
       setSigning(true);
       const actionPath = isVisado ? "visar" : "firmar";
+      const endpoint = getActionEndpoint(actionPath);
 
-      const res = await fetch(
-        `${API_URL}/public/docs/${publicSignToken}/${actionPath}`,
-        {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-        }
-      );
+      const res = await fetch(endpoint, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+      });
 
       const data = await res.json();
 
@@ -81,7 +110,11 @@ export function PublicSignView({
 
       setShowLegal(false);
       setAccepted(false);
-      await cargarFirmaPublica(publicSignToken);
+
+      await cargarFirmaPublica(publicSignToken, {
+        mode: publicSignMode,
+        tokenKind: isVisado ? "document" : publicTokenKind || "document",
+      });
     } catch (err) {
       alert(
         "❌ " +
@@ -105,14 +138,11 @@ export function PublicSignView({
 
       setRejecting(true);
 
-      const res = await fetch(
-        `${API_URL}/public/docs/${publicSignToken}/rechazar`,
-        {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ motivo }),
-        }
-      );
+      const res = await fetch(getActionEndpoint("rechazar"), {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ motivo }),
+      });
 
       const data = await res.json();
 
@@ -124,7 +154,11 @@ export function PublicSignView({
 
       alert("✅ Documento rechazado correctamente.");
 
-      await cargarFirmaPublica(publicSignToken);
+      await cargarFirmaPublica(publicSignToken, {
+        mode: publicSignMode,
+        tokenKind: publicTokenKind || "document",
+      });
+
       setShowReject(false);
       setRejectReason("");
       setRejectError("");
@@ -138,7 +172,6 @@ export function PublicSignView({
     }
   }
 
-  // Estados de carga / error
   if (showSkeleton) {
     return (
       <div className="login-bg">
@@ -182,7 +215,12 @@ export function PublicSignView({
                 color: "#e5e7eb",
                 border: "none",
               }}
-              onClick={() => cargarFirmaPublica(publicSignToken)}
+              onClick={() =>
+                cargarFirmaPublica(publicSignToken, {
+                  mode: publicSignMode,
+                  tokenKind: publicTokenKind || "document",
+                })
+              }
               disabled={publicSignLoading}
             >
               Reintentar carga
@@ -278,7 +316,6 @@ export function PublicSignView({
           </button>
         )}
 
-        {/* Panel legal antes de firmar/visar */}
         {showLegal && canActOnDocument && (
           <div
             style={{
@@ -369,6 +406,95 @@ Puedes revisar el texto completo de la Ley N° 19.799 en la Biblioteca del Congr
               </button>
             </div>
           </div>
+        )}
+
+        {showReject && (
+          <div
+            style={{
+              marginTop: 16,
+              padding: 12,
+              borderRadius: 8,
+              backgroundColor: "#fef2f2",
+              border: "1px solid #fecaca",
+            }}
+          >
+            <h3 style={{ marginBottom: 8, color: "#991b1b" }}>
+              Rechazar documento
+            </h3>
+
+            <textarea
+              value={rejectReason}
+              onChange={(e) => setRejectReason(e.target.value)}
+              placeholder="Escribe el motivo del rechazo"
+              rows={4}
+              style={{
+                width: "100%",
+                borderRadius: 8,
+                border: "1px solid #d1d5db",
+                padding: 10,
+                resize: "vertical",
+              }}
+            />
+
+            {rejectError ? (
+              <p style={{ marginTop: 8, color: "#b91c1c", fontSize: 13 }}>
+                {rejectError}
+              </p>
+            ) : null}
+
+            <div
+              style={{
+                display: "flex",
+                gap: 8,
+                justifyContent: "flex-end",
+                marginTop: 12,
+              }}
+            >
+              <button
+                type="button"
+                className="btn-main"
+                onClick={() => {
+                  setShowReject(false);
+                  setRejectReason("");
+                  setRejectError("");
+                }}
+                disabled={rejecting}
+              >
+                Cancelar
+              </button>
+              <button
+                type="button"
+                className="btn-main"
+                style={{
+                  backgroundColor: "#b91c1c",
+                  color: "#fff",
+                  borderRadius: 999,
+                  padding: "8px 14px",
+                }}
+                onClick={handleReject}
+                disabled={rejecting}
+              >
+                {rejecting ? "Rechazando..." : "Confirmar rechazo"}
+              </button>
+            </div>
+          </div>
+        ) : null}
+
+        {!isVisado && canActOnDocument && !showReject && (
+          <button
+            type="button"
+            className="btn-main"
+            style={{
+              width: "100%",
+              marginTop: 12,
+              backgroundColor: "#fff",
+              color: "#b91c1c",
+              border: "1px solid #fecaca",
+            }}
+            onClick={() => setShowReject(true)}
+          >
+            Rechazar documento
+          </button>
         )}
 
         {docRejected && (
