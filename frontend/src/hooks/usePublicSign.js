@@ -275,7 +275,6 @@ export function usePublicSign({
 
         const path = buildPublicLoadPath(token, tokenKind);
 
-        // Debug controlado
         if (import.meta.env.DEV) {
           // eslint-disable-next-line no-console
           console.log("[PUBLIC LOAD]", {
@@ -371,13 +370,7 @@ export function usePublicSign({
       }
 
       if (snapshot.publicView === "verification") {
-        setPublicSignToken("");
-        setPublicSignMode(null);
-        setPublicTokenKind("document");
-        setPublicSignDoc(null);
-        setPublicSignPdfUrl("");
-        setPublicSignError("");
-        setPublicSignLoading(false);
+        clearPublicState();
         return;
       }
 
