@@ -369,14 +369,12 @@ function getReadableParticipantLabel({ signer, isVisado, document }) {
   };
 }
 
-function buildActionEndpoint({ apiBase, token, isVisado, tokenKind }) {
+function buildActionEndpoint({ apiBase, token, isVisado }) {
   const encoded = encodeURIComponent(token);
 
-  if (isVisado || tokenKind === "document") {
-    return `${apiBase}/public/docs/document/${encoded}/visar`;
-  }
-
-  return `${apiBase}/public/docs/${encoded}/firmar`;
+  return isVisado
+    ? `${apiBase}/public/docs/document/${encoded}/visar`
+    : `${apiBase}/public/docs/${encoded}/firmar`;
 }
 
 function buildRejectEndpoint({ apiBase, token, tokenKind }) {
@@ -576,17 +574,19 @@ export function PublicSignView({
 
   const statusBadge = getStatusBadge(flowState, isVisado);
 
-  const effectiveTokenKind =
-    publicTokenKind || (isVisado ? "document" : "signer");
+const effectiveTokenKind =
+  publicTokenKind || (isVisado ? "document" : "signer");
 
-  const canActOnDocument =
-    flowState.kind === "pending" &&
-    !!document &&
-    !!publicSignToken &&
-    !!API_BASE &&
-    !publicSignLoading &&
-    ((isVisado && effectiveTokenKind === "document") ||
-      (!isVisado && effectiveTokenKind === "signer"));
+const canActOnDocument =
+  flowState.kind === "pending" &&
+  !!document &&
+  !!publicSignToken &&
+  !!API_BASE &&
+  !publicSignLoading &&
+  (
+    (isVisado && effectiveTokenKind === "document") ||
+    (!isVisado && effectiveTokenKind === "signer")
+  );
 
   const showSkeleton = publicSignLoading && !document && !publicSignError;
   const titleText = isVisado ? "Visado de documento" : "Firma electrónica";
@@ -640,7 +640,6 @@ export function PublicSignView({
         apiBase: API_BASE,
         token: publicSignToken,
         isVisado,
-        tokenKind: effectiveTokenKind,
       });
 
       const data = await fetchJsonSafe(endpoint, {

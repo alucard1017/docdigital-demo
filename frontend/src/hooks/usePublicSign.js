@@ -85,7 +85,7 @@ function resolveTokenKind({
     return "signer";
   }
 
-  // Subdominio firmar raiz -> token de firmante por defecto
+  // Subdominio firmar raíz -> token de firmante por defecto
   return "signer";
 }
 
