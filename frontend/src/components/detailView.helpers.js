@@ -1,3 +1,4 @@
+// frontend/src/components/detailView.helpers.js
 import { DOC_STATUS } from "../constants";
 import {
   DOCUMENT_STATE_META,
@@ -49,71 +50,6 @@ export function buildUserDisplayName(currentUser) {
 }
 
 /**
- * Tipo de trámite: Notaría / Propio / Sin notaría / N/D
- */
-export function getTramiteLabel(value) {
-  const normalized = normalizeText(value);
-
-  if (!normalized) return "N/D";
-
-  if (normalized === "notaria" || normalized === "notaría") return "Notaría";
-  if (normalized === "propio") return "Propio";
-
-  if (
-    normalized.includes("sin notaria") ||
-    normalized.includes("sin notaría") ||
-    normalized === "sinnotaria"
-  ) {
-    return "Sin notaría";
-  }
-
-  if (normalized.includes("notar")) return "Notaría";
-
-  return "N/D";
-}
-
-/**
- * Tipo de documento: contratos, poderes, autorizaciones, etc.
- */
-export function getDocumentLabel(value) {
-  const normalized = normalizeText(value);
-
-  if (!normalized) return "N/D";
-
-  if (
-    normalized === "poder" ||
-    normalized === "poderes" ||
-    normalized === "poderes y autorizaciones" ||
-    normalized === "poderes_autorizaciones"
-  ) {
-    return "Poderes y autorizaciones";
-  }
-
-  if (
-    normalized === "contrato" ||
-    normalized === "contratos" ||
-    normalized === "solo contratos" ||
-    normalized === "contrato_solo"
-  ) {
-    return "Solo contratos";
-  }
-
-  if (
-    normalized === "autorizacion" ||
-    normalized === "autorización" ||
-    normalized === "autorizaciones"
-  ) {
-    return "Autorizaciones";
-  }
-
-  if (normalized.includes("poder")) return "Poderes y autorizaciones";
-  if (normalized.includes("contrato")) return "Solo contratos";
-  if (normalized.includes("autoriz")) return "Autorizaciones";
-
-  return "N/D";
-}
-
-/**
  * Número interno / número de contrato.
  */
 export function getDocumentNumber(selectedDoc, timeline) {
@@ -146,7 +82,6 @@ export function getDocumentTitle(selectedDoc, timeline) {
 }
 
 export function getTimelineEvents(timeline, fallbackEvents) {
-  // admite timeline plano o timeline anidado
   const events =
     (Array.isArray(timeline?.events) && timeline.events) ||
     (Array.isArray(timeline?.timeline?.events) &&

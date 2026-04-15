@@ -1,6 +1,10 @@
 import React, { useCallback, useEffect, useMemo, useState } from "react";
 import { PublicHeader } from "../components/PublicHeader";
 import { PublicFooter } from "../components/PublicFooter";
+import {
+  getProcedureFieldLabel,
+  getProcedureLabel,
+} from "../utils/documentLabels";
 
 function normalizeApiBase(API_URL) {
   const baseFromProp = API_URL || import.meta.env.VITE_API_URL || "";
@@ -404,14 +408,13 @@ export function VerificationView({ API_URL }) {
                 </div>
               </div>
 
+              {/* Tipo de trámite / documento / condición */}
               <div>
                 <div style={{ fontSize: "0.75rem", color: textSubtle }}>
-                  Tipo de trámite
+                  {getProcedureFieldLabel(doc)}
                 </div>
                 <div>
-                  {doc.tipo_tramite_label ||
-                    doc.tipo_tramite ||
-                    "No informado"}
+                  {getProcedureLabel(doc)}
                 </div>
               </div>
 

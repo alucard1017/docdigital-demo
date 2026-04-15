@@ -1,5 +1,4 @@
 // backend/services/sendSignatureInviteEmail.js
-
 const nodemailer = require("nodemailer");
 const QRCode = require("qrcode");
 
@@ -55,18 +54,12 @@ const transporter = nodemailer.createTransport({
    Helpers
    ========================= */
 
-/**
- * Normaliza una base URL quitando slash final.
- * Ej: "https://foo.com/" => "https://foo.com"
- */
 function normalizeBaseUrl(url) {
   if (!url) return "";
-  return url.endsWith("/") ? url.slice(0, -1) : url;
+  const trimmed = url.trim();
+  return trimmed.endsWith("/") ? trimmed.slice(0, -1) : trimmed;
 }
 
-/**
- * Genera data URL con QR apuntando a "url"
- */
 async function generateQrDataUrl(url) {
   if (!url) return "";
   try {
@@ -89,7 +82,7 @@ async function generateQrDataUrl(url) {
 /**
  * Enviar invitación de firma por SMTP (Nodemailer)
  * Incluye:
- * - Enlace directo de firma pública (/public/sign?token=...)
+ * - Enlace directo de firma pública (/public/sign?token=sign_token)
  * - Enlace de verificación por código (/verificar?code=...)
  * - QR apuntando al mejor enlace disponible
  */
@@ -97,7 +90,7 @@ async function sendSignatureInviteEmail({
   signer_email,
   signer_name,
   document_title,
-  signature_token,   // token para firma pública
+  signature_token,   // token para firma pública (sign_token)
   verification_code, // ej: VF-2026-000008
 }) {
   const fromEmail = SMTP_FROM_EMAIL;
@@ -109,11 +102,10 @@ async function sendSignatureInviteEmail({
   }
 
   const frontendBase = normalizeBaseUrl(FRONTEND_URL);
-  const verifyBaseEnv = PUBLIC_VERIFY_BASE_URL || "";
-  const verifyBase = normalizeBaseUrl(verifyBaseEnv);
+  const verifyBase = normalizeBaseUrl(PUBLIC_VERIFY_BASE_URL || "");
 
-  // URL pública de firma en el frontend
-  // Ej: https://docdigital.vercel.app/public/sign?token=...
+  // URL pública de firma: usa el portal principal + /public/sign
+  // ej: https://docdigital.vercel.app/public/sign?token=...
   const signUrl =
     frontendBase && signature_token
       ? `${frontendBase}/public/sign?token=${encodeURIComponent(
@@ -122,7 +114,7 @@ async function sendSignatureInviteEmail({
       : "";
 
   // URL pública de verificación por código
-  // Ej: https://docdigital.vercel.app/verificar?code=VF-2026-000008
+  // ej: https://docdigital.vercel.app/verificar?code=VF-2026-000008
   const publicVerifyUrl =
     verifyBase && verification_code
       ? `${verifyBase}?code=${encodeURIComponent(verification_code)}`

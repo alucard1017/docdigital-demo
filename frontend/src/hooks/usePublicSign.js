@@ -25,7 +25,7 @@ function getLocationSnapshot({ isSigningPortal, isVerificationPortal }) {
   const pathname = window.location.pathname;
 
   const token = (params.get("token") || "").trim();
-  const mode = (params.get("mode") || "").trim() || null;
+  const mode = (params.get("mode") || "").trim().toLowerCase() || null;
 
   const isFirmaPublicaPath =
     pathname === "/public/sign" ||
@@ -65,17 +65,27 @@ function resolveTokenKind({
 }) {
   const normalizedMode = String(mode || "").trim().toLowerCase();
 
-  // Visado siempre trabaja por token de documento
+  // Visado siempre por token de documento
   if (normalizedMode === "visado") {
     return "document";
   }
 
-  // Consulta pública / firma pública genérica → token de documento
-  if (isConsultaPublica) return "document";
-  if (pathname === "/firma-publica") return "document";
-  if (pathname === "/public/sign" && isFirmaPublicaPath) return "document";
+  // Consulta pública siempre por token de documento
+  if (isConsultaPublica) {
+    return "document";
+  }
 
-  // Por defecto, asumimos token de firmante
+  // Enlace especial legacy de firma-publica -> documento
+  if (pathname === "/firma-publica") {
+    return "document";
+  }
+
+  // Portal normal de firma -> token de firmante
+  if (pathname === "/public/sign" && isFirmaPublicaPath) {
+    return "signer";
+  }
+
+  // Subdominio firmar raiz -> token de firmante por defecto
   return "signer";
 }
 
@@ -227,7 +237,7 @@ export function usePublicSign({
   const [publicSignPdfUrl, setPublicSignPdfUrl] = useState("");
   const [publicSignMode, setPublicSignMode] = useState(null);
   const [publicView, setPublicView] = useState(null);
-  const [publicTokenKind, setPublicTokenKind] = useState("document");
+  const [publicTokenKind, setPublicTokenKind] = useState("signer");
 
   const abortRef = useRef(null);
   const apiBase = ensureApiBase(apiRoot);
@@ -239,14 +249,14 @@ export function usePublicSign({
     setPublicSignToken("");
     setPublicSignPdfUrl("");
     setPublicSignMode(null);
-    setPublicTokenKind("document");
+    setPublicTokenKind("signer");
   }, []);
 
   const cargarFirmaPublica = useCallback(
     async (tokenParam, options = {}) => {
       const token = String(tokenParam || "").trim();
-      const mode = options.mode ?? publicSignMode ?? null;
-      const tokenKind = options.tokenKind ?? publicTokenKind ?? "document";
+      const mode = options.mode ?? null;
+      const tokenKind = options.tokenKind ?? "signer";
 
       if (!token) {
         setPublicSignError("No se recibió el token del documento.");
@@ -276,7 +286,6 @@ export function usePublicSign({
         const path = buildPublicLoadPath(token, tokenKind);
 
         if (import.meta.env.DEV) {
-          // eslint-disable-next-line no-console
           console.log("[PUBLIC LOAD]", {
             token,
             mode,
@@ -286,6 +295,7 @@ export function usePublicSign({
         }
 
         const res = await fetch(`${apiBase}${path}`, {
+          method: "GET",
           signal: controller.signal,
         });
 
@@ -318,7 +328,6 @@ export function usePublicSign({
         setPublicTokenKind(tokenKind);
 
         if (import.meta.env.DEV) {
-          // eslint-disable-next-line no-console
           console.log("📄 Public sign payload normalizado:", normalized);
         }
 
@@ -328,7 +337,6 @@ export function usePublicSign({
           return null;
         }
 
-        // eslint-disable-next-line no-console
         console.error("❌ Error cargando firma pública:", err);
         setPublicSignError(err?.message || "No se pudo cargar el documento");
         setPublicSignDoc(null);
@@ -341,7 +349,7 @@ export function usePublicSign({
         }
       }
     },
-    [apiBase, publicSignMode, publicTokenKind]
+    [apiBase]
   );
 
   useEffect(() => {
@@ -355,7 +363,7 @@ export function usePublicSign({
 
       if (snapshot.publicView === "public-sign") {
         const nextToken = snapshot.token;
-        const nextMode = snapshot.isFirmaPublicaPath ? snapshot.mode : null;
+        const nextMode = snapshot.mode || null;
         const nextTokenKind = resolveTokenKind(snapshot);
 
         setPublicSignToken(nextToken);
@@ -366,6 +374,7 @@ export function usePublicSign({
           mode: nextMode,
           tokenKind: nextTokenKind,
         });
+
         return;
       }
 

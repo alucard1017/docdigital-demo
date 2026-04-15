@@ -209,7 +209,7 @@ export const isAuthFailure = (status, message, code, path = "") => {
     if (isIgnoredAuth401(path)) return false;
     if (AUTH_FAILURE_CODES.has(normalizedCode)) return true;
     if (AUTH_FAILURE_MESSAGES.has(normalizedMessage)) return true;
-    // Cualquier 401 no público se trata como fallo de auth
+    // cualquier 401 no público se trata como fallo de auth
     return true;
   }
 
@@ -337,16 +337,14 @@ api.interceptors.response.use(
     } = extractErrorMeta(error);
 
     if (status == null) {
-      if (!import.meta.env.DEV) {
-        // eslint-disable-next-line no-console
-        console.error("[API RES NETWORK ERROR]", {
-          method,
-          url,
-          fullUrl,
-          message,
-          code,
-        });
-      }
+      // eslint-disable-next-line no-console
+      console.error("[API RES NETWORK ERROR]", {
+        method,
+        url,
+        fullUrl,
+        message,
+        code,
+      });
     }
 
     if (import.meta.env.DEV) {

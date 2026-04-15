@@ -1,12 +1,20 @@
 // backend/routes/publicDocs.js
 const express = require("express");
-const db = require("../db");
+const {
+  getPublicDocBySignerToken,
+} = require("../controllers/documents/publicDocuments");
 
 const router = express.Router();
 
 /* ================================
    HELPERS GENERALES
    ================================ */
+
+const NOT_FOUND_MESSAGE = "Enlace inválido o documento no encontrado";
+const INVITATION_EXPIRED_MESSAGE = "Esta invitación ha expirado";
+const LINK_EXPIRED_MESSAGE = "Este enlace ha expirado";
+const INVALID_TOKEN_MESSAGE = "Token inválido";
+const INTERNAL_ERROR_MESSAGE = "Error interno";
 
 function getClientIp(req) {
   return (
@@ -126,7 +134,7 @@ router.get("/docs/:token", async (req, res) => {
   const { token } = req.params;
 
   if (!token || typeof token !== "string" || !token.trim()) {
-    return res.status(400).json({ message: "Token inválido" });
+    return res.status(400).json({ message: INVALID_TOKEN_MESSAGE });
   }
 
   const cleanToken = token.trim();
@@ -135,7 +143,10 @@ router.get("/docs/:token", async (req, res) => {
   try {
     await client.query("BEGIN");
 
-    /* 1) Primero intentar legacy (signer_invitations) */
+    const ipAddress = getClientIp(req);
+    const userAgent = getUserAgent(req);
+
+    /* 1) Legacy (signer_invitations) */
     const inviteRes = await client.query(
       `
       SELECT
@@ -179,9 +190,6 @@ router.get("/docs/:token", async (req, res) => {
     let fromStatus = null;
     let toStatus = null;
 
-    const ipAddress = getClientIp(req);
-    const userAgent = getUserAgent(req);
-
     if (inviteRes.rowCount > 0) {
       /* ===== CASO LEGACY ===== */
       legacyRow = inviteRes.rows[0];
@@ -192,9 +200,7 @@ router.get("/docs/:token", async (req, res) => {
           "[PUBLIC DOCS] /docs/:token → invitación expirada (legacy)",
           cleanToken
         );
-        return res
-          .status(410)
-          .json({ message: "Esta invitación ha expirado" });
+        return res.status(410).json({ message: INVITATION_EXPIRED_MESSAGE });
       }
 
       // 2) Espejo moderno por company + numero_contrato_interno
@@ -459,9 +465,7 @@ router.get("/docs/:token", async (req, res) => {
         "[PUBLIC DOCS] /docs/:token → token no encontrado ni legacy ni moderno",
         cleanToken
       );
-      return res
-        .status(404)
-        .json({ message: "Enlace inválido o documento no encontrado" });
+      return res.status(404).json({ message: NOT_FOUND_MESSAGE });
     }
 
     const mrow = modernSignerRes.rows[0];
@@ -472,9 +476,7 @@ router.get("/docs/:token", async (req, res) => {
         "[PUBLIC DOCS] /docs/:token → enlace moderno expirado",
         cleanToken
       );
-      return res
-        .status(410)
-        .json({ message: "Este enlace ha expirado" });
+      return res.status(410).json({ message: LINK_EXPIRED_MESSAGE });
     }
 
     const effectiveModernDoc = {
@@ -545,10 +547,7 @@ router.get("/docs/:token", async (req, res) => {
         ? "OPENED"
         : mrow.signer_status;
 
-    if (
-      mrow.signer_status === "INVITED" ||
-      mrow.signer_status === "invited"
-    ) {
+    if (mrow.signer_status === "INVITED" || mrow.signer_status === "invited") {
       await client.query(
         `
         UPDATE public.document_signers
@@ -622,8 +621,7 @@ router.get("/docs/:token", async (req, res) => {
             email: modernParticipant.email,
             phone: modernParticipant.phone,
             requiresMfa: modernParticipant.requires_mfa,
-            isLegalRepresentative:
-              modernParticipant.is_legal_representative,
+            isLegalRepresentative: modernParticipant.is_legal_representative,
             metadata: modernParticipant.metadata || {},
           }
         : null,
@@ -648,10 +646,12 @@ router.get("/docs/:token", async (req, res) => {
       // ignore rollback error
     }
     console.error("❌ Error en GET /api/public/docs/:token:", err);
-    return res.status(500).json({ message: "Error interno" });
+    return res.status(500).json({ message: INTERNAL_ERROR_MESSAGE });
   } finally {
     client.release();
   }
 });
+
+router.get("/docs/:token", getPublicDocBySignerToken);
 
 module.exports = router;

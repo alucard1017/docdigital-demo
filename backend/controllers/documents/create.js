@@ -735,6 +735,18 @@ async function createDocument(req, res) {
       req.body.signers || req.body.firmantes || req.body.participants
     );
 
+    // Tipo de trámite (ej: notarial / contrato / poder / general)
+    const tipoTramiteRaw =
+      req.body.tipo_tramite ||
+      req.body.tipoTramite ||
+      req.body.tipo_trámite ||
+      null;
+
+    const tipoTramite =
+      typeof tipoTramiteRaw === "string"
+        ? normalizeText(tipoTramiteRaw).toLowerCase()
+        : null;
+
     console.log("[createDocument] Payload normalizado:", {
       companyId,
       userId,
@@ -745,6 +757,7 @@ async function createDocument(req, res) {
       hasFile: !!req.file,
       hasPdfUrl: !!req.body.pdfUrl,
       hasFileUrl: !!req.body.fileUrl,
+      tipoTramite,
     });
 
     if (!companyId) {
@@ -827,6 +840,7 @@ async function createDocument(req, res) {
     const storageKey = uploadResult.key;
     const storageUrl = uploadResult.url;
 
+    // Estado inicial
     const initialDocumentStatus = autoSendFlow
       ? "PENDIENTE_FIRMA"
       : "BORRADOR";
@@ -834,6 +848,19 @@ async function createDocument(req, res) {
     const initialLegacyStatus = autoSendFlow
       ? DOCUMENT_STATES.SIGNING
       : DOCUMENT_STATES.DRAFT;
+
+    const metadataPayload = {
+      autoSendFlow,
+      numeroContratoInterno,
+      signerCount: signers.length,
+    };
+
+    if (tipoTramite) {
+      metadataPayload.tipo_tramite = tipoTramite;
+    }
+
+    // signature_token: token de documento (para visado / acceso por doc)
+    const signatureToken = verificationCode;
 
     const { rows: documentRows } = await client.query(
       `
@@ -855,12 +882,15 @@ async function createDocument(req, res) {
         metadata,
         file_path,
         pdf_original_url,
+        tipo_tramite,
         created_at,
         updated_at
       )
       VALUES (
         $1, $2, $3, $4, $5, $6, $7, $8, $9, $10,
-        $11, $12, $13, $14, $15::jsonb, $16, $17, NOW(), NOW()
+        $11, $12, $13, $14, $15::jsonb, $16, $17,
+        $18,
+        NOW(), NOW()
       )
       RETURNING *
       `,
@@ -876,19 +906,13 @@ async function createDocument(req, res) {
         documentHash,
         null,
         verificationCode,
-        verificationCode,
+        signatureToken,
         requiresVisado,
         userId,
-        toJson(
-          {
-            autoSendFlow,
-            numeroContratoInterno,
-            signerCount: signers.length,
-          },
-          "{}"
-        ),
+        toJson(metadataPayload, "{}"),
         storageKey,
         storageUrl,
+        tipoTramite,
       ]
     );
 
@@ -1048,6 +1072,7 @@ async function createDocument(req, res) {
     await client.query("COMMIT");
     client.release();
 
+    // Sellado asíncrono (no bloquea respuesta)
     try {
       const sealResult = await sellarPdfConQr({
         s3Key: storageKey,
@@ -1075,6 +1100,7 @@ async function createDocument(req, res) {
       );
     }
 
+    // Invitaciones de firma/visado en background
     if (autoSendFlow) {
       void sendInvitationsInBackground({
         companyId,
@@ -1082,7 +1108,7 @@ async function createDocument(req, res) {
         documentoId: documentoNuevo.id,
         docTitle: titulo,
         code: verificationCode,
-        signers: canonicalSigners, // aquí van con sign_token
+        signers: canonicalSigners,
         actorName: req.user?.nombre || req.user?.name || "Sistema",
       });
     }
@@ -1103,6 +1129,7 @@ async function createDocument(req, res) {
       fileUrl: storageUrl,
       hash: documentHash,
       legacyFirmantes: legacySigners.length,
+      tipoTramite,
     });
   } catch (error) {
     try {
@@ -1247,6 +1274,7 @@ async function getUserDocuments(req, res) {
         d.updated_at,
         d.verification_code,
         d.nuevo_documento_id,
+        d.tipo_tramite,
         COALESCE(
           doc.numero_contrato_interno,
           d.metadata->>'numeroContratoInterno'

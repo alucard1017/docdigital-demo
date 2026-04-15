@@ -1,9 +1,13 @@
-import React, { useMemo, useState, useCallback, useEffect } from "react";
+import React, { useCallback, useEffect, useMemo, useState } from "react";
 import "./PublicSignView.css";
 import { PublicHeader } from "../components/PublicHeader";
 import { PublicFooter } from "../components/PublicFooter";
 import { ElectronicSignatureNotice } from "../components/Legal/ElectronicSignatureNotice";
 import { PublicPdfViewer } from "../components/PublicPdfViewer";
+import {
+  getProcedureFieldLabel,
+  getProcedureLabel,
+} from "../utils/documentLabels";
 
 function stripTrailingSlashes(value = "") {
   return String(value || "").trim().replace(/\/+$/, "");
@@ -54,6 +58,27 @@ function sanitizePublicMessage(message, fallback) {
   return raw;
 }
 
+async function fetchJsonSafe(url, options = {}) {
+  const res = await fetch(url, options);
+
+  let data = {};
+  try {
+    data = await res.json();
+  } catch {
+    data = {};
+  }
+
+  if (!res.ok) {
+    const message =
+      data?.message ||
+      data?.error ||
+      `La solicitud falló con estado ${res.status}`;
+    throw new Error(message);
+  }
+
+  return data;
+}
+
 function classifyPublicError(error) {
   const text = String(error || "").toLowerCase();
 
@@ -99,7 +124,8 @@ function classifyPublicError(error) {
     text.includes("token") ||
     text.includes("inválido") ||
     text.includes("invalido") ||
-    text.includes("invalid")
+    text.includes("invalid") ||
+    text.includes("no encontrado")
   ) {
     return {
       kind: "invalid",
@@ -139,14 +165,23 @@ function resolvePublicState({
     };
   }
 
-  const signerAlreadyDone = !isVisado && signerStatus === "FIRMADO";
-  const documentCompleted = !isVisado && documentStatus === "FIRMADO";
-  const documentRejected = documentStatus === "RECHAZADO";
+  const signerAlreadyDone =
+    !isVisado &&
+    ["FIRMADO", "SIGNED", "COMPLETED"].includes(signerStatus);
+
+  const documentCompleted =
+    !isVisado &&
+    ["FIRMADO", "SIGNED", "COMPLETED"].includes(documentStatus);
+
+  const documentRejected =
+    documentStatus === "RECHAZADO" || documentStatus === "REJECTED";
+
   const visadoDone =
     isVisado &&
     documentStatus &&
-    documentStatus !== "PENDIENTE_VISADO" &&
-    documentStatus !== "PENDIENTE";
+    !["PENDIENTE_VISADO", "PENDIENTE", "PENDIENTE_FIRMA"].includes(
+      documentStatus
+    );
 
   if (documentRejected) {
     return {
@@ -204,11 +239,13 @@ function getStatusBadge(state, isVisado) {
         label: "Completado",
         className: "public-sign-status public-sign-status--success",
       };
+
     case "used":
       return {
         label: "Sin acción",
         className: "public-sign-status public-sign-status--warning",
       };
+
     case "rejected":
     case "expired":
     case "invalid":
@@ -224,6 +261,7 @@ function getStatusBadge(state, isVisado) {
             : "Error",
         className: "public-sign-status public-sign-status--danger",
       };
+
     default:
       return {
         label: isVisado ? "Pendiente de visado" : "Pendiente de firma",
@@ -259,38 +297,6 @@ function buildRejectErrorMessage(responseMessage) {
   );
 }
 
-function getTramiteLabel(value) {
-  const v = normalizeText(value);
-  if (!v) return "";
-  if (v.includes("sin notaria") || v.includes("sin notaría")) {
-    return "Sin notaría";
-  }
-  if (v.includes("notaria") || v.includes("notaría")) return "Con notaría";
-  if (v === "propio") return "Propio";
-  return String(value || "").trim();
-}
-
-function getDocumentoLabel(value) {
-  const v = normalizeText(value);
-  if (!v) return "";
-  if (v === "poder" || v === "poderes") return "Poder";
-  if (v === "contrato" || v === "contratos") return "Contrato";
-  if (v === "autorizacion" || v === "autorización" || v === "autorizaciones") {
-    return "Autorización";
-  }
-  return String(value || "").trim();
-}
-
-function buildTipoLabel(tipoTramite, tipoDocumento) {
-  const tramite = getTramiteLabel(tipoTramite);
-  const documento = getDocumentoLabel(tipoDocumento);
-
-  if (tramite && documento) return `${tramite} · ${documento}`;
-  if (documento) return documento;
-  if (tramite) return tramite;
-  return "General";
-}
-
 function resolveSignerRoleLabel(signer, isVisado) {
   const rawRole = normalizeText(
     signer?.role ||
@@ -320,6 +326,7 @@ function buildMetaTitle(label, value, extra = "") {
 
 function getReadableParticipantLabel({ signer, isVisado, document }) {
   const roleLabel = resolveSignerRoleLabel(signer, isVisado);
+
   const signerName = pickFirstNonEmpty(
     signer?.name,
     signer?.nombre,
@@ -366,17 +373,20 @@ function buildActionEndpoint({ apiBase, token, isVisado, tokenKind }) {
   const encoded = encodeURIComponent(token);
 
   if (isVisado || tokenKind === "document") {
-    return isVisado
-      ? `${apiBase}/public/docs/document/${encoded}/visar`
-      : `${apiBase}/public/docs/${encoded}/sign`;
+    return `${apiBase}/public/docs/document/${encoded}/visar`;
   }
 
-  return `${apiBase}/public/docs/${encoded}/sign`;
+  return `${apiBase}/public/docs/${encoded}/firmar`;
 }
 
-function buildRejectEndpoint({ apiBase, token }) {
+function buildRejectEndpoint({ apiBase, token, tokenKind }) {
   const encoded = encodeURIComponent(token);
-  return `${apiBase}/public/docs/${encoded}/reject`;
+
+  if (tokenKind !== "signer") {
+    throw new Error("El rechazo público solo está disponible para enlaces de firmante.");
+  }
+
+  return `${apiBase}/public/docs/${encoded}/rechazar`;
 }
 
 export function PublicSignView({
@@ -403,175 +413,138 @@ export function PublicSignView({
   const [actionMessage, setActionMessage] = useState("");
   const [actionMessageType, setActionMessageType] = useState("info");
 
-  const document = useMemo(
-    () => publicSignDoc?.document || publicSignDoc || null,
-    [publicSignDoc]
+  const document = publicSignDoc?.document || publicSignDoc || null;
+
+  const documentMeta =
+    document?.metadata ||
+    document?.meta ||
+    document?.document_metadata ||
+    publicSignDoc?.metadata ||
+    publicSignDoc?.meta ||
+    {};
+
+  const signedDocument =
+    publicSignDoc?.signedDocument ||
+    publicSignDoc?.signed_document ||
+    publicSignDoc?.documento_firmado ||
+    null;
+
+  const signer =
+    publicSignDoc?.signer ||
+    publicSignDoc?.currentSigner ||
+    (Array.isArray(publicSignDoc?.signers) ? publicSignDoc.signers[0] : null) ||
+    null;
+
+  const pdfUrl = pickFirstNonEmpty(
+    publicSignPdfUrl,
+    publicSignDoc?.pdfUrl,
+    publicSignDoc?.previewUrl,
+    publicSignDoc?.signedPdfUrl,
+    document?.signedPdfUrl,
+    document?.previewUrl,
+    document?.pdf_final_url,
+    document?.pdf_url,
+    document?.archivo_url,
+    document?.file_url,
+    signedDocument?.pdfUrl,
+    signedDocument?.pdf_url,
+    signedDocument?.archivo_url
   );
 
-  const documentMeta = useMemo(() => {
-    return (
-      document?.metadata ||
-      document?.meta ||
-      document?.document_metadata ||
-      publicSignDoc?.metadata ||
-      publicSignDoc?.meta ||
-      {}
-    );
-  }, [document, publicSignDoc]);
+  const documentTitle = pickFirstNonEmpty(
+    document?.title,
+    document?.titulo,
+    document?.document_title,
+    document?.nombre,
+    document?.name,
+    signedDocument?.title,
+    signedDocument?.titulo,
+    "Documento"
+  );
 
-  const signedDocument = useMemo(() => {
-    return (
-      publicSignDoc?.signedDocument ||
-      publicSignDoc?.signed_document ||
-      publicSignDoc?.documento_firmado ||
-      null
-    );
-  }, [publicSignDoc]);
+  const companyName = pickFirstNonEmpty(
+    document?.destinatario_nombre,
+    document?.empresa_nombre,
+    document?.nombre_empresa,
+    document?.company_name,
+    document?.companyName,
+    document?.razon_social,
+    document?.empresa,
+    documentMeta?.destinatario_nombre,
+    documentMeta?.empresa_nombre,
+    documentMeta?.nombre_empresa,
+    documentMeta?.company_name,
+    documentMeta?.companyName,
+    documentMeta?.razon_social,
+    documentMeta?.empresa,
+    signedDocument?.destinatario_nombre,
+    signedDocument?.empresa_nombre,
+    signedDocument?.nombre_empresa,
+    signedDocument?.razon_social,
+    publicSignDoc?.destinatario_nombre,
+    publicSignDoc?.empresa_nombre,
+    publicSignDoc?.nombre_empresa,
+    publicSignDoc?.company_name,
+    publicSignDoc?.companyName,
+    publicSignDoc?.razon_social,
+    "No informado"
+  );
 
-  const signer = useMemo(() => {
-    return (
-      publicSignDoc?.signer ||
-      publicSignDoc?.currentSigner ||
-      (Array.isArray(publicSignDoc?.signers) ? publicSignDoc.signers[0] : null) ||
-      null
-    );
-  }, [publicSignDoc]);
+  const companyRut = pickFirstNonEmpty(
+    document?.empresa_rut,
+    document?.rut_empresa,
+    document?.company_rut,
+    document?.companyRut,
+    document?.rut,
+    documentMeta?.empresa_rut,
+    documentMeta?.rut_empresa,
+    documentMeta?.company_rut,
+    documentMeta?.companyRut,
+    documentMeta?.rut,
+    signedDocument?.empresa_rut,
+    signedDocument?.rut_empresa,
+    signedDocument?.rut,
+    publicSignDoc?.empresa_rut,
+    publicSignDoc?.rut_empresa,
+    publicSignDoc?.company_rut,
+    publicSignDoc?.companyRut,
+    publicSignDoc?.rut,
+    "No informado"
+  );
 
-  const pdfUrl = useMemo(() => {
-    return pickFirstNonEmpty(
-      publicSignPdfUrl,
-      publicSignDoc?.pdfUrl,
-      publicSignDoc?.previewUrl,
-      publicSignDoc?.signedPdfUrl,
-      document?.signedPdfUrl,
-      document?.previewUrl,
-      document?.pdf_final_url,
-      document?.pdf_url,
-      document?.archivo_url,
-      document?.file_url,
-      signedDocument?.pdfUrl,
-      signedDocument?.pdf_url,
-      signedDocument?.archivo_url
-    );
-  }, [publicSignPdfUrl, publicSignDoc, document, signedDocument]);
+  const contractNumber = pickFirstNonEmpty(
+    document?.numero_contrato_interno,
+    document?.numerocontratointerno,
+    document?.numero_contrato,
+    document?.numeroContrato,
+    document?.contract_number,
+    document?.n_contrato,
+    documentMeta?.numeroContratoInterno,
+    documentMeta?.numero_contrato_interno,
+    documentMeta?.numerocontratointerno,
+    documentMeta?.numero_contrato,
+    documentMeta?.numeroContrato,
+    documentMeta?.contract_number,
+    signedDocument?.numero_contrato_interno,
+    signedDocument?.numerocontratointerno,
+    signedDocument?.numero_contrato,
+    signedDocument?.contract_number,
+    publicSignDoc?.numero_contrato_interno,
+    publicSignDoc?.numerocontratointerno,
+    publicSignDoc?.numero_contrato,
+    publicSignDoc?.contract_number,
+    "Sin número"
+  );
 
-  const documentTitle = useMemo(() => {
-    return pickFirstNonEmpty(
-      document?.title,
-      document?.titulo,
-      document?.document_title,
-      document?.nombre,
-      document?.name,
-      signedDocument?.title,
-      signedDocument?.titulo,
-      "Documento"
-    );
-  }, [document, signedDocument]);
+  const procedureFieldLabel = getProcedureFieldLabel({
+    ...document,
+    metadata: documentMeta,
+  });
 
-  const companyName = useMemo(() => {
-    return pickFirstNonEmpty(
-      document?.destinatario_nombre,
-      document?.empresa_nombre,
-      document?.nombre_empresa,
-      document?.company_name,
-      document?.companyName,
-      document?.razon_social,
-      document?.empresa,
-      documentMeta?.destinatario_nombre,
-      documentMeta?.empresa_nombre,
-      documentMeta?.nombre_empresa,
-      documentMeta?.company_name,
-      documentMeta?.companyName,
-      documentMeta?.razon_social,
-      documentMeta?.empresa,
-      signedDocument?.destinatario_nombre,
-      signedDocument?.empresa_nombre,
-      signedDocument?.nombre_empresa,
-      signedDocument?.razon_social,
-      publicSignDoc?.destinatario_nombre,
-      publicSignDoc?.empresa_nombre,
-      publicSignDoc?.nombre_empresa,
-      publicSignDoc?.company_name,
-      publicSignDoc?.companyName,
-      publicSignDoc?.razon_social,
-      "No informado"
-    );
-  }, [document, documentMeta, signedDocument, publicSignDoc]);
-
-  const companyRut = useMemo(() => {
-    return pickFirstNonEmpty(
-      document?.empresa_rut,
-      document?.rut_empresa,
-      document?.company_rut,
-      document?.companyRut,
-      document?.rut,
-      documentMeta?.empresa_rut,
-      documentMeta?.rut_empresa,
-      documentMeta?.company_rut,
-      documentMeta?.companyRut,
-      documentMeta?.rut,
-      signedDocument?.empresa_rut,
-      signedDocument?.rut_empresa,
-      signedDocument?.rut,
-      publicSignDoc?.empresa_rut,
-      publicSignDoc?.rut_empresa,
-      publicSignDoc?.company_rut,
-      publicSignDoc?.companyRut,
-      publicSignDoc?.rut,
-      "No informado"
-    );
-  }, [document, documentMeta, signedDocument, publicSignDoc]);
-
-  const contractNumber = useMemo(() => {
-    return pickFirstNonEmpty(
-      document?.numero_contrato_interno,
-      document?.numerocontratointerno,
-      document?.numero_contrato,
-      document?.numeroContrato,
-      document?.contract_number,
-      document?.n_contrato,
-      documentMeta?.numeroContratoInterno,
-      documentMeta?.numero_contrato_interno,
-      documentMeta?.numerocontratointerno,
-      documentMeta?.numero_contrato,
-      documentMeta?.numeroContrato,
-      documentMeta?.contract_number,
-      signedDocument?.numero_contrato_interno,
-      signedDocument?.numerocontratointerno,
-      signedDocument?.numero_contrato,
-      signedDocument?.contract_number,
-      publicSignDoc?.numero_contrato_interno,
-      publicSignDoc?.numerocontratointerno,
-      publicSignDoc?.numero_contrato,
-      publicSignDoc?.contract_number,
-      "Sin número"
-    );
-  }, [document, documentMeta, signedDocument, publicSignDoc]);
-
-  const tipoDocumentoLabel = useMemo(() => {
-    return buildTipoLabel(
-      pickFirstNonEmpty(
-        document?.tipo_tramite,
-        document?.tramite_tipo,
-        document?.tipoTramite,
-        documentMeta?.tipo_tramite,
-        documentMeta?.tramite_tipo,
-        documentMeta?.tipoTramite,
-        signedDocument?.tipo_tramite,
-        publicSignDoc?.tipo_tramite
-      ),
-      pickFirstNonEmpty(
-        document?.tipo_documento,
-        document?.document_type,
-        document?.tipoDocumento,
-        documentMeta?.tipo_documento,
-        documentMeta?.document_type,
-        documentMeta?.tipoDocumento,
-        signedDocument?.tipo_documento,
-        publicSignDoc?.tipo_documento
-      )
-    );
-  }, [document, documentMeta, signedDocument, publicSignDoc]);
+  const procedureLabel = getProcedureLabel({
+    ...document,
+    metadata: documentMeta,
+  });
 
   const signerStatus = normalizeStatus(
     signer?.status || signer?.signer_status || signer?.estado
@@ -585,39 +558,35 @@ export function PublicSignView({
       signedDocument?.estado
   );
 
-  const signerRoleLabel = useMemo(
-    () => resolveSignerRoleLabel(signer, isVisado),
-    [signer, isVisado]
-  );
+  const signerRoleLabel = resolveSignerRoleLabel(signer, isVisado);
 
-  const participantInfo = useMemo(
-    () => getReadableParticipantLabel({ signer, isVisado, document }),
-    [signer, isVisado, document]
-  );
+  const participantInfo = getReadableParticipantLabel({
+    signer,
+    isVisado,
+    document,
+  });
 
-  const flowState = useMemo(
-    () =>
-      resolvePublicState({
-        publicSignError,
-        document,
-        documentStatus,
-        signerStatus,
-        isVisado,
-      }),
-    [publicSignError, document, documentStatus, signerStatus, isVisado]
-  );
+  const flowState = resolvePublicState({
+    publicSignError,
+    document,
+    documentStatus,
+    signerStatus,
+    isVisado,
+  });
 
-  const statusBadge = useMemo(
-    () => getStatusBadge(flowState, isVisado),
-    [flowState, isVisado]
-  );
+  const statusBadge = getStatusBadge(flowState, isVisado);
+
+  const effectiveTokenKind =
+    publicTokenKind || (isVisado ? "document" : "signer");
 
   const canActOnDocument =
     flowState.kind === "pending" &&
     !!document &&
     !!publicSignToken &&
     !!API_BASE &&
-    !publicSignLoading;
+    !publicSignLoading &&
+    ((isVisado && effectiveTokenKind === "document") ||
+      (!isVisado && effectiveTokenKind === "signer"));
 
   const showSkeleton = publicSignLoading && !document && !publicSignError;
   const titleText = isVisado ? "Visado de documento" : "Firma electrónica";
@@ -636,15 +605,18 @@ export function PublicSignView({
 
     cargarFirmaPublica(publicSignToken, {
       mode: publicSignMode,
-      tokenKind: publicTokenKind || (isVisado ? "document" : "signer"),
+      tokenKind: effectiveTokenKind,
     });
-  }, [
-    cargarFirmaPublica,
-    publicSignMode,
-    publicSignToken,
-    publicTokenKind,
-    isVisado,
-  ]);
+  }, [cargarFirmaPublica, publicSignMode, publicSignToken, effectiveTokenKind]);
+
+  const reloadPublicState = useCallback(async () => {
+    if (!publicSignToken || typeof cargarFirmaPublica !== "function") return;
+
+    await cargarFirmaPublica(publicSignToken, {
+      mode: publicSignMode,
+      tokenKind: effectiveTokenKind,
+    });
+  }, [cargarFirmaPublica, publicSignMode, publicSignToken, effectiveTokenKind]);
 
   const handleConfirm = useCallback(async () => {
     if (signing || rejecting || !canActOnDocument) return;
@@ -668,29 +640,15 @@ export function PublicSignView({
         apiBase: API_BASE,
         token: publicSignToken,
         isVisado,
-        tokenKind: publicTokenKind || (isVisado ? "document" : "signer"),
+        tokenKind: effectiveTokenKind,
       });
 
-      const res = await fetch(endpoint, {
+      const data = await fetchJsonSafe(endpoint, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
       });
 
-      let data = {};
-      try {
-        data = await res.json();
-      } catch {
-        data = {};
-      }
-
-      if (!res.ok) {
-        throw new Error(buildActionErrorMessage(isVisado, data?.message));
-      }
-
-      await cargarFirmaPublica(publicSignToken, {
-        mode: publicSignMode,
-        tokenKind: publicTokenKind || (isVisado ? "document" : "signer"),
-      });
+      await reloadPublicState();
 
       setActionMessage(buildActionSuccessMessage(isVisado, data?.message));
       setActionMessageType("success");
@@ -709,13 +667,11 @@ export function PublicSignView({
     isVisado,
     API_BASE,
     publicSignToken,
-    publicSignMode,
-    publicTokenKind,
-    cargarFirmaPublica,
+    reloadPublicState,
   ]);
 
   const handleReject = useCallback(async () => {
-    if (rejecting || signing || !canActOnDocument) return;
+    if (rejecting || signing || !canActOnDocument || isVisado) return;
 
     const motivo = String(rejectReason || "").trim();
 
@@ -730,10 +686,11 @@ export function PublicSignView({
       setActionMessageType("info");
       setRejecting(true);
 
-      const res = await fetch(
+      const data = await fetchJsonSafe(
         buildRejectEndpoint({
           apiBase: API_BASE,
           token: publicSignToken,
+	  tokenKind: effectiveTokenKind,
         }),
         {
           method: "POST",
@@ -742,21 +699,7 @@ export function PublicSignView({
         }
       );
 
-      let data = {};
-      try {
-        data = await res.json();
-      } catch {
-        data = {};
-      }
-
-      if (!res.ok) {
-        throw new Error(buildRejectErrorMessage(data?.message));
-      }
-
-      await cargarFirmaPublica(publicSignToken, {
-        mode: publicSignMode,
-        tokenKind: publicTokenKind || "signer",
-      });
+      await reloadPublicState();
 
       setActionMessage(
         sanitizePublicMessage(
@@ -778,12 +721,11 @@ export function PublicSignView({
     rejecting,
     signing,
     canActOnDocument,
+    isVisado,
     rejectReason,
     API_BASE,
     publicSignToken,
-    publicSignMode,
-    publicTokenKind,
-    cargarFirmaPublica,
+    reloadPublicState,
   ]);
 
   const handleToggleReject = useCallback(() => {
@@ -852,7 +794,7 @@ export function PublicSignView({
         </div>
       )}
 
-      {showReject && (
+      {showReject && !isVisado && (
         <div className="public-sign-reject-card">
           <h2 className="public-sign-reject-card__title">
             Rechazar documento
@@ -1041,13 +983,13 @@ export function PublicSignView({
 
                 <div className="public-sign-meta-card">
                   <div className="public-sign-meta-card__label">
-                    Tipo de trámite
+                    {procedureFieldLabel}
                   </div>
                   <div
                     className="public-sign-meta-card__value"
-                    title={tipoDocumentoLabel}
+                    title={procedureLabel}
                   >
-                    {tipoDocumentoLabel}
+                    {procedureLabel}
                   </div>
                 </div>
 
@@ -1096,9 +1038,7 @@ export function PublicSignView({
                 </div>
               )}
 
-              <div className="public-sign-desktop-actions">
-                {actionBlock}
-              </div>
+              <div className="public-sign-desktop-actions">{actionBlock}</div>
             </aside>
 
             <section className="public-sign-document-panel">

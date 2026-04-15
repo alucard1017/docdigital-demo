@@ -3,45 +3,19 @@ import React, { useCallback, useMemo } from "react";
 import { DOC_STATUS } from "../constants";
 import api from "../api/client";
 import { useToast } from "../hooks/useToast";
+import { getErrorMessage } from "./detailView.helpers";
+import {
+  getProcedureLabel,
+  getPrimaryProcedureLabel,
+} from "../utils/documentLabels";
 
-function normalize(value) {
-  if (!value) return "";
-  return String(value).trim().toLowerCase();
-}
-
-function getTramiteLabel(value) {
-  const v = normalize(value);
-  if (!v) return "";
-  if (v === "notaria" || v === "notaría") return "Notaría";
-  if (v.includes("sin notaria") || v.includes("sin notaría")) return "Sin notaría";
-  if (v === "propio") return "Propio";
-  return "";
-}
-
-function getDocumentoLabel(value) {
-  const v = normalize(value);
-  if (!v) return "";
-  if (v === "poder" || v === "poderes") return "Poder";
-  if (v === "contrato" || v === "contratos") return "Contrato";
-  if (
-    v === "autorizacion" ||
-    v === "autorización" ||
-    v === "autorizaciones"
-  ) {
-    return "Autorización";
+function pickFirstNonEmpty(...values) {
+  for (const value of values) {
+    if (value === null || value === undefined) continue;
+    const text = String(value).trim();
+    if (text) return text;
   }
   return "";
-}
-
-function buildTipoLabel(tipoTramite, tipoDocumento) {
-  const tramite = getTramiteLabel(tipoTramite);
-  const documento = getDocumentoLabel(tipoDocumento);
-
-  if (tramite && documento) return `${tramite} · ${documento}`;
-  if (documento) return documento;
-  if (tramite) return tramite;
-
-  return "General";
 }
 
 function getContractNumber(doc) {
@@ -50,13 +24,9 @@ function getContractNumber(doc) {
     doc?.numero_contrato ||
     doc?.contract_number ||
     doc?.n_contrato ||
-    doc?.numerocontratointerno || // por si viene ya mapeado así
+    doc?.numerocontratointerno ||
     "Sin número"
   );
-}
-
-function getErrorMessage(err, fallback) {
-  return err?.response?.data?.message || err?.message || fallback;
 }
 
 const STATUS_LABELS = {
@@ -82,17 +52,15 @@ const STATUS_COLORS = {
 export function DocumentRow({ doc, onOpenDetail }) {
   const { addToast } = useToast();
 
-  const tipoLabel = useMemo(
-    () => buildTipoLabel(doc?.tipo_tramite, doc?.tipo_documento),
-    [doc?.tipo_tramite, doc?.tipo_documento]
-  );
+  const tipoLabel = useMemo(() => {
+    return getPrimaryProcedureLabel(doc) || getProcedureLabel(doc) || "Documento";
+  }, [doc]);
 
   const numeroContrato = useMemo(() => getContractNumber(doc), [doc]);
 
-  const titleDocumento = useMemo(
-    () => doc?.title || "Sin título",
-    [doc?.title]
-  );
+  const titleDocumento = useMemo(() => {
+    return pickFirstNonEmpty(doc?.title, doc?.titulo, doc?.name, "Sin título");
+  }, [doc]);
 
   const { fechaLinea1, fechaLinea2 } = useMemo(() => {
     if (!doc?.created_at) {
@@ -117,35 +85,35 @@ export function DocumentRow({ doc, onOpenDetail }) {
     };
   }, [doc?.created_at]);
 
-  const estadoLabel = useMemo(
-    () => STATUS_LABELS[doc?.status] || doc?.status || "Sin estado",
-    [doc?.status]
-  );
+  const estadoLabel = useMemo(() => {
+    return STATUS_LABELS[doc?.status] || doc?.status || "Sin estado";
+  }, [doc?.status]);
 
-  const estadoColor = useMemo(
-    () => STATUS_COLORS[doc?.status] || "#6b7280",
-    [doc?.status]
-  );
+  const estadoColor = useMemo(() => {
+    return STATUS_COLORS[doc?.status] || "#6b7280";
+  }, [doc?.status]);
 
   const displayFirmante = useMemo(
     () =>
-      doc?.firmante_nombre ||
-      doc?.firmanteName ||
-      doc?.participant_nombre ||
-      doc?.participant_name ||
-      doc?.signer_name ||
-      doc?.signer ||
-      null,
+      pickFirstNonEmpty(
+        doc?.firmante_nombre,
+        doc?.firmanteName,
+        doc?.participant_nombre,
+        doc?.participant_name,
+        doc?.signer_name,
+        doc?.signer
+      ),
     [doc]
   );
 
   const displayEmpresa = useMemo(
     () =>
-      doc?.destinatario_nombre ||
-      doc?.empresa_nombre ||
-      doc?.company_name ||
-      doc?.razon_social ||
-      null,
+      pickFirstNonEmpty(
+        doc?.destinatario_nombre,
+        doc?.empresa_nombre,
+        doc?.company_name,
+        doc?.razon_social
+      ),
     [doc]
   );
 

@@ -23,16 +23,27 @@ import {
   buildFlowParticipants,
   buildUserDisplayName,
   formatDateTime,
-  getDocumentLabel,
   getDocumentNumber,
   getDocumentTitle,
   getErrorMessage,
   getTimelineEvents,
-  getTramiteLabel,
   isAbortLikeError,
   shouldShowGlobalReminder,
   shouldShowVisadoReminder,
 } from "./detailView.helpers";
+import {
+  getDocumentKindLabel,
+  getNotaryLabel,
+  getProcedureLabel,
+  getProcedureFieldLabel,
+} from "../utils/documentLabels";
+
+function getButtonStateStyle(isLoading) {
+  return {
+    cursor: isLoading ? "not-allowed" : "pointer",
+    opacity: isLoading ? 0.6 : 1,
+  };
+}
 
 export function DetailView({
   selectedDoc,
@@ -72,6 +83,20 @@ export function DetailView({
   const timelineToastShownRef = useRef(false);
   const signersToastShownRef = useRef(false);
 
+  const currentTimelineDoc = timeline?.document || null;
+  const currentDocId = selectedDoc?.id ?? currentTimelineDoc?.id ?? null;
+
+  const mergedDoc = useMemo(() => {
+    return {
+      ...(selectedDoc || {}),
+      ...(currentTimelineDoc || {}),
+      metadata: {
+        ...(selectedDoc?.metadata || selectedDoc?.meta || {}),
+        ...(currentTimelineDoc?.metadata || currentTimelineDoc?.meta || {}),
+      },
+    };
+  }, [selectedDoc, currentTimelineDoc]);
+
   const safeEvents = useMemo(() => {
     return getTimelineEvents(timeline, events);
   }, [timeline, events]);
@@ -79,12 +104,6 @@ export function DetailView({
   const displayName = useMemo(() => {
     return buildUserDisplayName(currentUser);
   }, [currentUser]);
-
-  const currentTimelineDoc = timeline?.document || null;
-
-  const currentDocId = useMemo(() => {
-    return selectedDoc?.id ?? currentTimelineDoc?.id ?? null;
-  }, [selectedDoc, currentTimelineDoc]);
 
   const numeroInterno = useMemo(() => {
     return getDocumentNumber(selectedDoc, timeline);
@@ -98,36 +117,21 @@ export function DetailView({
     return getDocumentTitle(selectedDoc, timeline);
   }, [selectedDoc, timeline]);
 
-  const tramiteLabel = useMemo(() => {
-    const rawValue =
-      currentTimelineDoc?.tipo_tramite ??
-      currentTimelineDoc?.tipoTramite ??
-      currentTimelineDoc?.tramite ??
-      selectedDoc?.tipo_tramite ??
-      selectedDoc?.tipoTramite ??
-      selectedDoc?.tramite ??
-      selectedDoc?.tipoTramiteLabel ??
-      null;
+  const clasificacionFieldLabel = useMemo(() => {
+    return getProcedureFieldLabel(mergedDoc);
+  }, [mergedDoc]);
 
-    const label = getTramiteLabel(rawValue);
-    return label || "N/D";
-  }, [currentTimelineDoc, selectedDoc]);
+  const clasificacionLabel = useMemo(() => {
+    return getProcedureLabel(mergedDoc);
+  }, [mergedDoc]);
+
+  const tramiteLabel = useMemo(() => {
+    return getNotaryLabel(mergedDoc) || "No informado";
+  }, [mergedDoc]);
 
   const documentoLabel = useMemo(() => {
-    const rawValue =
-      currentTimelineDoc?.tipo_documento ??
-      currentTimelineDoc?.tipoDocumento ??
-      currentTimelineDoc?.document_type ??
-      currentTimelineDoc?.tipo ??
-      selectedDoc?.tipo_documento ??
-      selectedDoc?.tipoDocumento ??
-      selectedDoc?.document_type ??
-      selectedDoc?.tipo ??
-      null;
-
-    const label = getDocumentLabel(rawValue);
-    return label || "N/D";
-  }, [currentTimelineDoc, selectedDoc]);
+    return getDocumentKindLabel(mergedDoc) || "No informado";
+  }, [mergedDoc]);
 
   const currentStatus = useMemo(() => {
     return currentTimelineDoc?.status ?? selectedDoc?.status ?? null;
@@ -161,7 +165,7 @@ export function DetailView({
     return flowParticipants.find((p) => p.statusKey === "pending") || null;
   }, [flowParticipants]);
 
-  const fetchTimelineAndParticipants = useCallback(
+  const refreshTimeline = useCallback(
     async (docId) => {
       try {
         setLoadingTimeline(true);
@@ -198,7 +202,7 @@ export function DetailView({
     [addToast]
   );
 
-  const fetchSigners = useCallback(
+  const refreshSigners = useCallback(
     async (docId, signal) => {
       try {
         setLoadingSigners(true);
@@ -230,6 +234,16 @@ export function DetailView({
     [addToast]
   );
 
+  const refreshAll = useCallback(
+    async (docId, signal) => {
+      await Promise.allSettled([
+        refreshTimeline(docId),
+        refreshSigners(docId, signal),
+      ]);
+    },
+    [refreshTimeline, refreshSigners]
+  );
+
   useEffect(() => {
     if (!selectedDoc?.id) return;
 
@@ -239,18 +253,17 @@ export function DetailView({
     timelineToastShownRef.current = false;
     signersToastShownRef.current = false;
 
-    fetchTimelineAndParticipants(docId);
-    fetchSigners(docId, controller.signal);
+    refreshAll(docId, controller.signal);
 
     const intervalId = window.setInterval(() => {
-      fetchTimelineAndParticipants(docId);
+      refreshAll(docId, controller.signal);
     }, DETAIL_POLL_INTERVAL_MS);
 
     return () => {
       controller.abort();
       window.clearInterval(intervalId);
     };
-  }, [selectedDoc?.id, fetchTimelineAndParticipants, fetchSigners]);
+  }, [selectedDoc?.id, refreshAll]);
 
   const handleBackToList = useCallback(() => {
     setView("list");
@@ -273,6 +286,8 @@ export function DetailView({
         message:
           res.data?.message || "Recordatorio de visado reenviado correctamente.",
       });
+
+      await refreshAll(selectedDoc.id);
     } catch (err) {
       console.error("Error reenviando visado:", err);
 
@@ -287,7 +302,7 @@ export function DetailView({
     } finally {
       setReenviarLoadingVisado(false);
     }
-  }, [selectedDoc?.id, addToast]);
+  }, [selectedDoc?.id, addToast, refreshAll]);
 
   const handleReenviarFirma = useCallback(
     async (signerId) => {
@@ -307,6 +322,8 @@ export function DetailView({
           message:
             res.data?.message || "Recordatorio de firma reenviado correctamente.",
         });
+
+        await refreshAll(selectedDoc.id);
       } catch (err) {
         console.error("Error reenviando firma:", err);
 
@@ -322,7 +339,7 @@ export function DetailView({
         setReenviarSignerId(null);
       }
     },
-    [selectedDoc?.id, addToast]
+    [selectedDoc?.id, addToast, refreshAll]
   );
 
   const handleEnviarRecordatorioATodos = useCallback(async () => {
@@ -338,6 +355,8 @@ export function DetailView({
         title: "Recordatorio enviado",
         message: res.data?.message || "Recordatorio enviado correctamente.",
       });
+
+      await refreshAll(selectedDoc.id);
     } catch (err) {
       console.error("Error enviando recordatorio a todos:", err);
 
@@ -349,7 +368,7 @@ export function DetailView({
     } finally {
       setRecordatorioLoading(false);
     }
-  }, [selectedDoc?.id, addToast]);
+  }, [selectedDoc?.id, addToast, refreshAll]);
 
   const manejarAccionDocumentoConLegal = useCallback(
     async (id, accion, extraData = {}) => {
@@ -380,9 +399,18 @@ export function DetailView({
         setAcceptedLegalVisado(false);
         setSignError("");
         setVisadoError("");
+        if (selectedDoc?.id) {
+          await refreshAll(selectedDoc.id);
+        }
       }
     },
-    [acceptedLegalSign, acceptedLegalVisado, manejarAccionDocumento]
+    [
+      acceptedLegalSign,
+      acceptedLegalVisado,
+      manejarAccionDocumento,
+      selectedDoc?.id,
+      refreshAll,
+    ]
   );
 
   if (!selectedDoc) return null;
@@ -435,7 +463,19 @@ export function DetailView({
                   </p>
 
                   <p>
-                    <span className="detail-meta-label">Tipo de trámite:</span>{" "}
+                    <span className="detail-meta-label">
+                      {clasificacionFieldLabel}:
+                    </span>{" "}
+                    <span
+                      className="detail-meta-value"
+                      title={clasificacionLabel}
+                    >
+                      {clasificacionLabel}
+                    </span>
+                  </p>
+
+                  <p>
+                    <span className="detail-meta-label">Condición notarial:</span>{" "}
                     <span className="detail-meta-value" title={tramiteLabel}>
                       {tramiteLabel}
                     </span>
@@ -493,10 +533,7 @@ export function DetailView({
                       className="btn-main detail-btn-reminder-all"
                       onClick={handleEnviarRecordatorioATodos}
                       disabled={recordatorioLoading}
-                      style={{
-                        cursor: recordatorioLoading ? "not-allowed" : "pointer",
-                        opacity: recordatorioLoading ? 0.6 : 1,
-                      }}
+                      style={getButtonStateStyle(recordatorioLoading)}
                     >
                       {recordatorioLoading
                         ? "Enviando recordatorio..."
@@ -510,10 +547,7 @@ export function DetailView({
                       className="btn-main detail-btn-reminder-visado"
                       onClick={handleReenviarVisado}
                       disabled={reenviarLoadingVisado}
-                      style={{
-                        cursor: reenviarLoadingVisado ? "not-allowed" : "pointer",
-                        opacity: reenviarLoadingVisado ? 0.6 : 1,
-                      }}
+                      style={getButtonStateStyle(reenviarLoadingVisado)}
                     >
                       {reenviarLoadingVisado
                         ? "Reenviando visado..."
@@ -580,7 +614,10 @@ export function DetailView({
                     <ElectronicSignatureNotice
                       mode="firma"
                       checked={acceptedLegalSign}
-                      onChange={setAcceptedLegalSign}
+                      onChange={(value) => {
+                        setAcceptedLegalSign(value);
+                        if (value) setSignError("");
+                      }}
                     />
                     {signError && (
                       <p className="detail-inline-error">{signError}</p>
@@ -593,7 +630,10 @@ export function DetailView({
                     <ElectronicSignatureNotice
                       mode="visado"
                       checked={acceptedLegalVisado}
-                      onChange={setAcceptedLegalVisado}
+                      onChange={(value) => {
+                        setAcceptedLegalVisado(value);
+                        if (value) setVisadoError("");
+                      }}
                     />
                     {visadoError && (
                       <p className="detail-inline-error">{visadoError}</p>
@@ -698,13 +738,9 @@ export function DetailView({
                               className="btn-main detail-btn-inline-reminder"
                               onClick={() => handleReenviarFirma(signerId)}
                               disabled={reenviarSignerId === signerId}
-                              style={{
-                                cursor:
-                                  reenviarSignerId === signerId
-                                    ? "not-allowed"
-                                    : "pointer",
-                                opacity: reenviarSignerId === signerId ? 0.6 : 1,
-                              }}
+                              style={getButtonStateStyle(
+                                reenviarSignerId === signerId
+                              )}
                             >
                               {reenviarSignerId === signerId
                                 ? "⏳ Enviando..."
