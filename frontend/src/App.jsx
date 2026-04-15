@@ -692,7 +692,7 @@ function App() {
             }}
             totalFiltrado={safeTotalFiltrado}
             pendientes={safePendientes}
-            visados={safeVisados}
+            visados={safeVisadosFiltered}
             firmados={safeFirmados}
             rechazados={safeRechazados}
             onSync={() => refreshDocs()}
@@ -794,7 +794,7 @@ function App() {
     setSearch,
     safeTotalFiltrado,
     safePendientes,
-    safeVisados,
+    safeVisadosFiltered,
     safeFirmados,
     safeRechazados,
     refreshDocs,
@@ -810,6 +810,7 @@ function App() {
     canAudit,
     user,
     apiRoot,
+    handleNavigateProtected,
   ]);
 
   // 1) Sesión en carga
@@ -817,14 +818,14 @@ function App() {
     return <SessionLoadingFallback />;
   }
 
-// 2) Portales públicos: verificación
-if (isPublicVerificationAccess) {
-  return <VerificationView API_URL={apiRoot} />;
-}
+  // 2) Portales públicos: verificación
+  if (isPublicVerificationAccess) {
+    return <VerificationView API_URL={apiRoot} />;
+  }
 
-// 3) Portales públicos: firma / visado
-if (isPublicSigningAccess) {
-  const effectiveToken = tokenFromUrl || publicSignToken || "";
+  // 3) Portales públicos: firma / visado
+  if (isPublicSigningAccess) {
+    const effectiveToken = tokenFromUrl || publicSignToken || "";
 
     return (
       <PublicSignView
