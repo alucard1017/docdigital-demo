@@ -1,6 +1,6 @@
 import React, { useMemo, useRef, useState } from "react";
 import api from "../api/client";
-import { getProcedureLabel } from "@/utils/documentLabels";
+import { getProcedureLabel } from "../utils/documentLabels";
 
 const TIPOS_TRAMITE = [
   { value: "propio", label: "Sin notaría" },
