@@ -652,3 +652,30 @@
   box-shadow: 0 16px 40px rgba(15, 23, 42, 0.35);
   background: #ffffff;
 }
+
+.public-sign-legal-box {
+  margin-bottom: 14px;
+  padding: 14px;
+  border-radius: 14px;
+  background: rgba(15, 23, 42, 0.82);
+  border: 1px solid rgba(148, 163, 184, 0.18);
+}
+
+.public-sign-legal-check {
+  display: flex;
+  align-items: flex-start;
+  gap: 10px;
+  font-size: 14px;
+  line-height: 1.6;
+  color: #e5e7eb;
+}
+
+.public-sign-legal-check input {
+  margin-top: 3px;
+  flex: 0 0 auto;
+}
+
+.public-sign-reject-actions {
+  display: grid;
+  gap: 10px;
+}

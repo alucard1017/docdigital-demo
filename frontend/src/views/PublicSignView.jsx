@@ -614,18 +614,23 @@ export function PublicSignView({
 
   const statusBadge = getStatusBadge(flowState, isVisado);
 
-  const canRenderActions =
-    flowState.kind === "pending" &&
-    !!document &&
-    !!publicSignToken &&
-    !publicSignLoading &&
-    ((isVisado && effectiveTokenKind === "document") ||
-      (!isVisado && effectiveTokenKind === "signer"));
+const isPendingFlow = flowState.kind === "pending" && !!document && !publicSignLoading;
 
-  const canSubmitAction = canRenderActions && !!API_BASE;
+const canRenderActions = isPendingFlow;
 
-  const canReject =
-    canRenderActions && !isVisado && effectiveTokenKind === "signer";
+const canSubmitAction =
+  isPendingFlow &&
+  !!publicSignToken &&
+  !!API_BASE &&
+  ((isVisado && effectiveTokenKind === "document") ||
+    (!isVisado && effectiveTokenKind === "signer"));
+
+const canReject =
+  !isVisado &&
+  isPendingFlow &&
+  effectiveTokenKind === "signer" &&
+  !!publicSignToken &&
+  !!API_BASE;
 
   const showSkeleton = publicSignLoading && !document && !publicSignError;
   const titleText = isVisado ? "Visado de documento" : "Firma electrónica";
@@ -804,116 +809,130 @@ export function PublicSignView({
     });
   }
 
-  const actionBlock = canRenderActions ? (
-    <div className="public-sign-action-block">
-      <ElectronicSignatureNotice
-        mode={resolvedMode}
-        checked={acceptedLegal}
-        onChange={(value) => {
-          setAcceptedLegal(value);
-          if (value) setLegalError("");
-        }}
-      />
+const actionBlock = canRenderActions ? (
+  <div className="public-sign-action-block">
+    <div className="public-sign-legal-box">
+      <label className="public-sign-legal-check">
+        <input
+          type="checkbox"
+          checked={acceptedLegal}
+          onChange={(e) => {
+            setAcceptedLegal(e.target.checked);
+            if (e.target.checked) setLegalError("");
+          }}
+        />
+        <span>
+          He leído y acepto el aviso legal para registrar mi{" "}
+          {isVisado ? "visado" : "firma electrónica"}.
+        </span>
+      </label>
+    </div>
 
-      {legalError && (
-        <div className="public-sign-inline-error">{legalError}</div>
-      )}
+    {legalError && (
+      <div className="public-sign-inline-error">{legalError}</div>
+    )}
 
-      <p className="public-sign-helper-text">
-        Al continuar, registrarás tu {isVisado ? "visado" : "firma electrónica"}.
-        Esta acción no se puede deshacer.
-      </p>
+    {!canSubmitAction && (
+      <div className="public-sign-inline-error">
+        No se puede habilitar la acción porque faltan datos del enlace o de la API.
+      </div>
+    )}
 
-      {!showReject && (
-        <div className="public-sign-actions">
+    <p className="public-sign-helper-text">
+      Al continuar, registrarás tu {isVisado ? "visado" : "firma electrónica"}.
+      Esta acción no se puede deshacer.
+    </p>
+
+    {!showReject && (
+      <div className="public-sign-actions">
+        <button
+          type="button"
+          className={`public-sign-button public-sign-button--primary ${
+            isVisado
+              ? "public-sign-button--warning"
+              : "public-sign-button--info"
+          }`}
+          onClick={handleConfirm}
+          disabled={signing || rejecting || !acceptedLegal || !canSubmitAction}
+        >
+          {signing
+            ? "Procesando..."
+            : isVisado
+            ? "Registrar visado"
+            : signerRoleLabel === "Firmante final"
+            ? "Registrar firma final"
+            : "Registrar firma"}
+        </button>
+
+        {canReject && (
           <button
             type="button"
-            className={`public-sign-button public-sign-button--primary ${
-              isVisado
-                ? "public-sign-button--warning"
-                : "public-sign-button--info"
-            }`}
-            onClick={handleConfirm}
-            disabled={signing || rejecting || !acceptedLegal}
+            className="public-sign-button public-sign-button--danger"
+            onClick={handleToggleReject}
+            disabled={signing || rejecting}
           >
-            {signing
-              ? "Procesando..."
-              : isVisado
-              ? "Registrar visado"
-              : signerRoleLabel === "Firmante final"
-              ? "Registrar firma final"
-              : "Registrar firma"}
+            Rechazar documento
+          </button>
+        )}
+      </div>
+    )}
+
+    {showReject && canReject && (
+      <div className="public-sign-reject-card">
+        <h2 className="public-sign-reject-card__title">
+          Rechazar documento
+        </h2>
+
+        <p className="public-sign-reject-card__text">
+          Explica brevemente el motivo. Esta información puede compartirse con
+          la empresa que te envió el documento.
+        </p>
+
+        <textarea
+          rows={5}
+          value={rejectReason}
+          onChange={(e) => setRejectReason(e.target.value)}
+          className="public-sign-textarea"
+          placeholder="Escribe aquí el motivo del rechazo..."
+          disabled={rejecting}
+          aria-invalid={rejectError ? "true" : "false"}
+          aria-describedby={
+            rejectError ? "public-sign-reject-error" : undefined
+          }
+        />
+
+        {rejectError && (
+          <div
+            id="public-sign-reject-error"
+            className="public-sign-inline-error"
+          >
+            {rejectError}
+          </div>
+        )}
+
+        <div className="public-sign-reject-actions">
+          <button
+            type="button"
+            className="public-sign-button public-sign-button--secondary"
+            onClick={handleToggleReject}
+            disabled={rejecting}
+          >
+            Cancelar
           </button>
 
-          {canReject && (
-            <button
-              type="button"
-              className="public-sign-button public-sign-button--danger"
-              onClick={handleToggleReject}
-              disabled={signing || rejecting}
-            >
-              Rechazar documento
-            </button>
-          )}
+          <button
+            type="button"
+            className="public-sign-button public-sign-button--danger-solid"
+            onClick={handleReject}
+            disabled={rejecting || signing}
+          >
+            {rejecting ? "Enviando..." : "Confirmar rechazo"}
+          </button>
         </div>
-      )}
-
-      {showReject && canReject && (
-        <div className="public-sign-reject-card">
-          <h2 className="public-sign-reject-card__title">
-            Rechazar documento
-          </h2>
-
-          <p className="public-sign-reject-card__text">
-            Explica brevemente el motivo. Esta información puede compartirse con
-            la empresa que te envió el documento.
-          </p>
-
-          <textarea
-            rows={5}
-            value={rejectReason}
-            onChange={(e) => setRejectReason(e.target.value)}
-            className="public-sign-textarea"
-            placeholder="Escribe aquí el motivo del rechazo..."
-            disabled={rejecting}
-            aria-invalid={rejectError ? "true" : "false"}
-            aria-describedby={
-              rejectError ? "public-sign-reject-error" : undefined
-            }
-          />
-
-          {rejectError && (
-            <div
-              id="public-sign-reject-error"
-              className="public-sign-inline-error"
-            >
-              {rejectError}
-            </div>
-          )}
-
-          <div className="public-sign-reject-actions">
-            <button
-              type="button"
-              className="public-sign-button public-sign-button--secondary"
-              onClick={handleToggleReject}
-              disabled={rejecting}
-            >
-              Cancelar
-            </button>
-
-            <button
-              type="button"
-              className="public-sign-button public-sign-button--danger-solid"
-              onClick={handleReject}
-              disabled={rejecting || signing}
-            >
-              {rejecting ? "Enviando..." : "Confirmar rechazo"}
-            </button>
-          </div>
-        </div>
-      )}
-    </div>
-  ) : null;
+      </div>
+    )}
+  </div>
+) : null;
 
   const messageCardClassName = `public-sign-message-card ${
     actionMessageType === "error"
