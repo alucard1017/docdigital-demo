@@ -294,7 +294,10 @@ const cargarFirmaPublica = useCallback(
   async (tokenParam, options = {}) => {
     const token = String(tokenParam || "").trim();
     const requestedMode = options.mode ?? null;
-    const requestedTokenKind = options.tokenKind ?? "signer";
+    const requestedTokenKind =
+      options.tokenKind === "document" || options.tokenKind === "signer"
+        ? options.tokenKind
+        : null;
 
     if (!token) {
       setPublicSignError("No se recibió el token del documento.");

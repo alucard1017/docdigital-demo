@@ -176,10 +176,9 @@ function resolvePublicState({
   const documentRejected =
     documentStatus === "RECHAZADO" || documentStatus === "REJECTED";
 
-  const visadoDone =
-    isVisado &&
-    documentStatus &&
-    !["PENDIENTE_VISADO", "PENDIENTE"].includes(documentStatus);
+const visadoDone =
+  isVisado &&
+  ["VISADO", "PENDIENTE_FIRMA", "FIRMADO", "SIGNED", "COMPLETED", "COMPLETADO"].includes(documentStatus);
 
   if (documentRejected) {
     return {

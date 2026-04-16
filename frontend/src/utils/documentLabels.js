@@ -144,10 +144,52 @@ function getRawVisadoFlag(doc = {}) {
     doc.requiresVisado ??
     doc.con_visado ??
     doc.visado ??
+    doc.tiene_visado ??
     meta.requires_visado ??
     meta.requiresVisado ??
     meta.con_visado ??
-    meta.visado
+    meta.visado ??
+    meta.tiene_visado
+  );
+}
+
+function getRequiresVisado(doc = {}) {
+  const meta = getMetaContainer(doc);
+
+  const raw =
+    doc.requires_visado ??
+    doc.requiresVisado ??
+    doc.requiere_visado ??
+    doc.tiene_visador ??
+    meta.requires_visado ??
+    meta.requiresVisado ??
+    meta.requiere_visado ??
+    meta.tiene_visador;
+
+  if (raw === true || raw === false) return raw;
+  if (isTruthyFlag(raw)) return true;
+  if (isFalsyFlag(raw)) return false;
+
+  const rawProcedure = normalizeLower(getRawProcedureType(doc));
+  if (rawProcedure.includes("visado")) return true;
+
+  return null;
+}
+
+function getDocumentStatus(doc = {}) {
+  const meta = getMetaContainer(doc);
+
+  return normalizeUpper(
+    pickFirstNonEmpty(
+      doc.status,
+      doc.estado,
+      doc.document_status,
+      doc.documentStatus,
+      meta.status,
+      meta.estado,
+      meta.document_status,
+      meta.documentStatus
+    )
   );
 }
 
@@ -196,36 +238,15 @@ export function getDocumentKindLabel(doc = {}) {
     return "Anexo";
   }
 
-  if (
-    [
-      "DECLARACION",
-      "DECLARACIÓN",
-      "AFFIDAVIT",
-    ].includes(type)
-  ) {
+  if (["DECLARACION", "DECLARACIÓN", "AFFIDAVIT"].includes(type)) {
     return "Declaración";
   }
 
-  // fallback por tipo_tramite si viene mejor clasificado ahí
-  if (
-    [
-      "CONTRATO",
-      "CONTRACT",
-      "ACUERDO",
-      "AGREEMENT",
-    ].includes(rawProcedure)
-  ) {
+  if (["CONTRATO", "CONTRACT", "ACUERDO", "AGREEMENT"].includes(rawProcedure)) {
     return "Contrato";
   }
 
-  if (
-    [
-      "PODER",
-      "MANDATO",
-      "POWER",
-      "POWER_OF_ATTORNEY",
-    ].includes(rawProcedure)
-  ) {
+  if (["PODER", "MANDATO", "POWER", "POWER_OF_ATTORNEY"].includes(rawProcedure)) {
     return "Poder";
   }
 
@@ -282,7 +303,38 @@ export function getNotaryLabel(doc = {}) {
 }
 
 export function getVisadoLabel(doc = {}) {
+  const requiresVisado = getRequiresVisado(doc);
+  const status = getDocumentStatus(doc);
   const visadoValue = getRawVisadoFlag(doc);
+
+  if (requiresVisado === false) {
+    return "Sin visado";
+  }
+
+  if (requiresVisado === true) {
+    if (status === "PENDIENTE_VISADO") {
+      return "Pendiente de visado";
+    }
+
+    if (
+      [
+        "VISADO",
+        "PENDIENTE_FIRMA",
+        "FIRMADO",
+        "SIGNED",
+        "COMPLETED",
+        "COMPLETADO",
+      ].includes(status)
+    ) {
+      return "Visado registrado";
+    }
+
+    if (isTruthyFlag(visadoValue)) {
+      return "Visado registrado";
+    }
+
+    return "Requiere visado";
+  }
 
   if (isTruthyFlag(visadoValue)) return "Con visado";
   if (isFalsyFlag(visadoValue)) return "Sin visado";
