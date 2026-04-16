@@ -363,8 +363,11 @@ export function usePublicSign({
 
       if (snapshot.publicView === "public-sign") {
         const nextToken = snapshot.token;
-        const nextMode = snapshot.mode || null;
         const nextTokenKind = resolveTokenKind(snapshot);
+
+        const nextMode =
+          snapshot.mode ||
+          (nextTokenKind === "document" ? "visado" : "firma");
 
         setPublicSignToken(nextToken);
         setPublicSignMode(nextMode);

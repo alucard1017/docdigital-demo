@@ -381,7 +381,9 @@ function buildRejectEndpoint({ apiBase, token, tokenKind }) {
   const encoded = encodeURIComponent(token);
 
   if (tokenKind !== "signer") {
-    throw new Error("El rechazo público solo está disponible para enlaces de firmante.");
+    throw new Error(
+      "El rechazo público solo está disponible para enlaces de firmante."
+    );
   }
 
   return `${apiBase}/public/docs/${encoded}/rechazar`;
@@ -574,19 +576,16 @@ export function PublicSignView({
 
   const statusBadge = getStatusBadge(flowState, isVisado);
 
-const effectiveTokenKind =
-  publicTokenKind || (isVisado ? "document" : "signer");
+  const effectiveTokenKind = publicTokenKind || (isVisado ? "document" : "signer");
 
-const canActOnDocument =
-  flowState.kind === "pending" &&
-  !!document &&
-  !!publicSignToken &&
-  !!API_BASE &&
-  !publicSignLoading &&
-  (
-    (isVisado && effectiveTokenKind === "document") ||
-    (!isVisado && effectiveTokenKind === "signer")
-  );
+  const canActOnDocument =
+    flowState.kind === "pending" &&
+    !!document &&
+    !!publicSignToken &&
+    !!API_BASE &&
+    !publicSignLoading &&
+    ((isVisado && effectiveTokenKind === "document") ||
+      (!isVisado && effectiveTokenKind === "signer"));
 
   const showSkeleton = publicSignLoading && !document && !publicSignError;
   const titleText = isVisado ? "Visado de documento" : "Firma electrónica";
@@ -685,18 +684,17 @@ const canActOnDocument =
       setActionMessageType("info");
       setRejecting(true);
 
-      const data = await fetchJsonSafe(
-        buildRejectEndpoint({
-          apiBase: API_BASE,
-          token: publicSignToken,
-	  tokenKind: effectiveTokenKind,
-        }),
-        {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ motivo }),
-        }
-      );
+      const endpoint = buildRejectEndpoint({
+        apiBase: API_BASE,
+        token: publicSignToken,
+        tokenKind: effectiveTokenKind,
+      });
+
+      const data = await fetchJsonSafe(endpoint, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ motivo }),
+      });
 
       await reloadPublicState();
 
@@ -724,6 +722,7 @@ const canActOnDocument =
     rejectReason,
     API_BASE,
     publicSignToken,
+    effectiveTokenKind,
     reloadPublicState,
   ]);
 
@@ -947,7 +946,8 @@ const canActOnDocument =
                   {documentTitle}
                 </div>
                 <div className="public-sign-summary__text">
-                  Revisa la información principal antes de abrir el documento completo.
+                  Revisa la información principal antes de abrir el documento
+                  completo.
                 </div>
               </div>
 
