@@ -269,7 +269,7 @@ export function usePublicSign({
   const [publicSignPdfUrl, setPublicSignPdfUrl] = useState("");
   const [publicSignMode, setPublicSignMode] = useState(null); // "firma" | "visado" | null
   const [publicView, setPublicView] = useState(null); // "public-sign" | "verification" | null
-  const [publicTokenKind, setPublicTokenKind] = useState("signer"); // "signer" | "document"
+  const [publicTokenKind, setPublicTokenKind] = useState(null); // "signer" | "document"
 
   const abortRef = useRef(null);
   const apiBase = ensureApiBase(apiRoot);
@@ -281,7 +281,7 @@ export function usePublicSign({
     setPublicSignToken("");
     setPublicSignPdfUrl("");
     setPublicSignMode(null);
-    setPublicTokenKind("signer");
+    setPublicTokenKind(null);
   }, []);
 
   /**
