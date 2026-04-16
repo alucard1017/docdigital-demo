@@ -237,13 +237,11 @@ function getStatusBadge(state, isVisado) {
         label: "Completado",
         className: "public-sign-status public-sign-status--success",
       };
-
     case "used":
       return {
         label: "Sin acción",
         className: "public-sign-status public-sign-status--warning",
       };
-
     case "rejected":
     case "expired":
     case "invalid":
@@ -259,7 +257,6 @@ function getStatusBadge(state, isVisado) {
             : "Error",
         className: "public-sign-status public-sign-status--danger",
       };
-
     default:
       return {
         label: isVisado ? "Pendiente de visado" : "Pendiente de firma",
@@ -398,31 +395,7 @@ export function PublicSignView({
   API_URL,
   cargarFirmaPublica,
 }) {
-const API_BASE = useMemo(() => normalizePublicApiBase(API_URL), [API_URL]);
-
-const effectiveTokenKind =
-  publicTokenKind === "document"
-    ? "document"
-    : publicTokenKind === "signer"
-    ? "signer"
-    : publicSignMode === "visado"
-    ? "document"
-    : "signer";
-
-const isVisado =
-  effectiveTokenKind === "document" || publicSignMode === "visado";
-
-const resolvedMode = isVisado ? "visado" : "firma";
-
-  const [showReject, setShowReject] = useState(false);
-  const [rejectReason, setRejectReason] = useState("");
-  const [rejecting, setRejecting] = useState(false);
-  const [rejectError, setRejectError] = useState("");
-  const [acceptedLegal, setAcceptedLegal] = useState(false);
-  const [legalError, setLegalError] = useState("");
-  const [signing, setSigning] = useState(false);
-  const [actionMessage, setActionMessage] = useState("");
-  const [actionMessageType, setActionMessageType] = useState("info");
+  const API_BASE = useMemo(() => normalizePublicApiBase(API_URL), [API_URL]);
 
   const document = publicSignDoc?.document || publicSignDoc || null;
 
@@ -445,6 +418,41 @@ const resolvedMode = isVisado ? "visado" : "firma";
     publicSignDoc?.currentSigner ||
     (Array.isArray(publicSignDoc?.signers) ? publicSignDoc.signers[0] : null) ||
     null;
+
+  const rawSignerRole = normalizeText(
+    signer?.role ||
+      signer?.rol ||
+      signer?.signer_role ||
+      signer?.participant_role
+  );
+
+  const effectiveTokenKind =
+    publicTokenKind === "document"
+      ? "document"
+      : publicTokenKind === "signer"
+      ? "signer"
+      : rawSignerRole.includes("vis")
+      ? "document"
+      : publicSignMode === "visado"
+      ? "document"
+      : "signer";
+
+  const isVisado =
+    effectiveTokenKind === "document" ||
+    publicSignMode === "visado" ||
+    rawSignerRole.includes("vis");
+
+  const resolvedMode = isVisado ? "visado" : "firma";
+
+  const [showReject, setShowReject] = useState(false);
+  const [rejectReason, setRejectReason] = useState("");
+  const [rejecting, setRejecting] = useState(false);
+  const [rejectError, setRejectError] = useState("");
+  const [acceptedLegal, setAcceptedLegal] = useState(false);
+  const [legalError, setLegalError] = useState("");
+  const [signing, setSigning] = useState(false);
+  const [actionMessage, setActionMessage] = useState("");
+  const [actionMessageType, setActionMessageType] = useState("info");
 
   const pdfUrl = pickFirstNonEmpty(
     publicSignPdfUrl,
@@ -588,11 +596,6 @@ const resolvedMode = isVisado ? "visado" : "firma";
 
   const statusBadge = getStatusBadge(flowState, isVisado);
 
-  const canReject =
-    !isVisado &&
-    effectiveTokenKind === "signer" &&
-    flowState.kind === "pending";
-
   const canActOnDocument =
     flowState.kind === "pending" &&
     !!document &&
@@ -601,6 +604,9 @@ const resolvedMode = isVisado ? "visado" : "firma";
     !publicSignLoading &&
     ((isVisado && effectiveTokenKind === "document") ||
       (!isVisado && effectiveTokenKind === "signer"));
+
+  const canReject =
+    canActOnDocument && !isVisado && effectiveTokenKind === "signer";
 
   const showSkeleton = publicSignLoading && !document && !publicSignError;
   const titleText = isVisado ? "Visado de documento" : "Firma electrónica";
@@ -624,6 +630,36 @@ const resolvedMode = isVisado ? "visado" : "firma";
     setRejectError("");
   }, [publicSignToken, resolvedMode, effectiveTokenKind]);
 
+  useEffect(() => {
+    if (import.meta.env.DEV) {
+      console.log("[PUBLIC SIGN VIEW DEBUG]", {
+        publicSignMode,
+        publicTokenKind,
+        rawSignerRole,
+        effectiveTokenKind,
+        isVisado,
+        resolvedMode,
+        signerRoleLabel,
+        participantInfo,
+        documentStatus,
+        signerStatus,
+        publicSignToken,
+      });
+    }
+  }, [
+    publicSignMode,
+    publicTokenKind,
+    rawSignerRole,
+    effectiveTokenKind,
+    isVisado,
+    resolvedMode,
+    signerRoleLabel,
+    participantInfo,
+    documentStatus,
+    signerStatus,
+    publicSignToken,
+  ]);
+
   const handleRetryLoad = useCallback(() => {
     if (!publicSignToken || typeof cargarFirmaPublica !== "function") return;
 
@@ -642,114 +678,131 @@ const resolvedMode = isVisado ? "visado" : "firma";
     });
   }, [cargarFirmaPublica, publicSignToken, resolvedMode, effectiveTokenKind]);
 
-const handleConfirm = useCallback(async () => {
-  if (signing || rejecting || !canActOnDocument) return;
+  const handleConfirm = useCallback(async () => {
+    if (signing || rejecting || !canActOnDocument) return;
 
-  if (!acceptedLegal) {
-    setLegalError(
-      isVisado
-        ? "Debes aceptar el aviso legal antes de registrar el visado."
-        : "Debes aceptar el aviso legal antes de registrar la firma."
-    );
-    return;
-  }
+    if (!acceptedLegal) {
+      setLegalError(
+        isVisado
+          ? "Debes aceptar el aviso legal antes de registrar el visado."
+          : "Debes aceptar el aviso legal antes de registrar la firma."
+      );
+      return;
+    }
 
-  try {
-    setActionMessage("");
-    setActionMessageType("info");
-    setLegalError("");
-    setSigning(true);
+    try {
+      setActionMessage("");
+      setActionMessageType("info");
+      setLegalError("");
+      setSigning(true);
 
-    const endpoint = buildActionEndpoint({
-      apiBase: API_BASE,
-      token: publicSignToken,
-      isVisado,
-    });
+      const endpoint = buildActionEndpoint({
+        apiBase: API_BASE,
+        token: publicSignToken,
+        isVisado,
+      });
 
-    const data = await fetchJsonSafe(endpoint, {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-    });
+      if (import.meta.env.DEV) {
+        console.log("[PUBLIC SIGN ACTION]", {
+          endpoint,
+          publicSignToken,
+          publicSignMode,
+          publicTokenKind,
+          effectiveTokenKind,
+          isVisado,
+          resolvedMode,
+        });
+      }
 
-    await reloadPublicState();
+      const data = await fetchJsonSafe(endpoint, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+      });
 
-    setActionMessage(buildActionSuccessMessage(isVisado, data?.message));
-    setActionMessageType("success");
-    window.scrollTo({ top: 0, behavior: "smooth" });
-  } catch (err) {
-    setActionMessage(buildActionErrorMessage(isVisado, err?.message));
-    setActionMessageType("error");
-    window.scrollTo({ top: 0, behavior: "smooth" });
-  } finally {
-    setSigning(false);
-  }
-}, [
-  signing,
-  rejecting,
-  canActOnDocument,
-  acceptedLegal,
-  isVisado,
-  API_BASE,
-  publicSignToken,
-  reloadPublicState,
-]);
+      await reloadPublicState();
 
-const handleReject = useCallback(async () => {
-  if (rejecting || signing || !canReject) return;
+      setActionMessage(buildActionSuccessMessage(isVisado, data?.message));
+      setActionMessageType("success");
+      window.scrollTo({ top: 0, behavior: "smooth" });
+    } catch (err) {
+      setActionMessage(buildActionErrorMessage(isVisado, err?.message));
+      setActionMessageType("error");
+      window.scrollTo({ top: 0, behavior: "smooth" });
+    } finally {
+      setSigning(false);
+    }
+  }, [
+    signing,
+    rejecting,
+    canActOnDocument,
+    acceptedLegal,
+    isVisado,
+    API_BASE,
+    publicSignToken,
+    publicSignMode,
+    publicTokenKind,
+    effectiveTokenKind,
+    resolvedMode,
+    reloadPublicState,
+  ]);
 
-  const motivo = String(rejectReason || "").trim();
+  const handleReject = useCallback(async () => {
+    if (rejecting || signing || !canReject) return;
 
-  if (!motivo) {
-    setRejectError("Debes ingresar un motivo de rechazo.");
-    return;
-  }
+    const motivo = String(rejectReason || "").trim();
 
-  try {
-    setRejectError("");
-    setActionMessage("");
-    setActionMessageType("info");
-    setRejecting(true);
+    if (!motivo) {
+      setRejectError("Debes ingresar un motivo de rechazo.");
+      return;
+    }
 
-    const endpoint = buildRejectEndpoint({
-      apiBase: API_BASE,
-      token: publicSignToken,
-      tokenKind: effectiveTokenKind,
-    });
+    try {
+      setRejectError("");
+      setActionMessage("");
+      setActionMessageType("info");
+      setRejecting(true);
 
-    const data = await fetchJsonSafe(endpoint, {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ motivo }),
-    });
+      const endpoint = buildRejectEndpoint({
+        apiBase: API_BASE,
+        token: publicSignToken,
+        tokenKind: effectiveTokenKind,
+      });
 
-    await reloadPublicState();
+      const data = await fetchJsonSafe(endpoint, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ motivo }),
+      });
 
-    setActionMessage(
-      sanitizePublicMessage(
-        data?.message,
-        "Documento rechazado correctamente."
-      )
-    );
-    setActionMessageType("success");
-    setShowReject(false);
-    setRejectReason("");
-    setRejectError("");
-    window.scrollTo({ top: 0, behavior: "smooth" });
-  } catch (err) {
-    setRejectError(buildRejectErrorMessage(err?.message));
-  } finally {
-    setRejecting(false);
-  }
-}, [
-  rejecting,
-  signing,
-  canReject,
-  rejectReason,
-  API_BASE,
-  publicSignToken,
-  effectiveTokenKind,
-  reloadPublicState,
-]);
+      await reloadPublicState();
+
+      setActionMessage(
+        sanitizePublicMessage(
+          data?.message,
+          "Documento rechazado correctamente."
+        )
+      );
+      setActionMessageType("success");
+      setShowReject(false);
+      setRejectReason("");
+      setRejectError("");
+      window.scrollTo({ top: 0, behavior: "smooth" });
+    } catch (err) {
+      setRejectError(buildRejectErrorMessage(err?.message));
+    } finally {
+      setRejecting(false);
+    }
+  }, [
+    rejecting,
+    signing,
+    canReject,
+    rejectReason,
+    API_BASE,
+    publicSignToken,
+    effectiveTokenKind,
+    reloadPublicState,
+  ]);
+
   const handleToggleReject = useCallback(() => {
     if (!canReject) return;
     setShowReject((prev) => !prev);
@@ -765,14 +818,14 @@ const handleReject = useCallback(async () => {
 
   const actionBlock = canActOnDocument ? (
     <div className="public-sign-action-block">
-	<ElectronicSignatureNotice	
-	  mode={resolvedMode}
-	  checked={acceptedLegal}
-	  onChange={(value) => {
-	    setAcceptedLegal(value);
-	    if (value) setLegalError("");
-	  }}
-	/>
+      <ElectronicSignatureNotice
+        mode={resolvedMode}
+        checked={acceptedLegal}
+        onChange={(value) => {
+          setAcceptedLegal(value);
+          if (value) setLegalError("");
+        }}
+      />
 
       {legalError && (
         <div className="public-sign-inline-error">{legalError}</div>
@@ -971,8 +1024,7 @@ const handleReject = useCallback(async () => {
                   {documentTitle}
                 </div>
                 <div className="public-sign-summary__text">
-                  Revisa la información principal antes de abrir el documento
-                  completo.
+                  Revisa la información principal antes de abrir el documento completo.
                 </div>
               </div>
 
