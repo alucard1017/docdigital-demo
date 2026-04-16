@@ -63,12 +63,11 @@ function normalizeBaseUrl(url) {
 async function generateQrDataUrl(url) {
   if (!url) return "";
   try {
-    const dataUrl = await QRCode.toDataURL(url, {
+    return await QRCode.toDataURL(url, {
       errorCorrectionLevel: "M",
       margin: 1,
       width: 256,
     });
-    return dataUrl;
   } catch (err) {
     console.error("📧 [EMAIL] Error generando QR:", err.message);
     return "";
@@ -84,7 +83,7 @@ async function generateQrDataUrl(url) {
  * Incluye:
  * - Enlace directo de firma pública (/public/sign?token=sign_token)
  * - Enlace de verificación por código (/verificar?code=...)
- * - QR apuntando al mejor enlace disponible
+ * - QR apuntando al mejor enlace disponible (prioriza firma)
  */
 async function sendSignatureInviteEmail({
   signer_email,
@@ -120,14 +119,14 @@ async function sendSignatureInviteEmail({
       ? `${verifyBase}?code=${encodeURIComponent(verification_code)}`
       : "";
 
-  const subject = `Invitación a firmar: ${document_title || "Documento"}`;
+  const safeSignerName = signer_name || "";
+  const safeDocumentTitle = document_title || "Documento";
+
+  const subject = `Invitación a firmar: ${safeDocumentTitle}`;
 
   // QR apuntando preferentemente a la URL de firma
   const qrTargetUrl = signUrl || publicVerifyUrl;
   const qrDataUrl = await generateQrDataUrl(qrTargetUrl);
-
-  const safeSignerName = signer_name || "";
-  const safeDocumentTitle = document_title || "Documento";
 
   const html = `
 <!DOCTYPE html>

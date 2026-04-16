@@ -179,9 +179,7 @@ function resolvePublicState({
   const visadoDone =
     isVisado &&
     documentStatus &&
-    !["PENDIENTE_VISADO", "PENDIENTE", "PENDIENTE_FIRMA"].includes(
-      documentStatus
-    );
+    !["PENDIENTE_VISADO", "PENDIENTE"].includes(documentStatus);
 
   if (documentRejected) {
     return {
@@ -401,7 +399,11 @@ export function PublicSignView({
   cargarFirmaPublica,
 }) {
   const API_BASE = useMemo(() => normalizePublicApiBase(API_URL), [API_URL]);
-  const isVisado = publicSignMode === "visado";
+
+  const resolvedMode = publicSignMode === "visado" ? "visado" : "firma";
+  const isVisado = resolvedMode === "visado";
+  const effectiveTokenKind =
+    publicTokenKind || (isVisado ? "document" : "signer");
 
   const [showReject, setShowReject] = useState(false);
   const [rejectReason, setRejectReason] = useState("");
@@ -438,6 +440,7 @@ export function PublicSignView({
   const pdfUrl = pickFirstNonEmpty(
     publicSignPdfUrl,
     publicSignDoc?.pdfUrl,
+    publicSignDoc?.file_url,
     publicSignDoc?.previewUrl,
     publicSignDoc?.signedPdfUrl,
     document?.signedPdfUrl,
@@ -576,7 +579,10 @@ export function PublicSignView({
 
   const statusBadge = getStatusBadge(flowState, isVisado);
 
-  const effectiveTokenKind = publicTokenKind || (isVisado ? "document" : "signer");
+  const canReject =
+    !isVisado &&
+    effectiveTokenKind === "signer" &&
+    flowState.kind === "pending";
 
   const canActOnDocument =
     flowState.kind === "pending" &&
@@ -599,23 +605,33 @@ export function PublicSignView({
     }
   }, [canActOnDocument]);
 
+  useEffect(() => {
+    setActionMessage("");
+    setActionMessageType("info");
+    setAcceptedLegal(false);
+    setLegalError("");
+    setShowReject(false);
+    setRejectReason("");
+    setRejectError("");
+  }, [publicSignToken, resolvedMode, effectiveTokenKind]);
+
   const handleRetryLoad = useCallback(() => {
     if (!publicSignToken || typeof cargarFirmaPublica !== "function") return;
 
     cargarFirmaPublica(publicSignToken, {
-      mode: publicSignMode,
+      mode: resolvedMode,
       tokenKind: effectiveTokenKind,
     });
-  }, [cargarFirmaPublica, publicSignMode, publicSignToken, effectiveTokenKind]);
+  }, [cargarFirmaPublica, publicSignToken, resolvedMode, effectiveTokenKind]);
 
   const reloadPublicState = useCallback(async () => {
-    if (!publicSignToken || typeof cargarFirmaPublica !== "function") return;
+    if (!publicSignToken || typeof cargarFirmaPublica !== "function") return null;
 
-    await cargarFirmaPublica(publicSignToken, {
-      mode: publicSignMode,
+    return await cargarFirmaPublica(publicSignToken, {
+      mode: resolvedMode,
       tokenKind: effectiveTokenKind,
     });
-  }, [cargarFirmaPublica, publicSignMode, publicSignToken, effectiveTokenKind]);
+  }, [cargarFirmaPublica, publicSignToken, resolvedMode, effectiveTokenKind]);
 
   const handleConfirm = useCallback(async () => {
     if (signing || rejecting || !canActOnDocument) return;
@@ -654,6 +670,7 @@ export function PublicSignView({
     } catch (err) {
       setActionMessage(buildActionErrorMessage(isVisado, err?.message));
       setActionMessageType("error");
+      window.scrollTo({ top: 0, behavior: "smooth" });
     } finally {
       setSigning(false);
     }
@@ -669,7 +686,7 @@ export function PublicSignView({
   ]);
 
   const handleReject = useCallback(async () => {
-    if (rejecting || signing || !canActOnDocument || isVisado) return;
+    if (rejecting || signing || !canReject) return;
 
     const motivo = String(rejectReason || "").trim();
 
@@ -717,8 +734,7 @@ export function PublicSignView({
   }, [
     rejecting,
     signing,
-    canActOnDocument,
-    isVisado,
+    canReject,
     rejectReason,
     API_BASE,
     publicSignToken,
@@ -727,10 +743,11 @@ export function PublicSignView({
   ]);
 
   const handleToggleReject = useCallback(() => {
+    if (!canReject) return;
     setShowReject((prev) => !prev);
     setRejectReason("");
     setRejectError("");
-  }, []);
+  }, [canReject]);
 
   const showPassiveStateCard =
     !canActOnDocument &&
@@ -779,7 +796,7 @@ export function PublicSignView({
               : "Registrar firma"}
           </button>
 
-          {!isVisado && (
+          {canReject && (
             <button
               type="button"
               className="public-sign-button public-sign-button--danger"
@@ -792,7 +809,7 @@ export function PublicSignView({
         </div>
       )}
 
-      {showReject && !isVisado && (
+      {showReject && canReject && (
         <div className="public-sign-reject-card">
           <h2 className="public-sign-reject-card__title">
             Rechazar documento

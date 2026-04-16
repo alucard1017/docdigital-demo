@@ -153,23 +153,24 @@ async function getPublicDocBySignerToken(req, res) {
       );
     }
 
+    const documentPayload = {
+      id: row.id,
+      title: row.title,
+      status: row.status,
+      destinatario_nombre: row.destinatario_nombre,
+      empresa_rut: row.empresa_rut,
+      requires_visado: row.requires_visado,
+      signature_status: row.signature_status,
+      firmante_nombre: row.firmante_nombre,
+      firmante_run: row.firmante_run,
+      numero_contrato_interno: row.numero_contrato_interno,
+      numero_contrato: row.numero_contrato || row.numero_contrato_interno || "",
+      pdf_final_url: row.pdf_final_url || null,
+      pdf_original_url: row.pdf_original_url || null,
+    };
+
     return res.json({
-      document: {
-        id: row.id,
-        title: row.title,
-        status: row.status,
-        destinatario_nombre: row.destinatario_nombre,
-        empresa_rut: row.empresa_rut,
-        requires_visado: row.requires_visado,
-        signature_status: row.signature_status,
-        firmante_nombre: row.firmante_nombre,
-        firmante_run: row.firmante_run,
-        numero_contrato_interno: row.numero_contrato_interno,
-        numero_contrato:
-          row.numero_contrato || row.numero_contrato_interno || "",
-        pdf_final_url: row.pdf_final_url || null,
-        pdf_original_url: row.pdf_original_url || null,
-      },
+      document: documentPayload,
       currentSigner: {
         id: row.signer_id,
         name: row.signer_name,
@@ -178,6 +179,9 @@ async function getPublicDocBySignerToken(req, res) {
         role: row.signer_role || "FIRMANTE",
       },
       pdfUrl,
+      file_url: pdfUrl,
+      public_mode: "firma",
+      public_token_kind: "signer",
     });
   } catch (err) {
     console.error("❌ Error cargando documento público (firmante):", err);
@@ -282,26 +286,30 @@ async function getPublicDocByDocumentToken(req, res) {
       );
     }
 
-    return res.json({
-      document: {
-        id: doc.id,
-        title: doc.title,
-        status: doc.status,
-        destinatario_nombre: doc.destinatario_nombre,
-        empresa_rut: doc.empresa_rut,
-        requires_visado: doc.requires_visado,
-        signature_status: doc.signature_status,
-        firmante_nombre: doc.firmante_nombre,
-        firmante_run: doc.firmante_run,
-        numero_contrato_interno: doc.numero_contrato_interno,
-        numero_contrato:
-          doc.numero_contrato || doc.numero_contrato_interno || "",
-        visador_nombre: doc.visador_nombre,
-        pdf_final_url: doc.pdf_final_url || null,
-        pdf_original_url: doc.pdf_original_url || null,
-        pdfUrl,
-      },
+    const documentPayload = {
+      id: doc.id,
+      title: doc.title,
+      status: doc.status,
+      destinatario_nombre: doc.destinatario_nombre,
+      empresa_rut: doc.empresa_rut,
+      requires_visado: doc.requires_visado,
+      signature_status: doc.signature_status,
+      firmante_nombre: doc.firmante_nombre,
+      firmante_run: doc.firmante_run,
+      numero_contrato_interno: doc.numero_contrato_interno,
+      numero_contrato: doc.numero_contrato || doc.numero_contrato_interno || "",
+      visador_nombre: doc.visador_nombre,
+      pdf_final_url: doc.pdf_final_url || null,
+      pdf_original_url: doc.pdf_original_url || null,
       pdfUrl,
+    };
+
+    return res.json({
+      document: documentPayload,
+      pdfUrl,
+      file_url: pdfUrl,
+      public_mode: "visado",
+      public_token_kind: "document",
     });
   } catch (err) {
     console.error("❌ Error cargando documento público (document):", err);
@@ -598,12 +606,17 @@ async function publicSignDocument(req, res) {
       }
     }
 
+    const fileUrl =
+      doc.pdf_final_url || doc.pdf_original_url || doc.file_path || null;
+
     return res.json({
       ...doc,
       numero_contrato_interno: doc.numero_contrato_interno,
       numero_contrato: doc.numero_contrato_interno,
-      file_url: doc.pdf_final_url || doc.pdf_original_url || doc.file_path,
+      file_url: fileUrl,
       documentStatus: newDocStatus,
+      public_mode: "firma",
+      public_token_kind: "signer",
       message: allSigned
         ? "Documento firmado correctamente por todos los firmantes"
         : "Firma registrada. Aún faltan firmantes por completar la firma",
@@ -801,10 +814,15 @@ async function publicRejectDocument(req, res) {
       req,
     });
 
+    const fileUrl =
+      doc.pdf_final_url || doc.pdf_original_url || doc.file_path || null;
+
     return res.json({
       ...doc,
-      file_url: doc.pdf_final_url || doc.pdf_original_url || doc.file_path,
+      file_url: fileUrl,
       documentStatus: "RECHAZADO",
+      public_mode: "firma",
+      public_token_kind: "signer",
       message: "Documento rechazado correctamente",
     });
   } catch (err) {
@@ -918,10 +936,15 @@ async function publicVisarDocument(req, res) {
       req,
     });
 
+    const fileUrl =
+      doc.pdf_final_url || doc.pdf_original_url || doc.file_path || null;
+
     return res.json({
       ...doc,
-      file_url: doc.pdf_final_url || doc.pdf_original_url || doc.file_path,
+      file_url: fileUrl,
       documentStatus: "PENDIENTE_FIRMA",
+      public_mode: "visado",
+      public_token_kind: "document",
       message: "Documento visado correctamente desde enlace público",
     });
   } catch (err) {

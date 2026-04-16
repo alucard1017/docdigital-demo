@@ -1,4 +1,3 @@
-// src/App.jsx
 import {
   useCallback,
   useEffect,
@@ -290,9 +289,7 @@ function App() {
   const safeVisadosFiltered = Number.isFinite(visados) ? visados : 0;
   const safeFirmados = Number.isFinite(firmados) ? firmados : 0;
   const safeRechazados = Number.isFinite(rechazados) ? rechazados : 0;
-  const safeTotalFiltrado = Number.isFinite(totalFiltrado)
-    ? totalFiltrado
-    : 0;
+  const safeTotalFiltrado = Number.isFinite(totalFiltrado) ? totalFiltrado : 0;
   const safeTotalPaginas =
     Number.isFinite(totalPaginas) && totalPaginas > 0 ? totalPaginas : 1;
   const safeCurrentPage =
@@ -306,12 +303,8 @@ function App() {
   const safeTotalPendientesGlobal = Number.isFinite(pendientesGlobal)
     ? pendientesGlobal
     : safePendientes;
-  const safeVisadosGlobal = Number.isFinite(visadosGlobal)
-    ? visadosGlobal
-    : 0;
-  const safeFirmadosGlobal = Number.isFinite(firmadosGlobal)
-    ? firmadosGlobal
-    : 0;
+  const safeVisadosGlobal = Number.isFinite(visadosGlobal) ? visadosGlobal : 0;
+  const safeFirmadosGlobal = Number.isFinite(firmadosGlobal) ? firmadosGlobal : 0;
   const safeRechazadosGlobal = Number.isFinite(rechazadosGlobal)
     ? rechazadosGlobal
     : 0;
@@ -754,9 +747,7 @@ function App() {
     }
 
     if (view === "users" && anyAdmin) return <UsersAdminView />;
-    if (view === "dashboard" && anyAdmin) {
-      return <DashboardView user={user} />;
-    }
+    if (view === "dashboard" && anyAdmin) return <DashboardView user={user} />;
     if (view === "companies" && anyAdmin) {
       return <CompaniesAdminView API_URL={apiRoot} />;
     }
@@ -813,17 +804,14 @@ function App() {
     handleNavigateProtected,
   ]);
 
-  // 1) Sesión en carga
   if (authLoading) {
     return <SessionLoadingFallback />;
   }
 
-  // 2) Portales públicos: verificación
   if (isPublicVerificationAccess) {
     return <VerificationView API_URL={apiRoot} />;
   }
 
-  // 3) Portales públicos: firma / visado
   if (isPublicSigningAccess) {
     const effectiveToken = tokenFromUrl || publicSignToken || "";
 
@@ -842,7 +830,6 @@ function App() {
     );
   }
 
-  // 4) Auth público
   if (!isAuthenticated && path === "/forgot-password") {
     return <ForgotPasswordView />;
   }
@@ -855,7 +842,6 @@ function App() {
     return <RegisterView />;
   }
 
-  // 5) Login
   if (!isAuthenticated) {
     const displayIdentifier =
       isEmailMode || identifier.includes("@")
@@ -889,7 +875,6 @@ function App() {
     );
   }
 
-  // 6) Detalle
   if (view === "detail" && selectedDoc) {
     const requiereVisado = selectedDoc.requires_visado === true;
 
@@ -921,7 +906,6 @@ function App() {
     );
   }
 
-  // 7) Dashboard protegido
   return (
     <div className="dashboard-root">
       <Suspense

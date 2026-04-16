@@ -21,8 +21,20 @@ function firstNonEmpty(...values) {
 }
 
 function getLocationSnapshot({ isSigningPortal, isVerificationPortal }) {
-  const params = new URLSearchParams(window.location.search);
-  const pathname = window.location.pathname;
+  if (typeof window === "undefined") {
+    return {
+      pathname: "/",
+      token: "",
+      mode: null,
+      isFirmaPublicaPath: false,
+      isConsultaPublica: false,
+      isVerificationPublic: false,
+      publicView: null,
+    };
+  }
+
+  const params = new URLSearchParams(window.location.search || "");
+  const pathname = window.location.pathname || "/";
 
   const token = (params.get("token") || "").trim();
   const mode = (params.get("mode") || "").trim().toLowerCase() || null;
@@ -57,6 +69,11 @@ function getLocationSnapshot({ isSigningPortal, isVerificationPortal }) {
   };
 }
 
+/**
+ * Determina el tipo de token esperado según la URL y el modo.
+ * - "document": token de documento (visado o consulta)
+ * - "signer": token de firmante (firma)
+ */
 function resolveTokenKind({
   pathname,
   mode,
@@ -65,30 +82,20 @@ function resolveTokenKind({
 }) {
   const normalizedMode = String(mode || "").trim().toLowerCase();
 
-  // Visado siempre por token de documento
-  if (normalizedMode === "visado") {
-    return "document";
-  }
+  if (normalizedMode === "visado") return "document";
+  if (isConsultaPublica) return "document";
+  if (pathname === "/firma-publica") return "document";
 
-  // Consulta pública siempre por token de documento
-  if (isConsultaPublica) {
-    return "document";
-  }
-
-  // Enlace especial legacy de firma-publica -> documento
-  if (pathname === "/firma-publica") {
-    return "document";
-  }
-
-  // Portal normal de firma -> token de firmante
   if (pathname === "/public/sign" && isFirmaPublicaPath) {
     return "signer";
   }
 
-  // Subdominio firmar raíz -> token de firmante por defecto
   return "signer";
 }
 
+/**
+ * Construye el path de carga según tipo de token.
+ */
 function buildPublicLoadPath(token, tokenKind) {
   const encoded = encodeURIComponent(token);
 
@@ -99,6 +106,10 @@ function buildPublicLoadPath(token, tokenKind) {
   return `/public/docs/${encoded}`;
 }
 
+/**
+ * Normaliza la respuesta pública del backend para que el resto del frontend
+ * tenga siempre las mismas claves.
+ */
 function normalizePublicDocumentResponse(data, mode = null) {
   const rawDocument =
     data?.document ||
@@ -216,12 +227,33 @@ function normalizePublicDocumentResponse(data, mode = null) {
       }
     : null;
 
+  const backendMode = String(
+    data?.mode || data?.public_mode || data?.tipo_acceso || ""
+  )
+    .trim()
+    .toLowerCase();
+
+  const effectiveMode =
+    mode || (backendMode === "visado" ? "visado" : backendMode || null);
+
+  const backendTokenKind = String(
+    data?.public_token_kind || data?.token_kind || ""
+  )
+    .trim()
+    .toLowerCase();
+
+  const effectiveTokenKind =
+    backendTokenKind === "document" || backendTokenKind === "signer"
+      ? backendTokenKind
+      : null;
+
   return {
     raw: data,
     document: normalizedDocument,
     signer,
     pdfUrl: normalizedPdfUrl,
-    mode,
+    mode: effectiveMode,
+    tokenKind: effectiveTokenKind,
   };
 }
 
@@ -235,9 +267,9 @@ export function usePublicSign({
   const [publicSignLoading, setPublicSignLoading] = useState(false);
   const [publicSignToken, setPublicSignToken] = useState("");
   const [publicSignPdfUrl, setPublicSignPdfUrl] = useState("");
-  const [publicSignMode, setPublicSignMode] = useState(null);
-  const [publicView, setPublicView] = useState(null);
-  const [publicTokenKind, setPublicTokenKind] = useState("signer");
+  const [publicSignMode, setPublicSignMode] = useState(null); // "firma" | "visado" | null
+  const [publicView, setPublicView] = useState(null); // "public-sign" | "verification" | null
+  const [publicTokenKind, setPublicTokenKind] = useState("signer"); // "signer" | "document"
 
   const abortRef = useRef(null);
   const apiBase = ensureApiBase(apiRoot);
@@ -252,6 +284,12 @@ export function usePublicSign({
     setPublicTokenKind("signer");
   }, []);
 
+  /**
+   * Carga el documento público a partir del token.
+   * options:
+   * - mode: "firma" | "visado" | null
+   * - tokenKind: "signer" | "document"
+   */
   const cargarFirmaPublica = useCallback(
     async (tokenParam, options = {}) => {
       const token = String(tokenParam || "").trim();
@@ -312,6 +350,16 @@ export function usePublicSign({
 
         const normalized = normalizePublicDocumentResponse(data, mode);
 
+        const nextMode =
+          normalized.mode ||
+          mode ||
+          (tokenKind === "document" ? "visado" : "firma");
+
+        const nextTokenKind =
+          normalized.tokenKind ||
+          tokenKind ||
+          (nextMode === "visado" ? "document" : "signer");
+
         setPublicSignDoc({
           ...normalized.raw,
           document: normalized.document,
@@ -324,11 +372,14 @@ export function usePublicSign({
 
         setPublicSignPdfUrl(normalized.pdfUrl || "");
         setPublicSignToken(token);
-        setPublicSignMode(mode);
-        setPublicTokenKind(tokenKind);
+        setPublicSignMode(nextMode);
+        setPublicTokenKind(nextTokenKind);
 
         if (import.meta.env.DEV) {
-          console.log("📄 Public sign payload normalizado:", normalized);
+          console.log("📄 Public sign payload normalizado:", normalized, {
+            nextMode,
+            nextTokenKind,
+          });
         }
 
         return normalized;
@@ -365,8 +416,9 @@ export function usePublicSign({
         const nextToken = snapshot.token;
         const nextTokenKind = resolveTokenKind(snapshot);
 
+        const nextModeFromUrl = snapshot.mode;
         const nextMode =
-          snapshot.mode ||
+          nextModeFromUrl ||
           (nextTokenKind === "document" ? "visado" : "firma");
 
         setPublicSignToken(nextToken);

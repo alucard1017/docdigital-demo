@@ -11,7 +11,11 @@ function ensureApiBase(value = "") {
   return clean.endsWith("/api") ? clean : `${clean}/api`;
 }
 
-export function PublicSignView({
+/**
+ * Componente sencillo de firma pública (versión legacy)
+ * No debe usarse en el portal principal; el flujo completo vive en src/views/PublicSignView.jsx
+ */
+export function LegacyPublicSignCard({
   publicSignLoading,
   publicSignError,
   publicSignDoc,
@@ -22,11 +26,12 @@ export function PublicSignView({
   API_URL,
   cargarFirmaPublica,
 }) {
+  const apiBase = ensureApiBase(API_URL);
   const isVisado = publicSignMode === "visado";
-  const pdfUrl = publicSignPdfUrl || "";
 
   const document = publicSignDoc?.document || null;
   const signer = publicSignDoc?.signer || null;
+  const pdfUrl = publicSignPdfUrl || "";
 
   const [showReject, setShowReject] = useState(false);
   const [rejectReason, setRejectReason] = useState("");
@@ -36,8 +41,6 @@ export function PublicSignView({
   const [showLegal, setShowLegal] = useState(false);
   const [accepted, setAccepted] = useState(false);
   const [signing, setSigning] = useState(false);
-
-  const apiBase = ensureApiBase(API_URL);
 
   const alreadySignedByThisSigner =
     !isVisado && signer && signer.status === "FIRMADO";
@@ -58,26 +61,29 @@ export function PublicSignView({
   const showSkeleton = publicSignLoading && !document && !publicSignError;
 
   function getDefaultErrorMessage() {
-    if (isVisado) return "No se pudo registrar el visado.";
-    return "No se pudo registrar la firma.";
+    return isVisado
+      ? "No se pudo registrar el visado."
+      : "No se pudo registrar la firma.";
   }
 
-  function getActionEndpoint(actionPath) {
+  function buildActionEndpoint(action) {
+    if (!apiBase || !publicSignToken) return null;
+
     const encodedToken = encodeURIComponent(publicSignToken);
 
-    if (actionPath === "visar") {
+    if (action === "visar") {
       return `${apiBase}/public/docs/document/${encodedToken}/visar`;
     }
 
-    if (actionPath === "firmar") {
+    if (action === "firmar") {
       return `${apiBase}/public/docs/${encodedToken}/firmar`;
     }
 
-    if (actionPath === "rechazar") {
+    if (action === "rechazar") {
       return `${apiBase}/public/docs/${encodedToken}/rechazar`;
     }
 
-    return `${apiBase}/public/docs/${encodedToken}/${actionPath}`;
+    return `${apiBase}/public/docs/${encodedToken}/${action}`;
   }
 
   async function handleConfirm() {
@@ -86,20 +92,31 @@ export function PublicSignView({
       return;
     }
 
+    const action = isVisado ? "visar" : "firmar";
+    const endpoint = buildActionEndpoint(action);
+
+    if (!endpoint) {
+      alert(getDefaultErrorMessage());
+      return;
+    }
+
     try {
       setSigning(true);
-      const actionPath = isVisado ? "visar" : "firmar";
-      const endpoint = getActionEndpoint(actionPath);
 
       const res = await fetch(endpoint, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
       });
 
-      const data = await res.json();
+      let data = {};
+      try {
+        data = await res.json();
+      } catch {
+        data = {};
+      }
 
       if (!res.ok) {
-        throw new Error(data.message || getDefaultErrorMessage());
+        throw new Error(data?.message || getDefaultErrorMessage());
       }
 
       alert(
@@ -111,10 +128,12 @@ export function PublicSignView({
       setShowLegal(false);
       setAccepted(false);
 
-      await cargarFirmaPublica(publicSignToken, {
-        mode: publicSignMode,
-        tokenKind: isVisado ? "document" : publicTokenKind || "document",
-      });
+      if (typeof cargarFirmaPublica === "function") {
+        await cargarFirmaPublica(publicSignToken, {
+          mode: publicSignMode,
+          tokenKind: publicTokenKind || (isVisado ? "document" : "signer"),
+        });
+      }
     } catch (err) {
       alert(
         "❌ " +
@@ -127,6 +146,15 @@ export function PublicSignView({
   }
 
   async function handleReject() {
+    const endpoint = buildActionEndpoint("rechazar");
+
+    if (!endpoint) {
+      setRejectError(
+        "No se pudo determinar el enlace de rechazo. Intenta nuevamente."
+      );
+      return;
+    }
+
     try {
       setRejectError("");
 
@@ -138,26 +166,33 @@ export function PublicSignView({
 
       setRejecting(true);
 
-      const res = await fetch(getActionEndpoint("rechazar"), {
+      const res = await fetch(endpoint, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ motivo }),
       });
 
-      const data = await res.json();
+      let data = {};
+      try {
+        data = await res.json();
+      } catch {
+        data = {};
+      }
 
       if (!res.ok) {
         throw new Error(
-          data.message || "No se pudo registrar el rechazo del documento."
+          data?.message || "No se pudo registrar el rechazo del documento."
         );
       }
 
       alert("✅ Documento rechazado correctamente.");
 
-      await cargarFirmaPublica(publicSignToken, {
-        mode: publicSignMode,
-        tokenKind: publicTokenKind || "document",
-      });
+      if (typeof cargarFirmaPublica === "function") {
+        await cargarFirmaPublica(publicSignToken, {
+          mode: publicSignMode,
+          tokenKind: publicTokenKind || "signer",
+        });
+      }
 
       setShowReject(false);
       setRejectReason("");
@@ -204,27 +239,29 @@ export function PublicSignView({
               No se pudo cargar el documento.
             </div>
             <div>{publicSignError}</div>
-            <button
-              type="button"
-              className="btn-main"
-              style={{
-                marginTop: 10,
-                padding: "8px 14px",
-                borderRadius: 999,
-                backgroundColor: "#0f172a",
-                color: "#e5e7eb",
-                border: "none",
-              }}
-              onClick={() =>
-                cargarFirmaPublica(publicSignToken, {
-                  mode: publicSignMode,
-                  tokenKind: publicTokenKind || "document",
-                })
-              }
-              disabled={publicSignLoading}
-            >
-              Reintentar carga
-            </button>
+            {publicSignToken && typeof cargarFirmaPublica === "function" && (
+              <button
+                type="button"
+                className="btn-main"
+                style={{
+                  marginTop: 10,
+                  padding: "8px 14px",
+                  borderRadius: 999,
+                  backgroundColor: "#0f172a",
+                  color: "#e5e7eb",
+                  border: "none",
+                }}
+                onClick={() =>
+                  cargarFirmaPublica(publicSignToken, {
+                    mode: publicSignMode,
+                    tokenKind: publicTokenKind || "signer",
+                  })
+                }
+                disabled={publicSignLoading}
+              >
+                Reintentar carga
+              </button>
+            )}
           </div>
         </div>
       </div>
@@ -339,9 +376,7 @@ export function PublicSignView({
                 ? `Mediante este acto, el visador declara que ha revisado íntegramente el documento individualizado y que su contenido se ajusta a las normas internas y a la legislación aplicable, para los fines de control y validación administrativa que correspondan.
 
 La presente visación tiene carácter de constancia de revisión y conformidad, y no reemplaza ni equivale a la firma electrónica del representante legal, de acuerdo con lo dispuesto en la Ley N° 19.799 sobre documentos electrónicos y firma electrónica y su normativa complementaria.`
-                : `Declaro que he leído íntegramente el documento mostrado arriba, que estoy de acuerdo con su contenido y que autorizo su suscripción mediante firma electrónica, otorgándole la misma validez y efecto jurídico que a mi firma manuscrita, conforme a la Ley N° 19.799 sobre documentos electrónicos y firma electrónica y su normativa complementaria.
-
-Puedes revisar el texto completo de la Ley N° 19.799 en la Biblioteca del Congreso Nacional de Chile: https://www.bcn.cl/leychile/navegar?idNorma=196640`}
+                : `Declaro que he leído íntegramente el documento mostrado arriba, que estoy de acuerdo con su contenido y que autorizo su suscripción mediante firma electrónica, otorgándole la misma validez y efecto jurídico que a mi firma manuscrita, conforme a la Ley N° 19.799 sobre documentos electrónicos y firma electrónica y su normativa complementaria.`}
             </p>
 
             <label
@@ -478,7 +513,7 @@ Puedes revisar el texto completo de la Ley N° 19.799 en la Biblioteca del Congr
               </button>
             </div>
           </div>
-        ) : null}
+        )}
 
         {!isVisado && canActOnDocument && !showReject && (
           <button
