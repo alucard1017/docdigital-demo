@@ -615,17 +615,18 @@ export function PublicSignView({
 
   const statusBadge = getStatusBadge(flowState, isVisado);
 
-  const canActOnDocument =
-    flowState.kind === "pending" &&
-    !!document &&
-    !!publicSignToken &&
-    !!API_BASE &&
-    !publicSignLoading &&
-    ((isVisado && effectiveTokenKind === "document") ||
-      (!isVisado && effectiveTokenKind === "signer"));
+const canRenderActions =
+  flowState.kind === "pending" &&
+  !!document &&
+  !!publicSignToken &&
+  !publicSignLoading &&
+  ((isVisado && effectiveTokenKind === "document") ||
+    (!isVisado && effectiveTokenKind === "signer"));
+
+const canSubmitAction = canRenderActions && !!API_BASE;
 
   const canReject =
-    canActOnDocument && !isVisado && effectiveTokenKind === "signer";
+    canRenderActions && !isVisado && effectiveTokenKind === "signer";
 
   const showSkeleton = publicSignLoading && !document && !publicSignError;
   const titleText = isVisado ? "Visado de documento" : "Firma electrónica";
@@ -799,6 +800,20 @@ export function PublicSignView({
           if (value) setLegalError("");
         }}
       />
+
+  if (import.meta.env.DEV) {
+    console.log("[PUBLIC ACTION BLOCK CHECK]", {
+      flowStateKind: flowState.kind,
+      hasDocument: !!document,
+      hasToken: !!publicSignToken,
+      apiBase: API_BASE,
+      publicSignLoading,
+      isVisado,
+      effectiveTokenKind,
+      canActOnDocument,
+      canReject,
+    });
+  }
 
       {legalError && (
         <div className="public-sign-inline-error">{legalError}</div>

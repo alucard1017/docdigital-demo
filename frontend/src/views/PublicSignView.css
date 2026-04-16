@@ -187,6 +187,7 @@
   background: rgba(2, 6, 23, 0.96);
   box-shadow: 0 18px 46px rgba(2, 6, 23, 0.55);
   padding: 18px 16px 20px;
+  overflow: visible;
 }
 
 .public-sign-summary {
@@ -253,7 +254,7 @@
   font-weight: 700;
 }
 
-/* Número de contrato: tamaño menor + wrap correcto */
+/* Número de contrato */
 
 .public-sign-meta-card__value--contract {
   font-size: 0.78rem;
@@ -264,7 +265,6 @@
   max-width: 100%;
 }
 
-/* Limitamos a 2 líneas donde line-clamp esté soportado */
 @supports (-webkit-line-clamp: 2) {
   .public-sign-meta-card__value--contract {
     display: -webkit-box;
@@ -323,7 +323,13 @@
 /* Bloque de acción */
 
 .public-sign-action-block {
-  margin-top: 18px;
+  margin-top: 22px;
+  padding: 14px 14px 16px;
+  border-radius: 18px;
+  background: radial-gradient(circle at top, #0f172a 0%, #020617 70%);
+  border: 1px solid rgba(96, 165, 250, 0.35);
+  box-shadow: 0 16px 40px rgba(15, 23, 42, 0.55);
+  min-height: 96px;
 }
 
 /* Acciones principales */
@@ -529,10 +535,12 @@
 
 .public-sign-desktop-actions {
   display: none;
+  width: 100%;
 }
 
 .public-sign-mobile-actions {
-  margin-top: 18px;
+  margin-top: 20px;
+  width: 100%;
 }
 
 /* Footer */
@@ -568,7 +576,6 @@
     padding: 22px 20px 22px;
   }
 
-  /* Grid meta en 2 columnas en desktop */
   .public-sign-meta-grid {
     grid-template-columns: repeat(2, minmax(0, 1fr));
   }
@@ -592,14 +599,13 @@
 
   .public-sign-desktop-actions {
     display: block;
-    margin-top: 18px;
+    margin-top: 22px;
   }
 
   .public-sign-mobile-actions {
     display: none;
   }
 
-  /* Número de contrato aún más discreto en desktop */
   .public-sign-meta-card__value--contract {
     font-size: 0.75rem;
   }
