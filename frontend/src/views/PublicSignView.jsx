@@ -177,8 +177,7 @@ function resolvePublicState({
     ["FIRMADO", "SIGNED", "COMPLETED", "COMPLETADO"].includes(signerStatus);
 
   const visadoAlreadyDone =
-    isVisado &&
-    ["VISADO"].includes(documentStatus);
+    isVisado && ["VISADO"].includes(documentStatus);
 
   const visadoPending =
     isVisado &&
@@ -615,15 +614,15 @@ export function PublicSignView({
 
   const statusBadge = getStatusBadge(flowState, isVisado);
 
-const canRenderActions =
-  flowState.kind === "pending" &&
-  !!document &&
-  !!publicSignToken &&
-  !publicSignLoading &&
-  ((isVisado && effectiveTokenKind === "document") ||
-    (!isVisado && effectiveTokenKind === "signer"));
+  const canRenderActions =
+    flowState.kind === "pending" &&
+    !!document &&
+    !!publicSignToken &&
+    !publicSignLoading &&
+    ((isVisado && effectiveTokenKind === "document") ||
+      (!isVisado && effectiveTokenKind === "signer"));
 
-const canSubmitAction = canRenderActions && !!API_BASE;
+  const canSubmitAction = canRenderActions && !!API_BASE;
 
   const canReject =
     canRenderActions && !isVisado && effectiveTokenKind === "signer";
@@ -632,13 +631,13 @@ const canSubmitAction = canRenderActions && !!API_BASE;
   const titleText = isVisado ? "Visado de documento" : "Firma electrónica";
 
   useEffect(() => {
-    if (!canActOnDocument) {
+    if (!canRenderActions) {
       setShowReject(false);
       setRejectReason("");
       setRejectError("");
       setLegalError("");
     }
-  }, [canActOnDocument]);
+  }, [canRenderActions]);
 
   useEffect(() => {
     setActionMessage("");
@@ -669,7 +668,7 @@ const canSubmitAction = canRenderActions && !!API_BASE;
   }, [cargarFirmaPublica, publicSignToken, resolvedMode, effectiveTokenKind]);
 
   const handleConfirm = useCallback(async () => {
-    if (signing || rejecting || !canActOnDocument) return;
+    if (signing || rejecting || !canSubmitAction) return;
 
     if (!acceptedLegal) {
       setLegalError(
@@ -712,7 +711,7 @@ const canSubmitAction = canRenderActions && !!API_BASE;
   }, [
     signing,
     rejecting,
-    canActOnDocument,
+    canSubmitAction,
     acceptedLegal,
     isVisado,
     API_BASE,
@@ -785,21 +784,10 @@ const canSubmitAction = canRenderActions && !!API_BASE;
   }, [canReject]);
 
   const showPassiveStateCard =
-    !canActOnDocument &&
+    !canRenderActions &&
     document &&
     !publicSignLoading &&
     flowState.kind !== "pending";
-
-  const actionBlock = canActOnDocument ? (
-    <div className="public-sign-action-block">
-      <ElectronicSignatureNotice
-        mode={resolvedMode}
-        checked={acceptedLegal}
-        onChange={(value) => {
-          setAcceptedLegal(value);
-          if (value) setLegalError("");
-        }}
-      />
 
   if (import.meta.env.DEV) {
     console.log("[PUBLIC ACTION BLOCK CHECK]", {
@@ -810,10 +798,22 @@ const canSubmitAction = canRenderActions && !!API_BASE;
       publicSignLoading,
       isVisado,
       effectiveTokenKind,
-      canActOnDocument,
+      canRenderActions,
+      canSubmitAction,
       canReject,
     });
   }
+
+  const actionBlock = canRenderActions ? (
+    <div className="public-sign-action-block">
+      <ElectronicSignatureNotice
+        mode={resolvedMode}
+        checked={acceptedLegal}
+        onChange={(value) => {
+          setAcceptedLegal(value);
+          if (value) setLegalError("");
+        }}
+      />
 
       {legalError && (
         <div className="public-sign-inline-error">{legalError}</div>
