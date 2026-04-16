@@ -208,6 +208,30 @@ function App() {
     [locationSnapshot, isSigningPortal, isVerificationPortal]
   );
 
+  // NUEVO: modo y tokenKind derivados explícitamente de la URL
+  const { modeFromUrl, effectivePublicModeFromUrl, effectiveTokenKindFromUrl } =
+    useMemo(() => {
+      const params = new URLSearchParams(locationSnapshot.search || "");
+      const rawMode = (params.get("mode") || "").trim().toLowerCase();
+
+      const mode =
+        rawMode === "visado" || rawMode === "visa"
+          ? "visado"
+          : rawMode === "firma"
+          ? "firma"
+          : "";
+
+      const modeEffective = mode || "firma";
+      const tokenKindEffective =
+        modeEffective === "visado" ? "document" : "signer";
+
+      return {
+        modeFromUrl: mode,
+        effectivePublicModeFromUrl: modeEffective,
+        effectiveTokenKindFromUrl: tokenKindEffective,
+      };
+    }, [locationSnapshot.search]);
+
   const {
     loadingDocs,
     errorDocs,
@@ -815,6 +839,18 @@ function App() {
   if (isPublicSigningAccess) {
     const effectiveToken = tokenFromUrl || publicSignToken || "";
 
+    // Modo efectivo: lo que diga el backend si ya cargó; si no, lo que diga la URL; si no, firma
+    const effectivePublicMode =
+      publicSignMode ||
+      effectivePublicModeFromUrl ||
+      "firma";
+
+    // Token kind efectivo: backend primero, si no, derivado del modo
+    const effectiveTokenKind =
+      publicTokenKind ||
+      effectiveTokenKindFromUrl ||
+      (effectivePublicMode === "visado" ? "document" : "signer");
+
     return (
       <PublicSignView
         publicSignLoading={publicSignLoading}
@@ -822,8 +858,8 @@ function App() {
         publicSignDoc={publicSignDoc}
         publicSignPdfUrl={publicSignPdfUrl}
         publicSignToken={effectiveToken}
-        publicSignMode={publicSignMode}
-        publicTokenKind={publicTokenKind}
+        publicSignMode={effectivePublicMode}
+        publicTokenKind={effectiveTokenKind}
         API_URL={apiRoot}
         cargarFirmaPublica={cargarFirmaPublica}
       />
