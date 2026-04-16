@@ -6,7 +6,7 @@ import { useToast } from "./useToast";
 const PAGE_SIZE = 20;
 const SEARCH_DEBOUNCE_MS = 400;
 
-function useDebouncedValue(value, delay = 400) {
+function useDebouncedValue(value, delay = SEARCH_DEBOUNCE_MS) {
   const [debouncedValue, setDebouncedValue] = useState(value);
 
   useEffect(() => {
@@ -25,7 +25,6 @@ function mapStatusFilterToApi(value) {
 
   switch (value) {
     case "PENDIENTES":
-      // backend considera varios estados como "pendientes"
       return "PENDIENTES";
     case "VISADOS":
       return DOC_STATUS.VISADO;
@@ -81,10 +80,9 @@ export function useDocuments(token) {
   const [sort, setSortState] = useState("created_at_desc");
   const [statusFilter, setStatusFilterState] = useState("TODOS");
   const [search, setSearchState] = useState("");
-  const debouncedSearch = useDebouncedValue(search, SEARCH_DEBOUNCE_MS);
+  const debouncedSearch = useDebouncedValue(search);
 
   const [page, setPageState] = useState(1);
-
   const [selectedDoc, setSelectedDoc] = useState(null);
 
   const [pdfUrl, setPdfUrl] = useState(null);
@@ -100,7 +98,6 @@ export function useDocuments(token) {
     hasPrevPage: false,
   });
 
-  // totales globales para Sidebar / métricas
   const [totalGlobal, setTotalGlobal] = useState(0);
   const [pendientesGlobal, setPendientesGlobal] = useState(0);
   const [visadosGlobal, setVisadosGlobal] = useState(0);
@@ -176,10 +173,7 @@ export function useDocuments(token) {
       if (trimmedSearch) params.search = trimmedSearch;
 
       const queryKey = JSON.stringify(params);
-
-      if (!force && lastQueryKeyRef.current === queryKey) {
-        return;
-      }
+      if (!force && lastQueryKeyRef.current === queryKey) return;
 
       lastQueryKeyRef.current = queryKey;
 
@@ -191,7 +185,6 @@ export function useDocuments(token) {
 
       try {
         const payload = await getDocuments(params);
-
         if (latestRequestRef.current !== requestId) return;
 
         const rows = Array.isArray(payload?.data) ? payload.data : [];
@@ -219,7 +212,6 @@ export function useDocuments(token) {
               : safePage > 1,
         });
 
-        // stats globales desde backend (fallbacks defensivos)
         const total = Number(stats.total ?? safeTotal);
         const pend = Number(stats.pendientes ?? 0);
         const vis = Number(stats.visados ?? 0);
@@ -331,7 +323,6 @@ export function useDocuments(token) {
     cargarPreviewPdf(selectedDoc.id);
 
     return () => {
-      // invalida la request anterior
       latestPreviewRequestRef.current += 1;
     };
   }, [selectedDoc?.id, cargarPreviewPdf, cleanupPdfUrl]);
@@ -482,7 +473,6 @@ export function useDocuments(token) {
 
   const docsPaginados = useMemo(() => docsFiltrados, [docsFiltrados]);
 
-  // conteos SOLO de la página actual
   const {
     pendientesPagina,
     visadosPagina,
@@ -552,20 +542,14 @@ export function useDocuments(token) {
     manejarAccionDocumento,
     docsFiltrados,
     docsPaginados,
-
-    // conteos de la página actual
     pendientesPagina,
     visadosPagina,
     firmadosPagina,
     rechazadosPagina,
-
-    // paginación y totales filtrados (globales al filtro actual)
     totalFiltrado,
     totalPaginas,
     pagination,
     debouncedSearch,
-
-    // totales globales de la bandeja (stats desde backend)
     totalGlobal,
     pendientesGlobal,
     visadosGlobal,

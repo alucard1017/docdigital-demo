@@ -165,20 +165,24 @@ function resolvePublicState({
     };
   }
 
-  const signerAlreadyDone =
-    !isVisado &&
-    ["FIRMADO", "SIGNED", "COMPLETED"].includes(signerStatus);
-
-  const documentCompleted =
-    !isVisado &&
-    ["FIRMADO", "SIGNED", "COMPLETED"].includes(documentStatus);
-
   const documentRejected =
     documentStatus === "RECHAZADO" || documentStatus === "REJECTED";
 
-const visadoDone =
-  isVisado &&
-  ["VISADO", "PENDIENTE_FIRMA", "FIRMADO", "SIGNED", "COMPLETED", "COMPLETADO"].includes(documentStatus);
+  const documentCompleted =
+    !isVisado &&
+    ["FIRMADO", "SIGNED", "COMPLETED", "COMPLETADO"].includes(documentStatus);
+
+  const signerAlreadyDone =
+    !isVisado &&
+    ["FIRMADO", "SIGNED", "COMPLETED", "COMPLETADO"].includes(signerStatus);
+
+  const visadoAlreadyDone =
+    isVisado &&
+    ["VISADO"].includes(documentStatus);
+
+  const visadoPending =
+    isVisado &&
+    ["PENDIENTE_VISADO", "PENDIENTE", ""].includes(documentStatus);
 
   if (documentRejected) {
     return {
@@ -209,7 +213,7 @@ const visadoDone =
     };
   }
 
-  if (visadoDone) {
+  if (visadoAlreadyDone) {
     return {
       kind: "used",
       title: "El visado ya fue registrado",
@@ -219,12 +223,19 @@ const visadoDone =
     };
   }
 
+  if (visadoPending || isVisado) {
+    return {
+      kind: "pending",
+      title: "Pendiente de visado",
+      message: "Revisa el documento y registra tu visado cuando estés listo.",
+      canRetry: false,
+    };
+  }
+
   return {
     kind: "pending",
-    title: isVisado ? "Pendiente de visado" : "Pendiente de firma",
-    message: isVisado
-      ? "Revisa el documento y registra tu visado cuando estés listo."
-      : "Revisa el documento y registra tu firma cuando estés listo.",
+    title: "Pendiente de firma",
+    message: "Revisa el documento y registra tu firma cuando estés listo.",
     canRetry: false,
   };
 }
@@ -236,11 +247,13 @@ function getStatusBadge(state, isVisado) {
         label: "Completado",
         className: "public-sign-status public-sign-status--success",
       };
+
     case "used":
       return {
         label: "Sin acción",
         className: "public-sign-status public-sign-status--warning",
       };
+
     case "rejected":
     case "expired":
     case "invalid":
@@ -256,6 +269,7 @@ function getStatusBadge(state, isVisado) {
             : "Error",
         className: "public-sign-status public-sign-status--danger",
       };
+
     default:
       return {
         label: isVisado ? "Pendiente de visado" : "Pendiente de firma",
@@ -560,7 +574,7 @@ export function PublicSignView({
     metadata: documentMeta,
   });
 
-  const procedureLabel = getProcedureLabel({
+  const baseProcedureLabel = getProcedureLabel({
     ...document,
     metadata: documentMeta,
   });
@@ -576,6 +590,12 @@ export function PublicSignView({
       signedDocument?.status ||
       signedDocument?.estado
   );
+
+  const procedureLabel = isVisado
+    ? documentStatus === "VISADO"
+      ? "Visado registrado"
+      : "Con visado"
+    : baseProcedureLabel;
 
   const signerRoleLabel = resolveSignerRoleLabel(signer, isVisado);
 
@@ -629,36 +649,6 @@ export function PublicSignView({
     setRejectError("");
   }, [publicSignToken, resolvedMode, effectiveTokenKind]);
 
-  useEffect(() => {
-    if (import.meta.env.DEV) {
-      console.log("[PUBLIC SIGN VIEW DEBUG]", {
-        publicSignMode,
-        publicTokenKind,
-        rawSignerRole,
-        effectiveTokenKind,
-        isVisado,
-        resolvedMode,
-        signerRoleLabel,
-        participantInfo,
-        documentStatus,
-        signerStatus,
-        publicSignToken,
-      });
-    }
-  }, [
-    publicSignMode,
-    publicTokenKind,
-    rawSignerRole,
-    effectiveTokenKind,
-    isVisado,
-    resolvedMode,
-    signerRoleLabel,
-    participantInfo,
-    documentStatus,
-    signerStatus,
-    publicSignToken,
-  ]);
-
   const handleRetryLoad = useCallback(() => {
     if (!publicSignToken || typeof cargarFirmaPublica !== "function") return;
 
@@ -701,18 +691,6 @@ export function PublicSignView({
         isVisado,
       });
 
-      if (import.meta.env.DEV) {
-        console.log("[PUBLIC SIGN ACTION]", {
-          endpoint,
-          publicSignToken,
-          publicSignMode,
-          publicTokenKind,
-          effectiveTokenKind,
-          isVisado,
-          resolvedMode,
-        });
-      }
-
       const data = await fetchJsonSafe(endpoint, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
@@ -738,10 +716,6 @@ export function PublicSignView({
     isVisado,
     API_BASE,
     publicSignToken,
-    publicSignMode,
-    publicTokenKind,
-    effectiveTokenKind,
-    resolvedMode,
     reloadPublicState,
   ]);
 
