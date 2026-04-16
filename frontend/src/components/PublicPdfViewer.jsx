@@ -1,4 +1,3 @@
-// frontend/src/components/PublicPdfViewer.jsx
 import React, { useMemo, useState } from "react";
 import { Document, Page, pdfjs } from "react-pdf";
 import "react-pdf/dist/Page/AnnotationLayer.css";
@@ -16,7 +15,7 @@ export function PublicPdfViewer({ fileUrl }) {
   }, [fileUrl]);
 
   function handleLoadSuccess({ numPages }) {
-    setNumPages(numPages);
+    setNumPages(numPages || 0);
     setLoadError("");
   }
 
@@ -37,7 +36,7 @@ export function PublicPdfViewer({ fileUrl }) {
   }
 
   return (
-    <div className="public-pdf-viewer">
+    <div className="public-pdf-viewer" aria-label="Vista previa del documento">
       {loadError ? (
         <div className="public-sign-pdf-empty">
           <div>{loadError}</div>
@@ -65,7 +64,8 @@ export function PublicPdfViewer({ fileUrl }) {
         }
       >
         {!loadError &&
-          Array.from(new Array(numPages || 0), (_, index) => (
+          numPages &&
+          Array.from({ length: numPages }, (_, index) => (
             <div className="public-pdf-page-wrap" key={`page_${index + 1}`}>
               <Page
                 pageNumber={index + 1}

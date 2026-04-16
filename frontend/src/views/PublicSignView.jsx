@@ -616,7 +616,7 @@ export function PublicSignView({
 
 const isPendingFlow = flowState.kind === "pending" && !!document && !publicSignLoading;
 
-const canRenderActions = isPendingFlow;
+const canRenderActions = true;
 
 const canSubmitAction =
   isPendingFlow &&

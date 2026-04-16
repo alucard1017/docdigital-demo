@@ -1,16 +1,10 @@
 import React from "react";
 
-interface ElectronicSignatureNoticeProps {
-  checked: boolean;
-  onChange: (checked: boolean) => void;
-  mode?: "firma" | "visado";
-}
-
-export const ElectronicSignatureNotice: React.FC<ElectronicSignatureNoticeProps> = ({
+export function ElectronicSignatureNotice({
   checked,
   onChange,
   mode = "firma",
-}) => {
+}) {
   const isVisado = mode === "visado";
 
   return (
@@ -20,7 +14,9 @@ export const ElectronicSignatureNotice: React.FC<ElectronicSignatureNoticeProps>
         borderRadius: 18,
         padding: 18,
         background: "rgba(15,23,42,0.72)",
-        border: `1px solid ${isVisado ? "rgba(245,158,11,0.26)" : "rgba(96,165,250,0.26)"}`,
+        border: `1px solid ${
+          isVisado ? "rgba(245,158,11,0.26)" : "rgba(96,165,250,0.26)"
+        }`,
       }}
     >
       <div
@@ -126,4 +122,4 @@ export const ElectronicSignatureNotice: React.FC<ElectronicSignatureNoticeProps>
       </label>
     </div>
   );
-};
+}
