@@ -102,13 +102,11 @@ function buildSafeStorageFileName(originalname, code) {
     getSafeBaseFileName(originalname || "documento"),
     "documento"
   );
-
   return `${Date.now()}-${code}-${safeBaseName}.pdf`;
 }
 
 async function fetchPdfBufferFromUrl(url) {
   const safeUrl = String(url || "").trim();
-
   if (!safeUrl) {
     throw new Error("URL vacía en fetchPdfBufferFromUrl");
   }
@@ -139,7 +137,6 @@ async function fetchPdfBufferFromUrl(url) {
   }
 
   const buffer = Buffer.from(response.data);
-
   if (!buffer.length) {
     throw new Error("El archivo remoto llegó vacío");
   }
@@ -637,10 +634,12 @@ async function sendInvitationsInBackground({
   const SIGNING_PORTAL_URL =
     process.env.SIGNING_PORTAL_URL || "https://firmar.verifirma.cl";
 
+  // URL pública de visado (por documento)
   const documentPublicUrl = `${SIGNING_PORTAL_URL}/document/${signatureToken}`;
 
   const jobs = signers.map(async (signer) => {
     try {
+      // URL pública de firma (por firmante)
       const signerPublicUrl = `${SIGNING_PORTAL_URL}/?token=${signer.sign_token}`;
 
       const payload = {
@@ -666,7 +665,7 @@ async function sendInvitationsInBackground({
         await sendVisadoInvitation(
           payload.signerEmail,
           payload.docTitle,
-          payload.documentPublicUrl, // <-- visado usa token de documento
+          payload.documentPublicUrl, // visado => token de documento
           payload.signerName,
           {
             documentoId: payload.documentoId,
@@ -677,7 +676,7 @@ async function sendInvitationsInBackground({
         await sendSigningInvitation(
           payload.signerEmail,
           payload.docTitle,
-          payload.publicUrl, // <-- firma sigue usando sign_token
+          payload.publicUrl, // firma => sign_token
           payload.signerName,
           {
             verificationCode: payload.verificationCode,
@@ -714,7 +713,6 @@ async function createDocument(req, res) {
     const companyId =
       req.user?.company_id || req.user?.companyId || req.body.company_id;
     const userId = req.user?.id || req.user?.userId || null;
-
     const autoSendFlow = normalizeBoolean(req.body.autoSendFlow, false);
 
     const rawTitulo =
@@ -798,7 +796,6 @@ async function createDocument(req, res) {
 
     const requiresVisado = signers.some((s) => s.debe_visar);
     const verificationCode = generarCodigoVerificacion();
-
     const numeroContratoInterno = await generarNumeroContratoInterno(
       client,
       companyId
@@ -861,7 +858,7 @@ async function createDocument(req, res) {
       metadataPayload.tipo_tramite = tipoTramite;
     }
 
-    // signature_token: token de documento (para visado / acceso por doc)
+    // Token de documento (para visado / acceso público por documento)
     const signatureToken = verificationCode;
 
     const { rows: documentRows } = await client.query(
@@ -1112,7 +1109,7 @@ async function createDocument(req, res) {
         code: verificationCode,
         signers: canonicalSigners,
         actorName: req.user?.nombre || req.user?.name || "Sistema",
-        signatureToken, // <-- se pasa el token de documento
+        signatureToken, // token de documento, para visado
       });
     }
 
