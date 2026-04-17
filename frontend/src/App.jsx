@@ -208,29 +208,27 @@ function App() {
     [locationSnapshot, isSigningPortal, isVerificationPortal]
   );
 
-  // NUEVO: modo y tokenKind derivados explícitamente de la URL
-  const { modeFromUrl, effectivePublicModeFromUrl, effectiveTokenKindFromUrl } =
-    useMemo(() => {
-      const params = new URLSearchParams(locationSnapshot.search || "");
-      const rawMode = (params.get("mode") || "").trim().toLowerCase();
+  // Derivar modo y tipo de token de la URL
+  const { effectivePublicModeFromUrl, effectiveTokenKindFromUrl } = useMemo(() => {
+    const params = new URLSearchParams(locationSnapshot.search || "");
+    const rawMode = (params.get("mode") || "").trim().toLowerCase();
 
-      const mode =
-        rawMode === "visado" || rawMode === "visa"
-          ? "visado"
-          : rawMode === "firma"
-          ? "firma"
-          : "";
+    const mode =
+      rawMode === "visado" || rawMode === "visa"
+        ? "visado"
+        : rawMode === "firma"
+        ? "firma"
+        : "";
 
-      const modeEffective = mode || "firma";
-      const tokenKindEffective =
-        modeEffective === "visado" ? "document" : "signer";
+    const modeEffective = mode || "firma";
+    const tokenKindEffective =
+      modeEffective === "visado" ? "document" : "signer";
 
-      return {
-        modeFromUrl: mode,
-        effectivePublicModeFromUrl: modeEffective,
-        effectiveTokenKindFromUrl: tokenKindEffective,
-      };
-    }, [locationSnapshot.search]);
+    return {
+      effectivePublicModeFromUrl: modeEffective,
+      effectiveTokenKindFromUrl: tokenKindEffective,
+    };
+  }, [locationSnapshot.search]);
 
   const {
     loadingDocs,
@@ -349,6 +347,7 @@ function App() {
     [cargarDocs, page, sort, statusFilter, search]
   );
 
+  // Sincronizar path y vista cuando cambia el historial
   useEffect(() => {
     const syncPath = () => {
       const nextPath = getPath();
@@ -373,6 +372,7 @@ function App() {
     };
   }, [isAuthenticated, selectedDoc]);
 
+  // Redirecciones de auth (excepto accesos públicos)
   useEffect(() => {
     if (authLoading) return;
     if (isAnyPublicAccess) return;
@@ -397,6 +397,7 @@ function App() {
     setSelectedDoc,
   ]);
 
+  // Normalizar vista protegida cuando hay sesión
   useEffect(() => {
     if (!isAuthenticated) return;
     if (view === "detail") return;
@@ -415,6 +416,7 @@ function App() {
     }
   }, [view, path, isAuthenticated, setSelectedDoc]);
 
+  // Suscripción a eventos de socket
   useEffect(() => {
     if (!token) return;
     if (typeof socketOn !== "function" || typeof socketOff !== "function") {
@@ -454,6 +456,7 @@ function App() {
     };
   }, [token, socketOn, socketOff, addToast, refreshDocs]);
 
+  // Errores de socket
   useEffect(() => {
     if (!socketLastError) return;
 
@@ -828,24 +831,23 @@ function App() {
     handleNavigateProtected,
   ]);
 
+  // Carga inicial de sesión
   if (authLoading) {
     return <SessionLoadingFallback />;
   }
 
+  // Verificación pública
   if (isPublicVerificationAccess) {
     return <VerificationView API_URL={apiRoot} />;
   }
 
+  // Firma / visado público
   if (isPublicSigningAccess) {
     const effectiveToken = tokenFromUrl || publicSignToken || "";
 
-    // Modo efectivo: lo que diga el backend si ya cargó; si no, lo que diga la URL; si no, firma
     const effectivePublicMode =
-      publicSignMode ||
-      effectivePublicModeFromUrl ||
-      "firma";
+      publicSignMode || effectivePublicModeFromUrl || "firma";
 
-    // Token kind efectivo: backend primero, si no, derivado del modo
     const effectiveTokenKind =
       publicTokenKind ||
       effectiveTokenKindFromUrl ||
@@ -866,6 +868,7 @@ function App() {
     );
   }
 
+  // Rutas públicas de auth
   if (!isAuthenticated && path === "/forgot-password") {
     return <ForgotPasswordView />;
   }
@@ -878,6 +881,7 @@ function App() {
     return <RegisterView />;
   }
 
+  // Login
   if (!isAuthenticated) {
     const displayIdentifier =
       isEmailMode || identifier.includes("@")
@@ -911,6 +915,7 @@ function App() {
     );
   }
 
+  // Detalle protegido
   if (view === "detail" && selectedDoc) {
     const requiereVisado = selectedDoc.requires_visado === true;
 
@@ -942,6 +947,7 @@ function App() {
     );
   }
 
+  // Dashboard principal
   return (
     <div className="dashboard-root">
       <Suspense
