@@ -1,8 +1,7 @@
 // backend/routes/publicDocs.js
 const express = require("express");
-const {
-  getPublicDocBySignerToken,
-} = require("../controllers/documents/publicDocuments");
+const db = require("../db");
+const publicDocumentsController = require("../controllers/documents/publicDocuments");
 
 const router = express.Router();
 
@@ -652,6 +651,42 @@ router.get("/docs/:token", async (req, res) => {
   }
 });
 
-router.get("/docs/:token", getPublicDocBySignerToken);
+/* ================================
+   NUEVAS RUTAS PÚBLICAS MODERNAS
+   (usando publicDocumentsController)
+   ================================ */
+
+// GET firma por sign_token (versión moderna simple)
+router.get(
+  "/docs2/:token",
+  publicDocumentsController.getPublicDocBySignerToken
+);
+
+// GET visado / visualización por signature_token
+router.get(
+  "/docs/document/:token",
+  publicDocumentsController.getPublicDocByDocumentToken
+);
+
+// POST firmar documento (sign_token)
+router.post(
+  "/docs/:token/firmar",
+  publicDocumentsController.publicSignDocument
+);
+
+// POST rechazar documento (sign_token)
+router.post(
+  "/docs/:token/rechazar",
+  publicDocumentsController.publicRejectDocument
+);
+
+// POST visar documento (signature_token)
+router.post(
+  "/docs/document/:token/visar",
+  publicDocumentsController.publicVisarDocument
+);
+
+// Verificación por código
+router.get("/verificar/:codigo", publicDocumentsController.verifyByCode);
 
 module.exports = router;

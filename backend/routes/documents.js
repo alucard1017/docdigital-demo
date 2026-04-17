@@ -888,7 +888,7 @@ router.post(
         )
         RETURNING id, token, expires_at, sent_at;
         `,
-        [signer.id, expiresAt.toISOString(), token]
+        [signer.id, token, expiresAt.toISOString()]
       );
 
       const invitation = inviteRes.rows[0];

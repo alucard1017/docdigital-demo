@@ -22,6 +22,44 @@ const NO_FILE_MESSAGE = "Documento sin archivo asociado";
 const EXPIRED_LINK_MESSAGE =
   "El enlace público ha expirado. Solicita uno nuevo al emisor.";
 
+function buildDocumentFilePath(row) {
+  return row?.pdf_final_url || row?.pdf_original_url || row?.file_path || null;
+}
+
+function buildPublicDocumentPayload(row, extra = {}) {
+  return {
+    id: row.id,
+    title: row.title,
+    status: row.status,
+    destinatario_nombre: row.destinatario_nombre,
+    empresa_rut: row.empresa_rut,
+    requires_visado: row.requires_visado,
+    signature_status: row.signature_status,
+    firmante_nombre: row.firmante_nombre,
+    firmante_run: row.firmante_run,
+    numero_contrato_interno: row.numero_contrato_interno,
+    numero_contrato: row.numero_contrato || row.numero_contrato_interno || "",
+    visador_nombre: row.visador_nombre || null,
+    pdf_final_url: row.pdf_final_url || null,
+    pdf_original_url: row.pdf_original_url || null,
+    ...extra,
+  };
+}
+
+async function buildSignedPdfUrlOrFail(row, res) {
+  const basePath = buildDocumentFilePath(row);
+
+  if (!basePath) {
+    console.warn("[PUBLIC] documento sin archivo asociado", {
+      documentId: row?.id,
+    });
+    res.status(404).json({ message: NO_FILE_MESSAGE });
+    return null;
+  }
+
+  return await getSignedUrl(basePath, 3600);
+}
+
 /**
  * SOLO lectura por token de documento (signature_token).
  * No usar para firmar/rechazar (se debe usar siempre sign_token).
@@ -113,18 +151,8 @@ async function getPublicDocBySignerToken(req, res) {
       return res.status(accessError.status).json(accessError.body);
     }
 
-    const basePath =
-      row.pdf_final_url || row.pdf_original_url || row.file_path || null;
-
-    if (!basePath) {
-      console.warn(
-        "[PUBLIC] getPublicDocBySignerToken → documento sin archivo asociado",
-        { documentId: row.id }
-      );
-      return res.status(404).json({ message: NO_FILE_MESSAGE });
-    }
-
-    const pdfUrl = await getSignedUrl(basePath, 3600);
+    const pdfUrl = await buildSignedPdfUrlOrFail(row, res);
+    if (!pdfUrl) return;
 
     try {
       await insertPublicEvent({
@@ -153,24 +181,8 @@ async function getPublicDocBySignerToken(req, res) {
       );
     }
 
-    const documentPayload = {
-      id: row.id,
-      title: row.title,
-      status: row.status,
-      destinatario_nombre: row.destinatario_nombre,
-      empresa_rut: row.empresa_rut,
-      requires_visado: row.requires_visado,
-      signature_status: row.signature_status,
-      firmante_nombre: row.firmante_nombre,
-      firmante_run: row.firmante_run,
-      numero_contrato_interno: row.numero_contrato_interno,
-      numero_contrato: row.numero_contrato || row.numero_contrato_interno || "",
-      pdf_final_url: row.pdf_final_url || null,
-      pdf_original_url: row.pdf_original_url || null,
-    };
-
     return res.json({
-      document: documentPayload,
+      document: buildPublicDocumentPayload(row),
       currentSigner: {
         id: row.signer_id,
         name: row.signer_name,
@@ -249,18 +261,8 @@ async function getPublicDocByDocumentToken(req, res) {
       return res.status(accessError.status).json(accessError.body);
     }
 
-    const basePath =
-      doc.pdf_final_url || doc.pdf_original_url || doc.file_path || null;
-
-    if (!basePath) {
-      console.warn(
-        "[PUBLIC] getPublicDocByDocumentToken → documento sin archivo asociado",
-        { documentId: doc.id }
-      );
-      return res.status(404).json({ message: NO_FILE_MESSAGE });
-    }
-
-    const pdfUrl = await getSignedUrl(basePath, 3600);
+    const pdfUrl = await buildSignedPdfUrlOrFail(doc, res);
+    if (!pdfUrl) return;
 
     try {
       await insertPublicEvent({
@@ -286,26 +288,8 @@ async function getPublicDocByDocumentToken(req, res) {
       );
     }
 
-    const documentPayload = {
-      id: doc.id,
-      title: doc.title,
-      status: doc.status,
-      destinatario_nombre: doc.destinatario_nombre,
-      empresa_rut: doc.empresa_rut,
-      requires_visado: doc.requires_visado,
-      signature_status: doc.signature_status,
-      firmante_nombre: doc.firmante_nombre,
-      firmante_run: doc.firmante_run,
-      numero_contrato_interno: doc.numero_contrato_interno,
-      numero_contrato: doc.numero_contrato || doc.numero_contrato_interno || "",
-      visador_nombre: doc.visador_nombre,
-      pdf_final_url: doc.pdf_final_url || null,
-      pdf_original_url: doc.pdf_original_url || null,
-      pdfUrl,
-    };
-
     return res.json({
-      document: documentPayload,
+      document: buildPublicDocumentPayload(doc, { pdfUrl }),
       pdfUrl,
       file_url: pdfUrl,
       public_mode: "visado",
@@ -341,7 +325,14 @@ async function publicSignDocument(req, res) {
         s.name   AS signer_name,
         s.email  AS signer_email,
         s.role   AS signer_role,
-        d.*
+        d.*,
+        COALESCE(
+          d.numero_contrato_interno,
+          d.metadata->>'numero_contrato',
+          d.metadata->>'numero_interno',
+          d.metadata->>'contract_number',
+          d.metadata->>'codigo_contrato'
+        ) AS numero_contrato
       FROM document_signers s
       JOIN documents d ON d.id = s.document_id
       WHERE s.sign_token = $1
@@ -413,28 +404,6 @@ async function publicSignDocument(req, res) {
     const { signed_count, total_signers } = countRes.rows[0];
     const allSigned = Number(signed_count) >= Number(total_signers);
 
-    try {
-      const dpCountRes = await db.query(
-        `
-        SELECT
-          COUNT(*) FILTER (WHERE status = 'FIRMADO') AS signed_dp,
-          COUNT(*) AS total_dp
-        FROM document_participants
-        WHERE document_id = $1
-        `,
-        [row.id]
-      );
-      const { signed_dp, total_dp } = dpCountRes.rows[0];
-      console.log(
-        `DEBUG publicSignDocument -> signers: ${signed_count}/${total_signers}, participants: ${signed_dp}/${total_dp}`
-      );
-    } catch (errCountDp) {
-      console.error(
-        "⚠️ Error contando en document_participants (publicSignDocument):",
-        errCountDp
-      );
-    }
-
     let newDocStatus = row.status;
     let newSignatureStatus = row.signature_status;
 
@@ -453,7 +422,14 @@ async function publicSignDocument(req, res) {
           signature_status = $2,
           updated_at = NOW()
       WHERE id = $3
-      RETURNING *
+      RETURNING *,
+      COALESCE(
+        numero_contrato_interno,
+        metadata->>'numero_contrato',
+        metadata->>'numero_interno',
+        metadata->>'contract_number',
+        metadata->>'codigo_contrato'
+      ) AS numero_contrato
       `,
       [newDocStatus, newSignatureStatus, row.id]
     );
@@ -606,13 +582,12 @@ async function publicSignDocument(req, res) {
       }
     }
 
-    const fileUrl =
-      doc.pdf_final_url || doc.pdf_original_url || doc.file_path || null;
+    const fileUrl = buildDocumentFilePath(doc);
 
     return res.json({
       ...doc,
       numero_contrato_interno: doc.numero_contrato_interno,
-      numero_contrato: doc.numero_contrato_interno,
+      numero_contrato: doc.numero_contrato || doc.numero_contrato_interno,
       file_url: fileUrl,
       documentStatus: newDocStatus,
       public_mode: "firma",
@@ -660,7 +635,14 @@ async function publicRejectDocument(req, res) {
         s.name   AS signer_name,
         s.email  AS signer_email,
         s.role   AS signer_role,
-        d.*
+        d.*,
+        COALESCE(
+          d.numero_contrato_interno,
+          d.metadata->>'numero_contrato',
+          d.metadata->>'numero_interno',
+          d.metadata->>'contract_number',
+          d.metadata->>'codigo_contrato'
+        ) AS numero_contrato
       FROM document_signers s
       JOIN documents d ON d.id = s.document_id
       WHERE s.sign_token = $1
@@ -720,7 +702,14 @@ async function publicRejectDocument(req, res) {
           reject_reason = $2,
           updated_at = NOW()
       WHERE id = $1
-      RETURNING *
+      RETURNING *,
+      COALESCE(
+        numero_contrato_interno,
+        metadata->>'numero_contrato',
+        metadata->>'numero_interno',
+        metadata->>'contract_number',
+        metadata->>'codigo_contrato'
+      ) AS numero_contrato
       `,
       [row.id, motivo]
     );
@@ -814,8 +803,7 @@ async function publicRejectDocument(req, res) {
       req,
     });
 
-    const fileUrl =
-      doc.pdf_final_url || doc.pdf_original_url || doc.file_path || null;
+    const fileUrl = buildDocumentFilePath(doc);
 
     return res.json({
       ...doc,
@@ -851,8 +839,15 @@ async function publicVisarDocument(req, res) {
 
     const current = await db.query(
       `
-      SELECT * 
-      FROM documents 
+      SELECT *,
+      COALESCE(
+        numero_contrato_interno,
+        metadata->>'numero_contrato',
+        metadata->>'numero_interno',
+        metadata->>'contract_number',
+        metadata->>'codigo_contrato'
+      ) AS numero_contrato
+      FROM documents
       WHERE signature_token = $1
       `,
       [token]
@@ -877,9 +872,17 @@ async function publicVisarDocument(req, res) {
       `
       UPDATE documents
       SET status = $1,
+          signature_status = COALESCE(signature_status, 'PENDIENTE'),
           updated_at = NOW()
       WHERE id = $2
-      RETURNING *
+      RETURNING *,
+      COALESCE(
+        numero_contrato_interno,
+        metadata->>'numero_contrato',
+        metadata->>'numero_interno',
+        metadata->>'contract_number',
+        metadata->>'codigo_contrato'
+      ) AS numero_contrato
       `,
       ["PENDIENTE_FIRMA", docActual.id]
     );
@@ -936,8 +939,7 @@ async function publicVisarDocument(req, res) {
       req,
     });
 
-    const fileUrl =
-      doc.pdf_final_url || doc.pdf_original_url || doc.file_path || null;
+    const fileUrl = buildDocumentFilePath(doc);
 
     return res.json({
       ...doc,
@@ -1163,6 +1165,7 @@ async function verifyByCode(req, res) {
 }
 
 module.exports = {
+  getDocumentAndSignerByDocumentToken,
   getPublicDocBySignerToken,
   getPublicDocByDocumentToken,
   publicSignDocument,
