@@ -618,12 +618,15 @@ const isPendingFlow = flowState.kind === "pending" && !!document && !publicSignL
 
 const canRenderActions = true;
 
-const canSubmitAction =
+const canSubmitVisado = isPendingFlow && !!publicSignToken && !!API_BASE && isVisado;
+const canSubmitFirma =
   isPendingFlow &&
   !!publicSignToken &&
   !!API_BASE &&
-  ((isVisado && effectiveTokenKind === "document") ||
-    (!isVisado && effectiveTokenKind === "signer"));
+  !isVisado &&
+  effectiveTokenKind === "signer";
+
+const canSubmitAction = canSubmitVisado || canSubmitFirma;
 
 const canReject =
   !isVisado &&
