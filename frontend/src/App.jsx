@@ -130,28 +130,37 @@ function getPublicAccessSnapshot({
   isVerificationPortal,
 }) {
   const params = new URLSearchParams(search || "");
-  const token = (params.get("token") || "").trim();
+  const queryToken = (params.get("token") || "").trim();
+
+  const normalizedPath = pathname || "/";
+  const documentPathMatch = normalizedPath.match(/^\/document\/([^/?#]+)$/i);
+  const documentTokenFromPath = documentPathMatch?.[1]?.trim() || "";
+
+  const tokenFromUrl = queryToken || documentTokenFromPath;
 
   const isPublicSigningAccess =
-    !!token &&
-    (pathname === "/public/sign" ||
-      pathname === "/firma-publica" ||
-      pathname === "/consulta-publica" ||
-      (isSigningPortal && pathname === "/"));
+    (!!queryToken &&
+      (normalizedPath === "/public/sign" ||
+        normalizedPath === "/firma-publica" ||
+        normalizedPath === "/consulta-publica" ||
+        (isSigningPortal && normalizedPath === "/"))) ||
+    (!!documentTokenFromPath &&
+      (normalizedPath.startsWith("/document/") ||
+        (isSigningPortal && normalizedPath.startsWith("/document/"))));
 
   const isPublicVerificationAccess =
-    pathname === "/verificar" ||
-    pathname === "/verificacion-publica" ||
-    (isVerificationPortal && pathname === "/");
+    normalizedPath === "/verificar" ||
+    normalizedPath === "/verificacion-publica" ||
+    (isVerificationPortal && normalizedPath === "/");
 
   return {
-    tokenFromUrl: token,
+    tokenFromUrl,
     isPublicSigningAccess,
     isPublicVerificationAccess,
     isAnyPublicAccess: isPublicSigningAccess || isPublicVerificationAccess,
+    isDocumentTokenPath: !!documentTokenFromPath,
   };
 }
-
 function ProtectedModuleFallback() {
   return <div className="protected-fallback">Cargando módulo…</div>;
 }
@@ -192,21 +201,50 @@ function App() {
 
   const locationSnapshot = useMemo(() => getLocationSnapshot(), [path]);
 
-  const {
-    tokenFromUrl,
-    isPublicSigningAccess,
-    isPublicVerificationAccess,
-    isAnyPublicAccess,
-  } = useMemo(
-    () =>
-      getPublicAccessSnapshot({
-        pathname: locationSnapshot.pathname,
-        search: locationSnapshot.search,
-        isSigningPortal,
-        isVerificationPortal,
-      }),
-    [locationSnapshot, isSigningPortal, isVerificationPortal]
-  );
+const {
+  tokenFromUrl,
+  isPublicSigningAccess,
+  isPublicVerificationAccess,
+  isAnyPublicAccess,
+  isDocumentTokenPath,
+} = useMemo(
+  () =>
+    getPublicAccessSnapshot({
+      pathname: locationSnapshot.pathname,
+      search: locationSnapshot.search,
+      isSigningPortal,
+      isVerificationPortal,
+    }),
+  [locationSnapshot, isSigningPortal, isVerificationPortal]
+);
+
+const { effectivePublicModeFromUrl, effectiveTokenKindFromUrl } = useMemo(() => {
+  const params = new URLSearchParams(locationSnapshot.search || "");
+  const rawMode = (params.get("mode") || "").trim().toLowerCase();
+
+  if (isDocumentTokenPath) {
+    return {
+      effectivePublicModeFromUrl: "visado",
+      effectiveTokenKindFromUrl: "document",
+    };
+  }
+
+  const mode =
+    rawMode === "visado" || rawMode === "visa"
+      ? "visado"
+      : rawMode === "firma"
+      ? "firma"
+      : "";
+
+  const modeEffective = mode || "firma";
+  const tokenKindEffective =
+    modeEffective === "visado" ? "document" : "signer";
+
+  return {
+    effectivePublicModeFromUrl: modeEffective,
+    effectiveTokenKindFromUrl: tokenKindEffective,
+  };
+}, [locationSnapshot.search, isDocumentTokenPath]);
 
   // Derivar modo y tipo de token de la URL
   const { effectivePublicModeFromUrl, effectiveTokenKindFromUrl } = useMemo(() => {
