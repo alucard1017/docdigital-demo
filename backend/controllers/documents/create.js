@@ -87,7 +87,7 @@ function getSafeBaseFileName(filename) {
 
 function sanitizeFileName(value, fallback = "documento") {
   const normalized = normalizeText(value)
-    .replace(/[<>:"/\\|?\*\x00-\x1F]/g, "-")
+    .replace(/[<>:"/\\|\?\*\x00-\x1F]/g, "-")
     .replace(/\.+$/g, "")
     .replace(/^\.+/g, "")
     .replace(/\s+/g, "-")
@@ -632,9 +632,12 @@ async function sendInvitationsInBackground({
   code,
   signers, // canonicalSigners con sign_token
   actorName,
+  signatureToken,
 }) {
   const SIGNING_PORTAL_URL =
     process.env.SIGNING_PORTAL_URL || "https://firmar.verifirma.cl";
+
+  const documentPublicUrl = `${SIGNING_PORTAL_URL}/document/${signatureToken}`;
 
   const jobs = signers.map(async (signer) => {
     try {
@@ -652,6 +655,7 @@ async function sendInvitationsInBackground({
         publicUrl: signerPublicUrl,
         actorName,
         signerOrder: signer.signer_order || signer.orden,
+        documentPublicUrl,
       };
 
       const isVisador =
@@ -662,7 +666,7 @@ async function sendInvitationsInBackground({
         await sendVisadoInvitation(
           payload.signerEmail,
           payload.docTitle,
-          payload.publicUrl,
+          payload.documentPublicUrl, // <-- visado usa token de documento
           payload.signerName,
           {
             documentoId: payload.documentoId,
@@ -673,7 +677,7 @@ async function sendInvitationsInBackground({
         await sendSigningInvitation(
           payload.signerEmail,
           payload.docTitle,
-          payload.publicUrl,
+          payload.publicUrl, // <-- firma sigue usando sign_token
           payload.signerName,
           {
             verificationCode: payload.verificationCode,
@@ -735,7 +739,6 @@ async function createDocument(req, res) {
       req.body.signers || req.body.firmantes || req.body.participants
     );
 
-    // Tipo de trámite (ej: notarial / contrato / poder / general)
     const tipoTramiteRaw =
       req.body.tipo_tramite ||
       req.body.tipoTramite ||
@@ -840,7 +843,6 @@ async function createDocument(req, res) {
     const storageKey = uploadResult.key;
     const storageUrl = uploadResult.url;
 
-    // Estado inicial
     const initialDocumentStatus = autoSendFlow
       ? "PENDIENTE_FIRMA"
       : "BORRADOR";
@@ -1072,7 +1074,7 @@ async function createDocument(req, res) {
     await client.query("COMMIT");
     client.release();
 
-    // Sellado asíncrono (no bloquea respuesta)
+    // Sellado asíncrono
     try {
       const sealResult = await sellarPdfConQr({
         s3Key: storageKey,
@@ -1110,6 +1112,7 @@ async function createDocument(req, res) {
         code: verificationCode,
         signers: canonicalSigners,
         actorName: req.user?.nombre || req.user?.name || "Sistema",
+        signatureToken, // <-- se pasa el token de documento
       });
     }
 
