@@ -123,6 +123,7 @@ function getLocationSnapshot() {
   };
 }
 
+// Incluye soporte para /document/:token como acceso público de visado
 function getPublicAccessSnapshot({
   pathname,
   search,
@@ -161,6 +162,7 @@ function getPublicAccessSnapshot({
     isDocumentTokenPath: !!documentTokenFromPath,
   };
 }
+
 function ProtectedModuleFallback() {
   return <div className="protected-fallback">Cargando módulo…</div>;
 }
@@ -201,55 +203,34 @@ function App() {
 
   const locationSnapshot = useMemo(() => getLocationSnapshot(), [path]);
 
-const {
-  tokenFromUrl,
-  isPublicSigningAccess,
-  isPublicVerificationAccess,
-  isAnyPublicAccess,
-  isDocumentTokenPath,
-} = useMemo(
-  () =>
-    getPublicAccessSnapshot({
-      pathname: locationSnapshot.pathname,
-      search: locationSnapshot.search,
-      isSigningPortal,
-      isVerificationPortal,
-    }),
-  [locationSnapshot, isSigningPortal, isVerificationPortal]
-);
+  const {
+    tokenFromUrl,
+    isPublicSigningAccess,
+    isPublicVerificationAccess,
+    isAnyPublicAccess,
+    isDocumentTokenPath,
+  } = useMemo(
+    () =>
+      getPublicAccessSnapshot({
+        pathname: locationSnapshot.pathname,
+        search: locationSnapshot.search,
+        isSigningPortal,
+        isVerificationPortal,
+      }),
+    [locationSnapshot, isSigningPortal, isVerificationPortal]
+  );
 
-const { effectivePublicModeFromUrl, effectiveTokenKindFromUrl } = useMemo(() => {
-  const params = new URLSearchParams(locationSnapshot.search || "");
-  const rawMode = (params.get("mode") || "").trim().toLowerCase();
-
-  if (isDocumentTokenPath) {
-    return {
-      effectivePublicModeFromUrl: "visado",
-      effectiveTokenKindFromUrl: "document",
-    };
-  }
-
-  const mode =
-    rawMode === "visado" || rawMode === "visa"
-      ? "visado"
-      : rawMode === "firma"
-      ? "firma"
-      : "";
-
-  const modeEffective = mode || "firma";
-  const tokenKindEffective =
-    modeEffective === "visado" ? "document" : "signer";
-
-  return {
-    effectivePublicModeFromUrl: modeEffective,
-    effectiveTokenKindFromUrl: tokenKindEffective,
-  };
-}, [locationSnapshot.search, isDocumentTokenPath]);
-
-  // Derivar modo y tipo de token de la URL
+  // Derivar modo y tipo de token de la URL, incluyendo /document/:token
   const { effectivePublicModeFromUrl, effectiveTokenKindFromUrl } = useMemo(() => {
     const params = new URLSearchParams(locationSnapshot.search || "");
     const rawMode = (params.get("mode") || "").trim().toLowerCase();
+
+    if (isDocumentTokenPath) {
+      return {
+        effectivePublicModeFromUrl: "visado",
+        effectiveTokenKindFromUrl: "document",
+      };
+    }
 
     const mode =
       rawMode === "visado" || rawMode === "visa"
@@ -266,7 +247,7 @@ const { effectivePublicModeFromUrl, effectiveTokenKindFromUrl } = useMemo(() => 
       effectivePublicModeFromUrl: modeEffective,
       effectiveTokenKindFromUrl: tokenKindEffective,
     };
-  }, [locationSnapshot.search]);
+  }, [locationSnapshot.search, isDocumentTokenPath]);
 
   const {
     loadingDocs,
