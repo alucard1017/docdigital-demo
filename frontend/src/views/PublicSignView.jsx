@@ -141,7 +141,7 @@ function classifyPublicError(error) {
     title: "No se pudo abrir el documento",
     message:
       "Ocurrió un problema al cargar este enlace. Intenta nuevamente en unos segundos.",
-    canRetry: true,
+      canRetry: true,
   };
 }
 
@@ -270,6 +270,7 @@ function resolveViewState({
   documentStatus,
   signerStatus,
   isVisado,
+  requiresVisado,
 }) {
   if (!hasToken) {
     return {
@@ -301,6 +302,16 @@ function resolveViewState({
       message:
         "El enlace fue reconocido, pero no se encontró la información necesaria para mostrar el documento.",
       canRetry: true,
+    };
+  }
+
+  if (isVisado && !requiresVisado) {
+    return {
+      kind: "used",
+      title: "Este documento no requiere visado",
+      message:
+        "El documento se abrió correctamente, pero este enlace no admite registrar un visado.",
+      canRetry: false,
     };
   }
 
@@ -490,6 +501,21 @@ export function PublicSignView({
       signer?.participant_role
   );
 
+  const requiresVisado = useMemo(() => {
+    return Boolean(
+      document?.requires_visado ??
+        document?.requiresVisado ??
+        document?.requiere_visado ??
+        documentMeta?.requires_visado ??
+        documentMeta?.requiresVisado ??
+        documentMeta?.requiere_visado ??
+        publicSignDoc?.requires_visado ??
+        publicSignDoc?.requiresVisado ??
+        publicSignDoc?.requiere_visado ??
+        false
+    );
+  }, [document, documentMeta, publicSignDoc]);
+
   const effectiveTokenKind = useMemo(() => {
     if (publicTokenKind === "document") return "document";
     if (publicTokenKind === "signer") return "signer";
@@ -499,12 +525,12 @@ export function PublicSignView({
   }, [publicTokenKind, rawSignerRole, publicSignMode]);
 
   const isVisado = useMemo(() => {
-    return (
-      effectiveTokenKind === "document" ||
+    return Boolean(
       publicSignMode === "visado" ||
-      rawSignerRole.includes("vis")
+        rawSignerRole.includes("vis") ||
+        (effectiveTokenKind === "document" && requiresVisado)
     );
-  }, [effectiveTokenKind, publicSignMode, rawSignerRole]);
+  }, [publicSignMode, rawSignerRole, effectiveTokenKind, requiresVisado]);
 
   const resolvedMode = isVisado ? "visado" : "firma";
   const hasToken = !!String(publicSignToken || "").trim();
@@ -646,7 +672,9 @@ export function PublicSignView({
   const procedureLabel = isVisado
     ? documentStatus === "VISADO"
       ? "Visado registrado"
-      : "Con visado"
+      : requiresVisado
+      ? "Con visado"
+      : baseProcedureLabel
     : baseProcedureLabel;
 
   const signerRoleLabel = resolveSignerRoleLabel(signer, isVisado);
@@ -667,6 +695,7 @@ export function PublicSignView({
         documentStatus,
         signerStatus,
         isVisado,
+        requiresVisado,
       }),
     [
       hasToken,
@@ -676,6 +705,7 @@ export function PublicSignView({
       documentStatus,
       signerStatus,
       isVisado,
+      requiresVisado,
     ]
   );
 
@@ -688,7 +718,11 @@ export function PublicSignView({
   const canRenderActions = viewState.kind === "ready";
 
   const canSubmitVisado =
-    canRenderActions && !!publicSignToken && !!API_BASE && isVisado;
+    canRenderActions &&
+    !!publicSignToken &&
+    !!API_BASE &&
+    isVisado &&
+    requiresVisado;
 
   const canSubmitFirma =
     canRenderActions &&
@@ -851,6 +885,25 @@ export function PublicSignView({
     setRejectError("");
   }, [canReject]);
 
+  if (import.meta.env.DEV) {
+    console.log("[PUBLIC VIEW STATE]", {
+      hasToken,
+      hasDocument: !!document,
+      publicSignLoading,
+      hasError: !!publicSignError,
+      effectiveTokenKind,
+      publicSignMode,
+      rawSignerRole,
+      requiresVisado,
+      isVisado,
+      canSubmitVisado,
+      canSubmitFirma,
+      viewStateKind: viewState.kind,
+      documentStatus,
+      signerStatus,
+    });
+  }
+
   const actionBlock = canRenderActions ? (
     <div className="public-sign-action-block">
       <div className="public-sign-legal-box">
@@ -878,7 +931,7 @@ export function PublicSignView({
 
       {!canSubmitAction && (
         <div className="public-sign-inline-error">
-          No se puede habilitar la acción porque faltan datos del enlace o de la API.
+          No se puede habilitar la acción para este enlace.
         </div>
       )}
 

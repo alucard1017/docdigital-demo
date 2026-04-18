@@ -286,10 +286,25 @@ function normalizePublicDocumentResponse(data, mode = null) {
     data?.pdf_url
   );
 
+  const requiresVisado = Boolean(
+    rawDocument?.requires_visado ??
+      rawDocument?.requiresVisado ??
+      rawDocument?.requiere_visado ??
+      metadata?.requires_visado ??
+      metadata?.requiresVisado ??
+      metadata?.requiere_visado ??
+      data?.requires_visado ??
+      data?.requiresVisado ??
+      data?.requiere_visado ??
+      false
+  );
+
   const normalizedDocument = rawDocument
     ? {
         ...rawDocument,
         metadata,
+        requires_visado: requiresVisado,
+        requiresVisado: requiresVisado,
         numero_contrato: numeroContrato || rawDocument?.numero_contrato || "",
         numeroContrato: numeroContrato || rawDocument?.numeroContrato || "",
         numero_contrato_interno:
@@ -496,6 +511,13 @@ export function usePublicSign({
         setPublicSignMode(nextMode);
         setPublicTokenKind(nextTokenKind);
 
+        if (import.meta.env.DEV) {
+          console.log("📄 Public sign payload normalizado:", normalized, {
+            nextMode,
+            nextTokenKind,
+          });
+        }
+
         return normalized;
       } catch (err) {
         if (err?.name === "AbortError") {
@@ -527,7 +549,6 @@ export function usePublicSign({
 
       if (snapshot.publicView === "public-sign") {
         const nextToken = snapshot.token;
-
         const nextTokenKind = resolveTokenKind(snapshot);
 
         const nextModeFromUrl = snapshot.mode;
