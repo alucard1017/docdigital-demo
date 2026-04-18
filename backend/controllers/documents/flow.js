@@ -32,13 +32,8 @@ const {
 const { triggerWebhook } = require("../../services/webhookService");
 const { emitToCompany } = require("../../services/socketService");
 const { getGeoFromIP } = require("../../utils/geoLocation");
-const {
-  getClientIp,
-  getUserAgent,
-} = require("./documentEventUtils");
-const {
-  insertDocumentEvent,
-} = require("./documentEventInserts");
+const { getClientIp, getUserAgent } = require("./documentEventUtils");
+const { insertDocumentEvent } = require("./documentEventInserts");
 
 /* ================================
    Helpers transacción + espejo
@@ -158,11 +153,7 @@ const upsertDocumentMirror = async (
    desde visadores + firmantes
    ================================ */
 
-async function syncParticipantsFromFlow(client, {
-  documentId,
-  signers = [],
-  visadores = [],
-}) {
+async function syncParticipantsFromFlow(client, { documentId, signers = [], visadores = [] }) {
   await client.query(
     `DELETE FROM document_participants WHERE document_id = $1`,
     [documentId]
@@ -178,12 +169,12 @@ async function syncParticipantsFromFlow(client, {
       `($${idx++}, 'VISADOR', 'PENDIENTE', NULL, NULL, NOW(), NOW(), $${idx++}, $${idx++}, 'VISADOR', $${idx++}, $${idx++}, $${idx++})`
     );
     values.push(
-      documentId,           // document_id
-      i + 1,                // step_order
-      i + 1,                // flow_order
-      v.name,               // name
-      v.email,              // email
-      1                     // flow_group
+      documentId, // document_id
+      i + 1, // step_order
+      i + 1, // flow_order
+      v.name, // name
+      v.email, // email
+      1 // flow_group
     );
   });
 
@@ -195,11 +186,11 @@ async function syncParticipantsFromFlow(client, {
       `($${idx++}, 'FIRMANTE', 'PENDIENTE', NULL, NULL, NOW(), NOW(), $${idx++}, $${idx++}, 'FIRMANTE', $${idx++}, $${idx++}, $${idx++})`
     );
     values.push(
-      documentId,                  // document_id
-      offset + i + 1,              // step_order
-      offset + i + 1,              // flow_order
-      s.name,                      // name
-      s.email,                     // email
+      documentId, // document_id
+      offset + i + 1, // step_order
+      offset + i + 1, // flow_order
+      s.name, // name
+      s.email, // email
       visadores.length > 0 ? 2 : 1 // flow_group
     );
   });
@@ -261,17 +252,10 @@ const getReminderConfig = async (client, companyId) => {
 
 const createAutomaticReminders = async (
   client,
-  {
-    documentId,
-    signers,
-    intervalDays,
-    maxAttempts,
-    companyId,
-  }
+  { documentId, signers, intervalDays, maxAttempts, companyId }
 ) => {
   if (!documentId || !signers?.length) return 0;
 
-  // Primer recordatorio a las 12h
   const firstReminderAt = new Date(Date.now() + 12 * 60 * 60 * 1000);
 
   for (const signer of signers) {
@@ -473,8 +457,9 @@ async function createFlow(req, res) {
   const { valid, errors } = validateCreateFlowBody(req.body);
   if (!valid) {
     return res.status(400).json({
-      error: "Datos inválidos",
-      detalles: errors,
+      code: "INVALID_BODY",
+      message: "Datos inválidos",
+      details: errors,
     });
   }
 
@@ -668,8 +653,9 @@ async function createFlow(req, res) {
     console.error("❌ Error creando flujo de documento:", error.message);
     console.error(error.stack);
     return res.status(500).json({
-      error: "Error creando flujo de documento",
-      detalle: error.message,
+      code: "FLOW_CREATE_ERROR",
+      message: "Error creando flujo de documento",
+      detail: error.message,
     });
   } finally {
     client.release();
@@ -682,7 +668,10 @@ async function createFlow(req, res) {
 async function sendFlow(req, res) {
   const { valid, id, error } = validateSendFlowParams(req.params);
   if (!valid) {
-    return res.status(400).json({ error });
+    return res.status(400).json({
+      code: "INVALID_PARAMS",
+      message: error || "Parámetros inválidos",
+    });
   }
 
   const client = await getDbClient();
@@ -701,7 +690,10 @@ async function sendFlow(req, res) {
 
     if (docRes.rowCount === 0) {
       await rollbackSafely(client);
-      return res.status(404).json({ error: "Documento no encontrado" });
+      return res.status(404).json({
+        code: "NOT_FOUND",
+        message: "Documento no encontrado",
+      });
     }
 
     const documento = docRes.rows[0];
@@ -709,7 +701,8 @@ async function sendFlow(req, res) {
     if (documento.estado !== DOCUMENT_STATES.DRAFT) {
       await rollbackSafely(client);
       return res.status(400).json({
-        error: "Solo puedes enviar documentos en estado BORRADOR",
+        code: "INVALID_STATE",
+        message: "Solo puedes enviar documentos en estado BORRADOR",
       });
     }
 
@@ -726,7 +719,8 @@ async function sendFlow(req, res) {
     if (firmantesRes.rowCount === 0) {
       await rollbackSafely(client);
       return res.status(400).json({
-        error: "El documento no tiene firmantes configurados",
+        code: "NO_SIGNERS",
+        message: "El documento no tiene firmantes configurados",
       });
     }
 
@@ -892,8 +886,9 @@ async function sendFlow(req, res) {
     console.error("❌ Error enviando flujo de documento:", error.message);
     console.error(error.stack);
     return res.status(500).json({
-      error: "Error enviando flujo de documento",
-      detalle: error.message,
+      code: "FLOW_SEND_ERROR",
+      message: "Error enviando flujo de documento",
+      detail: error.message,
     });
   } finally {
     client.release();
@@ -929,20 +924,27 @@ async function signFlow(req, res) {
 
     if (firmanteRes.rowCount === 0) {
       await rollbackSafely(client);
-      return res.status(404).json({ error: "Firmante no encontrado" });
+      return res.status(404).json({
+        code: "SIGNER_NOT_FOUND",
+        message: "Firmante no encontrado",
+      });
     }
 
     const firmante = firmanteRes.rows[0];
 
     if (firmante.estado === "FIRMADO") {
       await rollbackSafely(client);
-      return res.status(400).json({ error: "Este firmante ya firmó" });
+      return res.status(400).json({
+        code: "ALREADY_SIGNED",
+        message: "Este firmante ya firmó",
+      });
     }
 
     if (firmante.estado === "RECHAZADO") {
       await rollbackSafely(client);
       return res.status(400).json({
-        error: "Este firmante rechazó el documento",
+        code: "ALREADY_REJECTED",
+        message: "Este firmante rechazó el documento",
       });
     }
 
@@ -957,7 +959,8 @@ async function signFlow(req, res) {
       if (pendientesAntes > 0) {
         await rollbackSafely(client);
         return res.status(400).json({
-          error:
+          code: "SEQUENTIAL_BLOCKED",
+          message:
             "Aún hay firmantes anteriores en la secuencia que no han firmado",
         });
       }
@@ -1263,8 +1266,9 @@ async function signFlow(req, res) {
     console.error("❌ Error firmando flujo de documento:", error.message);
     console.error(error.stack);
     return res.status(500).json({
-      error: "Error firmando flujo de documento",
-      detalle: error.message,
+      code: "FLOW_SIGN_ERROR",
+      message: "Error firmando flujo de documento",
+      detail: error.message,
     });
   } finally {
     client.release();

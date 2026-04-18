@@ -2,7 +2,7 @@
 
 const { db, sellarPdfConQr, DOCUMENT_STATES } = require("./common");
 const { logAudit } = require("../../utils/auditLog");
-const { insertOwnerEvent } = require("./documentEventInserts");
+const { insertOwnerEvent, insertOwnerStatusChangedEvent } = require("./documentEventInserts");
 const {
   validateSign,
   validateVisar,
@@ -20,7 +20,10 @@ async function signDocument(req, res) {
     const userId = req.user.id;
 
     if (id === null) {
-      return res.status(400).json({ message: "ID de documento inválido" });
+      return res.status(400).json({
+        code: "INVALID_ID",
+        message: "ID de documento inválido",
+      });
     }
 
     const current = await db.query(
@@ -33,7 +36,10 @@ async function signDocument(req, res) {
     );
 
     if (current.rowCount === 0) {
-      return res.status(404).json({ message: "No encontrado" });
+      return res.status(404).json({
+        code: "NOT_FOUND",
+        message: "Documento no encontrado",
+      });
     }
 
     const docActual = current.rows[0];
@@ -69,16 +75,40 @@ async function signDocument(req, res) {
       action: "DOCUMENT_SIGNED_OWNER",
       details:
         "Firmado por propietario (aceptó aviso legal de uso de firma electrónica simple, con equivalencia a firma manuscrita conforme a la Ley N° 19.799).",
+      extraMetadata: {
+        actor_type: "OWNER",
+      },
     });
+
+    if (fromStatus !== toStatus) {
+      try {
+        await insertOwnerStatusChangedEvent({
+          req,
+          doc,
+          fromStatus,
+          toStatus,
+          details: "Cambio de estado por firma de propietario",
+          extraMetadata: {
+            reason: "owner_signed",
+          },
+        });
+      } catch (eventErr) {
+        console.error(
+          "⚠️ Error registrando STATUS_CHANGED (signDocument):",
+          eventErr
+        );
+      }
+    }
 
     await logAudit({
       user: req.user,
-      action: "document_signed",
+      action: "DOCUMENT_SIGNED_OWNER",
       entityType: "document",
       entityId: doc.id,
       metadata: {
         from_status: fromStatus,
         to_status: toStatus,
+        source: "owner",
       },
       req,
     });
@@ -133,7 +163,10 @@ async function signDocument(req, res) {
     });
   } catch (err) {
     console.error("❌ Error firmando documento:", err);
-    return res.status(500).json({ message: "Error interno del servidor" });
+    return res.status(500).json({
+      code: "INTERNAL_ERROR",
+      message: "Error interno del servidor",
+    });
   }
 }
 
@@ -142,7 +175,10 @@ async function viserDocumentInternalUpdate(id, userId, req = null) {
 
   if (numericId === null) {
     return {
-      error: { status: 400, body: { message: "ID de documento inválido" } },
+      error: {
+        status: 400,
+        body: { code: "INVALID_ID", message: "ID de documento inválido" },
+      },
     };
   }
 
@@ -156,7 +192,12 @@ async function viserDocumentInternalUpdate(id, userId, req = null) {
   );
 
   if (current.rowCount === 0) {
-    return { error: { status: 404, body: { message: "No encontrado" } } };
+    return {
+      error: {
+        status: 404,
+        body: { code: "NOT_FOUND", message: "Documento no encontrado" },
+      },
+    };
   }
 
   const docActual = current.rows[0];
@@ -179,15 +220,41 @@ async function viserDocumentInternalUpdate(id, userId, req = null) {
 
   const doc = result.rows[0];
 
+  const fromStatus = docActual.status;
+  const toStatus = "PENDIENTE_FIRMA";
+
   await insertOwnerEvent({
     req,
     doc,
-    fromStatus: docActual.status,
-    toStatus: "PENDIENTE_FIRMA",
+    fromStatus,
+    toStatus,
     eventType: "VISADO_OWNER",
     action: "DOCUMENT_VISADO_OWNER",
     details: "Documento visado por el propietario",
+    extraMetadata: {
+      actor_type: "OWNER",
+    },
   });
+
+  if (fromStatus !== toStatus) {
+    try {
+      await insertOwnerStatusChangedEvent({
+        req,
+        doc,
+        fromStatus,
+        toStatus,
+        details: "Cambio de estado por visado de propietario",
+        extraMetadata: {
+          reason: "owner_visado",
+        },
+      });
+    } catch (eventErr) {
+      console.error(
+        "⚠️ Error registrando STATUS_CHANGED (viserDocumentInternalUpdate):",
+        eventErr
+      );
+    }
+  }
 
   return { doc, docActual };
 }
@@ -206,12 +273,13 @@ async function visarDocument(req, res) {
 
     await logAudit({
       user: req.user,
-      action: "document_visado",
+      action: "DOCUMENT_VISADO_OWNER",
       entityType: "document",
       entityId: doc.id,
       metadata: {
         from_status: docActual.status,
         to_status: "PENDIENTE_FIRMA",
+        source: "owner",
       },
       req,
     });
@@ -223,7 +291,10 @@ async function visarDocument(req, res) {
     });
   } catch (err) {
     console.error("❌ Error visado documento:", err);
-    return res.status(500).json({ message: "Error interno del servidor" });
+    return res.status(500).json({
+      code: "INTERNAL_ERROR",
+      message: "Error interno del servidor",
+    });
   }
 }
 
@@ -234,13 +305,17 @@ async function rejectDocument(req, res) {
     const userId = req.user.id;
 
     if (id === null) {
-      return res.status(400).json({ message: "ID de documento inválido" });
+      return res.status(400).json({
+        code: "INVALID_ID",
+        message: "ID de documento inválido",
+      });
     }
 
     if (!motivo || !motivo.trim()) {
-      return res
-        .status(400)
-        .json({ message: "Debes indicar un motivo de rechazo." });
+      return res.status(400).json({
+        code: "MISSING_REASON",
+        message: "Debes indicar un motivo de rechazo.",
+      });
     }
 
     const current = await db.query(
@@ -253,7 +328,10 @@ async function rejectDocument(req, res) {
     );
 
     if (current.rowCount === 0) {
-      return res.status(404).json({ message: "No encontrado" });
+      return res.status(404).json({
+        code: "NOT_FOUND",
+        message: "Documento no encontrado",
+      });
     }
 
     const docActual = current.rows[0];
@@ -279,26 +357,51 @@ async function rejectDocument(req, res) {
 
     const doc = result.rows[0];
 
+    const fromStatus = docActual.status;
+    const toStatus = DOCUMENT_STATES.REJECTED;
+
     await insertOwnerEvent({
       req,
       doc,
-      fromStatus: docActual.status,
-      toStatus: DOCUMENT_STATES.REJECTED,
+      fromStatus,
+      toStatus,
       eventType: "REJECTED_OWNER",
       action: "DOCUMENT_REJECTED_OWNER",
-      details: "Documento rechazado",
-      extraMetadata: { reason: rejectReason },
+      details: "Documento rechazado por el propietario",
+      extraMetadata: {
+        actor_type: "OWNER",
+        reason: rejectReason,
+      },
     });
+
+    try {
+      await insertOwnerStatusChangedEvent({
+        req,
+        doc,
+        fromStatus,
+        toStatus,
+        details: "Cambio de estado por rechazo de propietario",
+        extraMetadata: {
+          reason: "owner_rejected",
+        },
+      });
+    } catch (eventErr) {
+      console.error(
+        "⚠️ Error registrando STATUS_CHANGED (rejectDocument):",
+        eventErr
+      );
+    }
 
     await logAudit({
       user: req.user,
-      action: "document_rejected",
+      action: "DOCUMENT_REJECTED_OWNER",
       entityType: "document",
       entityId: doc.id,
       metadata: {
         motivo: rejectReason,
-        from_status: docActual.status,
-        to_status: DOCUMENT_STATES.REJECTED,
+        from_status: fromStatus,
+        to_status: toStatus,
+        source: "owner",
       },
       req,
     });
@@ -310,7 +413,10 @@ async function rejectDocument(req, res) {
     });
   } catch (err) {
     console.error("❌ Error rechazando documento:", err);
-    return res.status(500).json({ message: "Error interno del servidor" });
+    return res.status(500).json({
+      code: "INTERNAL_ERROR",
+      message: "Error interno del servidor",
+    });
   }
 }
 

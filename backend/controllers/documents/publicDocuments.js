@@ -53,7 +53,10 @@ async function buildSignedPdfUrlOrFail(row, res) {
     console.warn("[PUBLIC] documento sin archivo asociado", {
       documentId: row?.id,
     });
-    res.status(404).json({ message: NO_FILE_MESSAGE });
+    res.status(404).json({
+      code: "NO_FILE",
+      message: NO_FILE_MESSAGE,
+    });
     return null;
   }
 
@@ -141,7 +144,10 @@ async function getPublicDocBySignerToken(req, res) {
         "[PUBLIC] getPublicDocBySignerToken → sin resultados para sign_token",
         { token }
       );
-      return res.status(404).json({ message: NOT_FOUND_MESSAGE });
+      return res.status(404).json({
+        code: "NOT_FOUND",
+        message: NOT_FOUND_MESSAGE,
+      });
     }
 
     const row = rows[0];
@@ -197,7 +203,10 @@ async function getPublicDocBySignerToken(req, res) {
     });
   } catch (err) {
     console.error("❌ Error cargando documento público (firmante):", err);
-    return res.status(500).json({ message: "Error interno del servidor" });
+    return res.status(500).json({
+      code: "INTERNAL_ERROR",
+      message: "Error interno del servidor",
+    });
   }
 }
 
@@ -251,7 +260,10 @@ async function getPublicDocByDocumentToken(req, res) {
         "[PUBLIC] getPublicDocByDocumentToken → sin resultados para signature_token",
         { token }
       );
-      return res.status(404).json({ message: NOT_FOUND_MESSAGE });
+      return res.status(404).json({
+        code: "NOT_FOUND",
+        message: NOT_FOUND_MESSAGE,
+      });
     }
 
     const doc = rows[0];
@@ -297,7 +309,10 @@ async function getPublicDocByDocumentToken(req, res) {
     });
   } catch (err) {
     console.error("❌ Error cargando documento público (document):", err);
-    return res.status(500).json({ message: "Error interno del servidor" });
+    return res.status(500).json({
+      code: "INTERNAL_ERROR",
+      message: "Error interno del servidor",
+    });
   }
 }
 
@@ -345,7 +360,10 @@ async function publicSignDocument(req, res) {
         "[PUBLIC] publicSignDocument → sin resultados para sign_token",
         { token }
       );
-      return res.status(404).json({ message: NOT_FOUND_MESSAGE });
+      return res.status(404).json({
+        code: "NOT_FOUND",
+        message: NOT_FOUND_MESSAGE,
+      });
     }
 
     const row = currentRes.rows[0];
@@ -356,9 +374,10 @@ async function publicSignDocument(req, res) {
     }
 
     if (row.signer_role && row.signer_role.toUpperCase() === "VISADOR") {
-      return res
-        .status(400)
-        .json({ message: "Este enlace corresponde a visado, no a firma" });
+      return res.status(400).json({
+        code: "WRONG_MODE",
+        message: "Este enlace corresponde a visado, no a firma",
+      });
     }
 
     await db.query(
@@ -598,7 +617,10 @@ async function publicSignDocument(req, res) {
     });
   } catch (err) {
     console.error("❌ Error firmando documento público:", err);
-    return res.status(500).json({ message: "Error interno del servidor" });
+    return res.status(500).json({
+      code: "INTERNAL_ERROR",
+      message: "Error interno del servidor",
+    });
   }
 }
 
@@ -655,7 +677,10 @@ async function publicRejectDocument(req, res) {
         "[PUBLIC] publicRejectDocument → sin resultados para sign_token",
         { token }
       );
-      return res.status(404).json({ message: NOT_FOUND_MESSAGE });
+      return res.status(404).json({
+        code: "NOT_FOUND",
+        message: NOT_FOUND_MESSAGE,
+      });
     }
 
     const row = current.rows[0];
@@ -815,7 +840,10 @@ async function publicRejectDocument(req, res) {
     });
   } catch (err) {
     console.error("❌ Error rechazando documento público:", err);
-    return res.status(500).json({ message: "Error interno del servidor" });
+    return res.status(500).json({
+      code: "INTERNAL_ERROR",
+      message: "Error interno del servidor",
+    });
   }
 }
 
@@ -858,7 +886,10 @@ async function publicVisarDocument(req, res) {
         "[PUBLIC] publicVisarDocument → sin resultados para signature_token",
         { token }
       );
-      return res.status(404).json({ message: NOT_FOUND_MESSAGE });
+      return res.status(404).json({
+        code: "NOT_FOUND",
+        message: NOT_FOUND_MESSAGE,
+      });
     }
 
     const docActual = current.rows[0];
@@ -951,7 +982,10 @@ async function publicVisarDocument(req, res) {
     });
   } catch (err) {
     console.error("❌ Error visando documento público:", err);
-    return res.status(500).json({ message: "Error interno del servidor" });
+    return res.status(500).json({
+      code: "INTERNAL_ERROR",
+      message: "Error interno del servidor",
+    });
   }
 }
 
@@ -967,9 +1001,10 @@ async function verifyByCode(req, res) {
     console.log("[PUBLIC] GET /api/public/verificar/:codigo", { codigo });
 
     if (!codigo || typeof codigo !== "string") {
-      return res
-        .status(400)
-        .json({ message: "Código de verificación inválido" });
+      return res.status(400).json({
+        code: "INVALID_CODE",
+        message: "Código de verificación inválido",
+      });
     }
 
     const docResult = await db.query(
@@ -985,9 +1020,10 @@ async function verifyByCode(req, res) {
       console.warn("[PUBLIC] verifyByCode → sin resultados para codigo", {
         codigo,
       });
-      return res
-        .status(404)
-        .json({ message: "Documento no encontrado para este código" });
+      return res.status(404).json({
+        code: "NOT_FOUND",
+        message: "Documento no encontrado para este código",
+      });
     }
 
     const documento = docResult.rows[0];
@@ -1160,7 +1196,10 @@ async function verifyByCode(req, res) {
     });
   } catch (err) {
     console.error("❌ Error en verificación por código:", err);
-    return res.status(500).json({ message: "Error interno del servidor" });
+    return res.status(500).json({
+      code: "INTERNAL_ERROR",
+      message: "Error interno del servidor",
+    });
   }
 }
 

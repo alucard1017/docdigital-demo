@@ -3,91 +3,137 @@ import { defineConfig } from "vite";
 import react from "@vitejs/plugin-react";
 import { visualizer } from "rollup-plugin-visualizer";
 
+function normalizeId(id = "") {
+  return String(id).replace(/\\/g, "/");
+}
+
+function isNodeModule(id) {
+  return id.includes("/node_modules/");
+}
+
+function includesAny(id, patterns = []) {
+  return patterns.some((pattern) => id.includes(pattern));
+}
+
+const VIEW_GROUPS = {
+  admin: [
+    "/src/views/UsersAdminView",
+    "/src/views/CompaniesAdminView",
+    "/src/views/StatusAdminView",
+    "/src/views/AuditLogsView",
+    "/src/views/AuthLogsView",
+    "/src/views/RemindersConfigView",
+  ],
+  analytics: [
+    "/src/views/DashboardView",
+    "/src/views/CompanyAnalyticsView",
+    "/src/views/EmailMetricsView",
+  ],
+  public: [
+    "/src/views/PublicSignView",
+    "/src/views/VerificationView",
+  ],
+  growth: [
+    "/src/views/TemplatesView",
+    "/src/views/PricingView",
+  ],
+};
+
+const VENDOR_GROUPS = {
+  react: ["/react/", "/react-dom/", "/scheduler/"],
+  router: ["/react-router/", "/react-router-dom/", "/@remix-run/"],
+};
+
+function resolveViewChunk(normalizedId) {
+  if (!normalizedId.includes("/src/views/")) return undefined;
+
+  for (const [chunkName, patterns] of Object.entries(VIEW_GROUPS)) {
+    if (includesAny(normalizedId, patterns)) {
+      return chunkName;
+    }
+  }
+
+  return undefined;
+}
+
+function resolveVendorChunk(normalizedId) {
+  if (!isNodeModule(normalizedId)) return undefined;
+
+  if (includesAny(normalizedId, VENDOR_GROUPS.react)) {
+    return "react-vendor";
+  }
+
+  if (includesAny(normalizedId, VENDOR_GROUPS.router)) {
+    return "router-vendor";
+  }
+
+  return "vendor";
+}
+
 function manualChunks(id) {
-  if (!id) return;
+  const normalizedId = normalizeId(id);
+  if (!normalizedId) return undefined;
 
-  const normalizedId = id.replace(/\\/g, "/");
+  const viewChunk = resolveViewChunk(normalizedId);
+  if (viewChunk) return viewChunk;
 
-  // 1) Agrupación por vistas internas (dominios funcionales)
-  if (normalizedId.includes("/src/views/")) {
-    if (
-      normalizedId.includes("/src/views/UsersAdminView") ||
-      normalizedId.includes("/src/views/CompaniesAdminView") ||
-      normalizedId.includes("/src/views/StatusAdminView") ||
-      normalizedId.includes("/src/views/AuditLogsView") ||
-      normalizedId.includes("/src/views/AuthLogsView") ||
-      normalizedId.includes("/src/views/RemindersConfigView")
-    ) {
-      return "admin";
-    }
+  const vendorChunk = resolveVendorChunk(normalizedId);
+  if (vendorChunk) return vendorChunk;
 
-    if (
-      normalizedId.includes("/src/views/DashboardView") ||
-      normalizedId.includes("/src/views/CompanyAnalyticsView") ||
-      normalizedId.includes("/src/views/EmailMetricsView")
-    ) {
-      return "analytics";
-    }
-
-    if (
-      normalizedId.includes("/src/views/PublicSignView") ||
-      normalizedId.includes("/src/views/VerificationView")
-    ) {
-      return "public";
-    }
-
-    if (
-      normalizedId.includes("/src/views/TemplatesView") ||
-      normalizedId.includes("/src/views/PricingView")
-    ) {
-      return "growth";
-    }
-  }
-
-  // 2) Dependencias externas
-  if (normalizedId.includes("/node_modules/")) {
-    // React base en un chunk separado
-    if (
-      normalizedId.includes("/react/") ||
-      normalizedId.includes("/react-dom/") ||
-      normalizedId.includes("/scheduler/")
-    ) {
-      return "react-vendor";
-    }
-
-    // TODO: si algún día tienes un bloque PDF/editor gigante,
-    // aquí puedes crear "pdf" o "editor" específicos.
-    // Por ahora, todo lo demás va a vendor.
-    return "vendor";
-  }
-
-  // 3) Resto: dejar que Vite/Rollup decidan
   return undefined;
 }
 
 export default defineConfig(({ mode }) => {
-  const analyze = mode === "analyze";
+  const isAnalyze = mode === "analyze";
 
   return {
     plugins: [
       react(),
-      visualizer({
-        filename: "dist/stats.html",
-        template: "treemap",
-        gzipSize: true,
-        brotliSize: true,
-        open: analyze,
-      }),
+      ...(isAnalyze
+        ? [
+            visualizer({
+              filename: "dist/stats.html",
+              template: "treemap",
+              gzipSize: true,
+              brotliSize: true,
+              open: true,
+            }),
+          ]
+        : []),
     ],
+
+    test: {
+      environment: "jsdom",
+      globals: true,
+      setupFiles: "./src/test/setupTests.js",
+    },
+
     build: {
-      sourcemap: analyze,
+      sourcemap: isAnalyze,
       chunkSizeWarningLimit: 900,
+      cssCodeSplit: true,
       rollupOptions: {
         output: {
           manualChunks,
           chunkFileNames: "assets/js/[name]-[hash].js",
           entryFileNames: "assets/js/[name]-[hash].js",
-          assetFileNames: "assets/[ext]/[name]-[hash].[ext]",
+          assetFileNames: ({ name }) => {
+            const normalizedName = normalizeId(name || "");
+
+            if (/\.(css)$/i.test(normalizedName)) {
+              return "assets/css/[name]-[hash][extname]";
+            }
+
+            if (/\.(png|jpe?g|svg|gif|webp|avif)$/i.test(normalizedName)) {
+              return "assets/img/[name]-[hash][extname]";
+            }
+
+            if (/\.(woff2?|ttf|otf|eot)$/i.test(normalizedName)) {
+              return "assets/fonts/[name]-[hash][extname]";
+            }
+
+            return "assets/[ext]/[name]-[hash][extname]";
+          },
         },
       },
     },

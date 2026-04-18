@@ -73,6 +73,8 @@ export function useSocket(accessToken, options = {}) {
   const [status, setStatus] = useState(SOCKET_STATUS.IDLE);
   const [lastError, setLastError] = useState(null);
   const [canRetry, setCanRetry] = useState(false);
+  const [reconnectAttempt, setReconnectAttempt] = useState(0);
+  const [errorReason, setErrorReason] = useState(null);
 
   const socketUrl = useMemo(() => buildSocketUrl(), []);
   const normalizedToken =
@@ -138,7 +140,9 @@ export function useSocket(accessToken, options = {}) {
 
   const resetUiState = useCallback(() => {
     setLastError(null);
+    setErrorReason(null);
     setCanRetry(false);
+    setReconnectAttempt(0);
   }, []);
 
   const disconnect = useCallback(() => {
@@ -187,6 +191,8 @@ export function useSocket(accessToken, options = {}) {
     setStatus(SOCKET_STATUS.CONNECTING);
     setCanRetry(false);
     setLastError(null);
+    setErrorReason(null);
+    setReconnectAttempt(0);
 
     const maybeDispatchAuthExpired = (detail = {}) => {
       if (!isBrowser()) return;
@@ -211,7 +217,9 @@ export function useSocket(accessToken, options = {}) {
     const handleConnect = () => {
       setStatus(SOCKET_STATUS.CONNECTED);
       setLastError(null);
+      setErrorReason(null);
       setCanRetry(false);
+      setReconnectAttempt(0);
       authExpiredHandledRef.current = false;
 
       if (import.meta.env.DEV) {
@@ -231,19 +239,23 @@ export function useSocket(accessToken, options = {}) {
       if (isIntentionalClose) {
         setStatus(SOCKET_STATUS.DISCONNECTED);
         setLastError(null);
+        setErrorReason("client_disconnect");
         setCanRetry(false);
         return;
       }
 
       setStatus(SOCKET_STATUS.DISCONNECTED);
       setLastError("Conexión perdida con el servidor.");
+      setErrorReason(reason || "server_disconnect");
       setCanRetry(true);
     };
 
     const handleReconnectAttempt = (attemptNumber) => {
       setStatus(SOCKET_STATUS.RECONNECTING);
       setLastError("Reconectando con el servidor…");
+      setErrorReason("reconnecting");
       setCanRetry(true);
+      setReconnectAttempt(attemptNumber);
 
       if (import.meta.env.DEV) {
         console.log("[WS] reconnect_attempt:", attemptNumber);
@@ -253,7 +265,9 @@ export function useSocket(accessToken, options = {}) {
     const handleReconnect = (attemptNumber) => {
       setStatus(SOCKET_STATUS.CONNECTED);
       setLastError(null);
+      setErrorReason(null);
       setCanRetry(false);
+      setReconnectAttempt(0);
 
       if (import.meta.env.DEV) {
         console.log("[WS] reconnect success:", attemptNumber);
@@ -262,7 +276,10 @@ export function useSocket(accessToken, options = {}) {
 
     const handleReconnectFailed = () => {
       setStatus(SOCKET_STATUS.ERROR);
-      setLastError("No se pudo restablecer la conexión. Puedes reintentar manualmente.");
+      setLastError(
+        "No se pudo restablecer la conexión. Puedes reintentar manualmente."
+      );
+      setErrorReason("reconnect_failed");
       setCanRetry(true);
 
       if (import.meta.env.DEV) {
@@ -281,6 +298,7 @@ export function useSocket(accessToken, options = {}) {
       if (isAuthLikeErrorMessage(rawMessage)) {
         setStatus(SOCKET_STATUS.ERROR);
         setLastError("Tu sesión expiró. Debes iniciar sesión nuevamente.");
+        setErrorReason("auth_error");
         setCanRetry(false);
 
         hardDisconnect(socket);
@@ -296,6 +314,7 @@ export function useSocket(accessToken, options = {}) {
 
       setStatus(SOCKET_STATUS.ERROR);
       setLastError(getFriendlySocketError(rawMessage));
+      setErrorReason("connect_error");
       setCanRetry(true);
     };
 
@@ -309,6 +328,7 @@ export function useSocket(accessToken, options = {}) {
 
       setStatus(SOCKET_STATUS.ERROR);
       setLastError("Tu sesión expiró. Debes iniciar sesión nuevamente.");
+      setErrorReason("auth_error_event");
       setCanRetry(false);
 
       hardDisconnect(socket);
@@ -416,12 +436,14 @@ export function useSocket(accessToken, options = {}) {
     try {
       setStatus(SOCKET_STATUS.CONNECTING);
       setLastError(null);
+      setErrorReason("manual_retry");
       setCanRetry(false);
       socket.connect();
     } catch (err) {
       console.error("[WS] retry error:", err);
       setStatus(SOCKET_STATUS.ERROR);
       setLastError("No se pudo reintentar la conexión.");
+      setErrorReason("retry_error");
       setCanRetry(true);
     }
   }, []);
@@ -436,6 +458,8 @@ export function useSocket(accessToken, options = {}) {
     reconnecting,
     hasError,
     lastError,
+    errorReason,
+    reconnectAttempt,
     canRetry,
     on,
     off,

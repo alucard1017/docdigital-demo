@@ -282,6 +282,7 @@ export function usePublicSign({
     setPublicSignPdfUrl("");
     setPublicSignMode(null);
     setPublicTokenKind(null);
+    setPublicView(null);
   }, []);
 
   /**
@@ -483,6 +484,7 @@ export function usePublicSign({
 
       if (snapshot.publicView === "verification") {
         clearPublicState();
+        setPublicView("verification");
         return;
       }
 

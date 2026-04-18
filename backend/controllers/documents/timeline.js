@@ -33,6 +33,21 @@ function normalizeBoolean(value) {
   return Boolean(value);
 }
 
+/**
+ * Contrato uniforme de salida para el timeline:
+ * {
+ *   id,
+ *   eventType,
+ *   action,
+ *   actor,
+ *   fromStatus,
+ *   toStatus,
+ *   ip,
+ *   userAgent,
+ *   createdAt,
+ *   metadata
+ * }
+ */
 function normalizeDocumentEvent(evt) {
   const metadata = safeJson(evt.metadata, null);
   const eventType = evt.event_type || evt.action || "UNKNOWN";
@@ -62,8 +77,8 @@ function normalizeDocumentEvent(evt) {
 
 function normalizeAuditEvent(evt) {
   const metadata = safeJson(evt.metadata, null);
-  const eventType = evt.action || "AUDIT_LOG";
   const action = evt.action || "AUDIT_LOG";
+  const eventType = metadata?.eventType || action || "AUDIT_LOG";
 
   return {
     id: `audit-${evt.id}`,
@@ -129,7 +144,10 @@ async function getDocumentPdf(req, res) {
   try {
     const docId = toNumber(req.params.id);
     if (!docId) {
-      return res.status(400).json({ message: "ID de documento inválido" });
+      return res.status(400).json({
+        code: "INVALID_ID",
+        message: "ID de documento inválido",
+      });
     }
 
     const result = await db.query(
@@ -151,7 +169,10 @@ async function getDocumentPdf(req, res) {
     );
 
     if (result.rowCount === 0) {
-      return res.status(404).json({ message: "Documento no encontrado" });
+      return res.status(404).json({
+        code: "NOT_FOUND",
+        message: "Documento no encontrado",
+      });
     }
 
     const {
@@ -166,9 +187,10 @@ async function getDocumentPdf(req, res) {
     } = result.rows[0];
 
     if (!file_path && !pdf_original_url && !pdf_final_url) {
-      return res
-        .status(404)
-        .json({ message: "Documento sin archivo asociado" });
+      return res.status(404).json({
+        code: "NO_FILE",
+        message: "Documento sin archivo asociado",
+      });
     }
 
     const key =
@@ -212,6 +234,7 @@ async function getDocumentPdf(req, res) {
           });
 
           return res.status(409).json({
+            code: "PDF_HASH_MISMATCH",
             message:
               "El archivo del documento no pasa la verificación de integridad. Contacta al administrador.",
           });
@@ -240,6 +263,7 @@ async function getDocumentPdf(req, res) {
         });
 
         return res.status(500).json({
+          code: "PDF_VERIFY_ERROR",
           message: "Error verificando la integridad del documento.",
         });
       }
@@ -270,7 +294,10 @@ async function getDocumentPdf(req, res) {
     });
   } catch (err) {
     console.error("❌ Error obteniendo PDF:", err);
-    return res.status(500).json({ message: "Error interno del servidor" });
+    return res.status(500).json({
+      code: "INTERNAL_ERROR",
+      message: "Error interno del servidor",
+    });
   }
 }
 
@@ -282,7 +309,10 @@ async function getTimeline(req, res) {
   try {
     const docId = toNumber(req.params.id);
     if (!docId) {
-      return res.status(400).json({ message: "ID de documento inválido" });
+      return res.status(400).json({
+        code: "INVALID_ID",
+        message: "ID de documento inválido",
+      });
     }
 
     const docRes = await db.query(
@@ -308,7 +338,10 @@ async function getTimeline(req, res) {
     );
 
     if (docRes.rowCount === 0) {
-      return res.status(404).json({ message: "Documento no encontrado" });
+      return res.status(404).json({
+        code: "NOT_FOUND",
+        message: "Documento no encontrado",
+      });
     }
 
     const doc = docRes.rows[0];
@@ -423,7 +456,10 @@ async function getTimeline(req, res) {
     });
   } catch (err) {
     console.error("❌ Error obteniendo timeline:", err);
-    return res.status(500).json({ message: "Error interno del servidor" });
+    return res.status(500).json({
+      code: "INTERNAL_ERROR",
+      message: "Error interno del servidor",
+    });
   }
 }
 
@@ -435,7 +471,10 @@ async function getLegalTimeline(req, res) {
   try {
     const docId = toNumber(req.params.id);
     if (!docId) {
-      return res.status(400).json({ message: "ID de documento inválido" });
+      return res.status(400).json({
+        code: "INVALID_ID",
+        message: "ID de documento inválido",
+      });
     }
 
     const docRes = await db.query(
@@ -448,7 +487,10 @@ async function getLegalTimeline(req, res) {
     );
 
     if (docRes.rowCount === 0) {
-      return res.status(404).json({ message: "Documento no encontrado" });
+      return res.status(404).json({
+        code: "NOT_FOUND",
+        message: "Documento no encontrado",
+      });
     }
 
     const doc = docRes.rows[0];
@@ -479,24 +521,9 @@ async function getLegalTimeline(req, res) {
       [docId]
     );
 
-    const events = (eventsRes.rows || []).map((evt) => ({
-      id: evt.id,
-      document_id: evt.document_id,
-      participant_id: evt.participant_id,
-      actor: evt.actor || null,
-      event_type: evt.event_type,
-      action: evt.action || null,
-      from_status: evt.from_status || null,
-      to_status: evt.to_status || null,
-      timestamp: evt.created_at,
-      ip_address: evt.ip_address || null,
-      user_agent: evt.user_agent || null,
-      hash_document: evt.hash_document || null,
-      company_id: evt.company_id || null,
-      user_id: evt.user_id || null,
-      metadata: safeJson(evt.metadata, null),
-      details: evt.details || null,
-    }));
+    const events = (eventsRes.rows || []).map((evt) =>
+      normalizeDocumentEvent(evt)
+    );
 
     return res.json({
       document: {
@@ -509,7 +536,10 @@ async function getLegalTimeline(req, res) {
     });
   } catch (err) {
     console.error("❌ Error obteniendo timeline legal:", err);
-    return res.status(500).json({ message: "Error interno del servidor" });
+    return res.status(500).json({
+      code: "INTERNAL_ERROR",
+      message: "Error interno del servidor",
+    });
   }
 }
 
@@ -521,7 +551,10 @@ async function getSigners(req, res) {
   try {
     const docId = toNumber(req.params.id);
     if (!docId) {
-      return res.status(400).json({ message: "ID de documento inválido" });
+      return res.status(400).json({
+        code: "INVALID_ID",
+        message: "ID de documento inválido",
+      });
     }
 
     const docRes = await db.query(
@@ -534,7 +567,10 @@ async function getSigners(req, res) {
     );
 
     if (docRes.rowCount === 0) {
-      return res.status(404).json({ message: "Documento no encontrado" });
+      return res.status(404).json({
+        code: "NOT_FOUND",
+        message: "Documento no encontrado",
+      });
     }
 
     const signersRes = await db.query(
@@ -559,7 +595,10 @@ async function getSigners(req, res) {
     return res.json(signersRes.rows || []);
   } catch (err) {
     console.error("❌ Error obteniendo firmantes:", err);
-    return res.status(500).json({ message: "Error interno del servidor" });
+    return res.status(500).json({
+      code: "INTERNAL_ERROR",
+      message: "Error interno del servidor",
+    });
   }
 }
 

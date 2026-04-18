@@ -34,12 +34,28 @@ import {
 import { isAnyAdmin, canViewAuditLogs } from "./utils/permissions";
 import { formatRun, formatRunDoc } from "./utils/formatters";
 
+import {
+  PUBLIC_AUTH_PATHS,
+  VALID_PROTECTED_VIEWS,
+  ROUTE_MAP,
+  VIEW_TO_PATH,
+  getProtectedViewFromPath,
+  getLocationSnapshot,
+  getPublicAccessSnapshot,
+  getEffectivePublicRouteState,
+  resolveAppEntry,
+} from "./utils/appRouting";
+
 import { useSocket } from "./hooks/useSocket";
 import { useOnboardingStatus } from "./hooks/useOnboardingStatus";
 import { usePublicSign } from "./hooks/usePublicSign";
 import { useDocuments } from "./hooks/useDocuments";
 import { useToast } from "./hooks/useToast";
 import { useAuth } from "./hooks/useAuth";
+
+/* ============================
+   Lazy views / modules
+   ============================ */
 
 const OnboardingWizardLazy = lazy(
   () => import("./components/Onboarding/OnboardingWizard")
@@ -64,104 +80,9 @@ const CompanyAnalyticsView = lazy(
   () => import("./views/CompanyAnalyticsView")
 );
 
-const ROUTE_MAP = {
-  "/": "list",
-  "/documents": "list",
-  "/new-document": "upload",
-  "/users": "users",
-  "/dashboard": "dashboard",
-  "/companies": "companies",
-  "/status": "status",
-  "/audit-logs": "audit-logs",
-  "/auth-logs": "auth-logs",
-  "/reminders-config": "reminders-config",
-  "/email-metrics": "email-metrics",
-  "/pricing": "pricing",
-  "/profile": "profile",
-  "/templates": "templates",
-  "/company-analytics": "company-analytics",
-};
-
-const VIEW_TO_PATH = {
-  list: "/documents",
-  upload: "/new-document",
-  users: "/users",
-  dashboard: "/dashboard",
-  companies: "/companies",
-  status: "/status",
-  "audit-logs": "/audit-logs",
-  "auth-logs": "/auth-logs",
-  "reminders-config": "/reminders-config",
-  "email-metrics": "/email-metrics",
-  pricing: "/pricing",
-  profile: "/profile",
-  templates: "/templates",
-  "company-analytics": "/company-analytics",
-};
-
-const VALID_PROTECTED_VIEWS = new Set(Object.values(ROUTE_MAP));
-
-const PUBLIC_AUTH_PATHS = new Set([
-  "/login",
-  "/forgot-password",
-  "/reset-password",
-  "/register",
-]);
-
-function getProtectedViewFromPath(path) {
-  return ROUTE_MAP[path] || "list";
-}
-
-function getLocationSnapshot() {
-  if (typeof window === "undefined") {
-    return { pathname: "/", search: "" };
-  }
-
-  return {
-    pathname: window.location.pathname || "/",
-    search: window.location.search || "",
-  };
-}
-
-// Incluye soporte para /document/:token como acceso público de visado
-function getPublicAccessSnapshot({
-  pathname,
-  search,
-  isSigningPortal,
-  isVerificationPortal,
-}) {
-  const params = new URLSearchParams(search || "");
-  const queryToken = (params.get("token") || "").trim();
-
-  const normalizedPath = pathname || "/";
-  const documentPathMatch = normalizedPath.match(/^\/document\/([^/?#]+)$/i);
-  const documentTokenFromPath = documentPathMatch?.[1]?.trim() || "";
-
-  const tokenFromUrl = queryToken || documentTokenFromPath;
-
-  const isPublicSigningAccess =
-    (!!queryToken &&
-      (normalizedPath === "/public/sign" ||
-        normalizedPath === "/firma-publica" ||
-        normalizedPath === "/consulta-publica" ||
-        (isSigningPortal && normalizedPath === "/"))) ||
-    (!!documentTokenFromPath &&
-      (normalizedPath.startsWith("/document/") ||
-        (isSigningPortal && normalizedPath.startsWith("/document/"))));
-
-  const isPublicVerificationAccess =
-    normalizedPath === "/verificar" ||
-    normalizedPath === "/verificacion-publica" ||
-    (isVerificationPortal && normalizedPath === "/");
-
-  return {
-    tokenFromUrl,
-    isPublicSigningAccess,
-    isPublicVerificationAccess,
-    isAnyPublicAccess: isPublicSigningAccess || isPublicVerificationAccess,
-    isDocumentTokenPath: !!documentTokenFromPath,
-  };
-}
+/* ============================
+   Fallbacks
+   ============================ */
 
 function ProtectedModuleFallback() {
   return <div className="protected-fallback">Cargando módulo…</div>;
@@ -171,10 +92,15 @@ function SessionLoadingFallback() {
   return <div className="session-loading">Cargando sesión...</div>;
 }
 
+/* ============================
+   App
+   ============================ */
+
 function App() {
   const subdomain = getSubdomain();
   const isVerificationPortal = subdomain === "verificar";
   const isSigningPortal = subdomain === "firmar";
+  const apiRoot = API_BASE_URL;
 
   const [path, setPath] = useState(() => getPath());
   const [view, setView] = useState(() => getProtectedViewFromPath(getPath()));
@@ -195,21 +121,13 @@ function App() {
   const [firmanteRunValue, setFirmanteRunValue] = useState("");
   const [empresaRutValue, setEmpresaRutValue] = useState("");
 
-  const apiRoot = API_BASE_URL;
-
   const { user, token, login, logout, authLoading, isAuthenticated } =
     useAuth();
   const { addToast } = useToast();
 
   const locationSnapshot = useMemo(() => getLocationSnapshot(), [path]);
 
-  const {
-    tokenFromUrl,
-    isPublicSigningAccess,
-    isPublicVerificationAccess,
-    isAnyPublicAccess,
-    isDocumentTokenPath,
-  } = useMemo(
+  const publicAccess = useMemo(
     () =>
       getPublicAccessSnapshot({
         pathname: locationSnapshot.pathname,
@@ -220,34 +138,33 @@ function App() {
     [locationSnapshot, isSigningPortal, isVerificationPortal]
   );
 
-  // Derivar modo y tipo de token de la URL, incluyendo /document/:token
-  const { effectivePublicModeFromUrl, effectiveTokenKindFromUrl } = useMemo(() => {
-    const params = new URLSearchParams(locationSnapshot.search || "");
-    const rawMode = (params.get("mode") || "").trim().toLowerCase();
+  const {
+    tokenFromUrl,
+    isPublicSigningAccess,
+    isPublicVerificationAccess,
+    isAnyPublicAccess,
+    isDocumentTokenPath,
+  } = publicAccess;
 
-    if (isDocumentTokenPath) {
-      return {
-        effectivePublicModeFromUrl: "visado",
-        effectiveTokenKindFromUrl: "document",
-      };
-    }
+  const { effectivePublicModeFromUrl, effectiveTokenKindFromUrl } = useMemo(
+    () =>
+      getEffectivePublicRouteState({
+        search: locationSnapshot.search,
+        isDocumentTokenPath,
+      }),
+    [locationSnapshot.search, isDocumentTokenPath]
+  );
 
-    const mode =
-      rawMode === "visado" || rawMode === "visa"
-        ? "visado"
-        : rawMode === "firma"
-        ? "firma"
-        : "";
-
-    const modeEffective = mode || "firma";
-    const tokenKindEffective =
-      modeEffective === "visado" ? "document" : "signer";
-
-    return {
-      effectivePublicModeFromUrl: modeEffective,
-      effectiveTokenKindFromUrl: tokenKindEffective,
-    };
-  }, [locationSnapshot.search, isDocumentTokenPath]);
+  const entryDecision = useMemo(
+    () =>
+      resolveAppEntry({
+        authLoading,
+        isAuthenticated,
+        path,
+        publicAccess,
+      }),
+    [authLoading, isAuthenticated, path, publicAccess]
+  );
 
   const {
     loadingDocs,
@@ -345,7 +262,9 @@ function App() {
     ? pendientesGlobal
     : safePendientes;
   const safeVisadosGlobal = Number.isFinite(visadosGlobal) ? visadosGlobal : 0;
-  const safeFirmadosGlobal = Number.isFinite(firmadosGlobal) ? firmadosGlobal : 0;
+  const safeFirmadosGlobal = Number.isFinite(firmadosGlobal)
+    ? firmadosGlobal
+    : 0;
   const safeRechazadosGlobal = Number.isFinite(rechazadosGlobal)
     ? rechazadosGlobal
     : 0;
@@ -365,134 +284,6 @@ function App() {
       }),
     [cargarDocs, page, sort, statusFilter, search]
   );
-
-  // Sincronizar path y vista cuando cambia el historial
-  useEffect(() => {
-    const syncPath = () => {
-      const nextPath = getPath();
-      setPath(nextPath);
-
-      if (!isAuthenticated) return;
-
-      setView((currentView) => {
-        if (currentView === "detail" && selectedDoc) return currentView;
-        return getProtectedViewFromPath(nextPath);
-      });
-    };
-
-    const navigationEvent = getNavigationEventName();
-
-    window.addEventListener("popstate", syncPath);
-    window.addEventListener(navigationEvent, syncPath);
-
-    return () => {
-      window.removeEventListener("popstate", syncPath);
-      window.removeEventListener(navigationEvent, syncPath);
-    };
-  }, [isAuthenticated, selectedDoc]);
-
-  // Redirecciones de auth (excepto accesos públicos)
-  useEffect(() => {
-    if (authLoading) return;
-    if (isAnyPublicAccess) return;
-
-    if (!isAuthenticated) {
-      if (!PUBLIC_AUTH_PATHS.has(path)) {
-        setSelectedDoc(null);
-        setView("list");
-        replaceTo("/login");
-      }
-      return;
-    }
-
-    if (PUBLIC_AUTH_PATHS.has(path)) {
-      replaceTo("/documents");
-    }
-  }, [
-    authLoading,
-    isAuthenticated,
-    path,
-    isAnyPublicAccess,
-    setSelectedDoc,
-  ]);
-
-  // Normalizar vista protegida cuando hay sesión
-  useEffect(() => {
-    if (!isAuthenticated) return;
-    if (view === "detail") return;
-
-    const expectedView = getProtectedViewFromPath(path);
-
-    if (VALID_PROTECTED_VIEWS.has(expectedView) && view !== expectedView) {
-      setView(expectedView);
-      return;
-    }
-
-    if (!VALID_PROTECTED_VIEWS.has(view)) {
-      setSelectedDoc(null);
-      setView("list");
-      replaceTo("/documents");
-    }
-  }, [view, path, isAuthenticated, setSelectedDoc]);
-
-  // Suscripción a eventos de socket
-  useEffect(() => {
-    if (!token) return;
-    if (typeof socketOn !== "function" || typeof socketOff !== "function") {
-      return;
-    }
-
-    const handleSent = (data) => {
-      addToast({
-        type: "success",
-        title: "Documento enviado",
-        message: data?.titulo
-          ? `"${data.titulo}" se envió correctamente.`
-          : "El documento se envió correctamente.",
-      });
-
-      refreshDocs({ page: 1 });
-    };
-
-    const handleSigned = (data) => {
-      addToast({
-        type: "success",
-        title: "Documento firmado",
-        message: data?.titulo
-          ? `"${data.titulo}" se firmó correctamente.`
-          : "El documento se firmó correctamente.",
-      });
-
-      refreshDocs({ page: 1 });
-    };
-
-    socketOn("document:sent", handleSent);
-    socketOn("document:signed", handleSigned);
-
-    return () => {
-      socketOff("document:sent", handleSent);
-      socketOff("document:signed", handleSigned);
-    };
-  }, [token, socketOn, socketOff, addToast, refreshDocs]);
-
-  // Errores de socket
-  useEffect(() => {
-    if (!socketLastError) return;
-
-    if (socketStatus === "error" || socketStatus === "disconnected") {
-      addToast({
-        type: "error",
-        title: "Problema con la conexión en tiempo real",
-        message: socketLastError,
-      });
-    }
-  }, [socketStatus, socketLastError, addToast]);
-
-  const handleLogout = useCallback(() => {
-    setSelectedDoc(null);
-    setView("list");
-    logout({ redirectTo: "/login", replace: true });
-  }, [logout, setSelectedDoc]);
 
   const handleNavigateProtected = useCallback(
     (nextView) => {
@@ -521,6 +312,12 @@ function App() {
     setSelectedDoc(null);
     handleNavigateProtected("list");
   }, [handleNavigateProtected, setSelectedDoc]);
+
+  const handleLogout = useCallback(() => {
+    setSelectedDoc(null);
+    setView("list");
+    logout({ redirectTo: "/login", replace: true });
+  }, [logout, setSelectedDoc]);
 
   const handleAfterCreateDocument = useCallback(async () => {
     setPage(1);
@@ -595,7 +392,140 @@ function App() {
     ]
   );
 
-  const renderListView = () => {
+  /* ============================
+     Sync navegación
+     ============================ */
+
+  useEffect(() => {
+    const syncPath = () => {
+      const nextPath = getPath();
+      setPath(nextPath);
+
+      if (!isAuthenticated) return;
+
+      setView((currentView) => {
+        if (currentView === "detail" && selectedDoc) return currentView;
+        return getProtectedViewFromPath(nextPath);
+      });
+    };
+
+    const navigationEvent = getNavigationEventName();
+
+    window.addEventListener("popstate", syncPath);
+    window.addEventListener(navigationEvent, syncPath);
+
+    return () => {
+      window.removeEventListener("popstate", syncPath);
+      window.removeEventListener(navigationEvent, syncPath);
+    };
+  }, [isAuthenticated, selectedDoc]);
+
+  /* ============================
+     Guards auth
+     ============================ */
+
+  useEffect(() => {
+    if (authLoading) return;
+    if (isAnyPublicAccess) return;
+
+    if (!isAuthenticated) {
+      if (!PUBLIC_AUTH_PATHS.has(path)) {
+        setSelectedDoc(null);
+        setView("list");
+        replaceTo("/login");
+      }
+      return;
+    }
+
+    if (PUBLIC_AUTH_PATHS.has(path)) {
+      replaceTo("/documents");
+    }
+  }, [
+    authLoading,
+    isAuthenticated,
+    isAnyPublicAccess,
+    path,
+    setSelectedDoc,
+  ]);
+
+  useEffect(() => {
+    if (!isAuthenticated) return;
+    if (view === "detail") return;
+
+    const expectedView = getProtectedViewFromPath(path);
+
+    if (VALID_PROTECTED_VIEWS.has(expectedView) && view !== expectedView) {
+      setView(expectedView);
+      return;
+    }
+
+    if (!VALID_PROTECTED_VIEWS.has(view)) {
+      setSelectedDoc(null);
+      setView("list");
+      replaceTo("/documents");
+    }
+  }, [view, path, isAuthenticated, setSelectedDoc]);
+
+  /* ============================
+     Socket listeners
+     ============================ */
+
+  useEffect(() => {
+    if (!token) return;
+    if (typeof socketOn !== "function" || typeof socketOff !== "function") {
+      return;
+    }
+
+    const handleSent = (data) => {
+      addToast({
+        type: "success",
+        title: "Documento enviado",
+        message: data?.titulo
+          ? `"${data.titulo}" se envió correctamente.`
+          : "El documento se envió correctamente.",
+      });
+
+      refreshDocs({ page: 1 });
+    };
+
+    const handleSigned = (data) => {
+      addToast({
+        type: "success",
+        title: "Documento firmado",
+        message: data?.titulo
+          ? `"${data.titulo}" se firmó correctamente.`
+          : "El documento se firmó correctamente.",
+      });
+
+      refreshDocs({ page: 1 });
+    };
+
+    socketOn("document:sent", handleSent);
+    socketOn("document:signed", handleSigned);
+
+    return () => {
+      socketOff("document:sent", handleSent);
+      socketOff("document:signed", handleSigned);
+    };
+  }, [token, socketOn, socketOff, addToast, refreshDocs]);
+
+  useEffect(() => {
+    if (!socketLastError) return;
+
+    if (socketStatus === "error" || socketStatus === "disconnected") {
+      addToast({
+        type: "error",
+        title: "Problema con la conexión en tiempo real",
+        message: socketLastError,
+      });
+    }
+  }, [socketStatus, socketLastError, addToast]);
+
+  /* ============================
+     Render helpers
+     ============================ */
+
+  const renderListView = useCallback(() => {
     if (loadingDocs) {
       return (
         <div className="list-state list-state--loading">
@@ -707,9 +637,21 @@ function App() {
         </div>
       </>
     );
-  };
+  }, [
+    loadingDocs,
+    errorDocs,
+    safeDocsFiltrados.length,
+    safeDocsPaginados,
+    handleOpenDetail,
+    safeCurrentPage,
+    safeTotalPaginas,
+    safeTotalFiltrado,
+    refreshDocs,
+    handleNavigateProtected,
+    setPage,
+  ]);
 
-  const renderProtectedView = useCallback(() => {
+  const protectedViewElement = useMemo(() => {
     if (view === "list") {
       return (
         <>
@@ -835,6 +777,7 @@ function App() {
     safeFirmados,
     safeRechazados,
     refreshDocs,
+    renderListView,
     tipoTramite,
     formErrors,
     showVisador,
@@ -850,18 +793,19 @@ function App() {
     handleNavigateProtected,
   ]);
 
-  // Carga inicial de sesión
-  if (authLoading) {
+  /* ============================
+     Early returns según entryDecision
+     ============================ */
+
+  if (entryDecision.screen === "session-loading") {
     return <SessionLoadingFallback />;
   }
 
-  // Verificación pública
-  if (isPublicVerificationAccess) {
+  if (entryDecision.screen === "public-verification") {
     return <VerificationView API_URL={apiRoot} />;
   }
 
-  // Firma / visado público
-  if (isPublicSigningAccess) {
+  if (entryDecision.screen === "public-sign") {
     const effectiveToken = (tokenFromUrl || publicSignToken || "").trim();
 
     const effectivePublicMode =
@@ -899,21 +843,19 @@ function App() {
     );
   }
 
-  // Rutas públicas de auth
-  if (!isAuthenticated && path === "/forgot-password") {
+  if (entryDecision.screen === "forgot-password") {
     return <ForgotPasswordView />;
   }
 
-  if (!isAuthenticated && path === "/reset-password") {
+  if (entryDecision.screen === "reset-password") {
     return <ResetPasswordView />;
   }
 
-  if (!isAuthenticated && path === "/register") {
+  if (entryDecision.screen === "register") {
     return <RegisterView />;
   }
 
-  // Login
-  if (!isAuthenticated) {
+  if (entryDecision.screen === "login") {
     const displayIdentifier =
       isEmailMode || identifier.includes("@")
         ? identifier
@@ -946,7 +888,7 @@ function App() {
     );
   }
 
-  // Detalle protegido
+  // protected-app (sesión activa) + vista detail
   if (view === "detail" && selectedDoc) {
     const requiereVisado = selectedDoc.requires_visado === true;
 
@@ -978,7 +920,6 @@ function App() {
     );
   }
 
-  // Dashboard principal
   return (
     <div className="dashboard-root">
       <Suspense
@@ -1035,7 +976,7 @@ function App() {
           </Suspense>
 
           <Suspense fallback={<ProtectedModuleFallback />}>
-            {renderProtectedView()}
+            {protectedViewElement}
           </Suspense>
 
           {import.meta.env.MODE !== "production" && (

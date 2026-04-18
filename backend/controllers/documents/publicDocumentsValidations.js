@@ -29,6 +29,24 @@ function validatePublicAccess(row, expiredMessage) {
   return null;
 }
 
+function isTruthyVisado(value) {
+  if (value === true) return true;
+  if (value === 1) return true;
+
+  const normalized = String(value ?? "")
+    .trim()
+    .toLowerCase();
+
+  return (
+    normalized === "true" ||
+    normalized === "t" ||
+    normalized === "1" ||
+    normalized === "yes" ||
+    normalized === "si" ||
+    normalized === "sí"
+  );
+}
+
 function validatePublicSign(row) {
   const expired = validatePublicAccess(
     row,
@@ -43,7 +61,7 @@ function validatePublicSign(row) {
     };
   }
 
-  if (row.requires_visado === true && row.status === "PENDIENTE_VISADO") {
+  if (isTruthyVisado(row.requires_visado) && row.status === "PENDIENTE_VISADO") {
     return {
       status: 400,
       body: { message: "Este documento requiere visación antes de firmar" },
@@ -115,7 +133,7 @@ function validatePublicVisar(docActual) {
     };
   }
 
-  if (docActual.requires_visado !== true) {
+  if (!isTruthyVisado(docActual.requires_visado)) {
     return {
       status: 400,
       body: { message: "Este documento no requiere visación" },
