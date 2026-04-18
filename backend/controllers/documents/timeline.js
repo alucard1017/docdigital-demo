@@ -33,6 +33,25 @@ function normalizeBoolean(value) {
   return Boolean(value);
 }
 
+function normalizeStatus(raw) {
+  if (!raw) return null;
+  switch (raw) {
+    case "BORRADOR":
+      return "BORRADOR";
+    case "PENDIENTE_VISADO":
+      return "PENDIENTE_VISADO";
+    case "PENDIENTE_FIRMA":
+    case "EN_FIRMA":
+      return "PENDIENTE_FIRMA";
+    case "FIRMADO":
+      return "FIRMADO";
+    case "RECHAZADO":
+      return "RECHAZADO";
+    default:
+      return raw;
+  }
+}
+
 /**
  * Contrato uniforme de salida para el timeline:
  * {
@@ -50,23 +69,52 @@ function normalizeBoolean(value) {
  */
 function normalizeDocumentEvent(evt) {
   const metadata = safeJson(evt.metadata, null);
-  const eventType = evt.event_type || evt.action || "UNKNOWN";
-  const action = evt.action || evt.event_type || "UNKNOWN";
+
+  const baseEventType = evt.event_type || evt.tipo_evento || evt.action;
+  const baseAction = evt.action || evt.tipo_evento || baseEventType;
+
+  const eventType = baseEventType || "UNKNOWN";
+  const action = baseAction || "UNKNOWN";
+
+  const fromStatusRaw =
+    evt.from_status || metadata?.from_status || metadata?.legacy_status || null;
+  const toStatusRaw =
+    evt.to_status || metadata?.to_status || metadata?.documents_status || null;
+
+  const fromStatus = normalizeStatus(fromStatusRaw);
+  const toStatus = normalizeStatus(toStatusRaw);
+
+  const actor =
+    evt.actor ||
+    metadata?.actor ||
+    metadata?.actor_email ||
+    (metadata?.actor_type ? metadata.actor_type.toLowerCase() : null) ||
+    "system";
+
+  const metaSource =
+    metadata?.source ||
+    (eventType.startsWith("PUBLIC_")
+      ? "public"
+      : eventType.endsWith("_OWNER")
+      ? "owner"
+      : eventType.includes("INTERNAL")
+      ? "internal_flow"
+      : "document_events");
 
   return {
     id: evt.id,
     eventType,
     action,
-    actor: evt.actor || "system",
-    fromStatus: evt.from_status || metadata?.from_status || null,
-    toStatus: evt.to_status || metadata?.to_status || null,
-    ip: evt.ip_address || null,
+    actor,
+    fromStatus,
+    toStatus,
+    ip: evt.ip_address || evt.ip || null,
     userAgent: evt.user_agent || null,
     createdAt: evt.created_at,
     metadata: {
       ...(metadata || {}),
-      source: "document_events",
-      details: evt.details || null,
+      source: metaSource,
+      details: evt.details || evt.detalle || null,
       participant_id: evt.participant_id || null,
       hash_document: evt.hash_document || null,
       company_id: evt.company_id || null,
@@ -78,15 +126,24 @@ function normalizeDocumentEvent(evt) {
 function normalizeAuditEvent(evt) {
   const metadata = safeJson(evt.metadata, null);
   const action = evt.action || "AUDIT_LOG";
-  const eventType = metadata?.eventType || action || "AUDIT_LOG";
+  const eventType =
+    metadata?.eventType || metadata?.event_type || action || "AUDIT_LOG";
+
+  const fromStatus = normalizeStatus(metadata?.from_status || null);
+  const toStatus = normalizeStatus(metadata?.to_status || null);
+
+  const actor =
+    metadata?.actor ||
+    (evt.user_id ? `user:${evt.user_id}` : null) ||
+    "system";
 
   return {
     id: `audit-${evt.id}`,
     eventType,
     action,
-    actor: evt.user_id ? `user:${evt.user_id}` : "system",
-    fromStatus: metadata?.from_status || null,
-    toStatus: metadata?.to_status || null,
+    actor,
+    fromStatus,
+    toStatus,
     ip: evt.ip || null,
     userAgent: evt.user_agent || null,
     createdAt: evt.created_at,
@@ -101,7 +158,9 @@ function normalizeAuditEvent(evt) {
 }
 
 function buildTimelineProgress(status, requiresVisado) {
-  switch (status) {
+  const normalized = normalizeStatus(status);
+
+  switch (normalized) {
     case "PENDIENTE_VISADO":
       return {
         currentStep: "Pendiente de visación",
@@ -129,7 +188,7 @@ function buildTimelineProgress(status, requiresVisado) {
     case "BORRADOR":
     default:
       return {
-        currentStep: status || "Pendiente",
+        currentStep: normalized || "Pendiente",
         nextStep: "",
         progress: 0,
       };
@@ -193,8 +252,10 @@ async function getDocumentPdf(req, res) {
       });
     }
 
+    const normalizedStatus = normalizeStatus(status);
+
     const key =
-      status === "FIRMADO" && pdf_final_url
+      normalizedStatus === "FIRMADO" && pdf_final_url
         ? pdf_final_url
         : pdf_original_url || file_path;
 
@@ -281,7 +342,7 @@ async function getDocumentPdf(req, res) {
         company_id,
         title,
         key,
-        final_pdf: status === "FIRMADO" && !!pdf_final_url,
+        final_pdf: normalizedStatus === "FIRMADO" && !!pdf_final_url,
         ip: getClientIp(req),
         user_agent: getUserAgent(req),
       },
@@ -290,7 +351,7 @@ async function getDocumentPdf(req, res) {
 
     return res.json({
       url: finalSignedUrl,
-      final: status === "FIRMADO" && !!pdf_final_url,
+      final: normalizedStatus === "FIRMADO" && !!pdf_final_url,
     });
   } catch (err) {
     console.error("❌ Error obteniendo PDF:", err);
@@ -434,7 +495,7 @@ async function getTimeline(req, res) {
       document: {
         id: doc.id,
         title: doc.title,
-        status: doc.status,
+        status: normalizeStatus(doc.status),
         company_id: doc.company_id,
         destinatario_nombre: doc.destinatario_nombre,
         empresa_rut: doc.empresa_rut,
@@ -529,7 +590,7 @@ async function getLegalTimeline(req, res) {
       document: {
         id: doc.id,
         title: doc.title,
-        status: doc.status,
+        status: normalizeStatus(doc.status),
         company_id: doc.company_id,
       },
       events,

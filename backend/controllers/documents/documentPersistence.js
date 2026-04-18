@@ -1,18 +1,18 @@
-const {
-  db,
-  uploadPdfToS3,
-} = require("./common");
+const { db, uploadPdfToS3 } = require("./common");
+const { toJson, buildSafeStorageFileName } = require("./documentUtils");
+const { generarSignToken } = require("./documentSignerHelpers");
 
 const pool = db?.pool || db;
 
-const {
-  toJson,
-  buildSafeStorageFileName,
-} = require("./documentUtils");
-
-const { generarSignToken } = require("./documentSignerHelpers");
+/* ================================
+   CONFIG / RECORDATORIOS
+   ================================ */
 
 async function getReminderConfig(client, companyId) {
+  if (!companyId) {
+    return { enabled: true };
+  }
+
   try {
     const { rows } = await client.query(
       `
@@ -46,7 +46,8 @@ async function createAutomaticReminders(client, { documentId, signers }) {
   let created = 0;
 
   for (const signer of signers) {
-    if (!signer?.email) continue;
+    const email = (signer?.email || "").trim().toLowerCase();
+    if (!email) continue;
 
     try {
       await client.query("SAVEPOINT sp_create_reminder");
@@ -86,7 +87,7 @@ async function createAutomaticReminders(client, { documentId, signers }) {
         `,
         [
           documentId,
-          signer.email,
+          email,
           signer.nombre,
           signer.debe_visar ? "VISADO" : "FIRMA",
         ]
@@ -100,7 +101,7 @@ async function createAutomaticReminders(client, { documentId, signers }) {
       } catch (_) {}
 
       console.error(
-        `⚠️ No se pudo crear recordatorio para ${signer.email}:`,
+        `⚠️ No se pudo crear recordatorio para ${email}:`,
         err.message
       );
     }
@@ -109,6 +110,10 @@ async function createAutomaticReminders(client, { documentId, signers }) {
   return created;
 }
 
+/* ================================
+   EVENTOS
+   ================================ */
+
 async function insertDocumentEvent(client, payload) {
   const {
     documentId,
@@ -116,7 +121,9 @@ async function insertDocumentEvent(client, payload) {
     userId,
     eventType,
     details = null,
-  } = payload;
+  } = payload || {};
+
+  if (!documentId || !companyId) return;
 
   const safeEventType = eventType || "DOCUMENT_CREATED";
 
@@ -164,7 +171,9 @@ async function insertLegacyEvento(client, payload) {
     tipo,
     descripcion,
     metadata = null,
-  } = payload;
+  } = payload || {};
+
+  if (!documentoId || !tipo) return;
 
   try {
     await client.query(
@@ -186,7 +195,15 @@ async function insertLegacyEvento(client, payload) {
   }
 }
 
+/* ================================
+   FIRMANTES / PARTICIPANTES
+   ================================ */
+
 async function createLegacySigners(client, { documentoId, signers }) {
+  if (!documentoId || !Array.isArray(signers) || !signers.length) {
+    return [];
+  }
+
   const inserted = [];
 
   for (const signer of signers) {
@@ -231,6 +248,10 @@ async function createLegacySigners(client, { documentoId, signers }) {
 }
 
 async function createCanonicalSigners(client, { documentId, companyId, signers }) {
+  if (!documentId || !companyId || !Array.isArray(signers) || !signers.length) {
+    return [];
+  }
+
   const inserted = [];
 
   for (const signer of signers) {
@@ -284,6 +305,11 @@ async function createCanonicalSigners(client, { documentId, companyId, signers }
   return inserted;
 }
 
+/**
+ * Sincroniza document_participants desde signers respetando:
+ * (document_id, COALESCE(flow_group,0), flow_order, email)
+ * y creando UNA entrada por email/documento.
+ */
 async function syncParticipantsFromSigners(client, { documentId, companyId, signers }) {
   if (!documentId || !companyId || !Array.isArray(signers) || !signers.length) {
     return [];
@@ -291,20 +317,27 @@ async function syncParticipantsFromSigners(client, { documentId, companyId, sign
 
   const inserted = [];
   const flowGroup = 0;
+
+  // Ordenamos por orden de firma
   const sorted = [...signers].sort((a, b) => a.orden - b.orden);
 
-  const byEmail = new Map();
-  sorted.forEach((s) => {
-    const email = (s.email || "").toLowerCase();
-    if (!byEmail.has(email)) {
-      byEmail.set(email, byEmail.size + 1);
-    }
-  });
+  // Deduplicamos por email, quedándonos con la primera aparición
+  const uniqueByEmail = [];
+  const seenEmails = new Set();
 
   for (const signer of sorted) {
+    const email = (signer.email || "").trim().toLowerCase();
+    if (!email || seenEmails.has(email)) continue;
+    seenEmails.add(email);
+    uniqueByEmail.push(signer);
+  }
+
+  // Asignamos flow_order incremental 1..N
+  for (let i = 0; i < uniqueByEmail.length; i++) {
+    const signer = uniqueByEmail[i];
+    const email = (signer.email || "").trim().toLowerCase();
     const participantRole = signer.debe_visar ? "VISADOR" : "FIRMANTE";
-    const email = (signer.email || "").toLowerCase();
-    const flowOrder = byEmail.get(email) || 1;
+    const flowOrder = i + 1;
 
     const { rows } = await client.query(
       `
@@ -343,7 +376,7 @@ async function syncParticipantsFromSigners(client, { documentId, companyId, sign
         participantRole,
         flowGroup,
         flowOrder,
-        signer.orden,
+        signer.orden, // sort_order = orden visual original
         toJson(
           {
             tipo_original: signer.tipo,
@@ -362,6 +395,10 @@ async function syncParticipantsFromSigners(client, { documentId, companyId, sign
 
   return inserted;
 }
+
+/* ================================
+   STORAGE
+   ================================ */
 
 async function uploadMainPdfToStorage(file, companyId, code) {
   if (!file?.buffer) {
