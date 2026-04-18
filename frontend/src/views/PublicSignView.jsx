@@ -141,7 +141,7 @@ function classifyPublicError(error) {
     title: "No se pudo abrir el documento",
     message:
       "Ocurrió un problema al cargar este enlace. Intenta nuevamente en unos segundos.",
-      canRetry: true,
+    canRetry: true,
   };
 }
 
@@ -270,7 +270,6 @@ function resolveViewState({
   documentStatus,
   signerStatus,
   isVisado,
-  requiresVisado,
 }) {
   if (!hasToken) {
     return {
@@ -305,16 +304,6 @@ function resolveViewState({
     };
   }
 
-  if (isVisado && !requiresVisado) {
-    return {
-      kind: "used",
-      title: "Este documento no requiere visado",
-      message:
-        "El documento se abrió correctamente, pero este enlace no admite registrar un visado.",
-      canRetry: false,
-    };
-  }
-
   const normalizedDocumentStatus = normalizeStatus(documentStatus);
   const normalizedSignerStatus = normalizeStatus(signerStatus);
 
@@ -336,7 +325,7 @@ function resolveViewState({
 
   const visadoAlreadyDone =
     isVisado &&
-    ["VISADO", "APPROVED", "COMPLETED", "COMPLETADO"].includes(
+    ["VISADO", "APPROVED", "COMPLETADO", "COMPLETED"].includes(
       normalizedDocumentStatus
     );
 
@@ -528,9 +517,9 @@ export function PublicSignView({
     return Boolean(
       publicSignMode === "visado" ||
         rawSignerRole.includes("vis") ||
-        (effectiveTokenKind === "document" && requiresVisado)
+        effectiveTokenKind === "document"
     );
-  }, [publicSignMode, rawSignerRole, effectiveTokenKind, requiresVisado]);
+  }, [publicSignMode, rawSignerRole, effectiveTokenKind]);
 
   const resolvedMode = isVisado ? "visado" : "firma";
   const hasToken = !!String(publicSignToken || "").trim();
@@ -695,7 +684,6 @@ export function PublicSignView({
         documentStatus,
         signerStatus,
         isVisado,
-        requiresVisado,
       }),
     [
       hasToken,
@@ -705,7 +693,6 @@ export function PublicSignView({
       documentStatus,
       signerStatus,
       isVisado,
-      requiresVisado,
     ]
   );
 
@@ -722,7 +709,7 @@ export function PublicSignView({
     !!publicSignToken &&
     !!API_BASE &&
     isVisado &&
-    requiresVisado;
+    effectiveTokenKind === "document";
 
   const canSubmitFirma =
     canRenderActions &&

@@ -512,9 +512,15 @@ export function usePublicSign({
         setPublicTokenKind(nextTokenKind);
 
         if (import.meta.env.DEV) {
-          console.log("📄 Public sign payload normalizado:", normalized, {
+          console.log("[PublicAccessSnapshot]", {
+            token,
+            requestedMode,
+            requestedTokenKind,
             nextMode,
             nextTokenKind,
+            hasDocument: !!normalized.document,
+            hasSigner: !!normalized.signer,
+            pdfUrl: normalized.pdfUrl || "",
           });
         }
 
@@ -544,6 +550,10 @@ export function usePublicSign({
         isSigningPortal,
         isVerificationPortal,
       });
+
+      if (import.meta.env.DEV) {
+        console.log("[PublicAccessSnapshot]", snapshot);
+      }
 
       setPublicView(snapshot.publicView);
 
