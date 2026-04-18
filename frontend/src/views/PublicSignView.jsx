@@ -263,24 +263,15 @@ function buildRejectErrorMessage(responseMessage) {
 }
 
 function resolveViewState({
+  hasToken,
   publicSignLoading,
   publicSignError,
   document,
   documentStatus,
   signerStatus,
   isVisado,
-  hasToken,
-  hasAttemptedInitialLoad,
+  hasResolvedFetch,
 }) {
-  if (publicSignLoading) {
-    return {
-      kind: "loading",
-      title: "Cargando documento",
-      message: "Estamos preparando la vista para que puedas revisarlo.",
-      canRetry: false,
-    };
-  }
-
   if (!hasToken) {
     return {
       kind: "invalid",
@@ -291,11 +282,20 @@ function resolveViewState({
     };
   }
 
+  if (publicSignLoading) {
+    return {
+      kind: "loading",
+      title: "Preparando documento",
+      message: "Estamos validando el enlace y cargando la información.",
+      canRetry: false,
+    };
+  }
+
   if (publicSignError) {
     return classifyPublicError(publicSignError);
   }
 
-  if (!document && !hasAttemptedInitialLoad) {
+  if (!hasResolvedFetch) {
     return {
       kind: "loading",
       title: "Preparando documento",
@@ -309,7 +309,7 @@ function resolveViewState({
       kind: "error",
       title: "No se pudo cargar el documento",
       message:
-        "El enlace fue reconocido, pero no se encontró la información necesaria para mostrar el documento. Intenta nuevamente o solicita un nuevo enlace.",
+        "El enlace fue reconocido, pero no se encontró la información necesaria para mostrar el documento.",
       canRetry: true,
     };
   }
@@ -449,27 +449,50 @@ export function PublicSignView({
 }) {
   const API_BASE = useMemo(() => normalizePublicApiBase(API_URL), [API_URL]);
 
-  const document = publicSignDoc?.document || publicSignDoc || null;
+  const [showReject, setShowReject] = useState(false);
+  const [rejectReason, setRejectReason] = useState("");
+  const [rejecting, setRejecting] = useState(false);
+  const [rejectError, setRejectError] = useState("");
+  const [acceptedLegal, setAcceptedLegal] = useState(false);
+  const [legalError, setLegalError] = useState("");
+  const [signing, setSigning] = useState(false);
+  const [actionMessage, setActionMessage] = useState("");
+  const [actionMessageType, setActionMessageType] = useState("info");
+  const [hasResolvedFetch, setHasResolvedFetch] = useState(false);
 
-  const documentMeta =
-    document?.metadata ||
-    document?.meta ||
-    document?.document_metadata ||
-    publicSignDoc?.metadata ||
-    publicSignDoc?.meta ||
-    {};
+  const document = useMemo(() => {
+    if (!publicSignDoc) return null;
+    return publicSignDoc?.document || publicSignDoc || null;
+  }, [publicSignDoc]);
 
-  const signedDocument =
-    publicSignDoc?.signedDocument ||
-    publicSignDoc?.signed_document ||
-    publicSignDoc?.documento_firmado ||
-    null;
+  const documentMeta = useMemo(
+    () =>
+      document?.metadata ||
+      document?.meta ||
+      document?.document_metadata ||
+      publicSignDoc?.metadata ||
+      publicSignDoc?.meta ||
+      {},
+    [document, publicSignDoc]
+  );
 
-  const signer =
-    publicSignDoc?.signer ||
-    publicSignDoc?.currentSigner ||
-    (Array.isArray(publicSignDoc?.signers) ? publicSignDoc.signers[0] : null) ||
-    null;
+  const signedDocument = useMemo(
+    () =>
+      publicSignDoc?.signedDocument ||
+      publicSignDoc?.signed_document ||
+      publicSignDoc?.documento_firmado ||
+      null,
+    [publicSignDoc]
+  );
+
+  const signer = useMemo(
+    () =>
+      publicSignDoc?.signer ||
+      publicSignDoc?.currentSigner ||
+      (Array.isArray(publicSignDoc?.signers) ? publicSignDoc.signers[0] : null) ||
+      null,
+    [publicSignDoc]
+  );
 
   const rawSignerRole = normalizeText(
     signer?.role ||
@@ -495,17 +518,32 @@ export function PublicSignView({
   }, [effectiveTokenKind, publicSignMode, rawSignerRole]);
 
   const resolvedMode = isVisado ? "visado" : "firma";
+  const hasToken = !!String(publicSignToken || "").trim();
 
-  const [showReject, setShowReject] = useState(false);
-  const [rejectReason, setRejectReason] = useState("");
-  const [rejecting, setRejecting] = useState(false);
-  const [rejectError, setRejectError] = useState("");
-  const [acceptedLegal, setAcceptedLegal] = useState(false);
-  const [legalError, setLegalError] = useState("");
-  const [signing, setSigning] = useState(false);
-  const [actionMessage, setActionMessage] = useState("");
-  const [actionMessageType, setActionMessageType] = useState("info");
-  const [hasAttemptedInitialLoad, setHasAttemptedInitialLoad] = useState(false);
+  useEffect(() => {
+    setHasResolvedFetch(false);
+    setActionMessage("");
+    setActionMessageType("info");
+    setAcceptedLegal(false);
+    setLegalError("");
+    setShowReject(false);
+    setRejectReason("");
+    setRejectError("");
+  }, [publicSignToken, resolvedMode, effectiveTokenKind]);
+
+  useEffect(() => {
+    if (!hasToken) {
+      setHasResolvedFetch(true);
+      return;
+    }
+
+    if (publicSignLoading) return;
+
+    if (publicSignError || publicSignDoc) {
+      setHasResolvedFetch(true);
+      return;
+    }
+  }, [hasToken, publicSignLoading, publicSignError, publicSignDoc]);
 
   const pdfUrl = pickFirstNonEmpty(
     publicSignPdfUrl,
@@ -645,52 +683,27 @@ export function PublicSignView({
     document,
   });
 
-  const hasToken = !!String(publicSignToken || "").trim();
-
-  useEffect(() => {
-    setHasAttemptedInitialLoad(false);
-  }, [publicSignToken, resolvedMode, effectiveTokenKind]);
-
-  useEffect(() => {
-    if (!hasToken) return;
-    if (publicSignLoading) return;
-
-    if (document || publicSignError) {
-      setHasAttemptedInitialLoad(true);
-    }
-  }, [hasToken, publicSignLoading, document, publicSignError]);
-
-  useEffect(() => {
-    setActionMessage("");
-    setActionMessageType("info");
-    setAcceptedLegal(false);
-    setLegalError("");
-    setShowReject(false);
-    setRejectReason("");
-    setRejectError("");
-  }, [publicSignToken, resolvedMode, effectiveTokenKind]);
-
   const viewState = useMemo(
     () =>
       resolveViewState({
+        hasToken,
         publicSignLoading,
         publicSignError,
         document,
         documentStatus,
         signerStatus,
         isVisado,
-        hasToken,
-        hasAttemptedInitialLoad,
+        hasResolvedFetch,
       }),
     [
+      hasToken,
       publicSignLoading,
       publicSignError,
       document,
       documentStatus,
       signerStatus,
       isVisado,
-      hasToken,
-      hasAttemptedInitialLoad,
+      hasResolvedFetch,
     ]
   );
 
@@ -699,7 +712,7 @@ export function PublicSignView({
     [viewState, isVisado]
   );
 
-  const canRenderDocument = !!document && viewState.kind !== "loading";
+  const canRenderDocument = !!document;
   const canRenderActions = viewState.kind === "ready";
 
   const canSubmitVisado =
@@ -735,7 +748,7 @@ export function PublicSignView({
   const handleRetryLoad = useCallback(() => {
     if (!publicSignToken || typeof cargarFirmaPublica !== "function") return;
 
-    setHasAttemptedInitialLoad(true);
+    setHasResolvedFetch(false);
 
     cargarFirmaPublica(publicSignToken, {
       mode: resolvedMode,
@@ -748,7 +761,7 @@ export function PublicSignView({
       return null;
     }
 
-    setHasAttemptedInitialLoad(true);
+    setHasResolvedFetch(false);
 
     return await cargarFirmaPublica(publicSignToken, {
       mode: resolvedMode,
@@ -888,7 +901,7 @@ export function PublicSignView({
       canReject,
       documentStatus,
       signerStatus,
-      hasAttemptedInitialLoad,
+      hasResolvedFetch,
     });
   }
 
@@ -1035,7 +1048,9 @@ export function PublicSignView({
         <header className="public-sign-heading">
           <div>
             <div className="public-sign-eyebrow">VeriFirma · Portal público</div>
-            <h1 className="public-sign-title">{titleText}</h1>
+            <h1 className="public-sign-title">
+              {isVisado ? "Visado de documento" : "Firma electrónica"}
+            </h1>
           </div>
           <div className={statusBadge.className}>{statusBadge.label}</div>
         </header>

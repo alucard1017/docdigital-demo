@@ -322,14 +322,19 @@ export function usePublicSign({
       abortRef.current = controller;
 
       async function doFetch(tokenKindToUse) {
-        const path = buildPublicLoadPath(token, tokenKindToUse);
+        const effectiveKind =
+          tokenKindToUse === "document" || tokenKindToUse === "signer"
+            ? tokenKindToUse
+            : "signer";
+
+        const path = buildPublicLoadPath(token, effectiveKind);
 
         if (import.meta.env.DEV) {
           console.log("[PUBLIC LOAD]", {
             token,
             requestedMode,
             requestedTokenKind,
-            tryingTokenKind: tokenKindToUse,
+            tryingTokenKind: effectiveKind,
             path,
           });
         }
@@ -355,17 +360,21 @@ export function usePublicSign({
           throw error;
         }
 
-        return { res, data, tokenKindUsed: tokenKindToUse };
+        return { res, data, tokenKindUsed: effectiveKind };
       }
 
       try {
         setPublicSignLoading(true);
         setPublicSignError("");
 
+        const firstKind =
+          requestedTokenKind ||
+          (requestedMode === "visado" ? "document" : "signer");
+
         let result;
 
         try {
-          result = await doFetch(requestedTokenKind);
+          result = await doFetch(firstKind);
         } catch (err) {
           if (err?.name === "AbortError") throw err;
 
@@ -374,13 +383,13 @@ export function usePublicSign({
           ).toLowerCase();
 
           const shouldRetryAsDocument =
-            requestedTokenKind === "signer" &&
+            firstKind === "signer" &&
             (message.includes("visado") ||
               message.includes("documento") ||
               message.includes("document token"));
 
           const shouldRetryAsSigner =
-            requestedTokenKind === "document" &&
+            firstKind === "document" &&
             (message.includes("firma") ||
               message.includes("firmante") ||
               message.includes("signer"));
@@ -463,6 +472,18 @@ export function usePublicSign({
 
       if (snapshot.publicView === "public-sign") {
         const nextToken = snapshot.token;
+
+        if (!nextToken) {
+          // No rompemos: dejamos el estado claro y listo para que la vista muestre “enlace inválido”
+          setPublicSignToken("");
+          setPublicSignMode(snapshot.mode || null);
+          setPublicTokenKind(null);
+          setPublicSignDoc(null);
+          setPublicSignError("");
+          setPublicSignPdfUrl("");
+          return;
+        }
+
         const nextTokenKind = resolveTokenKind(snapshot);
 
         const nextModeFromUrl = snapshot.mode;
