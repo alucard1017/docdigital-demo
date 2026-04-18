@@ -23,6 +23,51 @@ const NO_FILE_MESSAGE = "Documento sin archivo asociado";
 const EXPIRED_LINK_MESSAGE =
   "El enlace público ha expirado. Solicita uno nuevo al emisor.";
 
+/**
+ * Dado un documento y los datos del firmante/visador público,
+ * resuelve el id real de document_participants para respetar la FK
+ * document_events.participant_id -> document_participants.id.
+ */
+async function resolveParticipantIdForPublicEvent({
+  documentId,
+  email,
+  roleInDoc,
+}) {
+  if (!documentId || !email) return null;
+
+  try {
+    const res = await db.query(
+      `
+      SELECT id
+      FROM document_participants
+      WHERE document_id = $1
+        AND email = $2
+        AND ($3::text IS NULL OR role_in_doc = $3)
+      ORDER BY id ASC
+      LIMIT 1
+      `,
+      [documentId, email, roleInDoc || null]
+    );
+
+    if (!res.rows.length) {
+      return null;
+    }
+
+    return res.rows[0].id;
+  } catch (err) {
+    console.error(
+      "⚠️ Error resolviendo participant_id para evento público:",
+      {
+        documentId,
+        email,
+        roleInDoc,
+        error: err,
+      }
+    );
+    return null;
+  }
+}
+
 function buildDocumentFilePath(row) {
   return row?.pdf_final_url || row?.pdf_original_url || row?.file_path || null;
 }
@@ -162,10 +207,17 @@ async function getPublicDocBySignerToken(req, res) {
     if (!pdfUrl) return;
 
     try {
+      const participantId =
+        (await resolveParticipantIdForPublicEvent({
+          documentId: row.id,
+          email: row.signer_email,
+          roleInDoc: row.signer_role,
+        })) || null;
+
       await insertPublicEvent({
         req,
         doc: row,
-        participantId: row.signer_id || null,
+        participantId,
         actor: row.signer_name || row.signer_email || "Firmante externo",
         action: "PUBLIC_LINK_OPENED_SIGNER",
         details: "Apertura de enlace público de firma por firmante",
@@ -414,7 +466,6 @@ async function publicSignDocument(req, res) {
       );
     }
 
-    // NUEVO: contar solo firmantes reales (no visadores / solo must_sign = true)
     const countRes = await db.query(
       `
       SELECT 
@@ -497,10 +548,17 @@ async function publicSignDocument(req, res) {
     const fromStatus = row.status;
     const toStatus = newDocStatus;
 
+    const participantId =
+      (await resolveParticipantIdForPublicEvent({
+        documentId: doc.id,
+        email: row.signer_email,
+        roleInDoc: row.signer_role,
+      })) || null;
+
     await insertPublicEvent({
       req,
       doc,
-      participantId: row.signer_id || null,
+      participantId,
       actor: row.signer_name || row.signer_email || "Firmante externo",
       action: "SIGNED_PUBLIC",
       details: allSigned
@@ -781,10 +839,17 @@ async function publicRejectDocument(req, res) {
     const fromStatus = row.status;
     const toStatus = "RECHAZADO";
 
+    const participantId =
+      (await resolveParticipantIdForPublicEvent({
+        documentId: doc.id,
+        email: row.signer_email,
+        roleInDoc: row.signer_role,
+      })) || null;
+
     await insertPublicEvent({
       req,
       doc,
-      participantId: row.signer_id || null,
+      participantId,
       actor: row.signer_name || row.signer_email || "Firmante externo",
       action: "REJECTED_PUBLIC",
       details: `Documento rechazado desde enlace público. Motivo: ${motivo}`,
