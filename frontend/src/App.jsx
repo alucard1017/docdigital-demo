@@ -862,7 +862,7 @@ function App() {
 
   // Firma / visado público
   if (isPublicSigningAccess) {
-    const effectiveToken = tokenFromUrl || publicSignToken || "";
+    const effectiveToken = (tokenFromUrl || publicSignToken || "").trim();
 
     const effectivePublicMode =
       publicSignMode || effectivePublicModeFromUrl || "firma";
@@ -871,6 +871,18 @@ function App() {
       publicTokenKind ||
       effectiveTokenKindFromUrl ||
       (effectivePublicMode === "visado" ? "document" : "signer");
+
+    if (import.meta.env.DEV) {
+      console.log("[PublicAccessSnapshot]", {
+        path,
+        tokenFromUrl,
+        publicSignToken,
+        effectiveToken,
+        effectivePublicMode,
+        effectiveTokenKind,
+        isDocumentTokenPath,
+      });
+    }
 
     return (
       <PublicSignView

@@ -84,7 +84,7 @@ function classifyPublicError(error) {
 
   if (!text) {
     return {
-      kind: "generic-error",
+      kind: "error",
       title: "No se pudo abrir el documento",
       message:
         "Ocurrió un problema al cargar este enlace. Intenta nuevamente en unos segundos.",
@@ -137,171 +137,12 @@ function classifyPublicError(error) {
   }
 
   return {
-    kind: "generic-error",
+    kind: "error",
     title: "No se pudo abrir el documento",
     message:
       "Ocurrió un problema al cargar este enlace. Intenta nuevamente en unos segundos.",
     canRetry: true,
   };
-}
-
-function resolvePublicState({
-  publicSignError,
-  document,
-  documentStatus,
-  signerStatus,
-  isVisado,
-}) {
-  if (publicSignError) {
-    return classifyPublicError(publicSignError);
-  }
-
-  if (!document) {
-    return {
-      kind: "loading",
-      title: "",
-      message: "",
-      canRetry: false,
-    };
-  }
-
-  const documentRejected =
-    documentStatus === "RECHAZADO" || documentStatus === "REJECTED";
-
-  const documentCompleted =
-    !isVisado &&
-    ["FIRMADO", "SIGNED", "COMPLETED", "COMPLETADO"].includes(documentStatus);
-
-  const signerAlreadyDone =
-    !isVisado &&
-    ["FIRMADO", "SIGNED", "COMPLETED", "COMPLETADO"].includes(signerStatus);
-
-  const visadoAlreadyDone =
-    isVisado && ["VISADO"].includes(documentStatus);
-
-  const visadoPending =
-    isVisado &&
-    ["PENDIENTE_VISADO", "PENDIENTE", ""].includes(documentStatus);
-
-  if (documentRejected) {
-    return {
-      kind: "rejected",
-      title: "Este documento fue rechazado",
-      message: "El flujo quedó cerrado y este enlace ya no admite acciones.",
-      canRetry: false,
-    };
-  }
-
-  if (documentCompleted) {
-    return {
-      kind: "completed",
-      title: "Este documento ya fue firmado",
-      message:
-        "El proceso ya fue completado y no puedes realizar nuevas acciones desde este enlace.",
-      canRetry: false,
-    };
-  }
-
-  if (signerAlreadyDone) {
-    return {
-      kind: "used",
-      title: "Tu firma ya fue registrada",
-      message:
-        "Este enlace ya fue usado anteriormente y no requiere una nueva acción.",
-      canRetry: false,
-    };
-  }
-
-  if (visadoAlreadyDone) {
-    return {
-      kind: "used",
-      title: "El visado ya fue registrado",
-      message:
-        "La revisión del documento ya fue procesada y este enlace no requiere otra acción.",
-      canRetry: false,
-    };
-  }
-
-  if (visadoPending || isVisado) {
-    return {
-      kind: "pending",
-      title: "Pendiente de visado",
-      message: "Revisa el documento y registra tu visado cuando estés listo.",
-      canRetry: false,
-    };
-  }
-
-  return {
-    kind: "pending",
-    title: "Pendiente de firma",
-    message: "Revisa el documento y registra tu firma cuando estés listo.",
-    canRetry: false,
-  };
-}
-
-function getStatusBadge(state, isVisado) {
-  switch (state.kind) {
-    case "completed":
-      return {
-        label: "Completado",
-        className: "public-sign-status public-sign-status--success",
-      };
-
-    case "used":
-      return {
-        label: "Sin acción",
-        className: "public-sign-status public-sign-status--warning",
-      };
-
-    case "rejected":
-    case "expired":
-    case "invalid":
-    case "generic-error":
-      return {
-        label:
-          state.kind === "expired"
-            ? "Enlace vencido"
-            : state.kind === "invalid"
-            ? "Enlace inválido"
-            : state.kind === "rejected"
-            ? "Rechazado"
-            : "Error",
-        className: "public-sign-status public-sign-status--danger",
-      };
-
-    default:
-      return {
-        label: isVisado ? "Pendiente de visado" : "Pendiente de firma",
-        className: isVisado
-          ? "public-sign-status public-sign-status--warning"
-          : "public-sign-status public-sign-status--info",
-      };
-  }
-}
-
-function buildActionSuccessMessage(isVisado, responseMessage) {
-  return sanitizePublicMessage(
-    responseMessage,
-    isVisado
-      ? "Visado registrado correctamente."
-      : "Firma registrada correctamente."
-  );
-}
-
-function buildActionErrorMessage(isVisado, responseMessage) {
-  return sanitizePublicMessage(
-    responseMessage,
-    isVisado
-      ? "No se pudo registrar el visado. Intenta nuevamente."
-      : "No se pudo registrar la firma. Intenta nuevamente."
-  );
-}
-
-function buildRejectErrorMessage(responseMessage) {
-  return sanitizePublicMessage(
-    responseMessage,
-    "No se pudo registrar el rechazo. Intenta nuevamente."
-  );
 }
 
 function resolveSignerRoleLabel(signer, isVisado) {
@@ -394,6 +235,202 @@ function buildRejectEndpoint({ apiBase, token, tokenKind }) {
   }
 
   return `${apiBase}/public/docs/${encoded}/rechazar`;
+}
+
+function buildActionSuccessMessage(isVisado, responseMessage) {
+  return sanitizePublicMessage(
+    responseMessage,
+    isVisado
+      ? "Visado registrado correctamente."
+      : "Firma registrada correctamente."
+  );
+}
+
+function buildActionErrorMessage(isVisado, responseMessage) {
+  return sanitizePublicMessage(
+    responseMessage,
+    isVisado
+      ? "No se pudo registrar el visado. Intenta nuevamente."
+      : "No se pudo registrar la firma. Intenta nuevamente."
+  );
+}
+
+function buildRejectErrorMessage(responseMessage) {
+  return sanitizePublicMessage(
+    responseMessage,
+    "No se pudo registrar el rechazo. Intenta nuevamente."
+  );
+}
+
+function resolveViewState({
+  publicSignLoading,
+  publicSignError,
+  document,
+  documentStatus,
+  signerStatus,
+  isVisado,
+  hasToken,
+}) {
+  if (publicSignLoading) {
+    return {
+      kind: "loading",
+      title: "Cargando documento",
+      message: "Estamos preparando la vista para que puedas revisarlo.",
+      canRetry: false,
+    };
+  }
+
+  if (!hasToken) {
+    return {
+      kind: "invalid",
+      title: "Este enlace no es válido",
+      message:
+        "No pudimos validar este acceso. Abre el enlace completo desde tu correo o solicita uno nuevo.",
+      canRetry: false,
+    };
+  }
+
+  if (publicSignError) {
+    return classifyPublicError(publicSignError);
+  }
+
+  if (!document) {
+    return {
+      kind: "error",
+      title: "No se pudo cargar el documento",
+      message:
+        "El enlace fue reconocido, pero no se encontró la información necesaria para mostrar el documento. Intenta nuevamente o solicita un nuevo enlace.",
+      canRetry: true,
+    };
+  }
+
+  const normalizedDocumentStatus = normalizeStatus(documentStatus);
+  const normalizedSignerStatus = normalizeStatus(signerStatus);
+
+  const documentRejected =
+    normalizedDocumentStatus === "RECHAZADO" ||
+    normalizedDocumentStatus === "REJECTED";
+
+  const documentCompleted =
+    !isVisado &&
+    ["FIRMADO", "SIGNED", "COMPLETED", "COMPLETADO"].includes(
+      normalizedDocumentStatus
+    );
+
+  const signerAlreadyDone =
+    !isVisado &&
+    ["FIRMADO", "SIGNED", "COMPLETED", "COMPLETADO"].includes(
+      normalizedSignerStatus
+    );
+
+  const visadoAlreadyDone =
+    isVisado &&
+    ["VISADO", "APPROVED", "COMPLETED", "COMPLETADO"].includes(
+      normalizedDocumentStatus
+    );
+
+  if (documentRejected) {
+    return {
+      kind: "rejected",
+      title: "Este documento fue rechazado",
+      message: "El flujo quedó cerrado y este enlace ya no admite acciones.",
+      canRetry: false,
+    };
+  }
+
+  if (documentCompleted) {
+    return {
+      kind: "completed",
+      title: "Este documento ya fue firmado",
+      message:
+        "El proceso ya fue completado y no puedes realizar nuevas acciones desde este enlace.",
+      canRetry: false,
+    };
+  }
+
+  if (signerAlreadyDone) {
+    return {
+      kind: "used",
+      title: "Tu firma ya fue registrada",
+      message:
+        "Este enlace ya fue usado anteriormente y no requiere una nueva acción.",
+      canRetry: false,
+    };
+  }
+
+  if (visadoAlreadyDone) {
+    return {
+      kind: "used",
+      title: "El visado ya fue registrado",
+      message:
+        "La revisión del documento ya fue procesada y este enlace no requiere otra acción.",
+      canRetry: false,
+    };
+  }
+
+  return {
+    kind: "ready",
+    title: isVisado ? "Pendiente de visado" : "Pendiente de firma",
+    message: isVisado
+      ? "Revisa el documento y registra tu visado cuando estés listo."
+      : "Revisa el documento y registra tu firma cuando estés listo.",
+    canRetry: false,
+  };
+}
+
+function getStatusBadge(viewState, isVisado) {
+  switch (viewState.kind) {
+    case "completed":
+      return {
+        label: "Completado",
+        className: "public-sign-status public-sign-status--success",
+      };
+
+    case "used":
+      return {
+        label: "Sin acción",
+        className: "public-sign-status public-sign-status--warning",
+      };
+
+    case "rejected":
+      return {
+        label: "Rechazado",
+        className: "public-sign-status public-sign-status--danger",
+      };
+
+    case "expired":
+      return {
+        label: "Enlace vencido",
+        className: "public-sign-status public-sign-status--danger",
+      };
+
+    case "invalid":
+      return {
+        label: "Enlace inválido",
+        className: "public-sign-status public-sign-status--danger",
+      };
+
+    case "error":
+      return {
+        label: "Error",
+        className: "public-sign-status public-sign-status--danger",
+      };
+
+    case "loading":
+      return {
+        label: "Cargando",
+        className: "public-sign-status public-sign-status--info",
+      };
+
+    case "ready":
+    default:
+      return {
+        label: isVisado ? "Pendiente de visado" : "Pendiente de firma",
+        className: isVisado
+          ? "public-sign-status public-sign-status--warning"
+          : "public-sign-status public-sign-status--info",
+      };
+  }
 }
 
 export function PublicSignView({
@@ -604,38 +641,40 @@ export function PublicSignView({
     document,
   });
 
-  const flowState = resolvePublicState({
+  const hasToken = !!String(publicSignToken || "").trim();
+
+  const viewState = resolveViewState({
+    publicSignLoading,
     publicSignError,
     document,
     documentStatus,
     signerStatus,
     isVisado,
+    hasToken,
   });
 
-  const statusBadge = getStatusBadge(flowState, isVisado);
+  const statusBadge = getStatusBadge(viewState, isVisado);
 
-const isPendingFlow = flowState.kind === "pending" && !!document && !publicSignLoading;
+  const canRenderDocument = !!document && viewState.kind !== "loading";
+  const canRenderActions = viewState.kind === "ready";
+  const canSubmitVisado =
+    canRenderActions && !!publicSignToken && !!API_BASE && isVisado;
+  const canSubmitFirma =
+    canRenderActions &&
+    !!publicSignToken &&
+    !!API_BASE &&
+    !isVisado &&
+    effectiveTokenKind === "signer";
 
-const canRenderActions = true;
+  const canSubmitAction = canSubmitVisado || canSubmitFirma;
 
-const canSubmitVisado = isPendingFlow && !!publicSignToken && !!API_BASE && isVisado;
-const canSubmitFirma =
-  isPendingFlow &&
-  !!publicSignToken &&
-  !!API_BASE &&
-  !isVisado &&
-  effectiveTokenKind === "signer";
+  const canReject =
+    canRenderActions &&
+    !isVisado &&
+    effectiveTokenKind === "signer" &&
+    !!publicSignToken &&
+    !!API_BASE;
 
-const canSubmitAction = canSubmitVisado || canSubmitFirma;
-
-const canReject =
-  !isVisado &&
-  isPendingFlow &&
-  effectiveTokenKind === "signer" &&
-  !!publicSignToken &&
-  !!API_BASE;
-
-  const showSkeleton = publicSignLoading && !document && !publicSignError;
   const titleText = isVisado ? "Visado de documento" : "Firma electrónica";
 
   useEffect(() => {
@@ -791,151 +830,151 @@ const canReject =
     setRejectError("");
   }, [canReject]);
 
-  const showPassiveStateCard =
-    !canRenderActions &&
-    document &&
-    !publicSignLoading &&
-    flowState.kind !== "pending";
-
   if (import.meta.env.DEV) {
-    console.log("[PUBLIC ACTION BLOCK CHECK]", {
-      flowStateKind: flowState.kind,
+    console.log("[PUBLIC VIEW STATE]", {
+      viewStateKind: viewState.kind,
       hasDocument: !!document,
-      hasToken: !!publicSignToken,
+      hasToken,
       apiBase: API_BASE,
       publicSignLoading,
+      hasError: !!publicSignError,
       isVisado,
       effectiveTokenKind,
+      canRenderDocument,
       canRenderActions,
       canSubmitAction,
       canReject,
+      documentStatus,
+      signerStatus,
     });
   }
 
-const actionBlock = canRenderActions ? (
-  <div className="public-sign-action-block">
-    <div className="public-sign-legal-box">
-      <label className="public-sign-legal-check">
-        <input
-          type="checkbox"
-          checked={acceptedLegal}
-          onChange={(e) => {
-            setAcceptedLegal(e.target.checked);
-            if (e.target.checked) setLegalError("");
-          }}
-        />
-        <span>
-          He leído y acepto el aviso legal para registrar mi{" "}
-          {isVisado ? "visado" : "firma electrónica"}.
-        </span>
-      </label>
-    </div>
-
-    {legalError && (
-      <div className="public-sign-inline-error">{legalError}</div>
-    )}
-
-    {!canSubmitAction && (
-      <div className="public-sign-inline-error">
-        No se puede habilitar la acción porque faltan datos del enlace o de la API.
+  const actionBlock = canRenderActions ? (
+    <div className="public-sign-action-block">
+      <div className="public-sign-legal-box">
+        <label className="public-sign-legal-check">
+          <input
+            type="checkbox"
+            checked={acceptedLegal}
+            onChange={(e) => {
+              setAcceptedLegal(e.target.checked);
+              if (e.target.checked) setLegalError("");
+            }}
+          />
+          <span>
+            He leído y acepto el aviso legal para registrar mi{" "}
+            {isVisado ? "visado" : "firma electrónica"}.
+          </span>
+        </label>
       </div>
-    )}
 
-    <p className="public-sign-helper-text">
-      Al continuar, registrarás tu {isVisado ? "visado" : "firma electrónica"}.
-      Esta acción no se puede deshacer.
-    </p>
+      <ElectronicSignatureNotice />
 
-    {!showReject && (
-      <div className="public-sign-actions">
-        <button
-          type="button"
-          className={`public-sign-button public-sign-button--primary ${
-            isVisado
-              ? "public-sign-button--warning"
-              : "public-sign-button--info"
-          }`}
-          onClick={handleConfirm}
-          disabled={signing || rejecting || !acceptedLegal || !canSubmitAction}
-        >
-          {signing
-            ? "Procesando..."
-            : isVisado
-            ? "Registrar visado"
-            : signerRoleLabel === "Firmante final"
-            ? "Registrar firma final"
-            : "Registrar firma"}
-        </button>
+      {legalError && (
+        <div className="public-sign-inline-error">{legalError}</div>
+      )}
 
-        {canReject && (
-          <button
-            type="button"
-            className="public-sign-button public-sign-button--danger"
-            onClick={handleToggleReject}
-            disabled={signing || rejecting}
-          >
-            Rechazar documento
-          </button>
-        )}
-      </div>
-    )}
-
-    {showReject && canReject && (
-      <div className="public-sign-reject-card">
-        <h2 className="public-sign-reject-card__title">
-          Rechazar documento
-        </h2>
-
-        <p className="public-sign-reject-card__text">
-          Explica brevemente el motivo. Esta información puede compartirse con
-          la empresa que te envió el documento.
-        </p>
-
-        <textarea
-          rows={5}
-          value={rejectReason}
-          onChange={(e) => setRejectReason(e.target.value)}
-          className="public-sign-textarea"
-          placeholder="Escribe aquí el motivo del rechazo..."
-          disabled={rejecting}
-          aria-invalid={rejectError ? "true" : "false"}
-          aria-describedby={
-            rejectError ? "public-sign-reject-error" : undefined
-          }
-        />
-
-        {rejectError && (
-          <div
-            id="public-sign-reject-error"
-            className="public-sign-inline-error"
-          >
-            {rejectError}
-          </div>
-        )}
-
-        <div className="public-sign-reject-actions">
-          <button
-            type="button"
-            className="public-sign-button public-sign-button--secondary"
-            onClick={handleToggleReject}
-            disabled={rejecting}
-          >
-            Cancelar
-          </button>
-
-          <button
-            type="button"
-            className="public-sign-button public-sign-button--danger-solid"
-            onClick={handleReject}
-            disabled={rejecting || signing}
-          >
-            {rejecting ? "Enviando..." : "Confirmar rechazo"}
-          </button>
+      {!canSubmitAction && (
+        <div className="public-sign-inline-error">
+          No se puede habilitar la acción porque faltan datos del enlace o de la API.
         </div>
-      </div>
-    )}
-  </div>
-) : null;
+      )}
+
+      <p className="public-sign-helper-text">
+        Al continuar, registrarás tu {isVisado ? "visado" : "firma electrónica"}.
+        Esta acción no se puede deshacer.
+      </p>
+
+      {!showReject && (
+        <div className="public-sign-actions">
+          <button
+            type="button"
+            className={`public-sign-button public-sign-button--primary ${
+              isVisado
+                ? "public-sign-button--warning"
+                : "public-sign-button--info"
+            }`}
+            onClick={handleConfirm}
+            disabled={signing || rejecting || !acceptedLegal || !canSubmitAction}
+          >
+            {signing
+              ? "Procesando..."
+              : isVisado
+              ? "Registrar visado"
+              : signerRoleLabel === "Firmante final"
+              ? "Registrar firma final"
+              : "Registrar firma"}
+          </button>
+
+          {canReject && (
+            <button
+              type="button"
+              className="public-sign-button public-sign-button--danger"
+              onClick={handleToggleReject}
+              disabled={signing || rejecting}
+            >
+              Rechazar documento
+            </button>
+          )}
+        </div>
+      )}
+
+      {showReject && canReject && (
+        <div className="public-sign-reject-card">
+          <h2 className="public-sign-reject-card__title">
+            Rechazar documento
+          </h2>
+
+          <p className="public-sign-reject-card__text">
+            Explica brevemente el motivo. Esta información puede compartirse con
+            la empresa que te envió el documento.
+          </p>
+
+          <textarea
+            rows={5}
+            value={rejectReason}
+            onChange={(e) => setRejectReason(e.target.value)}
+            className="public-sign-textarea"
+            placeholder="Escribe aquí el motivo del rechazo..."
+            disabled={rejecting}
+            aria-invalid={rejectError ? "true" : "false"}
+            aria-describedby={
+              rejectError ? "public-sign-reject-error" : undefined
+            }
+          />
+
+          {rejectError && (
+            <div
+              id="public-sign-reject-error"
+              className="public-sign-inline-error"
+            >
+              {rejectError}
+            </div>
+          )}
+
+          <div className="public-sign-reject-actions">
+            <button
+              type="button"
+              className="public-sign-button public-sign-button--secondary"
+              onClick={handleToggleReject}
+              disabled={rejecting}
+            >
+              Cancelar
+            </button>
+
+            <button
+              type="button"
+              className="public-sign-button public-sign-button--danger-solid"
+              onClick={handleReject}
+              disabled={rejecting || signing}
+            >
+              {rejecting ? "Enviando..." : "Confirmar rechazo"}
+            </button>
+          </div>
+        </div>
+      )}
+    </div>
+  ) : null;
 
   const messageCardClassName = `public-sign-message-card ${
     actionMessageType === "error"
@@ -970,16 +1009,16 @@ const actionBlock = canRenderActions ? (
                 : "public-sign-intro__title--info"
             }`}
           >
-            {flowState.kind === "pending"
+            {viewState.kind === "ready"
               ? isVisado
                 ? "Revisa este documento para registrar tu visado"
                 : signerRoleLabel === "Firmante final"
                 ? "Revisa este documento para registrar tu firma final"
                 : "Revisa este documento para registrar tu firma"
-              : flowState.title}
+              : viewState.title}
           </div>
 
-          <div className="public-sign-intro__text">{flowState.message}</div>
+          <div className="public-sign-intro__text">{viewState.message}</div>
         </section>
 
         {actionMessage && (
@@ -988,7 +1027,7 @@ const actionBlock = canRenderActions ? (
           </div>
         )}
 
-        {showSkeleton && (
+        {viewState.kind === "loading" && (
           <div className="public-sign-message-card">
             <div className="spinner public-sign-spinner" />
             <div className="public-sign-message-card__title">
@@ -1000,29 +1039,41 @@ const actionBlock = canRenderActions ? (
           </div>
         )}
 
-        {publicSignError && (
-          <div className="public-sign-message-card public-sign-message-card--error">
-            <div className="public-sign-message-card__title">
-              {flowState.title}
-            </div>
-            <div className="public-sign-message-card__text">
-              {flowState.message}
-            </div>
+        {["invalid", "expired", "used", "rejected", "completed", "error"].includes(
+          viewState.kind
+        ) &&
+          !canRenderDocument && (
+            <div
+              className={`public-sign-message-card ${
+                viewState.kind === "error" ||
+                viewState.kind === "invalid" ||
+                viewState.kind === "expired" ||
+                viewState.kind === "rejected"
+                  ? "public-sign-message-card--error"
+                  : "public-sign-message-card--info"
+              }`}
+            >
+              <div className="public-sign-message-card__title">
+                {viewState.title}
+              </div>
+              <div className="public-sign-message-card__text">
+                {viewState.message}
+              </div>
 
-            {flowState.canRetry && (
-              <button
-                type="button"
-                className="public-sign-button public-sign-button--secondary public-sign-button--auto"
-                onClick={handleRetryLoad}
-                disabled={publicSignLoading}
-              >
-                Reintentar carga
-              </button>
-            )}
-          </div>
-        )}
+              {viewState.canRetry && (
+                <button
+                  type="button"
+                  className="public-sign-button public-sign-button--secondary public-sign-button--auto"
+                  onClick={handleRetryLoad}
+                  disabled={publicSignLoading}
+                >
+                  Reintentar carga
+                </button>
+              )}
+            </div>
+          )}
 
-        {document && !publicSignLoading && !publicSignError && (
+        {canRenderDocument && (
           <div className="public-sign-layout">
             <aside className="public-sign-sidebar">
               <div className="public-sign-summary">
@@ -1113,14 +1164,25 @@ const actionBlock = canRenderActions ? (
                 </a>
               )}
 
-              {showPassiveStateCard && (
+              {viewState.kind !== "ready" && (
                 <div className="public-sign-message-card public-sign-message-card--info">
                   <div className="public-sign-message-card__title">
-                    {flowState.title}
+                    {viewState.title}
                   </div>
                   <div className="public-sign-message-card__text">
-                    {flowState.message}
+                    {viewState.message}
                   </div>
+
+                  {viewState.canRetry && (
+                    <button
+                      type="button"
+                      className="public-sign-button public-sign-button--secondary public-sign-button--auto"
+                      onClick={handleRetryLoad}
+                      disabled={publicSignLoading}
+                    >
+                      Reintentar carga
+                    </button>
+                  )}
                 </div>
               )}
 

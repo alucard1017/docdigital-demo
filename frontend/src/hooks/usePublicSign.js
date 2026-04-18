@@ -290,164 +290,166 @@ export function usePublicSign({
    * - mode: "firma" | "visado" | null
    * - tokenKind: "signer" | "document"
    */
-const cargarFirmaPublica = useCallback(
-  async (tokenParam, options = {}) => {
-    const token = String(tokenParam || "").trim();
-    const requestedMode = options.mode ?? null;
-    const requestedTokenKind =
-      options.tokenKind === "document" || options.tokenKind === "signer"
-        ? options.tokenKind
-        : null;
+  const cargarFirmaPublica = useCallback(
+    async (tokenParam, options = {}) => {
+      const token = String(tokenParam || "").trim();
+      const requestedMode = options.mode ?? null;
+      const requestedTokenKind =
+        options.tokenKind === "document" || options.tokenKind === "signer"
+          ? options.tokenKind
+          : null;
 
-    if (!token) {
-      setPublicSignError("No se recibió el token del documento.");
-      setPublicSignDoc(null);
-      setPublicSignPdfUrl("");
-      return null;
-    }
-
-    if (!apiBase) {
-      setPublicSignError("La URL del servicio público no está configurada.");
-      setPublicSignDoc(null);
-      setPublicSignPdfUrl("");
-      return null;
-    }
-
-    if (abortRef.current) {
-      abortRef.current.abort();
-    }
-
-    const controller = new AbortController();
-    abortRef.current = controller;
-
-    async function doFetch(tokenKindToUse) {
-      const path = buildPublicLoadPath(token, tokenKindToUse);
-
-      if (import.meta.env.DEV) {
-        console.log("[PUBLIC LOAD]", {
-          token,
-          requestedMode,
-          requestedTokenKind,
-          tryingTokenKind: tokenKindToUse,
-          path,
-        });
-      }
-
-      const res = await fetch(`${apiBase}${path}`, {
-        method: "GET",
-        signal: controller.signal,
-      });
-
-      let data = {};
-      try {
-        data = await res.json();
-      } catch {
-        data = {};
-      }
-
-      if (!res.ok) {
-        const error = new Error(data?.message || "No se pudo cargar el documento");
-        error.status = res.status;
-        error.payload = data;
-        throw error;
-      }
-
-      return { res, data, tokenKindUsed: tokenKindToUse };
-    }
-
-    try {
-      setPublicSignLoading(true);
-      setPublicSignError("");
-
-      let result;
-
-      try {
-        result = await doFetch(requestedTokenKind);
-      } catch (err) {
-        if (err?.name === "AbortError") throw err;
-
-        const message = String(
-          err?.payload?.message || err?.message || ""
-        ).toLowerCase();
-
-        const shouldRetryAsDocument =
-          requestedTokenKind === "signer" &&
-          (message.includes("visado") ||
-            message.includes("documento") ||
-            message.includes("document token"));
-
-        const shouldRetryAsSigner =
-          requestedTokenKind === "document" &&
-          (message.includes("firma") ||
-            message.includes("firmante") ||
-            message.includes("signer"));
-
-        if (shouldRetryAsDocument) {
-          result = await doFetch("document");
-        } else if (shouldRetryAsSigner) {
-          result = await doFetch("signer");
-        } else {
-          throw err;
-        }
-      }
-
-      const normalized = normalizePublicDocumentResponse(
-        result.data,
-        requestedMode
-      );
-
-      const nextTokenKind =
-        normalized.tokenKind ||
-        result.tokenKindUsed ||
-        (requestedMode === "visado" ? "document" : "signer");
-
-      const nextMode =
-        normalized.mode ||
-        requestedMode ||
-        (nextTokenKind === "document" ? "visado" : "firma");
-
-      setPublicSignDoc({
-        ...normalized.raw,
-        document: normalized.document,
-        signer: normalized.signer,
-        numero_contrato:
-          normalized.document?.numero_contrato ||
-          normalized.raw?.numero_contrato ||
-          "",
-      });
-
-      setPublicSignPdfUrl(normalized.pdfUrl || "");
-      setPublicSignToken(token);
-      setPublicSignMode(nextMode);
-      setPublicTokenKind(nextTokenKind);
-
-      if (import.meta.env.DEV) {
-        console.log("📄 Public sign payload normalizado:", normalized, {
-          nextMode,
-          nextTokenKind,
-        });
-      }
-
-      return normalized;
-    } catch (err) {
-      if (err?.name === "AbortError") {
+      if (!token) {
+        setPublicSignError("No se recibió el token del documento.");
+        setPublicSignDoc(null);
+        setPublicSignPdfUrl("");
         return null;
       }
 
-      console.error("❌ Error cargando firma pública:", err);
-      setPublicSignError(err?.message || "No se pudo cargar el documento");
-      setPublicSignDoc(null);
-      setPublicSignPdfUrl("");
-      return null;
-    } finally {
-      if (abortRef.current === controller) {
-        setPublicSignLoading(false);
-        abortRef.current = null;
+      if (!apiBase) {
+        setPublicSignError("La URL del servicio público no está configurada.");
+        setPublicSignDoc(null);
+        setPublicSignPdfUrl("");
+        return null;
       }
-    }
-  },
-  [apiBase]
-);
+
+      if (abortRef.current) {
+        abortRef.current.abort();
+      }
+
+      const controller = new AbortController();
+      abortRef.current = controller;
+
+      async function doFetch(tokenKindToUse) {
+        const path = buildPublicLoadPath(token, tokenKindToUse);
+
+        if (import.meta.env.DEV) {
+          console.log("[PUBLIC LOAD]", {
+            token,
+            requestedMode,
+            requestedTokenKind,
+            tryingTokenKind: tokenKindToUse,
+            path,
+          });
+        }
+
+        const res = await fetch(`${apiBase}${path}`, {
+          method: "GET",
+          signal: controller.signal,
+        });
+
+        let data = {};
+        try {
+          data = await res.json();
+        } catch {
+          data = {};
+        }
+
+        if (!res.ok) {
+          const error = new Error(
+            data?.message || "No se pudo cargar el documento"
+          );
+          error.status = res.status;
+          error.payload = data;
+          throw error;
+        }
+
+        return { res, data, tokenKindUsed: tokenKindToUse };
+      }
+
+      try {
+        setPublicSignLoading(true);
+        setPublicSignError("");
+
+        let result;
+
+        try {
+          result = await doFetch(requestedTokenKind);
+        } catch (err) {
+          if (err?.name === "AbortError") throw err;
+
+          const message = String(
+            err?.payload?.message || err?.message || ""
+          ).toLowerCase();
+
+          const shouldRetryAsDocument =
+            requestedTokenKind === "signer" &&
+            (message.includes("visado") ||
+              message.includes("documento") ||
+              message.includes("document token"));
+
+          const shouldRetryAsSigner =
+            requestedTokenKind === "document" &&
+            (message.includes("firma") ||
+              message.includes("firmante") ||
+              message.includes("signer"));
+
+          if (shouldRetryAsDocument) {
+            result = await doFetch("document");
+          } else if (shouldRetryAsSigner) {
+            result = await doFetch("signer");
+          } else {
+            throw err;
+          }
+        }
+
+        const normalized = normalizePublicDocumentResponse(
+          result.data,
+          requestedMode
+        );
+
+        const nextTokenKind =
+          normalized.tokenKind ||
+          result.tokenKindUsed ||
+          (requestedMode === "visado" ? "document" : "signer");
+
+        const nextMode =
+          normalized.mode ||
+          requestedMode ||
+          (nextTokenKind === "document" ? "visado" : "firma");
+
+        setPublicSignDoc({
+          ...normalized.raw,
+          document: normalized.document,
+          signer: normalized.signer,
+          numero_contrato:
+            normalized.document?.numero_contrato ||
+            normalized.raw?.numero_contrato ||
+            "",
+        });
+
+        setPublicSignPdfUrl(normalized.pdfUrl || "");
+        setPublicSignToken(token);
+        setPublicSignMode(nextMode);
+        setPublicTokenKind(nextTokenKind);
+
+        if (import.meta.env.DEV) {
+          console.log("📄 Public sign payload normalizado:", normalized, {
+            nextMode,
+            nextTokenKind,
+          });
+        }
+
+        return normalized;
+      } catch (err) {
+        if (err?.name === "AbortError") {
+          return null;
+        }
+
+        console.error("❌ Error cargando firma pública:", err);
+        setPublicSignError(err?.message || "No se pudo cargar el documento");
+        setPublicSignDoc(null);
+        setPublicSignPdfUrl("");
+        return null;
+      } finally {
+        if (abortRef.current === controller) {
+          setPublicSignLoading(false);
+          abortRef.current = null;
+        }
+      }
+    },
+    [apiBase]
+  );
 
   useEffect(() => {
     const syncViewWithLocation = () => {

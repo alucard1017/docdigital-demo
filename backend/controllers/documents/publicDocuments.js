@@ -57,7 +57,7 @@ async function buildSignedPdfUrlOrFail(row, res) {
     return null;
   }
 
-  return await getSignedUrl(basePath, 3600);
+  return getSignedUrl(basePath, 3600);
 }
 
 /**
