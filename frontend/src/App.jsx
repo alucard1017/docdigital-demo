@@ -37,7 +37,6 @@ import { formatRun, formatRunDoc } from "./utils/formatters";
 import {
   PUBLIC_AUTH_PATHS,
   VALID_PROTECTED_VIEWS,
-  ROUTE_MAP,
   VIEW_TO_PATH,
   getProtectedViewFromPath,
   getLocationSnapshot,
@@ -247,7 +246,9 @@ function App() {
   const safeVisadosFiltered = Number.isFinite(visados) ? visados : 0;
   const safeFirmados = Number.isFinite(firmados) ? firmados : 0;
   const safeRechazados = Number.isFinite(rechazados) ? rechazados : 0;
-  const safeTotalFiltrado = Number.isFinite(totalFiltrado) ? totalFiltrado : 0;
+  const safeTotalFiltrado = Number.isFinite(totalFiltrado)
+    ? totalFiltrado
+    : 0;
   const safeTotalPaginas =
     Number.isFinite(totalPaginas) && totalPaginas > 0 ? totalPaginas : 1;
   const safeCurrentPage =
@@ -532,9 +533,7 @@ function App() {
           <div className="list-state-title">
             Cargando tu bandeja de documentos…
           </div>
-          <p className="list-state-text">
-            Esto puede tardar unos segundos.
-          </p>
+          <p className="list-state-text">Esto puede tardar unos segundos.</p>
           <div className="spinner" />
         </div>
       );
