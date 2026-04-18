@@ -34,7 +34,6 @@ function buildPublicDocumentPayload(row, extra = {}) {
     status: row.status,
     destinatario_nombre: row.destinatario_nombre,
     empresa_rut: row.empresa_rut,
-    // Normalizamos requires_visado a boolean consistente
     requires_visado: isTruthyVisado(row.requires_visado),
     signature_status: row.signature_status,
     firmante_nombre: row.firmante_nombre,
@@ -344,6 +343,8 @@ async function publicSignDocument(req, res) {
         s.name   AS signer_name,
         s.email  AS signer_email,
         s.role   AS signer_role,
+        s.must_sign,
+        s.must_review,
         d.*,
         COALESCE(
           d.numero_contrato_interno,
@@ -413,11 +414,12 @@ async function publicSignDocument(req, res) {
       );
     }
 
+    // NUEVO: contar solo firmantes reales (no visadores / solo must_sign = true)
     const countRes = await db.query(
       `
       SELECT 
-        COUNT(*) FILTER (WHERE status = 'FIRMADO') AS signed_count,
-        COUNT(*) AS total_signers
+        COUNT(*) FILTER (WHERE status = 'FIRMADO' AND (must_sign = TRUE OR role != 'VISADOR')) AS signed_count,
+        COUNT(*) FILTER (WHERE (must_sign = TRUE OR role != 'VISADOR'))        AS total_signers
       FROM document_signers
       WHERE document_id = $1
       `,
@@ -425,7 +427,9 @@ async function publicSignDocument(req, res) {
     );
 
     const { signed_count, total_signers } = countRes.rows[0];
-    const allSigned = Number(signed_count) >= Number(total_signers);
+    const allSigned =
+      Number(total_signers || 0) > 0 &&
+      Number(signed_count) >= Number(total_signers);
 
     let newDocStatus = row.status;
     let newSignatureStatus = row.signature_status;
@@ -871,7 +875,7 @@ async function publicVisarDocument(req, res) {
 
     const current = await db.query(
       `
-      SELECT *,
+      SELECT * ,
       COALESCE(
         numero_contrato_interno,
         metadata->>'numero_contrato',
