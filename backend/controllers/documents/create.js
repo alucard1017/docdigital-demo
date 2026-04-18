@@ -840,18 +840,24 @@ async function createDocument(req, res) {
     const storageKey = uploadResult.key;
     const storageUrl = uploadResult.url;
 
+    // NUEVO: estado inicial depende de si requiere visado
     const initialDocumentStatus = autoSendFlow
-      ? "PENDIENTE_FIRMA"
+      ? requiresVisado
+        ? "PENDIENTE_VISADO"
+        : "PENDIENTE_FIRMA"
       : "BORRADOR";
 
     const initialLegacyStatus = autoSendFlow
-      ? DOCUMENT_STATES.SIGNING
+      ? requiresVisado
+        ? "PENDIENTE_VISADO"
+        : DOCUMENT_STATES.SIGNING
       : DOCUMENT_STATES.DRAFT;
 
     const metadataPayload = {
       autoSendFlow,
       numeroContratoInterno,
       signerCount: signers.length,
+      requires_visado: requiresVisado,
     };
 
     if (tipoTramite) {
@@ -876,7 +882,7 @@ async function createDocument(req, res) {
         sealed_hash_sha256,
         verification_code,
         signature_token,
-        requires_review,
+        requires_visado,
         created_by,
         metadata,
         file_path,
@@ -1000,6 +1006,7 @@ async function createDocument(req, res) {
         legacy_documento_id: documentoNuevo.id,
         autoSendFlow,
         signers: signers.length,
+        requiresVisado,
       },
     });
 
@@ -1011,6 +1018,7 @@ async function createDocument(req, res) {
       metadata: {
         document_id: document.id,
         autoSendFlow,
+        requiresVisado,
       },
     });
 
@@ -1024,17 +1032,17 @@ async function createDocument(req, res) {
             updated_at = NOW()
         WHERE id = $1
         `,
-        [documentoNuevo.id, DOCUMENT_STATES.SIGNING]
+        [documentoNuevo.id, initialLegacyStatus]
       );
 
       await client.query(
         `
         UPDATE documents
-        SET status = 'PENDIENTE_FIRMA',
+        SET status = $2,
             updated_at = NOW()
         WHERE id = $1
         `,
-        [document.id]
+        [document.id, initialDocumentStatus]
       );
 
       await insertDocumentEvent(client, {
@@ -1055,6 +1063,7 @@ async function createDocument(req, res) {
         descripcion: "Documento enviado a firma/visado",
         metadata: {
           document_id: document.id,
+          requiresVisado,
         },
       });
 
@@ -1115,12 +1124,12 @@ async function createDocument(req, res) {
 
     return res.status(201).json({
       message: autoSendFlow
-        ? "Documento creado y enviado a firma correctamente"
+        ? "Documento creado y enviado al flujo correctamente"
         : "Documento creado correctamente",
       id: document.id,
       documentoId: documentoNuevo.id,
-      estado: autoSendFlow ? DOCUMENT_STATES.SIGNING : DOCUMENT_STATES.DRAFT,
-      documentsStatus: autoSendFlow ? "PENDIENTE_FIRMA" : "BORRADOR",
+      estado: autoSendFlow ? initialLegacyStatus : DOCUMENT_STATES.DRAFT,
+      documentsStatus: autoSendFlow ? initialDocumentStatus : "BORRADOR",
       codigoVerificacion: verificationCode,
       numeroContratoInterno,
       recordatoriosCreados: remindersCreated,
@@ -1130,6 +1139,7 @@ async function createDocument(req, res) {
       hash: documentHash,
       legacyFirmantes: legacySigners.length,
       tipoTramite,
+      requiresVisado,
     });
   } catch (error) {
     try {
