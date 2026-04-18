@@ -1,11 +1,20 @@
-import React from "react";
+import React, { useId } from "react";
 
 export function ElectronicSignatureNotice({
-  checked,
+  checked = false,
   onChange,
   mode = "firma",
 }) {
   const isVisado = mode === "visado";
+  const checkboxId = useId();
+
+  const handleCheckboxChange = (event) => {
+    const nextChecked = !!event?.target?.checked;
+
+    if (typeof onChange === "function") {
+      onChange(nextChecked);
+    }
+  };
 
   return (
     <div
@@ -78,6 +87,7 @@ export function ElectronicSignatureNotice({
       </p>
 
       <label
+        htmlFor={checkboxId}
         style={{
           display: "flex",
           alignItems: "flex-start",
@@ -96,9 +106,10 @@ export function ElectronicSignatureNotice({
         }}
       >
         <input
+          id={checkboxId}
           type="checkbox"
-          checked={checked}
-          onChange={(e) => onChange(e.target.checked)}
+          checked={!!checked}
+          onChange={handleCheckboxChange}
           style={{
             marginTop: 3,
             width: 16,

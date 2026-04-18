@@ -780,9 +780,25 @@ export function PublicSignView({
         isVisado,
       });
 
+      const payload = {
+        acceptedLegal: true,
+        mode: resolvedMode,
+      };
+
+      if (import.meta.env.DEV) {
+        console.log("[PUBLIC ACTION]", {
+          endpoint,
+          payload,
+          isVisado,
+          effectiveTokenKind,
+          publicSignToken,
+        });
+      }
+
       const data = await fetchJsonSafe(endpoint, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(payload),
       });
 
       await reloadPublicState();
@@ -806,6 +822,8 @@ export function PublicSignView({
     API_BASE,
     publicSignToken,
     reloadPublicState,
+    resolvedMode,
+    effectiveTokenKind,
   ]);
 
   const handleReject = useCallback(async () => {
@@ -893,24 +911,14 @@ export function PublicSignView({
 
   const actionBlock = canRenderActions ? (
     <div className="public-sign-action-block">
-      <div className="public-sign-legal-box">
-        <label className="public-sign-legal-check">
-          <input
-            type="checkbox"
-            checked={acceptedLegal}
-            onChange={(e) => {
-              setAcceptedLegal(e.target.checked);
-              if (e.target.checked) setLegalError("");
-            }}
-          />
-          <span>
-            He leído y acepto el aviso legal para registrar mi{" "}
-            {isVisado ? "visado" : "firma electrónica"}.
-          </span>
-        </label>
-      </div>
-
-      <ElectronicSignatureNotice />
+      <ElectronicSignatureNotice
+        checked={acceptedLegal}
+        onChange={(value) => {
+          setAcceptedLegal(value);
+          if (value) setLegalError("");
+        }}
+        mode={resolvedMode}
+      />
 
       {legalError && (
         <div className="public-sign-inline-error">{legalError}</div>
