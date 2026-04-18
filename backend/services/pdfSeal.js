@@ -12,6 +12,176 @@ const {
 const db = require("../db");
 const crypto = require("crypto");
 
+function parseGeoLocation(value) {
+  if (!value) return "Desconocido";
+  try {
+    const geo = typeof value === "string" ? JSON.parse(value) : value;
+    if (geo && geo.city && geo.country) return `${geo.city}, ${geo.country}`;
+    if (geo && geo.city) return geo.city;
+    if (geo && geo.country) return geo.country;
+    return "Desconocido";
+  } catch {
+    return "Desconocido";
+  }
+}
+
+function formatFechaEvidencia(value) {
+  if (!value) return "N/A";
+  try {
+    return new Date(value).toLocaleString("es-CL", {
+      timeZone: "America/Santiago",
+    });
+  } catch {
+    return "N/A";
+  }
+}
+
+function normalizeRoleLabel(role, actionType) {
+  const r = String(role || "").trim().toUpperCase();
+  if (r === "VISADOR") return "Visador";
+  if (r === "APROBADOR") return "Aprobador";
+  if (actionType === "VISADO") return "Visador";
+  return "Firmante";
+}
+
+async function obtenerParticipantesEvidencia(documentoId) {
+  const legacyRes = await db.query(
+    `
+    SELECT
+      nombre,
+      email,
+      rol,
+      estado,
+      fecha_firma,
+      ip_firma,
+      user_agent_firma,
+      geo_location,
+      tipo_firma
+    FROM firmantes
+    WHERE documento_id = $1
+      AND (
+        estado = 'FIRMADO'
+        OR UPPER(COALESCE(rol, '')) = 'VISADOR'
+      )
+    ORDER BY orden_firma ASC, fecha_firma ASC NULLS LAST, id ASC
+    `,
+    [documentoId]
+  );
+
+  const legacyRows = legacyRes.rows || [];
+
+  const modernDocRes = await db.query(
+    `
+    SELECT id
+    FROM documents
+    WHERE id = $1 OR nuevo_documento_id = $1
+    ORDER BY id DESC
+    LIMIT 1
+    `,
+    [documentoId]
+  );
+
+  let modernDocumentId = null;
+  if (modernDocRes.rowCount > 0) {
+    modernDocumentId = modernDocRes.rows[0].id;
+  }
+
+  let canonicalRows = [];
+  if (modernDocumentId) {
+    const canonicalRes = await db.query(
+      `
+      SELECT
+        name,
+        email,
+        role,
+        status,
+        signed_at,
+        reviewed_at,
+        ip_address,
+        user_agent,
+        metadata
+      FROM document_signers
+      WHERE document_id = $1
+      ORDER BY signer_order ASC, signed_at ASC NULLS LAST, id ASC
+      `,
+      [modernDocumentId]
+    );
+    canonicalRows = canonicalRes.rows || [];
+  }
+
+  const legacyParticipants = legacyRows.map((row) => {
+    const roleUpper = String(row.rol || "").trim().toUpperCase();
+    const isVisador = roleUpper === "VISADOR";
+    return {
+      nombre: row.nombre || "Sin nombre",
+      email: row.email || "N/A",
+      role: row.rol || (isVisador ? "VISADOR" : "FIRMANTE"),
+      actionType: isVisador ? "VISADO" : "FIRMA",
+      fecha: row.fecha_firma || null,
+      ip: row.ip_firma || "N/A",
+      userAgent: row.user_agent_firma || "N/A",
+      location: parseGeoLocation(row.geo_location),
+      tipoFirma: isVisador ? "VISADO" : row.tipo_firma || "SIMPLE",
+      source: "legacy",
+    };
+  });
+
+  const seen = new Set(
+    legacyParticipants.map((p) => `${p.email}|${p.actionType}|${p.role}`)
+  );
+
+  const canonicalParticipants = canonicalRows
+    .filter((row) => {
+      const roleUpper = String(row.role || "").trim().toUpperCase();
+      const isVisador = roleUpper === "VISADOR";
+      return row.status === "FIRMADO" || isVisador;
+    })
+    .map((row) => {
+      const roleUpper = String(row.role || "").trim().toUpperCase();
+      const isVisador = roleUpper === "VISADOR";
+      const actionType = isVisador ? "VISADO" : "FIRMA";
+      const fecha = isVisador
+        ? row.reviewed_at || row.signed_at || null
+        : row.signed_at || null;
+
+      let location = "Desconocido";
+      try {
+        const meta =
+          row.metadata && typeof row.metadata === "string"
+            ? JSON.parse(row.metadata)
+            : row.metadata || null;
+        location = parseGeoLocation(meta?.geo_location || meta?.geo || null);
+      } catch {
+        location = "Desconocido";
+      }
+
+      return {
+        nombre: row.name || "Sin nombre",
+        email: row.email || "N/A",
+        role: row.role || (isVisador ? "VISADOR" : "FIRMANTE"),
+        actionType,
+        fecha,
+        ip: row.ip_address || "N/A",
+        userAgent: row.user_agent || "N/A",
+        location,
+        tipoFirma: isVisador ? "VISADO" : "SIMPLE",
+        source: "canonical",
+      };
+    })
+    .filter((p) => {
+      const key = `${p.email}|${p.actionType}|${p.role}`;
+      if (seen.has(key)) return false;
+      seen.add(key);
+      return true;
+    });
+
+  return [...legacyParticipants, ...canonicalParticipants].sort((a, b) => {
+    const da = a.fecha ? new Date(a.fecha).getTime() : 0;
+    const dbb = b.fecha ? new Date(b.fecha).getTime() : 0;
+    return da - dbb;
+  });
+}
+
 async function sellarPdfConQr({
   s3Key,
   documentoId,
@@ -20,7 +190,8 @@ async function sellarPdfConQr({
   numeroContratoInterno,
 }) {
   if (!s3Key) throw new Error("s3Key es obligatorio para sellar el PDF");
-  if (!documentoId) throw new Error("documentoId es obligatorio para sellar el PDF");
+  if (!documentoId)
+    throw new Error("documentoId es obligatorio para sellar el PDF");
   if (!codigoVerificacion) {
     throw new Error("codigoVerificacion es obligatorio para sellar el PDF");
   }
@@ -72,17 +243,16 @@ async function sellarPdfConQr({
   const lastPage = pages[pages.length - 1];
   const { width, height } = lastPage.getSize();
 
-  // Logo + N° interno (más elegante, menos pegado al borde)
   try {
     const logoPngBytes = await fs.promises.readFile(
       path.join(__dirname, "../assets/verifirma-logo.png")
     );
     const logoImage = await pdfDoc.embedPng(logoPngBytes);
 
-    const logoWidth = 78; // un poco más pequeño
+    const logoWidth = 78;
     const logoHeight = (logoImage.height / logoImage.width) * logoWidth;
 
-    const marginRight = 32; // más separado del borde
+    const marginRight = 32;
     const marginTop = 52;
 
     const logoX = width - logoWidth - marginRight;
@@ -95,7 +265,6 @@ async function sellarPdfConQr({
       height: logoHeight,
     });
 
-    // N° interno debajo del logo, alineado al borde izquierdo del logo
     const internalFontSize = 8.2;
 
     lastPage.drawText(`N° interno`, {
@@ -117,7 +286,6 @@ async function sellarPdfConQr({
     console.error("⚠️ Error embebiendo logo en PDF sellado:", err);
   }
 
-  // QR
   const urlVerificacion = `https://verifirma.cl/verificar/${codigoVerificacion}`;
   try {
     const qrDataUrl = await QRCode.toDataURL(urlVerificacion, {
@@ -151,7 +319,6 @@ async function sellarPdfConQr({
     console.error("⚠️ Error generando/embebiendo QR en PDF sellado:", err);
   }
 
-  // Barra lateral
   try {
     const barcodePngBuffer = await bwipjs.toBuffer({
       bcid: "code128",
@@ -196,7 +363,6 @@ async function sellarPdfConQr({
     console.error("⚠️ Error generando/embebiendo código de barras:", err);
   }
 
-  // Bloque legal breve
   const esAvanzada = categoriaFirma === "AVANZADA";
 
   const textoLegal = [
@@ -224,26 +390,10 @@ async function sellarPdfConQr({
   });
 
   /* ========= 3) Páginas de certificado de evidencias ========= */
-  const firmantesRes = await db.query(
-    `
-    SELECT 
-      nombre,
-      email,
-      fecha_firma,
-      ip_firma,
-      user_agent_firma,
-      geo_location,
-      tipo_firma
-    FROM firmantes
-    WHERE documento_id = $1 AND estado = 'FIRMADO'
-    ORDER BY fecha_firma ASC
-    `,
-    [documentoId]
-  );
-  const firmantes = firmantesRes.rows || [];
+  const participantes = await obtenerParticipantesEvidencia(documentoId);
 
   let evidencesPage = pdfDoc.addPage();
-  let { width: evWidth, height: evHeight } = evidencesPage.getSize();
+  let { height: evHeight } = evidencesPage.getSize();
   let evY = evHeight - 60;
 
   evidencesPage.drawText("Certificado de firma electrónica VeriFirma", {
@@ -274,7 +424,7 @@ async function sellarPdfConQr({
 
   evY -= 70;
 
-  evidencesPage.drawText("Firmantes y evidencias registradas", {
+  evidencesPage.drawText("Participantes y evidencias registradas", {
     x: 50,
     y: evY,
     size: 11,
@@ -284,12 +434,11 @@ async function sellarPdfConQr({
 
   evY -= 22;
 
-  if (firmantes.length > 0) {
-    firmantes.forEach((f, idx) => {
+  if (participantes.length > 0) {
+    participantes.forEach((p, idx) => {
       if (evY < 120) {
         evidencesPage = pdfDoc.addPage();
         const sizeExtra = evidencesPage.getSize();
-        evWidth = sizeExtra.width;
         evHeight = sizeExtra.height;
         evY = evHeight - 80;
 
@@ -307,32 +456,23 @@ async function sellarPdfConQr({
         evY -= 30;
       }
 
-      let location = "Desconocido";
-      try {
-        const geo = f.geo_location ? JSON.parse(f.geo_location) : null;
-        if (geo && geo.city && geo.country) {
-          location = `${geo.city}, ${geo.country}`;
-        }
-      } catch (err) {
-        console.error("⚠️ Error parseando geo_location en PDF sellado:", err);
-      }
+      const roleLabel = normalizeRoleLabel(p.role, p.actionType);
+      const fechaLabel =
+        p.actionType === "VISADO"
+          ? "Fecha y hora de visado"
+          : "Fecha y hora de firma";
 
-      const fecha = f.fecha_firma
-        ? new Date(f.fecha_firma).toLocaleString("es-CL", {
-            timeZone: "America/Santiago",
-          })
-        : "N/A";
-
-      const firmText = [
-        `Firmante ${idx + 1}: ${f.nombre || "Sin nombre"}`,
-        `Email: ${f.email || "N/A"}`,
-        `Fecha y hora de firma: ${fecha}`,
-        `IP: ${f.ip_firma || "N/A"}`,
-        `Ubicación aproximada: ${location}`,
-        `Tipo de firma: ${f.tipo_firma || "SIMPLE"}`,
+      const block = [
+        `${roleLabel} ${idx + 1}: ${p.nombre || "Sin nombre"}`,
+        `Email: ${p.email || "N/A"}`,
+        `${fechaLabel}: ${formatFechaEvidencia(p.fecha)}`,
+        `IP: ${p.ip || "N/A"}`,
+        `Ubicación aproximada: ${p.location || "Desconocido"}`,
+        `Tipo de acción: ${p.actionType}`,
+        `Tipo de firma: ${p.tipoFirma || "N/A"}`,
       ].join("\n");
 
-      evidencesPage.drawText(firmText, {
+      evidencesPage.drawText(block, {
         x: 50,
         y: evY,
         size: 9,
@@ -341,11 +481,11 @@ async function sellarPdfConQr({
         lineHeight: 11,
       });
 
-      evY -= 80;
+      evY -= 92;
     });
   } else {
     evidencesPage.drawText(
-      "No hay firmas registradas para este documento.",
+      "No hay evidencias registradas para este documento.",
       {
         x: 50,
         y: evY,
@@ -374,7 +514,7 @@ async function sellarPdfConQr({
 
   let finalUrl = null;
   try {
-    finalUrl = await getSignedUrl(finalKey, 60 * 60 * 24 * 7); // 7 días
+    finalUrl = await getSignedUrl(finalKey, 60 * 60 * 24 * 7);
   } catch (err) {
     console.warn(
       "⚠️ No se pudo generar URL firmada larga para PDF final:",
@@ -396,7 +536,9 @@ async function sellarPdfConQr({
     [finalKey, finalHash, finalUrl, finalKey, documentoId]
   );
 
-  console.log(`✅ PDF sellado con ${firmantes.length} evidencias: ${finalKey}`);
+  console.log(
+    `✅ PDF sellado con ${participantes.length} evidencias: ${finalKey}`
+  );
 
   return {
     finalKey,
