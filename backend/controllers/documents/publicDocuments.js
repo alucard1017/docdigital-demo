@@ -15,6 +15,7 @@ const {
   validatePublicSign,
   validatePublicReject,
   validatePublicVisar,
+  isTruthyVisado,
 } = require("./publicDocumentsValidations");
 
 const NOT_FOUND_MESSAGE = "Enlace inválido o documento no encontrado";
@@ -33,7 +34,8 @@ function buildPublicDocumentPayload(row, extra = {}) {
     status: row.status,
     destinatario_nombre: row.destinatario_nombre,
     empresa_rut: row.empresa_rut,
-    requires_visado: row.requires_visado,
+    // Normalizamos requires_visado a boolean consistente
+    requires_visado: isTruthyVisado(row.requires_visado),
     signature_status: row.signature_status,
     firmante_nombre: row.firmante_nombre,
     firmante_run: row.firmante_run,
@@ -300,11 +302,13 @@ async function getPublicDocByDocumentToken(req, res) {
       );
     }
 
+    const requiresVisadoBool = isTruthyVisado(doc.requires_visado);
+
     return res.json({
       document: buildPublicDocumentPayload(doc, { pdfUrl }),
       pdfUrl,
       file_url: pdfUrl,
-      public_mode: "visado",
+      public_mode: requiresVisadoBool ? "visado" : "firma",
       public_token_kind: "document",
     });
   } catch (err) {

@@ -1,14 +1,21 @@
-// backend/controllers/documents/signingValidations.js
-
 const { DOCUMENT_STATES } = require("./common");
+const { isTruthyVisado } = require("./publicDocumentsValidations");
 
 function checkNotTerminal(doc) {
   if (doc.status === DOCUMENT_STATES.SIGNED) {
-    return { status: 400, body: { message: "El documento ya está firmado" } };
+    return {
+      status: 400,
+      body: { message: "El documento ya está firmado" },
+    };
   }
+
   if (doc.status === DOCUMENT_STATES.REJECTED) {
-    return { status: 400, body: { message: "Documento rechazado" } };
+    return {
+      status: 400,
+      body: { message: "Documento rechazado" },
+    };
   }
+
   return null;
 }
 
@@ -16,7 +23,9 @@ function validateSign(doc) {
   const terminal = checkNotTerminal(doc);
   if (terminal) return terminal;
 
-  if (doc.requires_visado === true && doc.status === "PENDIENTE_VISADO") {
+  const requiresVisado = isTruthyVisado(doc?.requires_visado);
+
+  if (requiresVisado && doc.status === "PENDIENTE_VISADO") {
     return {
       status: 400,
       body: { message: "Este documento requiere visación antes de firmar" },
@@ -30,7 +39,9 @@ function validateVisar(doc) {
   const terminal = checkNotTerminal(doc);
   if (terminal) return terminal;
 
-  if (doc.requires_visado !== true) {
+  const requiresVisado = isTruthyVisado(doc?.requires_visado);
+
+  if (!requiresVisado) {
     return {
       status: 400,
       body: { message: "Este documento no requiere visación" },
@@ -56,9 +67,14 @@ function validateReject(doc) {
       body: { message: "Ya firmado, no se puede rechazar" },
     };
   }
+
   if (doc.status === DOCUMENT_STATES.REJECTED) {
-    return { status: 400, body: { message: "Ya rechazado" } };
+    return {
+      status: 400,
+      body: { message: "Ya rechazado" },
+    };
   }
+
   return null;
 }
 

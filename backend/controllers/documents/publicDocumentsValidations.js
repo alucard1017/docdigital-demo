@@ -1,5 +1,3 @@
-// backend/controllers/documents/publicDocumentsValidations.js
-
 const { isExpired } = require("./documentEventUtils");
 
 function validatePublicToken(token) {
@@ -30,21 +28,21 @@ function validatePublicAccess(row, expiredMessage) {
 }
 
 function isTruthyVisado(value) {
-  if (value === true) return true;
-  if (value === 1) return true;
+  if (value === true || value === 1) return true;
+  if (value === false || value === 0) return false;
 
   const normalized = String(value ?? "")
     .trim()
     .toLowerCase();
 
-  return (
-    normalized === "true" ||
-    normalized === "t" ||
-    normalized === "1" ||
-    normalized === "yes" ||
-    normalized === "si" ||
-    normalized === "sí"
-  );
+  return [
+    "true",
+    "t",
+    "1",
+    "yes",
+    "si",
+    "sí",
+  ].includes(normalized);
 }
 
 function validatePublicSign(row) {
@@ -61,7 +59,10 @@ function validatePublicSign(row) {
     };
   }
 
-  if (isTruthyVisado(row.requires_visado) && row.status === "PENDIENTE_VISADO") {
+  if (
+    isTruthyVisado(row.requires_visado) &&
+    row.status === "PENDIENTE_VISADO"
+  ) {
     return {
       status: 400,
       body: { message: "Este documento requiere visación antes de firmar" },
@@ -159,4 +160,5 @@ module.exports = {
   validatePublicSign,
   validatePublicReject,
   validatePublicVisar,
+  isTruthyVisado,
 };
