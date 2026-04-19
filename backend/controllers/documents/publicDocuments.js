@@ -55,21 +55,25 @@ async function resolveParticipantIdForPublicEvent({
 
     return res.rows[0].id;
   } catch (err) {
-    console.error(
-      "⚠️ Error resolviendo participant_id para evento público:",
-      {
-        documentId,
-        email,
-        roleInDoc,
-        error: err,
-      }
-    );
+    console.error("⚠️ Error resolviendo participant_id para evento público:", {
+      documentId,
+      email,
+      roleInDoc,
+      error: err,
+    });
     return null;
   }
 }
 
 function buildDocumentFilePath(row) {
-  return row?.pdf_final_url || row?.pdf_original_url || row?.file_path || null;
+  return (
+    row?.pdf_final_url ||
+    row?.final_file_url ||
+    row?.final_storage_key ||
+    row?.pdf_original_url ||
+    row?.file_path ||
+    null
+  );
 }
 
 function buildPublicDocumentPayload(row, extra = {}) {
@@ -614,26 +618,46 @@ async function publicSignDocument(req, res) {
       req,
     });
 
-    if (allSigned && doc.nuevo_documento_id) {
+    // SELLADO PDF: siempre que allSigned sea true, independientemente de nuevo_documento_id.
+    if (allSigned) {
       try {
-        const docNuevoRes = await db.query(
-          `
-          SELECT id, codigo_verificacion, categoria_firma
-          FROM documentos
-          WHERE id = $1
-          `,
-          [doc.nuevo_documento_id]
-        );
+        let codigoVerificacion = null;
+        let categoriaFirma = "SIMPLE";
 
-        if (docNuevoRes.rowCount > 0) {
-          const docNuevo = docNuevoRes.rows[0];
-          const baseKey = doc.pdf_original_url || doc.file_path;
+        if (doc.nuevo_documento_id) {
+          const docNuevoRes = await db.query(
+            `
+            SELECT id, codigo_verificacion, categoria_firma
+            FROM documentos
+            WHERE id = $1
+            `,
+            [doc.nuevo_documento_id]
+          );
 
+          if (docNuevoRes.rowCount > 0) {
+            const docNuevo = docNuevoRes.rows[0];
+            codigoVerificacion = docNuevo.codigo_verificacion;
+            categoriaFirma = docNuevo.categoria_firma || "SIMPLE";
+          }
+        }
+
+        const baseKey =
+          doc.pdf_original_url ||
+          doc.file_path ||
+          doc.final_storage_key ||
+          doc.final_file_url;
+
+        if (!baseKey) {
+          console.warn(
+            "[PUBLIC] publicSignDocument → sin baseKey para sellar PDF",
+            { documentId: doc.id }
+          );
+        } else {
           const sealResult = await sellarPdfConQr({
             s3Key: baseKey,
             documentoId: doc.id,
-            codigoVerificacion: docNuevo.codigo_verificacion,
-            categoriaFirma: docNuevo.categoria_firma || "SIMPLE",
+            codigoVerificacion: codigoVerificacion || null,
+            categoriaFirma: categoriaFirma,
             numeroContratoInterno: doc.numero_contrato_interno,
           });
 
@@ -667,7 +691,8 @@ async function publicSignDocument(req, res) {
       }
     }
 
-    const fileUrl = buildDocumentFilePath(doc);
+    const fileUrl = await buildSignedPdfUrlOrFail(doc, res);
+    if (!fileUrl) return;
 
     return res.json({
       ...doc,
