@@ -1,8 +1,29 @@
-// backend/controllers/documents/timeline.js
-
 const { db, getSignedUrl, computeHash, axios } = require("./common");
 const { logAudit } = require("../../utils/auditLog");
 const { getClientIp, getUserAgent } = require("./documentEventUtils");
+
+/**
+ * Contrato uniforme de salida para eventos del timeline.
+ *
+ * El frontend puede asumir SIEMPRE este shape:
+ * {
+ *   id: string | number,
+ *   eventType: string,
+ *   action: string,
+ *   actor: string,
+ *   fromStatus: string | null,
+ *   toStatus: string | null,
+ *   ip: string | null,
+ *   userAgent: string | null,
+ *   createdAt: string | Date,
+ *   metadata: object | null
+ * }
+ *
+ * Notas:
+ * - getTimeline() mezcla document_events + audit_log, ambos normalizados a este contrato.
+ * - getLegalTimeline() usa solo document_events, también normalizados al mismo contrato.
+ * - metadata.source siempre viene informado.
+ */
 
 /* ================================
    Helpers comunes
@@ -11,6 +32,7 @@ const { getClientIp, getUserAgent } = require("./documentEventUtils");
 function safeJson(value, fallback = null) {
   if (!value) return fallback;
   if (typeof value === "object") return value;
+
   try {
     return JSON.parse(value);
   } catch {
@@ -35,6 +57,7 @@ function normalizeBoolean(value) {
 
 function normalizeStatus(raw) {
   if (!raw) return null;
+
   switch (raw) {
     case "BORRADOR":
       return "BORRADOR";
@@ -52,23 +75,49 @@ function normalizeStatus(raw) {
   }
 }
 
-/**
- * Contrato uniforme de salida para el timeline:
- * {
- *   id,
- *   eventType,
- *   action,
- *   actor,
- *   fromStatus,
- *   toStatus,
- *   ip,
- *   userAgent,
- *   createdAt,
- *   metadata
- * }
- */
+function normalizeCreatedAt(value) {
+  return value || null;
+}
+
+function detectEventSource(eventType, metadata) {
+  if (metadata?.source) return metadata.source;
+  if (!eventType) return "document_events";
+
+  if (eventType.startsWith("PUBLIC_")) return "public";
+  if (eventType.endsWith("_OWNER")) return "owner";
+  if (eventType.includes("INTERNAL")) return "internal_flow";
+
+  return "document_events";
+}
+
+function buildNormalizedEvent({
+  id,
+  eventType,
+  action,
+  actor,
+  fromStatus,
+  toStatus,
+  ip,
+  userAgent,
+  createdAt,
+  metadata,
+}) {
+  return {
+    id,
+    eventType: eventType || "UNKNOWN",
+    action: action || eventType || "UNKNOWN",
+    actor: actor || "system",
+    fromStatus: normalizeStatus(fromStatus),
+    toStatus: normalizeStatus(toStatus),
+    ip: ip || null,
+    userAgent: userAgent || null,
+    createdAt: normalizeCreatedAt(createdAt),
+    metadata: metadata || {},
+  };
+}
+
 function normalizeDocumentEvent(evt) {
-  const metadata = safeJson(evt.metadata, null);
+  const metadata = safeJson(evt.metadata, {}) || {};
 
   const baseEventType = evt.event_type || evt.tipo_evento || evt.action;
   const baseAction = evt.action || evt.tipo_evento || baseEventType;
@@ -77,84 +126,79 @@ function normalizeDocumentEvent(evt) {
   const action = baseAction || "UNKNOWN";
 
   const fromStatusRaw =
-    evt.from_status || metadata?.from_status || metadata?.legacy_status || null;
-  const toStatusRaw =
-    evt.to_status || metadata?.to_status || metadata?.documents_status || null;
+    evt.from_status ||
+    metadata.from_status ||
+    metadata.legacy_status ||
+    null;
 
-  const fromStatus = normalizeStatus(fromStatusRaw);
-  const toStatus = normalizeStatus(toStatusRaw);
+  const toStatusRaw =
+    evt.to_status ||
+    metadata.to_status ||
+    metadata.documents_status ||
+    null;
 
   const actor =
     evt.actor ||
-    metadata?.actor ||
-    metadata?.actor_email ||
-    (metadata?.actor_type ? metadata.actor_type.toLowerCase() : null) ||
+    metadata.actor ||
+    metadata.actor_email ||
+    (metadata.actor_type
+      ? `system:${String(metadata.actor_type).toLowerCase()}`
+      : null) ||
     "system";
 
-  const metaSource =
-    metadata?.source ||
-    (eventType.startsWith("PUBLIC_")
-      ? "public"
-      : eventType.endsWith("_OWNER")
-      ? "owner"
-      : eventType.includes("INTERNAL")
-      ? "internal_flow"
-      : "document_events");
+  const source = detectEventSource(eventType, metadata);
 
-  return {
+  return buildNormalizedEvent({
     id: evt.id,
     eventType,
     action,
     actor,
-    fromStatus,
-    toStatus,
+    fromStatus: fromStatusRaw,
+    toStatus: toStatusRaw,
     ip: evt.ip_address || evt.ip || null,
     userAgent: evt.user_agent || null,
     createdAt: evt.created_at,
     metadata: {
-      ...(metadata || {}),
-      source: metaSource,
-      details: evt.details || evt.detalle || null,
-      participant_id: evt.participant_id || null,
-      hash_document: evt.hash_document || null,
-      company_id: evt.company_id || null,
-      user_id: evt.user_id || null,
+      ...metadata,
+      source,
+      details: evt.details || evt.detalle || metadata.details || null,
+      participant_id: evt.participant_id || metadata.participant_id || null,
+      hash_document: evt.hash_document || metadata.hash_document || null,
+      company_id: evt.company_id || metadata.company_id || null,
+      user_id: evt.user_id || metadata.user_id || null,
     },
-  };
+  });
 }
 
 function normalizeAuditEvent(evt) {
-  const metadata = safeJson(evt.metadata, null);
+  const metadata = safeJson(evt.metadata, {}) || {};
   const action = evt.action || "AUDIT_LOG";
   const eventType =
-    metadata?.eventType || metadata?.event_type || action || "AUDIT_LOG";
-
-  const fromStatus = normalizeStatus(metadata?.from_status || null);
-  const toStatus = normalizeStatus(metadata?.to_status || null);
+    metadata.eventType || metadata.event_type || action || "AUDIT_LOG";
 
   const actor =
-    metadata?.actor ||
+    metadata.actor ||
     (evt.user_id ? `user:${evt.user_id}` : null) ||
     "system";
 
-  return {
+  return buildNormalizedEvent({
     id: `audit-${evt.id}`,
     eventType,
     action,
     actor,
-    fromStatus,
-    toStatus,
+    fromStatus: metadata.from_status || null,
+    toStatus: metadata.to_status || null,
     ip: evt.ip || null,
     userAgent: evt.user_agent || null,
     createdAt: evt.created_at,
     metadata: {
-      ...(metadata || {}),
+      ...metadata,
       source: "audit_log",
-      details: evt.details || null,
-      request_id: evt.request_id || null,
-      user_id: evt.user_id || null,
+      details: evt.details || metadata.details || null,
+      request_id: evt.request_id || metadata.request_id || null,
+      user_id: evt.user_id || metadata.user_id || null,
     },
-  };
+  });
 }
 
 function buildTimelineProgress(status, requiresVisado) {
@@ -610,6 +654,13 @@ async function getLegalTimeline(req, res) {
 
 async function getSigners(req, res) {
   try {
+    if (!req.user || !req.user.id) {
+      return res.status(401).json({
+        code: "UNAUTHENTICATED",
+        message: "Autenticación requerida",
+      });
+    }
+
     const docId = toNumber(req.params.id);
     if (!docId) {
       return res.status(400).json({

@@ -1,5 +1,3 @@
-// backend/controllers/documents/flowCommon.js
-
 const common = require("./common");
 const { crypto, DOCUMENT_STATES } = common;
 
@@ -9,6 +7,33 @@ if (!pool || typeof pool.query !== "function") {
     "No se pudo resolver un cliente/pool SQL válido desde ./common"
   );
 }
+
+const LEGACY_SIGNER_STATES = {
+  PENDING: "PENDIENTE",
+  SIGNED: "FIRMADO",
+  REJECTED: "RECHAZADO",
+};
+
+const PARTICIPANT_STATES = {
+  PENDING: "PENDIENTE",
+  SIGNED: "FIRMADO",
+  REJECTED: "RECHAZADO",
+};
+
+const LEGACY_FLOW_TYPES = {
+  SEQUENTIAL: "SECUENCIAL",
+  PARALLEL: "PARALELO",
+};
+
+const isPositiveNumber = (value) => {
+  const n = Number(value);
+  return Number.isFinite(n) && n > 0;
+};
+
+const toSafeNumber = (value, fallback = 0) => {
+  const n = Number(value);
+  return Number.isFinite(n) ? n : fallback;
+};
 
 const getDbClient = async () => {
   if (typeof pool.connect === "function") {
@@ -23,6 +48,7 @@ const getDbClient = async () => {
 
 const rollbackSafely = async (client) => {
   if (!client) return;
+
   try {
     await client.query("ROLLBACK");
   } catch (e) {
@@ -130,27 +156,52 @@ const upsertDocumentMirror = async (
   return result.rows[0].id;
 };
 
+/**
+ * Cuenta participantes legacy del flujo.
+ *
+ * Importante:
+ * - Hoy considera "completado" únicamente estado = 'FIRMADO'.
+ * - Incluye todas las filas de firmantes del documento.
+ * - Si el modelo de negocio decide excluir ciertos roles del cierre final,
+ *   este es el punto donde debe ajustarse el criterio.
+ */
 const countLegacySignatures = async (client, documentId) => {
+  if (!isPositiveNumber(documentId)) {
+    return {
+      firmadosNum: 0,
+      totalNum: 0,
+    };
+  }
+
   const countRes = await client.query(
     `
     SELECT
-      COUNT(*) FILTER (WHERE estado = 'FIRMADO') AS firmados,
+      COUNT(*) FILTER (WHERE estado = $2) AS firmados,
       COUNT(*) AS total
     FROM firmantes
     WHERE documento_id = $1
     `,
-    [documentId]
+    [documentId, LEGACY_SIGNER_STATES.SIGNED]
   );
 
   const row = countRes.rows[0] || {};
+
   return {
-    firmadosNum: Number(row.firmados || 0),
-    totalNum: Number(row.total || 0),
+    firmadosNum: toSafeNumber(row.firmados, 0),
+    totalNum: toSafeNumber(row.total, 0),
   };
 };
 
+/**
+ * Cuenta participantes del modelo nuevo.
+ *
+ * Importante:
+ * - Mantiene la lógica vigente: completado = status 'FIRMADO'.
+ * - Incluye todas las filas en document_participants del documento.
+ * - Sirve para contrastar consistencia con legacy.
+ */
 const countParticipantSignatures = async (client, documentId) => {
-  if (!documentId) {
+  if (!isPositiveNumber(documentId)) {
     return {
       firmadosDpNum: 0,
       totalDpNum: 0,
@@ -160,22 +211,27 @@ const countParticipantSignatures = async (client, documentId) => {
   const dpCountRes = await client.query(
     `
     SELECT
-      COUNT(*) FILTER (WHERE status = 'FIRMADO') AS firmados_dp,
+      COUNT(*) FILTER (WHERE status = $2) AS firmados_dp,
       COUNT(*) AS total_dp
     FROM document_participants
     WHERE document_id = $1
     `,
-    [documentId]
+    [documentId, PARTICIPANT_STATES.SIGNED]
   );
 
   const row = dpCountRes.rows[0] || {};
+
   return {
-    firmadosDpNum: Number(row.firmados_dp || 0),
-    totalDpNum: Number(row.total_dp || 0),
+    firmadosDpNum: toSafeNumber(row.firmados_dp, 0),
+    totalDpNum: toSafeNumber(row.total_dp, 0),
   };
 };
 
 const getDocumentFlowType = async (client, documentId) => {
+  if (!isPositiveNumber(documentId)) {
+    return LEGACY_FLOW_TYPES.SEQUENTIAL;
+  }
+
   const result = await client.query(
     `
     SELECT tipo_flujo
@@ -185,28 +241,48 @@ const getDocumentFlowType = async (client, documentId) => {
     [documentId]
   );
 
-  return result.rows[0]?.tipo_flujo || "SECUENCIAL";
+  const tipoFlujo = result.rows[0]?.tipo_flujo;
+
+  if (tipoFlujo === LEGACY_FLOW_TYPES.PARALLEL) {
+    return LEGACY_FLOW_TYPES.PARALLEL;
+  }
+
+  return LEGACY_FLOW_TYPES.SEQUENTIAL;
 };
 
+/**
+ * Retorna cuántos participantes anteriores siguen pendientes
+ * para un firmante/visador dado en flujo secuencial.
+ *
+ * Regla actual:
+ * - Todos los registros con orden_firma menor deben estar en estado FIRMADO.
+ * - Si están PENDIENTE o RECHAZADO, cuentan como bloqueantes.
+ */
 const validateSequentialSigning = async (client, { documentId, order }) => {
+  if (!isPositiveNumber(documentId) || !isPositiveNumber(order)) {
+    return 0;
+  }
+
   const pendingBeforeRes = await client.query(
     `
     SELECT COUNT(*) AS pendientes
     FROM firmantes
     WHERE documento_id = $1
       AND orden_firma < $2
-      AND estado <> 'FIRMADO'
+      AND estado <> $3
     `,
-    [documentId, order]
+    [documentId, order, LEGACY_SIGNER_STATES.SIGNED]
   );
 
-  return Number(pendingBeforeRes.rows[0]?.pendientes || 0);
+  return toSafeNumber(pendingBeforeRes.rows[0]?.pendientes, 0);
 };
 
 const mapLegacyStatusToDocumentsStatus = (legacyStatus) => {
   switch (legacyStatus) {
     case "BORRADOR":
       return DOCUMENT_STATES.DRAFT;
+    case "PENDIENTE_VISADO":
+      return "PENDIENTE_VISADO";
     case "EN_FIRMA":
       return "PENDIENTE_FIRMA";
     case "FIRMADO":
@@ -241,6 +317,9 @@ const mapFlowStateAfterRejected = () => ({
 module.exports = {
   crypto,
   DOCUMENT_STATES,
+  LEGACY_SIGNER_STATES,
+  PARTICIPANT_STATES,
+  LEGACY_FLOW_TYPES,
   getDbClient,
   rollbackSafely,
   upsertDocumentMirror,
