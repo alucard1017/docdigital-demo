@@ -45,6 +45,7 @@ function normalizeRoleLabel(role, actionType) {
 }
 
 async function obtenerParticipantesEvidencia(documentoId) {
+  // Firmantes legacy (tabla firmantes)
   const legacyRes = await db.query(
     `
     SELECT
@@ -70,6 +71,7 @@ async function obtenerParticipantesEvidencia(documentoId) {
 
   const legacyRows = legacyRes.rows || [];
 
+  // Documento moderno (tabla documents)
   const modernDocRes = await db.query(
     `
     SELECT id
@@ -96,7 +98,6 @@ async function obtenerParticipantesEvidencia(documentoId) {
         role,
         status,
         signed_at,
-        reviewed_at,
         ip_address,
         user_agent,
         metadata
@@ -140,9 +141,6 @@ async function obtenerParticipantesEvidencia(documentoId) {
       const roleUpper = String(row.role || "").trim().toUpperCase();
       const isVisador = roleUpper === "VISADOR";
       const actionType = isVisador ? "VISADO" : "FIRMA";
-      const fecha = isVisador
-        ? row.reviewed_at || row.signed_at || null
-        : row.signed_at || null;
 
       let location = "Desconocido";
       try {
@@ -160,7 +158,8 @@ async function obtenerParticipantesEvidencia(documentoId) {
         email: row.email || "N/A",
         role: row.role || (isVisador ? "VISADOR" : "FIRMANTE"),
         actionType,
-        fecha,
+        // En producción no existe reviewed_at: usamos siempre signed_at como timestamp
+        fecha: row.signed_at || null,
         ip: row.ip_address || "N/A",
         userAgent: row.user_agent || "N/A",
         location,
@@ -412,21 +411,22 @@ async function sellarPdfConQr({
 
   evY -= 30;
 
-  const resumenDocLines = [
-    `Número interno: ${numeroInternoTexto}`,
-    `ID del documento (documents.id): ${documentoId}`,
-    `Código de verificación: ${codigoVerificacion}`,
-    `Verificación en línea: ${urlVerificacion}`,
-  ];
-
-  evidencesPage.drawText(resumenDocLines.join("\n"), {
-    x: 50,
-    y: evY,
-    size: 9,
-    font,
-    color: rgb(0.1, 0.1, 0.1),
-    lineHeight: 12,
-  });
+  evidencesPage.drawText(
+    [
+      `Número interno: ${numeroInternoTexto}`,
+      `ID del documento (documents.id): ${documentoId}`,
+      `Código de verificación: ${codigoVerificacion}`,
+      `Verificación en línea: ${urlVerificacion}`,
+    ].join("\n"),
+    {
+      x: 50,
+      y: evY,
+      size: 9,
+      font,
+      color: rgb(0.1, 0.1, 0.1),
+      lineHeight: 12,
+    }
+  );
 
   evY -= 70;
 
@@ -500,7 +500,6 @@ async function sellarPdfConQr({
         color: rgb(0.4, 0.4, 0.4),
       }
     );
-    evY -= 20;
   }
 
   // 4) Guardar y subir versión final
