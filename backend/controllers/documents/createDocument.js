@@ -1,3 +1,4 @@
+// backend/controllers/documents/createDocument.js
 const {
   db,
   validateLength,
@@ -38,7 +39,9 @@ const { sendInvitationsInBackground } = require("./documentNotifications");
 async function rollbackQuietly(client) {
   try {
     await client.query("ROLLBACK");
-  } catch (_) {}
+  } catch (_) {
+    // swallow rollback errors
+  }
 }
 
 async function createDocument(req, res) {
@@ -57,7 +60,6 @@ async function createDocument(req, res) {
 
     const companyId =
       req.user?.company_id || req.user?.companyId || req.body.company_id;
-
     const userId = req.user?.id || req.user?.userId || null;
     const autoSendFlow = normalizeBoolean(req.body.autoSendFlow, false);
 
@@ -135,14 +137,17 @@ async function createDocument(req, res) {
       });
     }
 
-    const requiresVisado = signers.some((s) => s.debe_visar);
+    const requiresVisado = signers.some((s) => s.debe_visar === true);
     const verificationCode = generarCodigoVerificacion();
     const numeroContratoInterno = await generarNumeroContratoInterno(
       client,
       companyId
     );
 
-    console.log("[createDocument] numeroContratoInterno =>", numeroContratoInterno);
+    console.log(
+      "[createDocument] numeroContratoInterno =>",
+      numeroContratoInterno
+    );
 
     let originalBuffer;
     let originalFilename;
@@ -205,6 +210,7 @@ async function createDocument(req, res) {
 
     const signatureToken = verificationCode;
 
+    // 1) documents (modelo moderno, fuente para pdf_final_url)
     const { rows: documentRows } = await client.query(
       `
       INSERT INTO documents (
@@ -261,6 +267,7 @@ async function createDocument(req, res) {
 
     const document = documentRows[0];
 
+    // 2) documentos (legacy, con código de verificación y número interno)
     const { rows: legacyRows } = await client.query(
       `
       INSERT INTO documentos (
@@ -318,6 +325,7 @@ async function createDocument(req, res) {
       [document.id, documentoNuevo.id]
     );
 
+    // 3) firmantes legacy + canónicos + participants
     const legacySigners = await createLegacySigners(client, {
       documentoId: documentoNuevo.id,
       signers,
@@ -418,9 +426,11 @@ async function createDocument(req, res) {
     await client.query("COMMIT");
     committed = true;
 
+    // 4) Sellado post-commit (no bloquea la creación)
     try {
       const sealResult = await sellarPdfConQr({
         s3Key: storageKey,
+        // IMPORTANTE: usamos documents.id, que es el que pdfSeal actualiza (final_storage_key, pdf_final_url, etc.)
         documentoId: document.id,
         codigoVerificacion: verificationCode,
         categoriaFirma: requiresVisado ? "AVANZADA" : "SIMPLE",

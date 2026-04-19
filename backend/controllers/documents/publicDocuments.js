@@ -24,9 +24,8 @@ const EXPIRED_LINK_MESSAGE =
   "El enlace público ha expirado. Solicita uno nuevo al emisor.";
 
 /**
- * Dado un documento y los datos del firmante/visador público,
- * resuelve el id real de document_participants para respetar la FK
- * document_events.participant_id -> document_participants.id.
+ * Resuelve el id de document_participants para eventos públicos
+ * (FK document_events.participant_id -> document_participants.id).
  */
 async function resolveParticipantIdForPublicEvent({
   documentId,
@@ -618,7 +617,7 @@ async function publicSignDocument(req, res) {
       req,
     });
 
-    // SELLADO PDF: siempre que allSigned sea true, independientemente de nuevo_documento_id.
+    // SELLADO PDF: si todos firmaron, sellamos usando documents.id (fuente de pdf_final_url).
     if (allSigned) {
       try {
         let codigoVerificacion = null;
@@ -657,7 +656,7 @@ async function publicSignDocument(req, res) {
             s3Key: baseKey,
             documentoId: doc.id,
             codigoVerificacion: codigoVerificacion || null,
-            categoriaFirma: categoriaFirma,
+            categoriaFirma,
             numeroContratoInterno: doc.numero_contrato_interno,
           });
 

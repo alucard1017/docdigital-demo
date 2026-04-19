@@ -129,7 +129,7 @@ async function signDocument(req, res) {
           { documentId: doc.id }
         );
       } else {
-        // Si existe documento legacy, recuperamos datos de verificación; si no, usamos metadata actual.
+        // Preferimos datos de verificación desde documento legacy (si existe)
         let codigoVerificacion = null;
         let categoriaFirma = "SIMPLE";
 
@@ -145,12 +145,12 @@ async function signDocument(req, res) {
 
           if (docNuevoRes.rowCount > 0) {
             const docNuevo = docNuevoRes.rows[0];
-            codigoVerificacion = docNuevo.codigo_verificacion;
+            codigoVerificacion = docNuevo.codigo_verificacion || null;
             categoriaFirma = docNuevo.categoria_firma || "SIMPLE";
           }
         }
 
-        // Fallback: si no hay documento legado, intenta usar metadata del propio documents
+        // Fallback: metadata de documents (sigue manteniendo unicidad)
         if (!codigoVerificacion) {
           const meta = doc.metadata || {};
           codigoVerificacion =
