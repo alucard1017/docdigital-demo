@@ -16,9 +16,9 @@ function parseGeoLocation(value) {
   if (!value) return "Desconocido";
   try {
     const geo = typeof value === "string" ? JSON.parse(value) : value;
-    if (geo && geo.city && geo.country) return `${geo.city}, ${geo.country}`;
-    if (geo && geo.city) return geo.city;
-    if (geo && geo.country) return geo.country;
+    if (geo?.city && geo?.country) return `${geo.city}, ${geo.country}`;
+    if (geo?.city) return geo.city;
+    if (geo?.country) return geo.country;
     return "Desconocido";
   } catch {
     return "Desconocido";
@@ -182,6 +182,11 @@ async function obtenerParticipantesEvidencia(documentoId) {
   });
 }
 
+/**
+ * Sella un PDF existente añadiendo footer, QR, barra lateral
+ * y certificado de evidencias, subiendo una nueva versión final
+ * y actualizando la fila en documents (final_storage_key, pdf_final_url, etc.).
+ */
 async function sellarPdfConQr({
   s3Key,
   documentoId,
@@ -217,7 +222,7 @@ async function sellarPdfConQr({
   const numeroInternoTexto =
     numeroContratoInterno != null ? String(numeroContratoInterno) : "—";
 
-  /* ========= 1) Footer en todas las páginas ========= */
+  // 1) Footer en todas las páginas
   const footerFontSize = 8;
   const footerMarginY = 30;
   const footerColor = rgb(0.4, 0.4, 0.4);
@@ -239,7 +244,7 @@ async function sellarPdfConQr({
     });
   });
 
-  /* ========= 2) Última página: logo, N° interno, QR, barra lateral, bloque legal ========= */
+  // 2) Última página: logo, N° interno, QR, barra lateral, bloque legal
   const lastPage = pages[pages.length - 1];
   const { width, height } = lastPage.getSize();
 
@@ -267,7 +272,7 @@ async function sellarPdfConQr({
 
     const internalFontSize = 8.2;
 
-    lastPage.drawText(`N° interno`, {
+    lastPage.drawText("N° interno", {
       x: logoX,
       y: logoY - 14,
       size: internalFontSize,
@@ -275,7 +280,7 @@ async function sellarPdfConQr({
       color: rgb(0.35, 0.35, 0.35),
     });
 
-    lastPage.drawText(`${numeroInternoTexto}`, {
+    lastPage.drawText(numeroInternoTexto, {
       x: logoX,
       y: logoY - 26,
       size: internalFontSize + 0.4,
@@ -287,6 +292,7 @@ async function sellarPdfConQr({
   }
 
   const urlVerificacion = `https://verifirma.cl/verificar/${codigoVerificacion}`;
+
   try {
     const qrDataUrl = await QRCode.toDataURL(urlVerificacion, {
       errorCorrectionLevel: "M",
@@ -389,7 +395,7 @@ async function sellarPdfConQr({
     lineHeight: 10,
   });
 
-  /* ========= 3) Páginas de certificado de evidencias ========= */
+  // 3) Páginas de certificado de evidencias
   const participantes = await obtenerParticipantesEvidencia(documentoId);
 
   let evidencesPage = pdfDoc.addPage();
@@ -497,7 +503,7 @@ async function sellarPdfConQr({
     evY -= 20;
   }
 
-  /* ========= 4) Guardar y subir versión final ========= */
+  // 4) Guardar y subir versión final
   const newPdfBytes = await pdfDoc.save();
   const newBuffer = Buffer.from(newPdfBytes);
 

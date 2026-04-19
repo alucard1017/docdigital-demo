@@ -1,8 +1,10 @@
 // backend/controllers/documents/signing.js
-
 const { db, sellarPdfConQr, DOCUMENT_STATES } = require("./common");
 const { logAudit } = require("../../utils/auditLog");
-const { insertOwnerEvent, insertOwnerStatusChangedEvent } = require("./documentEventInserts");
+const {
+  insertOwnerEvent,
+  insertOwnerStatusChangedEvent,
+} = require("./documentEventInserts");
 const {
   validateSign,
   validateVisar,
@@ -13,6 +15,10 @@ const parseId = (raw) => {
   const id = Number(raw);
   return Number.isFinite(id) ? id : null;
 };
+
+/* ================================
+   POST: Firmar documento (propietario)
+   ================================ */
 
 async function signDocument(req, res) {
   try {
@@ -113,52 +119,87 @@ async function signDocument(req, res) {
       req,
     });
 
+    // === Sellar PDF con QR siempre que tengamos sourceKey ===
     try {
-      if (doc.nuevo_documento_id) {
-        const docNuevoRes = await db.query(
+      const sourceKey = doc.pdf_original_url || doc.file_path;
+
+      if (!sourceKey) {
+        console.warn(
+          "[signDocument] Documento sin pdf_original_url ni file_path. No se puede sellar.",
+          { documentId: doc.id }
+        );
+      } else {
+        // Si existe documento legacy, recuperamos datos de verificación; si no, usamos metadata actual.
+        let codigoVerificacion = null;
+        let categoriaFirma = "SIMPLE";
+
+        if (doc.nuevo_documento_id) {
+          const docNuevoRes = await db.query(
+            `
+            SELECT id, codigo_verificacion, categoria_firma
+            FROM documentos
+            WHERE id = $1
+            `,
+            [doc.nuevo_documento_id]
+          );
+
+          if (docNuevoRes.rowCount > 0) {
+            const docNuevo = docNuevoRes.rows[0];
+            codigoVerificacion = docNuevo.codigo_verificacion;
+            categoriaFirma = docNuevo.categoria_firma || "SIMPLE";
+          }
+        }
+
+        // Fallback: si no hay documento legado, intenta usar metadata del propio documents
+        if (!codigoVerificacion) {
+          const meta = doc.metadata || {};
+          codigoVerificacion =
+            meta.codigo_verificacion ||
+            meta.verification_code ||
+            doc.signature_token ||
+            `DOC-${doc.id}`;
+        }
+
+        await sellarPdfConQr({
+          s3Key: sourceKey,
+          // IMPORTANTE: usamos el id de documents, que es donde se actualiza pdf_final_url
+          documentoId: doc.id,
+          codigoVerificacion,
+          categoriaFirma,
+          numeroContratoInterno: doc.numero_contrato_interno,
+        });
+
+        // Recargar campos finales después del sellado
+        const updatedDocRes = await db.query(
           `
-          SELECT id, codigo_verificacion, categoria_firma
-          FROM documentos
+          SELECT
+            pdf_final_url,
+            final_storage_key,
+            final_file_url
+          FROM documents
           WHERE id = $1
           `,
-          [doc.nuevo_documento_id]
+          [doc.id]
         );
 
-        if (docNuevoRes.rowCount > 0) {
-          const docNuevo = docNuevoRes.rows[0];
-          const sourceKey = doc.pdf_original_url || doc.file_path;
-
-          if (sourceKey) {
-            await sellarPdfConQr({
-              s3Key: sourceKey,
-              documentoId: docNuevo.id,
-              codigoVerificacion: docNuevo.codigo_verificacion,
-              categoriaFirma: docNuevo.categoria_firma || "SIMPLE",
-              numeroContratoInterno: doc.numero_contrato_interno,
-            });
-
-            const updatedDocRes = await db.query(
-              `
-              SELECT pdf_final_url
-              FROM documents
-              WHERE id = $1
-              `,
-              [doc.id]
-            );
-
-            if (updatedDocRes.rowCount > 0) {
-              doc.pdf_final_url = updatedDocRes.rows[0].pdf_final_url;
-            }
-          }
+        if (updatedDocRes.rowCount > 0) {
+          const finalRow = updatedDocRes.rows[0];
+          doc.pdf_final_url =
+            finalRow.pdf_final_url ||
+            finalRow.final_file_url ||
+            finalRow.final_storage_key ||
+            doc.pdf_final_url;
         }
       }
     } catch (sealError) {
-      console.error("⚠️ Error sellando PDF con QR:", sealError);
+      console.error("⚠️ Error sellando PDF con QR (signDocument):", sealError);
     }
+
+    const fileUrl = doc.pdf_final_url || doc.file_path;
 
     return res.json({
       ...doc,
-      file_url: doc.pdf_final_url || doc.file_path,
+      file_url: fileUrl,
       message: "Documento firmado exitosamente",
     });
   } catch (err) {
@@ -169,6 +210,10 @@ async function signDocument(req, res) {
     });
   }
 }
+
+/* ================================
+   VISADO interno (propietario)
+   ================================ */
 
 async function viserDocumentInternalUpdate(id, userId, req = null) {
   const numericId = parseId(id);
@@ -284,9 +329,11 @@ async function visarDocument(req, res) {
       req,
     });
 
+    const fileUrl = doc.pdf_final_url || doc.file_path;
+
     return res.json({
       ...doc,
-      file_url: doc.pdf_final_url || doc.file_path,
+      file_url: fileUrl,
       message: "Documento visado exitosamente",
     });
   } catch (err) {
@@ -297,6 +344,10 @@ async function visarDocument(req, res) {
     });
   }
 }
+
+/* ================================
+   Rechazar documento (propietario)
+   ================================ */
 
 async function rejectDocument(req, res) {
   try {
@@ -406,9 +457,11 @@ async function rejectDocument(req, res) {
       req,
     });
 
+    const fileUrl = doc.pdf_final_url || doc.file_path;
+
     return res.json({
       ...doc,
-      file_url: doc.pdf_final_url || doc.file_path,
+      file_url: fileUrl,
       message: "Documento rechazado exitosamente",
     });
   } catch (err) {
