@@ -1,5 +1,4 @@
 // backend/controllers/documents/documentEventInserts.js
-
 const db = require("../../db");
 const {
   getClientIp,
@@ -13,6 +12,8 @@ const {
 
 /**
  * Inserta un evento genérico en document_events.
+ * - Siempre guarda JSON válido en metadata.
+ * - Refuerza un contrato mínimo: ids, estados, tipo de evento, contexto técnico.
  */
 async function insertDocumentEvent({
   documentId,
@@ -30,6 +31,27 @@ async function insertDocumentEvent({
   userId = null,
   metadata = {},
 }) {
+  const baseEventType = eventType || metadata.event_type || action || null;
+
+  const safeMetadata = {
+    // Contrato mínimo transversal (útil para auditoría y sellado)
+    source: metadata.source || "document_events",
+    company_id: companyId ?? metadata.company_id ?? null,
+    user_id: userId ?? metadata.user_id ?? null,
+    document_id: documentId ?? metadata.document_id ?? null,
+    participant_id: participantId ?? metadata.participant_id ?? null,
+    from_status: fromStatus ?? metadata.from_status ?? null,
+    to_status: toStatus ?? metadata.to_status ?? null,
+    event_type: baseEventType,
+    action: action || metadata.action || null,
+    // Contexto de dispositivo / red (alineado con buenas prácticas de audit trail)
+    ip_address: ipAddress ?? metadata.ip_address ?? null,
+    user_agent: userAgent ?? metadata.user_agent ?? null,
+    hash_document: hashDocument ?? metadata.hash_document ?? null,
+    // Resto de metadata extendida, sin perder nada de lo que mandes
+    ...metadata,
+  };
+
   await db.query(
     `
     INSERT INTO document_events (
@@ -58,23 +80,23 @@ async function insertDocumentEvent({
       participantId,
       actor,
       action,
-      details,
+      details || null,
       fromStatus,
       toStatus,
-      eventType,
+      baseEventType,
       ipAddress,
       userAgent,
       hashDocument,
       companyId,
       userId,
-      // guardamos siempre JSON válido
-      JSON.stringify(metadata || {}),
+      JSON.stringify(safeMetadata),
     ]
   );
 }
 
 /**
  * Evento para acciones del propietario (panel interno).
+ * Mantiene metadatos ricos e incorpora el contrato mínimo estándar.
  */
 async function insertOwnerEvent({
   req,
@@ -90,7 +112,7 @@ async function insertOwnerEvent({
   const userAgent = getUserAgent(req);
   const hashDocument = getDocumentHash(doc);
 
-  const metadata = buildOwnerMetadata({
+  const ownerMetadata = buildOwnerMetadata({
     doc,
     req,
     fromStatus,
@@ -102,7 +124,7 @@ async function insertOwnerEvent({
   await insertDocumentEvent({
     documentId: doc.id,
     participantId: null,
-    actor: req?.user?.name || "Propietario",
+    actor: req?.user?.name || `user:${req?.user?.id || "owner"}`,
     action,
     details,
     fromStatus,
@@ -113,7 +135,10 @@ async function insertOwnerEvent({
     hashDocument,
     companyId: doc.company_id || null,
     userId: req?.user?.id || null,
-    metadata,
+    metadata: {
+      ...ownerMetadata,
+      source: ownerMetadata.source || "owner_action",
+    },
   });
 }
 
@@ -136,7 +161,7 @@ async function insertPublicEvent({
   const userAgent = getUserAgent(req);
   const hashDocument = getDocumentHash(doc);
 
-  const metadata = buildPublicMetadataBase({
+  const publicMetadata = buildPublicMetadataBase({
     doc,
     extra: extraMetadata,
   });
@@ -155,7 +180,10 @@ async function insertPublicEvent({
     hashDocument,
     companyId: doc.company_id || null,
     userId: null,
-    metadata,
+    metadata: {
+      ...publicMetadata,
+      source: publicMetadata.source || "public_link",
+    },
   });
 }
 

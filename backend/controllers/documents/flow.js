@@ -1,5 +1,4 @@
 // backend/controllers/documents/flow.js
-
 const {
   crypto,
   DOCUMENT_STATES,
@@ -206,6 +205,7 @@ async function createFlow(req, res) {
     );
 
     const documento = docResult.rows[0];
+    const documentsStatus = mapLegacyStatusToDocumentsStatus(documento.estado);
 
     for (const [index, f] of firmantes.entries()) {
       await client.query(
@@ -257,7 +257,7 @@ async function createFlow(req, res) {
     const newDocumentId = await upsertDocumentMirror(client, {
       nuevoDocumentoId: documento.id,
       title: documento.titulo,
-      status: mapLegacyStatusToDocumentsStatus(documento.estado),
+      status: documentsStatus,
       companyId: documento.company_id,
       ownerId: documento.creado_por,
       filePath: null,
@@ -293,7 +293,7 @@ async function createFlow(req, res) {
       action: "DOCUMENT_CREATED",
       details: "Documento creado en estado BORRADOR",
       fromStatus: null,
-      toStatus: DOCUMENT_STATES.DRAFT,
+      toStatus: documentsStatus,
       eventType: "DOCUMENT_CREATED",
       ipAddress,
       userAgent,
@@ -306,6 +306,7 @@ async function createFlow(req, res) {
         tipo: documento.tipo,
         categoria_firma: documento.categoria_firma,
         tipo_flujo: documento.tipo_flujo,
+        signing_sequence: signersArray.length + visadoresArray.length,
       },
     });
 
@@ -314,7 +315,7 @@ async function createFlow(req, res) {
     const metadata = buildDocumentAuditMetadata({
       documentId: documento.id,
       title: documento.titulo,
-      status: mapLegacyStatusToDocumentsStatus(documento.estado),
+      status: documentsStatus,
       companyId: documento.company_id || null,
       extra: {
         tipo: documento.tipo,
@@ -322,7 +323,7 @@ async function createFlow(req, res) {
         tipo_flujo: documento.tipo_flujo,
         fecha_expiracion: documento.fecha_expiracion,
         documents_equivalent_id: newDocumentId,
-        documents_status: mapLegacyStatusToDocumentsStatus(documento.estado),
+        documents_status: documentsStatus,
       },
     });
 
@@ -420,6 +421,7 @@ async function sendFlow(req, res) {
 
     const firmantes = firmantesRes.rows;
     const tieneVisador = firmantes.some((f) => f.rol === "VISADOR");
+    const totalParticipantes = firmantes.length;
 
     const { legacyStatus, documentsStatus } = mapFlowStateAfterSend();
 
@@ -518,10 +520,13 @@ async function sendFlow(req, res) {
       metadata: {
         fuente: "API",
         legacy_documento_id: documento.id,
-        total_firmantes: firmantes.length,
+        total_participantes: totalParticipantes,
+        total_firmantes: firmantes.filter((f) => f.rol !== "VISADOR").length,
+        total_visadores: firmantes.filter((f) => f.rol === "VISADOR").length,
         tiene_visador: tieneVisador,
         categoria_firma: documento.categoria_firma,
         fecha_expiracion: documento.fecha_expiracion,
+        tipo_flujo: documento.tipo_flujo || "SECUENCIAL",
       },
     });
 
@@ -804,7 +809,8 @@ async function signFlow(req, res) {
         [
           firmante.documento_id,
           JSON.stringify({
-            descripcion: "Todos los participantes requeridos completaron su acción",
+            descripcion:
+              "Todos los participantes requeridos completaron su acción",
             firmados: firmadosNum,
             total: totalNum,
           }),
@@ -911,11 +917,12 @@ async function signFlow(req, res) {
           req,
           doc: flowDoc,
           actor: "system",
-          fromStatus: "PENDIENTE_FIRMA",
+          fromStatus: fromStatus,
           toStatus: DOCUMENT_STATES.SIGNED,
           eventType: "DOCUMENT_COMPLETED",
           action: "DOCUMENT_COMPLETED",
-          details: "Documento completado por todos los participantes requeridos",
+          details:
+            "Documento completado por todos los participantes requeridos",
           userId: null,
           extraMetadata: {
             via: "signFlow",

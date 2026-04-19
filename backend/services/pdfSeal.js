@@ -12,6 +12,20 @@ const {
 const db = require("../db");
 const crypto = require("crypto");
 
+/**
+ * Helpers de parsing tolerantes a cambios de schema / tipos.
+ */
+
+function parseJsonSafe(value) {
+  if (!value) return null;
+  if (typeof value === "object") return value;
+  try {
+    return JSON.parse(value);
+  } catch {
+    return null;
+  }
+}
+
 function parseGeoLocation(value) {
   if (!value) return "Desconocido";
   try {
@@ -44,8 +58,78 @@ function normalizeRoleLabel(role, actionType) {
   return "Firmante";
 }
 
+/**
+ * Normaliza un participante moderno a partir de document_participants + metadata.
+ * Esta función es el punto único donde se admite diversidad de claves en metadata,
+ * así el resto del código no depende de nombres frágiles.
+ */
+function normalizeParticipantFromMetadata(row, source) {
+  const meta = parseJsonSafe(row.metadata) || {};
+  const roleUpper = String(row.role || "").trim().toUpperCase();
+  const isVisador = roleUpper === "VISADOR";
+  const isAprobador = roleUpper === "APROBADOR";
+
+  const actionType = isVisador
+    ? "VISADO"
+    : isAprobador
+    ? "APROBACION"
+    : "FIRMA";
+
+  const fecha =
+    row.completed_at ||
+    row.signed_at ||
+    row.reviewed_at || // si algún día la agregas, la usamos
+    row.updated_at ||
+    meta.completed_at ||
+    meta.signed_at ||
+    null;
+
+  const ip =
+    row.ip_address || // si se agrega como columna fuerte
+    meta.ip_address ||
+    meta.ip ||
+    meta.ip_firma ||
+    meta.ipAddress ||
+    "N/A";
+
+  const userAgent =
+    row.user_agent ||
+    meta.user_agent ||
+    meta.userAgent ||
+    meta.user_agent_firma ||
+    "N/A";
+
+  const location = parseGeoLocation(
+    meta.geo_location || meta.geo || row.geo_location || null
+  );
+
+  const tipoFirma =
+    meta.tipo_firma ||
+    meta.signature_type ||
+    meta.tipoFirma ||
+    (isVisador ? "VISADO" : "SIMPLE");
+
+  return {
+    nombre: row.name || row.nombre || meta.name || meta.nombre || "Sin nombre",
+    email: row.email || meta.email || "N/A",
+    role: row.role || (isVisador ? "VISADOR" : "FIRMANTE"),
+    actionType,
+    fecha,
+    ip,
+    userAgent,
+    location,
+    tipoFirma,
+    source,
+  };
+}
+
+/**
+ * Construye la lista de participantes que aparecerán en el certificado,
+ * combinando legacy (firmantes) y modelo moderno (document_participants).
+ * Nunca lanza error por cambios de columnas: cualquier fallo loguea y sigue.
+ */
 async function obtenerParticipantesEvidencia(documentoId) {
-  // Firmantes legacy (tabla firmantes)
+  // 1) Fuente legacy: tabla firmantes (no se toca por compatibilidad histórica)
   const legacyRes = await db.query(
     `
     SELECT
@@ -71,45 +155,6 @@ async function obtenerParticipantesEvidencia(documentoId) {
 
   const legacyRows = legacyRes.rows || [];
 
-  // Documento moderno (tabla documents)
-  const modernDocRes = await db.query(
-    `
-    SELECT id
-    FROM documents
-    WHERE id = $1 OR nuevo_documento_id = $1
-    ORDER BY id DESC
-    LIMIT 1
-    `,
-    [documentoId]
-  );
-
-  let modernDocumentId = null;
-  if (modernDocRes.rowCount > 0) {
-    modernDocumentId = modernDocRes.rows[0].id;
-  }
-
-  let canonicalRows = [];
-  if (modernDocumentId) {
-    const canonicalRes = await db.query(
-      `
-      SELECT
-        name,
-        email,
-        role,
-        status,
-        signed_at,
-        ip_address,
-        user_agent,
-        metadata
-      FROM document_signers
-      WHERE document_id = $1
-      ORDER BY signer_order ASC, signed_at ASC NULLS LAST, id ASC
-      `,
-      [modernDocumentId]
-    );
-    canonicalRows = canonicalRes.rows || [];
-  }
-
   const legacyParticipants = legacyRows.map((row) => {
     const roleUpper = String(row.rol || "").trim().toUpperCase();
     const isVisador = roleUpper === "VISADOR";
@@ -131,42 +176,69 @@ async function obtenerParticipantesEvidencia(documentoId) {
     legacyParticipants.map((p) => `${p.email}|${p.actionType}|${p.role}`)
   );
 
+  // 2) Fuente moderna: document_participants, alineado con el flujo actual
+  let canonicalRows = [];
+  try {
+    const modernDocRes = await db.query(
+      `
+      SELECT id
+      FROM documents
+      WHERE id = $1 OR nuevo_documento_id = $1
+      ORDER BY id DESC
+      LIMIT 1
+      `,
+      [documentoId]
+    );
+
+    const modernDocumentId =
+      modernDocRes.rowCount > 0 ? modernDocRes.rows[0].id : null;
+
+    if (modernDocumentId) {
+      const canonicalRes = await db.query(
+        `
+        SELECT
+          name,
+          email,
+          role,
+          status,
+          metadata,
+          created_at,
+          updated_at,
+          signed_at,
+          completed_at,
+          -- columnas opcionales, pueden no existir en algunas migraciones
+          NULL::text AS ip_address,
+          NULL::text AS user_agent,
+          NULL::jsonb AS geo_location
+        FROM document_participants
+        WHERE document_id = $1
+        ORDER BY flow_order ASC NULLS LAST, created_at ASC, id ASC
+        `,
+        [modernDocumentId]
+      );
+      canonicalRows = canonicalRes.rows || [];
+    }
+  } catch (err) {
+    console.error(
+      "⚠️ Error leyendo document_participants para evidencias:",
+      err.message
+    );
+    canonicalRows = [];
+  }
+
   const canonicalParticipants = canonicalRows
     .filter((row) => {
       const roleUpper = String(row.role || "").trim().toUpperCase();
+      const statusUpper = String(row.status || "").trim().toUpperCase();
       const isVisador = roleUpper === "VISADOR";
-      return row.status === "FIRMADO" || isVisador;
+      // Consideramos firmado/visado o visador (aunque el status venga raro)
+      return (
+        statusUpper === "FIRMADO" ||
+        statusUpper === "VISADO" ||
+        isVisador
+      );
     })
-    .map((row) => {
-      const roleUpper = String(row.role || "").trim().toUpperCase();
-      const isVisador = roleUpper === "VISADOR";
-      const actionType = isVisador ? "VISADO" : "FIRMA";
-
-      let location = "Desconocido";
-      try {
-        const meta =
-          row.metadata && typeof row.metadata === "string"
-            ? JSON.parse(row.metadata)
-            : row.metadata || null;
-        location = parseGeoLocation(meta?.geo_location || meta?.geo || null);
-      } catch {
-        location = "Desconocido";
-      }
-
-      return {
-        nombre: row.name || "Sin nombre",
-        email: row.email || "N/A",
-        role: row.role || (isVisador ? "VISADOR" : "FIRMANTE"),
-        actionType,
-        // En producción no existe reviewed_at: usamos siempre signed_at como timestamp
-        fecha: row.signed_at || null,
-        ip: row.ip_address || "N/A",
-        userAgent: row.user_agent || "N/A",
-        location,
-        tipoFirma: isVisador ? "VISADO" : "SIMPLE",
-        source: "canonical",
-      };
-    })
+    .map((row) => normalizeParticipantFromMetadata(row, "canonical"))
     .filter((p) => {
       const key = `${p.email}|${p.actionType}|${p.role}`;
       if (seen.has(key)) return false;
@@ -174,9 +246,12 @@ async function obtenerParticipantesEvidencia(documentoId) {
       return true;
     });
 
-  return [...legacyParticipants, ...canonicalParticipants].sort((a, b) => {
-    const da = a.fecha ? new Date(a.fecha).getTime() : 0;
-    const dbb = b.fecha ? new Date(b.fecha).getTime() : 0;
+  const all = [...legacyParticipants, ...canonicalParticipants];
+
+  // Orden cronológico por fecha de acción; si no hay fecha, lo mandamos al final
+  return all.sort((a, b) => {
+    const da = a.fecha ? new Date(a.fecha).getTime() : Number.MAX_SAFE_INTEGER;
+    const dbb = b.fecha ? new Date(b.fecha).getTime() : Number.MAX_SAFE_INTEGER;
     return da - dbb;
   });
 }
@@ -194,8 +269,9 @@ async function sellarPdfConQr({
   numeroContratoInterno,
 }) {
   if (!s3Key) throw new Error("s3Key es obligatorio para sellar el PDF");
-  if (!documentoId)
+  if (!documentoId) {
     throw new Error("documentoId es obligatorio para sellar el PDF");
+  }
   if (!codigoVerificacion) {
     throw new Error("codigoVerificacion es obligatorio para sellar el PDF");
   }
@@ -229,7 +305,6 @@ async function sellarPdfConQr({
   pages.forEach((page, index) => {
     const { width } = page.getSize();
     const pageNumber = index + 1;
-
     const footerText = `N° interno: ${numeroInternoTexto} · Página ${pageNumber} de ${totalPages} · verifirma.cl`;
     const textWidth = font.widthOfTextAtSize(footerText, footerFontSize);
     const x = (width - textWidth) / 2;
@@ -255,10 +330,8 @@ async function sellarPdfConQr({
 
     const logoWidth = 78;
     const logoHeight = (logoImage.height / logoImage.width) * logoWidth;
-
     const marginRight = 32;
     const marginTop = 52;
-
     const logoX = width - logoWidth - marginRight;
     const logoY = height - logoHeight - marginTop;
 
@@ -269,12 +342,10 @@ async function sellarPdfConQr({
       height: logoHeight,
     });
 
-    const internalFontSize = 8.2;
-
     lastPage.drawText("N° interno", {
       x: logoX,
       y: logoY - 14,
-      size: internalFontSize,
+      size: 8.2,
       font,
       color: rgb(0.35, 0.35, 0.35),
     });
@@ -282,7 +353,7 @@ async function sellarPdfConQr({
     lastPage.drawText(numeroInternoTexto, {
       x: logoX,
       y: logoY - 26,
-      size: internalFontSize + 0.4,
+      size: 8.6,
       font: fontBold,
       color: rgb(0.1, 0.1, 0.1),
     });
@@ -298,7 +369,6 @@ async function sellarPdfConQr({
     });
     const qrImage = await pdfDoc.embedPng(qrDataUrl);
     const qrSize = 80;
-
     const qrX = width - qrSize - 40;
     const qrY = 40;
 
@@ -339,9 +409,7 @@ async function sellarPdfConQr({
     const barcodeWidth = 35;
     const barcodeHeight =
       (barcodePng.height / barcodePng.width) * barcodeWidth;
-
-    const marginRight = 15;
-    const barcodeX = width - barcodeWidth - marginRight;
+    const barcodeX = width - barcodeWidth - 15;
     const barcodeY = height / 2 - barcodeHeight / 2;
 
     lastPage.drawImage(barcodePng, {
@@ -351,19 +419,19 @@ async function sellarPdfConQr({
       height: barcodeHeight,
     });
 
-    const textoLateral =
-      "VeriFirma · Plataforma de firma electrónica · Seguridad digital sin fronteras · verifirma.cl";
-
-    lastPage.drawText(textoLateral, {
-      x: width - 5,
-      y: barcodeY + barcodeHeight / 2 - 7,
-      size: 7,
-      font,
-      color: rgb(0.2, 0.2, 0.2),
-      rotate: degrees(90),
-      maxWidth: height - 80,
-      lineHeight: 9,
-    });
+    lastPage.drawText(
+      "VeriFirma · Plataforma de firma electrónica · Seguridad digital sin fronteras · verifirma.cl",
+      {
+        x: width - 5,
+        y: barcodeY + barcodeHeight / 2 - 7,
+        size: 7,
+        font,
+        color: rgb(0.2, 0.2, 0.2),
+        rotate: degrees(90),
+        maxWidth: height - 80,
+        lineHeight: 9,
+      }
+    );
   } catch (err) {
     console.error("⚠️ Error generando/embebiendo código de barras:", err);
   }
@@ -395,7 +463,16 @@ async function sellarPdfConQr({
   });
 
   // 3) Páginas de certificado de evidencias
-  const participantes = await obtenerParticipantesEvidencia(documentoId);
+  let participantes = [];
+  try {
+    participantes = await obtenerParticipantesEvidencia(documentoId);
+  } catch (err) {
+    console.error(
+      "⚠️ Error obteniendo participantes para certificado:",
+      err.message
+    );
+    participantes = [];
+  }
 
   let evidencesPage = pdfDoc.addPage();
   let { height: evHeight } = evidencesPage.getSize();
@@ -411,22 +488,21 @@ async function sellarPdfConQr({
 
   evY -= 30;
 
-  evidencesPage.drawText(
-    [
-      `Número interno: ${numeroInternoTexto}`,
-      `ID del documento (documents.id): ${documentoId}`,
-      `Código de verificación: ${codigoVerificacion}`,
-      `Verificación en línea: ${urlVerificacion}`,
-    ].join("\n"),
-    {
-      x: 50,
-      y: evY,
-      size: 9,
-      font,
-      color: rgb(0.1, 0.1, 0.1),
-      lineHeight: 12,
-    }
-  );
+  const resumenDocLines = [
+    `Número interno: ${numeroInternoTexto}`,
+    `ID del documento (documents.id): ${documentoId}`,
+    `Código de verificación: ${codigoVerificacion}`,
+    `Verificación en línea: ${urlVerificacion}`,
+  ];
+
+  evidencesPage.drawText(resumenDocLines.join("\n"), {
+    x: 50,
+    y: evY,
+    size: 9,
+    font,
+    color: rgb(0.1, 0.1, 0.1),
+    lineHeight: 12,
+  });
 
   evY -= 70;
 
