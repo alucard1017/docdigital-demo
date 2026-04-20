@@ -1,3 +1,5 @@
+// backend/controllers/documents/sendFlow.js
+
 const {
   DOCUMENT_STATES,
   getDbClient,
@@ -26,12 +28,29 @@ const {
   cancelPendingReminders,
 } = require("./flowHelpers");
 
+function normalizeRole(rawRole) {
+  const role = String(rawRole || "").trim().toUpperCase();
+  if (!role) return null;
+  if (role.includes("VIS")) return "VISADOR";
+  if (role.includes("REV")) return "VISADOR";
+  if (role.includes("FINAL")) return "FIRMANTE_FINAL";
+  if (role.includes("FIRM")) return "FIRMANTE";
+  return role;
+}
+
 async function sendFlow(req, res) {
   const { valid, id, error } = validateSendFlowParams(req.params);
   if (!valid) {
     return res.status(400).json({
       code: "INVALID_PARAMS",
       message: error || "Parámetros inválidos",
+    });
+  }
+
+  if (!req.user) {
+    return res.status(401).json({
+      code: "UNAUTHORIZED",
+      message: "Usuario no autenticado",
     });
   }
 
@@ -59,6 +78,18 @@ async function sendFlow(req, res) {
 
     const documento = docRes.rows[0];
 
+    if (
+      documento.company_id &&
+      req.user.company_id &&
+      documento.company_id !== req.user.company_id
+    ) {
+      await rollbackSafely(client);
+      return res.status(403).json({
+        code: "FORBIDDEN",
+        message: "No tienes permisos para enviar este documento",
+      });
+    }
+
     if (documento.estado !== DOCUMENT_STATES.DRAFT) {
       await rollbackSafely(client);
       return res.status(400).json({
@@ -85,9 +116,29 @@ async function sendFlow(req, res) {
       });
     }
 
-    const firmantes = firmantesRes.rows;
-    const tieneVisador = firmantes.some((f) => f.rol === "VISADOR");
+    const firmantes = firmantesRes.rows.map((f) => ({
+      ...f,
+      rol: normalizeRole(f.rol),
+    }));
+
     const totalParticipantes = firmantes.length;
+    const totalVisadores = firmantes.filter((f) => f.rol === "VISADOR").length;
+    const totalFirmantes = totalParticipantes - totalVisadores;
+    const tieneVisador = totalVisadores > 0;
+
+    if (totalFirmantes <= 0) {
+      await rollbackSafely(client);
+      return res.status(400).json({
+        code: "NO_SIGNERS",
+        message:
+          "El flujo debe tener al menos un firmante distinto de visador antes de ser enviado.",
+      });
+    }
+
+    const normalizedFlowType =
+      (documento.tipo_flujo || "SECUENCIAL").toUpperCase() === "PARALELO"
+        ? "PARALELO"
+        : "SECUENCIAL";
 
     const { legacyStatus, documentsStatus } = mapFlowStateAfterSend();
 
@@ -110,9 +161,7 @@ async function sendFlow(req, res) {
       ownerId: documento.creado_por,
       filePath: null,
       signFlowType:
-        (documento.tipo_flujo || "SECUENCIAL") === "PARALELO"
-          ? "PARALLEL"
-          : "SEQUENTIAL",
+        normalizedFlowType === "PARALELO" ? "PARALLEL" : "SEQUENTIAL",
       notaryMode: "NONE",
       countryCode: "CL",
       enviadoEn: new Date(),
@@ -135,21 +184,21 @@ async function sendFlow(req, res) {
           fuente: "API",
           enviado_por: req.user.id,
           estado_inicial: legacyStatus,
-          total_firmantes: firmantes.length,
+          total_firmantes: totalFirmantes,
+          total_visadores: totalVisadores,
           tiene_visador: tieneVisador,
         }),
       ]
     );
 
     const reminderConfig = await getReminderConfig(client, documento.company_id);
-
     await cancelPendingReminders(client, documento.id);
 
     let recordatoriosCreados = 0;
     if (reminderConfig.enabled) {
       recordatoriosCreados = await createAutomaticReminders(client, {
         documentId: documento.id,
-        signers: firmantes,
+        signers: firmantes.filter((f) => f.rol !== "VISADOR"),
         intervalDays: reminderConfig.intervalDays,
         maxAttempts: reminderConfig.maxAttempts,
         companyId: documento.company_id,
@@ -160,10 +209,10 @@ async function sendFlow(req, res) {
       documentId: newDocumentId,
       signers: firmantes
         .filter((f) => f.rol !== "VISADOR")
-        .map((f) => ({ name: f.nombre, email: f.email })),
+        .map((f) => ({ id: f.id, name: f.nombre, email: f.email })),
       visadores: firmantes
         .filter((f) => f.rol === "VISADOR")
-        .map((f) => ({ name: f.nombre, email: f.email })),
+        .map((f) => ({ id: f.id, name: f.nombre, email: f.email })),
     });
 
     const ipAddress = getClientIp(req);
@@ -187,12 +236,12 @@ async function sendFlow(req, res) {
         fuente: "API",
         legacy_documento_id: documento.id,
         total_participantes: totalParticipantes,
-        total_firmantes: firmantes.filter((f) => f.rol !== "VISADOR").length,
-        total_visadores: firmantes.filter((f) => f.rol === "VISADOR").length,
+        total_firmantes: totalFirmantes,
+        total_visadores: totalVisadores,
         tiene_visador: tieneVisador,
         categoria_firma: documento.categoria_firma,
         fecha_expiracion: documento.fecha_expiracion,
-        tipo_flujo: documento.tipo_flujo || "SECUENCIAL",
+        tipo_flujo: normalizedFlowType,
       },
     });
 
@@ -203,7 +252,7 @@ async function sendFlow(req, res) {
         documentoId: documento.id,
         titulo: documento.titulo,
         estado: legacyStatus,
-        firmantes: firmantes.length,
+        firmantes: totalFirmantes,
         tieneVisador,
       }).catch((err) => console.error("Error en webhook document.sent:", err));
 
@@ -211,7 +260,7 @@ async function sendFlow(req, res) {
         documentoId: documento.id,
         titulo: documento.titulo,
         estado: legacyStatus,
-        firmantes: firmantes.length,
+        firmantes: totalFirmantes,
       });
     }
 
@@ -222,7 +271,8 @@ async function sendFlow(req, res) {
       companyId: documento.company_id,
       extra: {
         categoria_firma: documento.categoria_firma,
-        firmantes: firmantes.length,
+        firmantes: totalFirmantes,
+        visadores: totalVisadores,
         fecha_expiracion: documento.fecha_expiracion,
         documents_equivalent_id: newDocumentId,
         documents_status: documentsStatus,

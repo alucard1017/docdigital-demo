@@ -1,5 +1,9 @@
 // frontend/src/utils/documentEvents.js
 
+/* ============================
+   Helpers básicos
+   ============================ */
+
 export function normalizeText(value = "") {
   return String(value ?? "").trim();
 }
@@ -94,7 +98,7 @@ export function normalizeStatus(value) {
 }
 
 /* ============================
-   Lectura raw
+   Lectura raw (contrato backend)
    ============================ */
 
 export function getRawTimestamp(raw) {
@@ -116,6 +120,7 @@ export function getRawAction(raw) {
 }
 
 export function getRawSource(raw) {
+  // backend mete source en metadata.source
   return normalizeText(
     raw?.source ||
       raw?.metadata?.source ||
@@ -129,6 +134,7 @@ export function getRawIp(raw) {
     normalizeText(raw?.ip) ||
     normalizeText(raw?.ipAddress) ||
     normalizeText(raw?.ip_address) ||
+    normalizeText(raw?.metadata?.ip) ||
     ""
   );
 }
@@ -161,7 +167,12 @@ export function getMetadataActorType(raw) {
 
 export function isAuditEvent(raw) {
   const source = getRawSource(raw);
-  return source === "audit_log" || source === "audit";
+  const eventType = getRawEventType(raw);
+  return (
+    source === "audit_log" ||
+    source === "audit" ||
+    eventType.startsWith("AUDIT_")
+  );
 }
 
 export function isSystemEvent(raw) {
@@ -206,11 +217,17 @@ export function getEventKind(raw) {
   if (
     eventType === "SIGNED_OWNER" ||
     eventType === "SIGNED_PUBLIC" ||
-    eventType === "DOCUMENT_SIGNED"
+    eventType === "DOCUMENT_SIGNED" ||
+    eventType === "SIGNED_INTERNAL"
   ) {
     return "signed";
   }
-  if (eventType === "VISADO_OWNER" || eventType === "VISADO_PUBLIC") {
+  if (
+    eventType === "VISADO_OWNER" ||
+    eventType === "VISADO_PUBLIC" ||
+    eventType === "VISADO_INTERNAL" ||
+    eventType.includes("REVIEWED")
+  ) {
     return "approved";
   }
   if (
@@ -221,7 +238,9 @@ export function getEventKind(raw) {
     return "rejected";
   }
   if (eventType === "DOCUMENT_COMPLETED") return "completed";
-  if (eventType.includes("VERIFY")) return "verified";
+  if (eventType.includes("VERIFY") || eventType.includes("VERIFIED")) {
+    return "verified";
+  }
   if (isAuditEvent(raw)) return "audit";
   if (isSystemEvent(raw)) return "system";
 
@@ -316,7 +335,12 @@ export function buildMetadataSummary(metadata) {
   } = metadata;
 
   const docTitle =
-    title || documentTitle || document_title || documentId || document_id || "";
+    title ||
+    documentTitle ||
+    document_title ||
+    documentId ||
+    document_id ||
+    "";
 
   const from = fromStatus || from_status || "";
   const to = toStatus || to_status || status || documentStatus || "";
@@ -324,7 +348,8 @@ export function buildMetadataSummary(metadata) {
   const parts = [];
 
   if (docTitle) parts.push(`Documento: ${docTitle}`);
-  if (numero_contrato_interno) parts.push(`Contrato: ${numero_contrato_interno}`);
+  if (numero_contrato_interno)
+    parts.push(`Contrato: ${numero_contrato_interno}`);
   if (from && to) {
     parts.push(`Estado: ${from} → ${to}`);
   } else if (to) {
@@ -437,7 +462,7 @@ export function getBadgeClass(actorType) {
 }
 
 /* ============================
-   Mapping principal
+   Mapping principal (backend → UI)
    ============================ */
 
 export function mapDocumentEvent(raw) {
@@ -461,8 +486,8 @@ export function mapDocumentEvent(raw) {
     title: getEventTitle(raw, kind),
     kind,
     icon: getEventIconByKind(kind),
-    actor: actorLabel,          // string legible (Sistema, juan nieto, ALUCARD, etc.)
-    actorType,                  // "system" | "user" | "audit"
+    actor: actorLabel, // string legible (Sistema, Juan, etc.)
+    actorType, // "system" | "user" | "audit"
     fromStatus,
     toStatus,
     fromStatusNorm: normalizeStatus(fromStatus),
@@ -501,7 +526,14 @@ export function getEventVisualStatus(index, total) {
   return "pending";
 }
 
+/* ============================
+   Normalización del timeline
+   ============================ */
+
 export function normalizeTimeline(rawTimeline) {
+  // backend responde:
+  // - getTimeline: { document, participants, timeline: { events, progress, currentStep, nextStep } }
+  // - getLegalTimeline: { document, events }
   const rawEvents =
     (Array.isArray(rawTimeline?.events) && rawTimeline.events) ||
     (Array.isArray(rawTimeline?.timeline?.events) &&
@@ -517,22 +549,25 @@ export function normalizeTimeline(rawTimeline) {
       return aTime - bTime;
     });
 
+  const rawProgress =
+    rawTimeline?.progress ?? rawTimeline?.timeline?.progress ?? 0;
+
+  const rawCurrentStep =
+    rawTimeline?.currentStep ??
+    rawTimeline?.timeline?.currentStep ??
+    rawTimeline?.currentStatus ??
+    rawTimeline?.timeline?.currentStatus;
+
+  const rawNextStep =
+    rawTimeline?.nextStep ?? rawTimeline?.timeline?.nextStep;
+
   return {
     events: mappedEvents,
     hasEvents: mappedEvents.length > 0,
-    progress: clampProgress(
-      rawTimeline?.progress ?? rawTimeline?.timeline?.progress
-    ),
+    progress: clampProgress(rawProgress),
     currentStep:
-      normalizeText(
-        rawTimeline?.currentStep ??
-          rawTimeline?.timeline?.currentStep ??
-          rawTimeline?.currentStatus ??
-          rawTimeline?.timeline?.currentStatus
-      ) || "En curso",
+      normalizeText(rawCurrentStep) || "En curso",
     nextStep:
-      normalizeText(
-        rawTimeline?.nextStep ?? rawTimeline?.timeline?.nextStep
-      ) || "Por definir",
+      normalizeText(rawNextStep) || "Por definir",
   };
 }

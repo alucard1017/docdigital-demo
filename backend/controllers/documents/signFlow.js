@@ -1,3 +1,5 @@
+// backend/controllers/documents/signFlow.js
+
 const {
   DOCUMENT_STATES,
   getDbClient,
@@ -29,6 +31,16 @@ const { getGeoFromIP } = require("../../utils/geoLocation");
 const { getClientIp, getUserAgent } = require("./documentEventUtils");
 
 const { cancelPendingReminders } = require("./flowHelpers");
+
+function normalizeRole(rawRole) {
+  const role = String(rawRole || "").trim().toUpperCase();
+  if (!role) return null;
+  if (role.includes("VIS")) return "VISADOR";
+  if (role.includes("REV")) return "VISADOR";
+  if (role.includes("FINAL")) return "FIRMANTE_FINAL";
+  if (role.includes("FIRM")) return "FIRMANTE";
+  return role;
+}
 
 async function signFlow(req, res) {
   const { firmanteId } = req.params;
@@ -63,7 +75,12 @@ async function signFlow(req, res) {
       });
     }
 
-    const firmante = firmanteRes.rows[0];
+    const firmanteRaw = firmanteRes.rows[0];
+    const firmante = {
+      ...firmanteRaw,
+      rol: normalizeRole(firmanteRaw.rol),
+    };
+
     const actorIsReviewer = firmante.rol === "VISADOR";
 
     // 2) Validar estado actual del firmante

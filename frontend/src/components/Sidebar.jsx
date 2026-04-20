@@ -1,8 +1,19 @@
 // src/components/Sidebar.jsx
-import React, { useCallback } from "react";
+import React, { useCallback, useMemo } from "react";
 import "../styles/sidebar.css";
-
-const OWNER_ID = 7;
+import {
+  isAnyAdmin,
+  isEffectiveGlobalAdmin,
+  canViewDashboard,
+  canViewEmailMetrics,
+  canViewCompanyAnalytics,
+  canManageUsers,
+  canViewTemplates,
+  canManageReminders,
+  canManageCompanies,
+  canManageSystemStatus,
+  canViewAuditLogs,
+} from "../utils/permissions";
 
 function buildNavItemClass(active) {
   return `nav-item${active ? " active" : ""}`;
@@ -60,20 +71,30 @@ export function Sidebar({
   view,
   setView,
   logout,
-  isAnyAdmin,
+  isAnyAdmin: isAnyAdminProp,
   socketStatus,
   socketLastError,
   socketCanRetry,
   onRetrySocket,
 }) {
-  const isOwner = user?.id === OWNER_ID;
-  const showAdminSection = isOwner || isAnyAdmin;
+  // Por compatibilidad: si te pasan isAnyAdmin como prop, úsalo como fallback
+  const anyAdmin = useMemo(
+    () => (typeof isAnyAdminProp === "boolean"
+      ? isAnyAdminProp
+      : isAnyAdmin(user)),
+    [isAnyAdminProp, user]
+  );
 
-  const isAdminGlobalOrOwner =
-    !!user &&
-    (user.role === "SUPER_ADMIN" ||
-      user.role === "ADMIN_GLOBAL" ||
-      user.id === OWNER_ID);
+  const isGlobalAdmin = useEffectiveGlobalAdmin(user);
+  const canSeeDashboard = canViewDashboard(user);
+  const canSeeEmailMetrics = canViewEmailMetrics(user);
+  const canSeeCompanyAnalytics = canViewCompanyAnalytics(user);
+  const canAdminUsers = canManageUsers(user);
+  const canAdminTemplates = canViewTemplates(user);
+  const canAdminReminders = canManageReminders(user);
+  const canAdminCompanies = canManageCompanies(user);
+  const canAdminSystemStatus = canManageSystemStatus(user);
+  const canSeeAudit = canViewAuditLogs(user);
 
   const safeTotalDocs = Number.isFinite(totalDocuments) ? totalDocuments : 0;
   const safePendientes = Number.isFinite(totalPendientes)
@@ -139,7 +160,6 @@ export function Sidebar({
 
   return (
     <aside className="sidebar sidebar-root">
-      {/* Branding + estado tiempo real */}
       <div className="sidebar-brand">
         <div className="sidebar-brand-mark" aria-hidden="true">
           <div className="sidebar-brand-mark-inner" />
@@ -194,14 +214,10 @@ export function Sidebar({
         </div>
       </div>
 
-      {/* Usuario */}
       <div className="sidebar-user-card">
         <div className="sidebar-user-header">Sesión activa</div>
 
-        <div
-          className="sidebar-user-name"
-          title={user?.name || "Usuario"}
-        >
+        <div className="sidebar-user-name" title={user?.name || "Usuario"}>
           {user?.name || "Usuario"}
         </div>
 
@@ -213,7 +229,6 @@ export function Sidebar({
         </div>
       </div>
 
-      {/* Rol */}
       <div className="sidebar-role-badge-wrap">
         <span className="sidebar-role-badge" title={displayRole}>
           <span className="sidebar-role-dot" />
@@ -221,7 +236,6 @@ export function Sidebar({
         </span>
       </div>
 
-      {/* Bandeja */}
       <SidebarSectionLabel>Bandeja</SidebarSectionLabel>
 
       {renderNavItem({
@@ -241,46 +255,114 @@ export function Sidebar({
         onClick: () => handleChangeView("upload"),
       })}
 
-      {/* Reportes */}
-      {showAdminSection && (
+      {isGlobalAdmin && (
         <>
           <SidebarSectionLabel>Reportes</SidebarSectionLabel>
 
-          {renderNavItem({
-            active: view === "dashboard",
-            icon: "📊",
-            label: "Dashboard",
-            title: "Dashboard administrativo",
-            onClick: () => handleChangeView("dashboard"),
-          })}
+          {canSeeDashboard &&
+            renderNavItem({
+              active: view === "dashboard",
+              icon: "📊",
+              label: "Dashboard",
+              title: "Dashboard administrativo global",
+              onClick: () => handleChangeView("dashboard"),
+            })}
 
-          {renderNavItem({
-            active: view === "email-metrics",
-            icon: "📧",
-            label: "Métricas de email",
-            title: "Ver métricas de email",
-            onClick: () => handleChangeView("email-metrics"),
-          })}
+          {canSeeEmailMetrics &&
+            renderNavItem({
+              active: view === "email-metrics",
+              icon: "📧",
+              label: "Métricas de email",
+              title: "Ver métricas globales de email",
+              onClick: () => handleChangeView("email-metrics"),
+            })}
 
-          {renderNavItem({
-            active: view === "company-analytics",
-            icon: "📈",
-            label: "Analytics empresa",
-            title: "Analytics de la empresa",
-            onClick: () => handleChangeView("company-analytics"),
-          })}
-
-          {renderNavItem({
-            active: view === "templates",
-            icon: "📋",
-            label: "Plantillas",
-            title: "Gestionar plantillas de documentos",
-            onClick: () => handleChangeView("templates"),
-          })}
+          {canSeeCompanyAnalytics &&
+            renderNavItem({
+              active: view === "company-analytics",
+              icon: "📈",
+              label: "Analytics empresa",
+              title: "Analytics global por empresa",
+              onClick: () => handleChangeView("company-analytics"),
+            })}
         </>
       )}
 
-      {/* Cuenta */}
+      {anyAdmin && (
+        <>
+          <SidebarSectionLabel>Administración</SidebarSectionLabel>
+
+          {canAdminUsers &&
+            renderNavItem({
+              active: view === "users",
+              icon: "👥",
+              label: "Usuarios",
+              title: "Gestionar usuarios de la empresa",
+              onClick: () => handleChangeView("users"),
+            })}
+
+          {canAdminTemplates &&
+            renderNavItem({
+              active: view === "templates",
+              icon: "📋",
+              label: "Plantillas",
+              title: "Gestionar plantillas de documentos",
+              onClick: () => handleChangeView("templates"),
+            })}
+
+          {canAdminReminders &&
+            renderNavItem({
+              active: view === "reminders-config",
+              icon: "🔔",
+              label: "Recordatorios",
+              title: "Configurar recordatorios automáticos",
+              onClick: () => handleChangeView("reminders-config"),
+            })}
+        </>
+      )}
+
+      {isGlobalAdmin && (
+        <>
+          <SidebarSectionLabel>Administración global</SidebarSectionLabel>
+
+          {canAdminCompanies &&
+            renderNavItem({
+              active: view === "companies",
+              icon: "🏢",
+              label: "Empresas",
+              title: "Gestionar empresas",
+              onClick: () => handleChangeView("companies"),
+            })}
+
+          {canAdminSystemStatus &&
+            renderNavItem({
+              active: view === "status",
+              icon: "⚙️",
+              label: "Estado sistema",
+              title: "Estado del sistema",
+              onClick: () => handleChangeView("status"),
+            })}
+
+          {canSeeAudit &&
+            renderNavItem({
+              active: view === "audit-logs",
+              icon: "📜",
+              label: "Auditoría negocio",
+              title: "Auditoría de negocio",
+              onClick: () => handleChangeView("audit-logs"),
+            })}
+
+          {canSeeAudit &&
+            renderNavItem({
+              active: view === "auth-logs",
+              icon: "🔐",
+              label: "Auth logs",
+              title: "Logs de autenticación",
+              onClick: () => handleChangeView("auth-logs"),
+            })}
+        </>
+      )}
+
       <SidebarSectionLabel>Cuenta</SidebarSectionLabel>
 
       {renderNavItem({
@@ -299,66 +381,6 @@ export function Sidebar({
         onClick: () => handleChangeView("profile"),
       })}
 
-      {/* Administración */}
-      {showAdminSection && (
-        <>
-          <SidebarSectionLabel>Administración</SidebarSectionLabel>
-
-          {renderNavItem({
-            active: view === "users",
-            icon: "👥",
-            label: "Usuarios",
-            title: "Gestionar usuarios de la empresa",
-            onClick: () => handleChangeView("users"),
-          })}
-
-          {renderNavItem({
-            active: view === "reminders-config",
-            icon: "🔔",
-            label: "Recordatorios",
-            title: "Configurar recordatorios automáticos",
-            onClick: () => handleChangeView("reminders-config"),
-          })}
-
-          {isAdminGlobalOrOwner && (
-            <>
-              {renderNavItem({
-                active: view === "companies",
-                icon: "🏢",
-                label: "Empresas",
-                title: "Gestionar empresas",
-                onClick: () => handleChangeView("companies"),
-              })}
-
-              {renderNavItem({
-                active: view === "status",
-                icon: "⚙️",
-                label: "Estado sistema",
-                title: "Estado del sistema",
-                onClick: () => handleChangeView("status"),
-              })}
-
-              {renderNavItem({
-                active: view === "audit-logs",
-                icon: "📜",
-                label: "Auditoría negocio",
-                title: "Auditoría de negocio",
-                onClick: () => handleChangeView("audit-logs"),
-              })}
-
-              {renderNavItem({
-                active: view === "auth-logs",
-                icon: "🔐",
-                label: "Auth logs",
-                title: "Logs de autenticación",
-                onClick: () => handleChangeView("auth-logs"),
-              })}
-            </>
-          )}
-        </>
-      )}
-
-      {/* Footer métricas rápidas */}
       <div className="sidebar-metrics-card">
         <div className="sidebar-metric-row">
           <span>Trámites totales</span>
@@ -370,6 +392,21 @@ export function Sidebar({
           <strong className="sidebar-metric-value is-warning">
             {safePendientes}
           </strong>
+        </div>
+
+        <div className="sidebar-metric-row">
+          <span>Visados</span>
+          <strong className="sidebar-metric-value">{safeVisados}</strong>
+        </div>
+
+        <div className="sidebar-metric-row">
+          <span>Firmados</span>
+          <strong className="sidebar-metric-value">{safeFirmados}</strong>
+        </div>
+
+        <div className="sidebar-metric-row">
+          <span>Rechazados</span>
+          <strong className="sidebar-metric-value">{safeRechazados}</strong>
         </div>
 
         <div className="sidebar-metrics-divider" />
@@ -389,4 +426,9 @@ export function Sidebar({
       })}
     </aside>
   );
+}
+
+// Pequeño hook interno para recalcular solo una vez
+function useEffectiveGlobalAdmin(user) {
+  return useMemo(() => isEffectiveGlobalAdmin(user), [user]);
 }

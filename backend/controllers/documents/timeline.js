@@ -15,7 +15,7 @@ const { getClientIp, getUserAgent } = require("./documentEventUtils");
  *   toStatus: string | null,
  *   ip: string | null,
  *   userAgent: string | null,
- *   createdAt: string | Date,
+ *   createdAt: string,       // ISO 8601
  *   metadata: object | null
  * }
  *
@@ -58,7 +58,9 @@ function normalizeBoolean(value) {
 function normalizeStatus(raw) {
   if (!raw) return null;
 
-  switch (raw) {
+  const value = String(raw).toUpperCase().trim();
+
+  switch (value) {
     case "BORRADOR":
       return "BORRADOR";
     case "PENDIENTE_VISADO":
@@ -71,21 +73,27 @@ function normalizeStatus(raw) {
     case "RECHAZADO":
       return "RECHAZADO";
     default:
-      return raw;
+      return value;
   }
 }
 
 function normalizeCreatedAt(value) {
-  return value || null;
+  if (!value) return null;
+  const date = value instanceof Date ? value : new Date(value);
+  if (Number.isNaN(date.getTime())) return null;
+  return date.toISOString();
 }
 
 function detectEventSource(eventType, metadata) {
   if (metadata?.source) return metadata.source;
   if (!eventType) return "document_events";
 
-  if (eventType.startsWith("PUBLIC_")) return "public";
-  if (eventType.endsWith("_OWNER")) return "owner";
-  if (eventType.includes("INTERNAL")) return "internal_flow";
+  const type = String(eventType).toUpperCase();
+
+  if (type.startsWith("PUBLIC_")) return "public";
+  if (type.endsWith("_OWNER")) return "owner";
+  if (type.includes("INTERNAL")) return "internal_flow";
+  if (type.includes("AUDIT")) return "audit_log";
 
   return "document_events";
 }
@@ -141,6 +149,7 @@ function normalizeDocumentEvent(evt) {
     evt.actor ||
     metadata.actor ||
     metadata.actor_email ||
+    (metadata.user_id ? `user:${metadata.user_id}` : null) ||
     (metadata.actor_type
       ? `system:${String(metadata.actor_type).toLowerCase()}`
       : null) ||
@@ -172,9 +181,9 @@ function normalizeDocumentEvent(evt) {
 
 function normalizeAuditEvent(evt) {
   const metadata = safeJson(evt.metadata, {}) || {};
-  const action = evt.action || "AUDIT_LOG";
+  const baseAction = evt.action || "AUDIT_LOG";
   const eventType =
-    metadata.eventType || metadata.event_type || action || "AUDIT_LOG";
+    metadata.eventType || metadata.event_type || `AUDIT_${baseAction}`;
 
   const actor =
     metadata.actor ||
@@ -184,7 +193,7 @@ function normalizeAuditEvent(evt) {
   return buildNormalizedEvent({
     id: `audit-${evt.id}`,
     eventType,
-    action,
+    action: baseAction,
     actor,
     fromStatus: metadata.from_status || null,
     toStatus: metadata.to_status || null,
@@ -526,7 +535,11 @@ async function getTimeline(req, res) {
     const normalizedEvents = [
       ...documentEvents.map(normalizeDocumentEvent),
       ...auditEvents.map(normalizeAuditEvent),
-    ].sort((a, b) => new Date(a.createdAt) - new Date(b.createdAt));
+    ].sort((a, b) => {
+      const da = a.createdAt ? new Date(a.createdAt).getTime() : 0;
+      const dbT = b.createdAt ? new Date(b.createdAt).getTime() : 0;
+      return da - dbT;
+    });
 
     const requiresVisadoBool = normalizeBoolean(doc.requires_visado);
 

@@ -1,5 +1,5 @@
 // src/components/DetailActions.jsx
-import React, { useCallback } from "react";
+import React, { useCallback, useMemo } from "react";
 import { API_BASE_URL } from "../constants";
 import { useToast } from "../hooks/useToast";
 
@@ -19,25 +19,74 @@ export function DetailActions({
   setView,
   setSelectedDoc,
   manejarAccionDocumento,
-  isAdmin = false,
+  canAdminDocumentActions = false,
 }) {
   const { addToast } = useToast();
 
-  if (!selectedDoc) return null;
+  const documentId = selectedDoc?.id ?? null;
+
+  const canShowReject = useMemo(
+    () => !canAdminDocumentActions && puedeRechazar,
+    [canAdminDocumentActions, puedeRechazar]
+  );
+  const canShowVisar = useMemo(
+    () => !canAdminDocumentActions && puedeVisar,
+    [canAdminDocumentActions, puedeVisar]
+  );
+  const canShowFirmar = useMemo(
+    () => !canAdminDocumentActions && puedeFirmar,
+    [canAdminDocumentActions, puedeFirmar]
+  );
+  const canShowAdminCancel = useMemo(
+    () => canAdminDocumentActions,
+    [canAdminDocumentActions]
+  );
 
   const handleVolver = useCallback(() => {
-    setView("list");
-    setSelectedDoc(null);
+    if (typeof setView === "function") {
+      setView("list");
+    }
+
+    if (typeof setSelectedDoc === "function") {
+      setSelectedDoc(null);
+    }
   }, [setView, setSelectedDoc]);
 
-  const handleDownload = useCallback(() => {
-    if (!selectedDoc?.id) return;
+  const handleSuccessAndClose = useCallback(
+    ({ title, message }) => {
+      addToast({
+        type: "success",
+        title,
+        message,
+      });
+      handleVolver();
+    },
+    [addToast, handleVolver]
+  );
 
-    const url = apiUrl(`/docs/${selectedDoc.id}/download`);
+  const runDocumentAction = useCallback(
+    async (action, payload, successToast) => {
+      if (!documentId) return;
+
+      const ok = await manejarAccionDocumento(documentId, action, payload);
+
+      if (ok) {
+        handleSuccessAndClose(successToast);
+      }
+    },
+    [documentId, manejarAccionDocumento, handleSuccessAndClose]
+  );
+
+  const handleDownload = useCallback(() => {
+    if (!documentId) return;
+
+    const url = apiUrl(`/documents/${documentId}/download`);
     const link = document.createElement("a");
+
     link.href = url;
     link.target = "_blank";
     link.rel = "noopener noreferrer";
+
     document.body.appendChild(link);
     link.click();
     document.body.removeChild(link);
@@ -47,60 +96,54 @@ export function DetailActions({
       title: "Descarga iniciada",
       message: "Se inició la descarga del documento.",
     });
-  }, [selectedDoc?.id, addToast]);
+  }, [documentId, addToast]);
 
   const handleRechazar = useCallback(async () => {
-    if (!selectedDoc?.id) return;
-
     const motivo = window.prompt("Indica el motivo de rechazo:");
-    if (!motivo) return;
+    if (!motivo || !motivo.trim()) return;
 
-    const ok = await manejarAccionDocumento(selectedDoc.id, "rechazar", {
-      motivo,
-    });
-
-    if (ok) {
-      handleVolver();
-    }
-  }, [selectedDoc?.id, manejarAccionDocumento, handleVolver]);
+    await runDocumentAction(
+      "rechazar",
+      { motivo: motivo.trim() },
+      {
+        title: "Documento rechazado",
+        message: "El documento fue rechazado correctamente.",
+      }
+    );
+  }, [runDocumentAction]);
 
   const handleVisar = useCallback(async () => {
-    if (!selectedDoc?.id) return;
-
-    // El aviso legal ya se valida en DetailView (ElectronicSignatureNotice),
-    // aquí solo ejecutamos la acción.
-    const ok = await manejarAccionDocumento(selectedDoc.id, "visar");
-    if (ok) {
-      handleVolver();
-    }
-  }, [selectedDoc?.id, manejarAccionDocumento, handleVolver]);
+    await runDocumentAction("visar", undefined, {
+      title: "Documento visado",
+      message: "El documento fue visado correctamente.",
+    });
+  }, [runDocumentAction]);
 
   const handleFirmar = useCallback(async () => {
-    if (!selectedDoc?.id) return;
-
-    // Igual que en visado: el aviso legal ya se exige antes.
-    const ok = await manejarAccionDocumento(selectedDoc.id, "firmar");
-    if (ok) {
-      handleVolver();
-    }
-  }, [selectedDoc?.id, manejarAccionDocumento, handleVolver]);
+    await runDocumentAction("firmar", undefined, {
+      title: "Documento firmado",
+      message: "El documento fue firmado correctamente.",
+    });
+  }, [runDocumentAction]);
 
   const handleCancelarAdmin = useCallback(async () => {
-    if (!selectedDoc?.id) return;
-
     const okConfirm = window.confirm(
-      "¿Deseas cancelar este trámite? Esta acción no se puede deshacer."
+      "¿Deseas cancelar este trámite? Esta acción marcará el flujo como rechazado y no se puede deshacer."
     );
+
     if (!okConfirm) return;
 
-    const ok = await manejarAccionDocumento(selectedDoc.id, "rechazar", {
-      motivo: "Cancelado por administrador",
-    });
+    await runDocumentAction(
+      "rechazar",
+      { motivo: "Cancelado por administrador" },
+      {
+        title: "Trámite cancelado",
+        message: "El trámite fue cancelado por un administrador.",
+      }
+    );
+  }, [runDocumentAction]);
 
-    if (ok) {
-      handleVolver();
-    }
-  }, [selectedDoc?.id, manejarAccionDocumento, handleVolver]);
+  if (!selectedDoc || !documentId) return null;
 
   return (
     <div className="detail-actions-bar">
@@ -109,7 +152,7 @@ export function DetailActions({
         className="btn-main detail-actions-btn detail-actions-btn--secondary"
         onClick={handleVolver}
       >
-        Volver sin firmar
+        Volver a la bandeja
       </button>
 
       <button
@@ -120,7 +163,7 @@ export function DetailActions({
         Descargar PDF
       </button>
 
-      {!isAdmin && puedeRechazar && (
+      {canShowReject && (
         <button
           type="button"
           className="btn-main detail-actions-btn detail-actions-btn--reject"
@@ -130,7 +173,7 @@ export function DetailActions({
         </button>
       )}
 
-      {!isAdmin && puedeVisar && (
+      {canShowVisar && (
         <button
           type="button"
           className="btn-main detail-actions-btn detail-actions-btn--visar"
@@ -140,7 +183,7 @@ export function DetailActions({
         </button>
       )}
 
-      {!isAdmin && puedeFirmar && (
+      {canShowFirmar && (
         <button
           type="button"
           className="btn-main detail-actions-btn detail-actions-btn--primary"
@@ -150,7 +193,7 @@ export function DetailActions({
         </button>
       )}
 
-      {isAdmin && (
+      {canShowAdminCancel && (
         <button
           type="button"
           className="btn-main detail-actions-btn detail-actions-btn--admin-cancel"

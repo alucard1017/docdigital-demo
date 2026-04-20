@@ -1,4 +1,3 @@
-// frontend/src/components/Timeline.jsx
 import React, { useMemo } from "react";
 import "./Timeline.css";
 import {
@@ -15,6 +14,129 @@ import {
 
 function getActorPrefix(actorType) {
   return actorType === "user" ? "Por:" : "Origen:";
+}
+
+function shouldShowStatusTransition(event) {
+  return Boolean(event?.fromStatus || event?.toStatus);
+}
+
+function renderStatusTransition(event) {
+  if (!shouldShowStatusTransition(event)) return null;
+
+  const from = event.fromStatus || "Sin estado";
+  const to = event.toStatus || "Sin estado";
+
+  return (
+    <div className="timeline-event-status-change" title={`${from} → ${to}`}>
+      <span className="timeline-event-status timeline-event-status--from">
+        {from}
+      </span>
+      <span className="timeline-event-status-arrow" aria-hidden="true">
+        →
+      </span>
+      <span className="timeline-event-status timeline-event-status--to">
+        {to}
+      </span>
+    </div>
+  );
+}
+
+function EventTechMeta({ event }) {
+  if (!event?.showTechMeta) return null;
+  if (!event.ip && !event.userAgent && !event.requestId) return null;
+
+  return (
+    <div className="timeline-audit-meta">
+      {event.ip && (
+        <div title={event.ip}>IP: {ellipsisMiddle(event.ip, 28)}</div>
+      )}
+
+      {event.userAgent && (
+        <div title={event.userAgent}>
+          Agente: {shortenUserAgent(event.userAgent, 68)}
+        </div>
+      )}
+
+      {event.requestId && (
+        <div title={event.requestId}>
+          Req ID: {ellipsisMiddle(event.requestId, 32)}
+        </div>
+      )}
+    </div>
+  );
+}
+
+function TimelineEventCard({ event, index, total }) {
+  const visualStatus = getEventVisualStatus(index, total);
+  const isLast = index === total - 1;
+
+  const badgeLabel = getBadgeLabel(event.actorType);
+  const badgeClass = getBadgeClass(event.actorType);
+  const actorType = event.actorType;
+  const actorLabel = event.actor;
+
+  return (
+    <article
+      className={`timeline-event-wrapper timeline-event--${event.kind}`}
+      aria-label={event.title || "Evento del timeline"}
+    >
+      {!isLast && (
+        <div
+          className={`timeline-line timeline-line-${visualStatus}`}
+          aria-hidden="true"
+        />
+      )}
+
+      <div
+        className={`timeline-dot timeline-dot-${visualStatus}`}
+        aria-hidden="true"
+      >
+        <span className="timeline-icon">{event.icon}</span>
+      </div>
+
+      <div className={`timeline-content timeline-content-${visualStatus}`}>
+        <div className="timeline-event-top">
+          <h4 className="timeline-event-title" title={event.title || ""}>
+            {event.title}
+          </h4>
+
+          <span
+            className={`timeline-event-badge ${badgeClass}`}
+            title={`Tipo de actor: ${badgeLabel}`}
+          >
+            {badgeLabel}
+          </span>
+        </div>
+
+        {event.details && (
+          <p className="timeline-event-details" title={event.details}>
+            {event.details}
+          </p>
+        )}
+
+        {renderStatusTransition(event)}
+
+        <div className="timeline-event-meta-row">
+          {event.createdAt && (
+            <p className="timeline-event-timestamp">
+              {formatTimelineTimestamp(event.createdAt)}
+            </p>
+          )}
+
+          {actorLabel && (
+            <p
+              className={`timeline-event-actor timeline-event-actor--${actorType}`}
+              title={actorLabel}
+            >
+              {getActorPrefix(actorType)} {actorLabel}
+            </p>
+          )}
+        </div>
+
+        <EventTechMeta event={event} />
+      </div>
+    </article>
+  );
 }
 
 export function Timeline({ timeline }) {
@@ -85,100 +207,14 @@ export function Timeline({ timeline }) {
             Este documento todavía no tiene eventos para mostrar.
           </div>
         ) : (
-          events.map((event, index) => {
-            const visualStatus = getEventVisualStatus(index, events.length);
-            const isLast = index === events.length - 1;
-
-            const badgeLabel = getBadgeLabel(event.actorType);
-            const badgeClass = getBadgeClass(event.actorType);
-            const actorType = event.actorType; // "system" | "user" | "audit"
-            const actorLabel = event.actor;    // string ya normalizado
-
-            return (
-              <article
-                key={getStableEventKey(event)}
-                className={`timeline-event-wrapper timeline-event--${event.kind}`}
-              >
-                {!isLast && (
-                  <div
-                    className={`timeline-line timeline-line-${visualStatus}`}
-                    aria-hidden="true"
-                  />
-                )}
-
-                <div
-                  className={`timeline-dot timeline-dot-${visualStatus}`}
-                  aria-hidden="true"
-                >
-                  <span className="timeline-icon">{event.icon}</span>
-                </div>
-
-                <div
-                  className={`timeline-content timeline-content-${visualStatus}`}
-                >
-                  <div className="timeline-event-top">
-                    <h4
-                      className="timeline-event-title"
-                      title={event.title || ""}
-                    >
-                      {event.title}
-                    </h4>
-
-                    <span
-                      className={`timeline-event-badge ${badgeClass}`}
-                      title={`Tipo de actor: ${badgeLabel}`}
-                    >
-                      {badgeLabel}
-                    </span>
-                  </div>
-
-                  {event.details && (
-                    <p className="timeline-event-details" title={event.details}>
-                      {event.details}
-                    </p>
-                  )}
-
-                  {event.createdAt && (
-                    <p className="timeline-event-timestamp">
-                      {formatTimelineTimestamp(event.createdAt)}
-                    </p>
-                  )}
-
-                  {actorLabel && (
-                    <p
-                      className={`timeline-event-actor timeline-event-actor--${actorType}`}
-                      title={actorLabel}
-                    >
-                      {getActorPrefix(actorType)} {actorLabel}
-                    </p>
-                  )}
-
-                  {event.showTechMeta &&
-                    (event.ip || event.userAgent || event.requestId) && (
-                      <div className="timeline-audit-meta">
-                        {event.ip && (
-                          <div title={event.ip}>
-                            IP: {ellipsisMiddle(event.ip, 28)}
-                          </div>
-                        )}
-
-                        {event.userAgent && (
-                          <div title={event.userAgent}>
-                            Agente: {shortenUserAgent(event.userAgent, 68)}
-                          </div>
-                        )}
-
-                        {event.requestId && (
-                          <div title={event.requestId}>
-                            Req ID: {ellipsisMiddle(event.requestId, 32)}
-                          </div>
-                        )}
-                      </div>
-                    )}
-                </div>
-              </article>
-            );
-          })
+          events.map((event, index) => (
+            <TimelineEventCard
+              key={getStableEventKey(event)}
+              event={event}
+              index={index}
+              total={events.length}
+            />
+          ))
         )}
       </div>
     </section>

@@ -1,3 +1,4 @@
+// src/App.jsx
 import {
   useCallback,
   useEffect,
@@ -31,7 +32,20 @@ import {
   navigateTo,
   replaceTo,
 } from "./utils/router";
-import { isAnyAdmin, canViewAuditLogs } from "./utils/permissions";
+import {
+  isAnyAdmin,
+  isEffectiveGlobalAdmin,
+  canViewAuditLogs,
+  canAccessProtectedView,
+  canManageUsers,
+  canViewTemplates,
+  canManageReminders,
+  canViewDashboard,
+  canManageCompanies,
+  canManageSystemStatus,
+  canViewEmailMetrics,
+  canViewCompanyAnalytics,
+} from "./utils/permissions";
 import { formatRun, formatRunDoc } from "./utils/formatters";
 
 import {
@@ -139,8 +153,6 @@ function App() {
 
   const {
     tokenFromUrl,
-    isPublicSigningAccess,
-    isPublicVerificationAccess,
     isAnyPublicAccess,
     isDocumentTokenPath,
   } = publicAccess;
@@ -271,7 +283,8 @@ function App() {
     : 0;
 
   const anyAdmin = isAnyAdmin(user);
-  const canAudit = !!user && canViewAuditLogs(user);
+  const isGlobalAdmin = isEffectiveGlobalAdmin(user);
+  const canAudit = canViewAuditLogs(user);
 
   const refreshDocs = useCallback(
     async (overrides = {}) =>
@@ -449,23 +462,32 @@ function App() {
     setSelectedDoc,
   ]);
 
+  // Guard de vistas protegidas + permisos
   useEffect(() => {
     if (!isAuthenticated) return;
     if (view === "detail") return;
 
     const expectedView = getProtectedViewFromPath(path);
 
-    if (VALID_PROTECTED_VIEWS.has(expectedView) && view !== expectedView) {
-      setView(expectedView);
-      return;
-    }
-
-    if (!VALID_PROTECTED_VIEWS.has(view)) {
+    // Si la vista no es válida o el usuario no tiene permiso → ir a list
+    if (!VALID_PROTECTED_VIEWS.has(expectedView)) {
       setSelectedDoc(null);
       setView("list");
       replaceTo("/documents");
+      return;
     }
-  }, [view, path, isAuthenticated, setSelectedDoc]);
+
+    if (!canAccessProtectedView(user, expectedView)) {
+      setSelectedDoc(null);
+      setView("list");
+      replaceTo("/documents");
+      return;
+    }
+
+    if (view !== expectedView) {
+      setView(expectedView);
+    }
+  }, [view, path, isAuthenticated, user, setSelectedDoc]);
 
   /* ============================
      Socket listeners
@@ -676,6 +698,7 @@ function App() {
             firmados={safeFirmados}
             rechazados={safeRechazados}
             onSync={() => refreshDocs()}
+            token={token}
           />
 
           <div className="inbox-header-card">
@@ -733,32 +756,39 @@ function App() {
       );
     }
 
-    if (view === "users" && anyAdmin) return <UsersAdminView />;
-    if (view === "dashboard" && anyAdmin) return <DashboardView user={user} />;
-    if (view === "companies" && anyAdmin) {
-      return <CompaniesAdminView API_URL={apiRoot} />;
-    }
-    if (view === "status" && anyAdmin) {
-      return <StatusAdminView API_URL={apiRoot} />;
-    }
-    if (view === "audit-logs" && canAudit) {
-      return <AuditLogsView API_URL={apiRoot} />;
-    }
-    if (view === "auth-logs" && canAudit) {
-      return <AuthLogsView API_URL={apiRoot} />;
-    }
-    if (view === "reminders-config" && anyAdmin) {
+    // Admin scoped (empresa)
+    if (view === "users" && canManageUsers(user)) return <UsersAdminView />;
+    if (view === "reminders-config" && canManageReminders(user)) {
       return <RemindersConfigView />;
     }
-    if (view === "email-metrics" && anyAdmin) {
+    if (view === "templates" && canViewTemplates(user)) return <TemplatesView />;
+
+    // Admin global
+    if (view === "dashboard" && canViewDashboard(user)) {
+      return <DashboardView user={user} />;
+    }
+    if (view === "companies" && canManageCompanies(user)) {
+      return <CompaniesAdminView API_URL={apiRoot} />;
+    }
+    if (view === "status" && canManageSystemStatus(user)) {
+      return <StatusAdminView API_URL={apiRoot} />;
+    }
+    if (view === "audit-logs" && canViewAuditLogs(user)) {
+      return <AuditLogsView API_URL={apiRoot} />;
+    }
+    if (view === "auth-logs" && canViewAuditLogs(user)) {
+      return <AuthLogsView API_URL={apiRoot} />;
+    }
+    if (view === "email-metrics" && canViewEmailMetrics(user)) {
       return <EmailMetricsView />;
     }
-    if (view === "pricing") return <PricingView />;
-    if (view === "profile") return <ProfileView />;
-    if (view === "templates" && anyAdmin) return <TemplatesView />;
-    if (view === "company-analytics" && anyAdmin) {
+    if (view === "company-analytics" && canViewCompanyAnalytics(user)) {
       return <CompanyAnalyticsView />;
     }
+
+    // Comunes
+    if (view === "pricing") return <PricingView />;
+    if (view === "profile") return <ProfileView />;
 
     return <div className="redirect-fallback">Redirigiendo…</div>;
   }, [
@@ -785,11 +815,10 @@ function App() {
     empresaRutValue,
     handleAfterCreateDocument,
     cargarDocs,
-    anyAdmin,
-    canAudit,
     user,
     apiRoot,
     handleNavigateProtected,
+    token,
   ]);
 
   /* ============================

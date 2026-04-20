@@ -1,3 +1,5 @@
+// backend/controllers/documents/createFlow.js
+
 const {
   crypto,
   DOCUMENT_STATES,
@@ -18,6 +20,18 @@ const { validateCreateFlowBody } = require("./flowValidation");
 
 const { getClientIp, getUserAgent } = require("./documentEventUtils");
 const { insertDocumentEvent } = require("./documentEventInserts");
+
+function normalizeRole(rawRole) {
+  const role = String(rawRole || "").trim().toUpperCase();
+  if (!role) return null;
+
+  if (role.includes("VIS")) return "VISADOR";
+  if (role.includes("REV")) return "VISADOR";
+  if (role.includes("FINAL")) return "FIRMANTE_FINAL";
+  if (role.includes("FIRM")) return "FIRMANTE";
+
+  return role;
+}
 
 async function createFlow(req, res) {
   console.log("DEBUG crear-flujo body >>>", req.body);
@@ -40,12 +54,51 @@ async function createFlow(req, res) {
     tipoFlujo = "SECUENCIAL",
   } = req.body;
 
+  if (!req.user) {
+    return res.status(401).json({
+      code: "UNAUTHORIZED",
+      message: "Usuario no autenticado",
+    });
+  }
+
   const client = await getDbClient();
 
   try {
     await client.query("BEGIN");
 
     const codigoVerificacion = crypto.randomUUID().slice(0, 8);
+
+    const normalizedFlowType =
+      (tipoFlujo || "SECUENCIAL").toUpperCase() === "PARALELO"
+        ? "PARALELO"
+        : "SECUENCIAL";
+
+    // Normalizar roles de firmantes/visadores
+    const normalizedFirmantes = firmantes.map((f, index) => {
+      const normalizedRole = normalizeRole(f.rol);
+
+      return {
+        ...f,
+        rol: normalizedRole,
+        ordenFirma:
+          typeof f.ordenFirma === "number" && f.ordenFirma > 0
+            ? f.ordenFirma
+            : index + 1,
+      };
+    });
+
+    const hasAtLeastOneSigner = normalizedFirmantes.some(
+      (f) => f.rol !== "VISADOR"
+    );
+
+    if (!hasAtLeastOneSigner) {
+      await rollbackSafely(client);
+      return res.status(400).json({
+        code: "NO_SIGNERS",
+        message:
+          "El flujo debe tener al menos un firmante distinto de visador.",
+      });
+    }
 
     const docResult = await client.query(
       `
@@ -72,7 +125,7 @@ async function createFlow(req, res) {
         DOCUMENT_STATES.DRAFT,
         codigoVerificacion,
         categoriaFirma,
-        tipoFlujo,
+        normalizedFlowType,
         req.user.id,
         req.user.company_id,
         fechaExpiracion || null,
@@ -82,7 +135,8 @@ async function createFlow(req, res) {
     const documento = docResult.rows[0];
     const documentsStatus = mapLegacyStatusToDocumentsStatus(documento.estado);
 
-    for (const [index, f] of firmantes.entries()) {
+    // Insertar firmantes legacy
+    for (const [index, f] of normalizedFirmantes.entries()) {
       await client.query(
         `
         INSERT INTO firmantes (
@@ -109,6 +163,7 @@ async function createFlow(req, res) {
       );
     }
 
+    // Evento legacy de creación
     await client.query(
       `
       INSERT INTO eventos_firma (
@@ -129,6 +184,7 @@ async function createFlow(req, res) {
       ]
     );
 
+    // Mirror en documents
     const newDocumentId = await upsertDocumentMirror(client, {
       nuevoDocumentoId: documento.id,
       title: documento.titulo,
@@ -138,17 +194,18 @@ async function createFlow(req, res) {
       filePath: null,
       description: documento.tipo || null,
       signFlowType:
-        (tipoFlujo || "SECUENCIAL") === "PARALELO" ? "PARALLEL" : "SEQUENTIAL",
+        normalizedFlowType === "PARALELO" ? "PARALLEL" : "SEQUENTIAL",
       notaryMode: "NONE",
       countryCode: "CL",
       fechaExpiracion: documento.fecha_expiracion || null,
     });
 
-    const signersArray = firmantes
+    // Sincronizar participants (signers + visadores)
+    const signersArray = normalizedFirmantes
       .filter((f) => f.rol !== "VISADOR")
       .map((f) => ({ name: f.nombre, email: f.email }));
 
-    const visadoresArray = firmantes
+    const visadoresArray = normalizedFirmantes
       .filter((f) => f.rol === "VISADOR")
       .map((f) => ({ name: f.nombre, email: f.email }));
 
@@ -158,6 +215,7 @@ async function createFlow(req, res) {
       visadores: visadoresArray,
     });
 
+    // Eventos en document_events
     const ipAddress = getClientIp(req);
     const userAgent = getUserAgent(req);
 
@@ -180,7 +238,7 @@ async function createFlow(req, res) {
         legacy_documento_id: documento.id,
         tipo: documento.tipo,
         categoria_firma: documento.categoria_firma,
-        tipo_flujo: documento.tipo_flujo,
+        tipo_flujo: normalizedFlowType,
         signing_sequence: signersArray.length + visadoresArray.length,
       },
     });
@@ -195,7 +253,7 @@ async function createFlow(req, res) {
       extra: {
         tipo: documento.tipo,
         categoria_firma: documento.categoria_firma,
-        tipo_flujo: documento.tipo_flujo,
+        tipo_flujo: normalizedFlowType,
         fecha_expiracion: documento.fecha_expiracion,
         documents_equivalent_id: newDocumentId,
         documents_status: documentsStatus,

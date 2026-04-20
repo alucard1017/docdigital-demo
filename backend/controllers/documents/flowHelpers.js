@@ -1,4 +1,14 @@
+// backend/controllers/documents/flowHelpers.js
+
 async function getReminderConfig(client, companyId) {
+  if (!companyId) {
+    return {
+      intervalDays: 3,
+      maxAttempts: 3,
+      enabled: true,
+    };
+  }
+
   const configRes = await client.query(
     `
     SELECT interval_days, max_attempts, enabled
@@ -19,8 +29,8 @@ async function getReminderConfig(client, companyId) {
   const config = configRes.rows[0];
 
   return {
-    intervalDays: Number(config.interval_days) || 3,
-    maxAttempts: Number(config.max_attempts) || 3,
+    intervalDays: Number(config.interval_days) > 0 ? Number(config.interval_days) : 3,
+    maxAttempts: Number(config.max_attempts) > 0 ? Number(config.max_attempts) : 3,
     enabled: Boolean(config.enabled),
   };
 }
@@ -29,7 +39,7 @@ async function createAutomaticReminders(
   client,
   { documentId, signers, intervalDays, maxAttempts, companyId }
 ) {
-  if (!documentId || !signers?.length) return 0;
+  if (!documentId || !Array.isArray(signers) || !signers.length) return 0;
 
   const safeIntervalDays =
     Number.isFinite(Number(intervalDays)) && Number(intervalDays) > 0
@@ -41,11 +51,12 @@ async function createAutomaticReminders(
       ? Number(maxAttempts)
       : 3;
 
-  const firstReminderAt = new Date(
-    Date.now() + 12 * 60 * 60 * 1000
-  );
+  // Primera corrida: 12h después del envío para que no spamee al minuto 1
+  const firstReminderAt = new Date(Date.now() + 12 * 60 * 60 * 1000);
 
   for (const signer of signers) {
+    if (!signer?.email) continue;
+
     await client.query(
       `
       INSERT INTO recordatorios (

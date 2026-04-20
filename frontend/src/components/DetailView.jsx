@@ -37,6 +37,10 @@ import {
   getProcedureLabel,
   getProcedureFieldLabel,
 } from "../utils/documentLabels";
+import {
+  canViewAuditLogs,
+  canManageReminders,
+} from "../utils/permissions";
 
 function getButtonStateStyle(isLoading) {
   return {
@@ -83,8 +87,19 @@ export function DetailView({
   const timelineToastShownRef = useRef(false);
   const signersToastShownRef = useRef(false);
 
+  const canSeeActionHistory = useMemo(() => {
+    return canViewAuditLogs(currentUser);
+  }, [currentUser]);
+
+  const canManageDocumentReminders = useMemo(() => {
+    return canManageReminders(currentUser);
+  }, [currentUser]);
+
   const currentTimelineDoc = timeline?.document || null;
-  const currentDocId = selectedDoc?.id ?? currentTimelineDoc?.id ?? null;
+
+  const currentDocId = useMemo(() => {
+    return selectedDoc?.id ?? currentTimelineDoc?.id ?? null;
+  }, [selectedDoc?.id, currentTimelineDoc?.id]);
 
   const mergedDoc = useMemo(() => {
     return {
@@ -135,18 +150,19 @@ export function DetailView({
 
   const currentStatus = useMemo(() => {
     return currentTimelineDoc?.status ?? selectedDoc?.status ?? null;
-  }, [currentTimelineDoc, selectedDoc]);
+  }, [currentTimelineDoc?.status, selectedDoc?.status]);
 
   const isSigned = currentStatus === "FIRMADO";
   const isRejected = currentStatus === "RECHAZADO";
 
   const mostrarBotonReenvioVisado = useMemo(() => {
-    return shouldShowVisadoReminder(selectedDoc, currentStatus);
-  }, [selectedDoc, currentStatus]);
+    return canManageDocumentReminders &&
+      shouldShowVisadoReminder(mergedDoc, currentStatus);
+  }, [canManageDocumentReminders, mergedDoc, currentStatus]);
 
   const mostrarBotonRecordatorio = useMemo(() => {
-    return shouldShowGlobalReminder(currentStatus);
-  }, [currentStatus]);
+    return canManageDocumentReminders && shouldShowGlobalReminder(currentStatus);
+  }, [canManageDocumentReminders, currentStatus]);
 
   const baseUrl = api.defaults.baseURL || "";
   const downloadUrl = currentDocId
@@ -165,8 +181,29 @@ export function DetailView({
     return flowParticipants.find((p) => p.statusKey === "pending") || null;
   }, [flowParticipants]);
 
+  const handleBackToList = useCallback(() => {
+    if (typeof setView === "function") {
+      setView("list");
+    }
+
+    if (typeof setSelectedDoc === "function") {
+      setSelectedDoc(null);
+    }
+  }, [setView, setSelectedDoc]);
+
+  const showErrorToastOnce = useCallback(
+    (ref, config) => {
+      if (ref.current) return;
+      ref.current = true;
+      addToast(config);
+    },
+    [addToast]
+  );
+
   const refreshTimeline = useCallback(
     async (docId) => {
+      if (!docId) return;
+
       try {
         setLoadingTimeline(true);
         setLoadingParticipants(true);
@@ -183,27 +220,26 @@ export function DetailView({
         setTimeline(null);
         setParticipants([]);
 
-        if (!timelineToastShownRef.current) {
-          timelineToastShownRef.current = true;
-          addToast({
-            type: "error",
-            title: "No se pudo cargar el flujo",
-            message: getErrorMessage(
-              err,
-              "No se pudo cargar la línea de tiempo del documento."
-            ),
-          });
-        }
+        showErrorToastOnce(timelineToastShownRef, {
+          type: "error",
+          title: "No se pudo cargar el flujo",
+          message: getErrorMessage(
+            err,
+            "No se pudo cargar la línea de tiempo del documento."
+          ),
+        });
       } finally {
         setLoadingTimeline(false);
         setLoadingParticipants(false);
       }
     },
-    [addToast]
+    [showErrorToastOnce]
   );
 
   const refreshSigners = useCallback(
     async (docId, signal) => {
+      if (!docId) return;
+
       try {
         setLoadingSigners(true);
 
@@ -216,26 +252,25 @@ export function DetailView({
         console.error("Error fetching signers:", err);
         setSigners([]);
 
-        if (!signersToastShownRef.current) {
-          signersToastShownRef.current = true;
-          addToast({
-            type: "error",
-            title: "No se pudieron cargar los firmantes",
-            message: getErrorMessage(
-              err,
-              "No se pudo cargar la lista de firmantes."
-            ),
-          });
-        }
+        showErrorToastOnce(signersToastShownRef, {
+          type: "error",
+          title: "No se pudieron cargar los firmantes",
+          message: getErrorMessage(
+            err,
+            "No se pudo cargar la lista de firmantes."
+          ),
+        });
       } finally {
         setLoadingSigners(false);
       }
     },
-    [addToast]
+    [showErrorToastOnce]
   );
 
   const refreshAll = useCallback(
     async (docId, signal) => {
+      if (!docId) return;
+
       await Promise.allSettled([
         refreshTimeline(docId),
         refreshSigners(docId, signal),
@@ -265,53 +300,70 @@ export function DetailView({
     };
   }, [selectedDoc?.id, refreshAll]);
 
-  const handleBackToList = useCallback(() => {
-    setView("list");
-    setSelectedDoc(null);
-  }, [setView, setSelectedDoc]);
+  const runRefreshableAction = useCallback(
+    async ({ request, successToast, errorToast, loadingSetter }) => {
+      try {
+        if (typeof loadingSetter === "function") {
+          loadingSetter(true);
+        }
+
+        const res = await request();
+
+        addToast({
+          type: "success",
+          title: successToast.title,
+          message: res?.data?.message || successToast.message,
+        });
+
+        if (currentDocId) {
+          await refreshAll(currentDocId);
+        }
+      } catch (err) {
+        console.error(errorToast.logLabel, err);
+
+        addToast({
+          type: "error",
+          title: errorToast.title,
+          message: getErrorMessage(err, errorToast.message),
+        });
+      } finally {
+        if (typeof loadingSetter === "function") {
+          loadingSetter(false);
+        }
+      }
+    },
+    [addToast, currentDocId, refreshAll]
+  );
 
   const handleReenviarVisado = useCallback(async () => {
-    if (!selectedDoc?.id) return;
+    if (!currentDocId) return;
 
-    try {
-      setReenviarLoadingVisado(true);
-
-      const res = await api.post(`/documents/${selectedDoc.id}/reenviar`, {
-        tipo: REMINDER_TYPES.VISADO,
-      });
-
-      addToast({
-        type: "success",
+    await runRefreshableAction({
+      loadingSetter: setReenviarLoadingVisado,
+      request: () =>
+        api.post(`/documents/${currentDocId}/reenviar`, {
+          tipo: REMINDER_TYPES.VISADO,
+        }),
+      successToast: {
         title: "Visado reenviado",
-        message:
-          res.data?.message || "Recordatorio de visado reenviado correctamente.",
-      });
-
-      await refreshAll(selectedDoc.id);
-    } catch (err) {
-      console.error("Error reenviando visado:", err);
-
-      addToast({
-        type: "error",
+        message: "Recordatorio de visado reenviado correctamente.",
+      },
+      errorToast: {
         title: "No se pudo reenviar el visado",
-        message: getErrorMessage(
-          err,
-          "No se pudo reenviar el correo de visado."
-        ),
-      });
-    } finally {
-      setReenviarLoadingVisado(false);
-    }
-  }, [selectedDoc?.id, addToast, refreshAll]);
+        message: "No se pudo reenviar el correo de visado.",
+        logLabel: "Error reenviando visado:",
+      },
+    });
+  }, [currentDocId, runRefreshableAction]);
 
   const handleReenviarFirma = useCallback(
     async (signerId) => {
-      if (!selectedDoc?.id || !signerId) return;
+      if (!currentDocId || !signerId) return;
 
       try {
         setReenviarSignerId(signerId);
 
-        const res = await api.post(`/documents/${selectedDoc.id}/reenviar`, {
+        const res = await api.post(`/documents/${currentDocId}/reenviar`, {
           tipo: REMINDER_TYPES.FIRMA,
           signerId,
         });
@@ -323,7 +375,7 @@ export function DetailView({
             res.data?.message || "Recordatorio de firma reenviado correctamente.",
         });
 
-        await refreshAll(selectedDoc.id);
+        await refreshAll(currentDocId);
       } catch (err) {
         console.error("Error reenviando firma:", err);
 
@@ -339,36 +391,26 @@ export function DetailView({
         setReenviarSignerId(null);
       }
     },
-    [selectedDoc?.id, addToast, refreshAll]
+    [currentDocId, addToast, refreshAll]
   );
 
   const handleEnviarRecordatorioATodos = useCallback(async () => {
-    if (!selectedDoc?.id) return;
+    if (!currentDocId) return;
 
-    try {
-      setRecordatorioLoading(true);
-
-      const res = await api.post(`/documents/${selectedDoc.id}/recordatorio`);
-
-      addToast({
-        type: "success",
+    await runRefreshableAction({
+      loadingSetter: setRecordatorioLoading,
+      request: () => api.post(`/documents/${currentDocId}/recordatorio`),
+      successToast: {
         title: "Recordatorio enviado",
-        message: res.data?.message || "Recordatorio enviado correctamente.",
-      });
-
-      await refreshAll(selectedDoc.id);
-    } catch (err) {
-      console.error("Error enviando recordatorio a todos:", err);
-
-      addToast({
-        type: "error",
+        message: "Recordatorio enviado correctamente.",
+      },
+      errorToast: {
         title: "No se pudo enviar el recordatorio",
-        message: getErrorMessage(err, "No se pudo enviar el recordatorio."),
-      });
-    } finally {
-      setRecordatorioLoading(false);
-    }
-  }, [selectedDoc?.id, addToast, refreshAll]);
+        message: "No se pudo enviar el recordatorio.",
+        logLabel: "Error enviando recordatorio a todos:",
+      },
+    });
+  }, [currentDocId, runRefreshableAction]);
 
   const manejarAccionDocumentoConLegal = useCallback(
     async (id, accion, extraData = {}) => {
@@ -377,7 +419,7 @@ export function DetailView({
           setSignError(
             "Debes aceptar el aviso legal de firma electrónica antes de firmar."
           );
-          return;
+          return false;
         }
         setSignError("");
       }
@@ -387,7 +429,7 @@ export function DetailView({
           setVisadoError(
             "Debes aceptar el aviso legal de visado antes de aprobar el documento."
           );
-          return;
+          return false;
         }
         setVisadoError("");
       }
@@ -399,16 +441,19 @@ export function DetailView({
         setAcceptedLegalVisado(false);
         setSignError("");
         setVisadoError("");
-        if (selectedDoc?.id) {
-          await refreshAll(selectedDoc.id);
+
+        if (currentDocId) {
+          await refreshAll(currentDocId);
         }
       }
+
+      return ok;
     },
     [
       acceptedLegalSign,
       acceptedLegalVisado,
       manejarAccionDocumento,
-      selectedDoc?.id,
+      currentDocId,
       refreshAll,
     ]
   );
@@ -500,15 +545,15 @@ export function DetailView({
               </div>
             </div>
 
-            {selectedDoc.description && (
+            {mergedDoc.description && (
               <div className="detail-description">
-                <strong>Descripción:</strong> {selectedDoc.description}
+                <strong>Descripción:</strong> {mergedDoc.description}
               </div>
             )}
 
-            {isRejected && selectedDoc.reject_reason && (
+            {isRejected && mergedDoc.reject_reason && (
               <div className="detail-reject-box">
-                <strong>Motivo de rechazo:</strong> {selectedDoc.reject_reason}
+                <strong>Motivo de rechazo:</strong> {mergedDoc.reject_reason}
               </div>
             )}
 
@@ -690,6 +735,7 @@ export function DetailView({
 
                       const signerId = signerMatch?.id;
                       const canRemind =
+                        canManageDocumentReminders &&
                         participant.roleKey === FLOW_ROLE_KEYS.FIRMANTE &&
                         participant.statusKey === "pending" &&
                         Boolean(signerId);
@@ -779,29 +825,31 @@ export function DetailView({
               </div>
             </section>
 
-            <section className="detail-section">
-              <div className="detail-section__header">
-                <h3 className="detail-section__title">Historial de acciones</h3>
-                <p className="detail-section__subtitle">
-                  Registro detallado de eventos del documento para seguimiento y
-                  auditoría.
-                </p>
-              </div>
+            {canSeeActionHistory && (
+              <section className="detail-section">
+                <div className="detail-section__header">
+                  <h3 className="detail-section__title">Historial de acciones</h3>
+                  <p className="detail-section__subtitle">
+                    Registro detallado de eventos del documento para seguimiento y
+                    auditoría.
+                  </p>
+                </div>
 
-              <div className="detail-history">
-                <EventList events={safeEvents} />
-              </div>
-            </section>
+                <div className="detail-history">
+                  <EventList events={safeEvents} />
+                </div>
+              </section>
+            )}
 
             <DetailActions
               puedeFirmar={puedeFirmar}
               puedeVisar={puedeVisar}
               puedeRechazar={puedeRechazar}
-              selectedDoc={selectedDoc}
+              selectedDoc={mergedDoc}
               setView={setView}
               setSelectedDoc={setSelectedDoc}
               manejarAccionDocumento={manejarAccionDocumentoConLegal}
-              isAdmin={true}
+              isAdmin={canSeeActionHistory}
             />
           </div>
         </div>

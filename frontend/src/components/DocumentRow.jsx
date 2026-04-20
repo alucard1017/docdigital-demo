@@ -53,7 +53,11 @@ export function DocumentRow({ doc, onOpenDetail }) {
   const { addToast } = useToast();
 
   const tipoLabel = useMemo(() => {
-    return getPrimaryProcedureLabel(doc) || getProcedureLabel(doc) || "Documento";
+    return (
+      getPrimaryProcedureLabel(doc) ||
+      getProcedureLabel(doc) ||
+      "Documento"
+    );
   }, [doc]);
 
   const numeroContrato = useMemo(() => getContractNumber(doc), [doc]);
@@ -217,8 +221,8 @@ export function DocumentRow({ doc, onOpenDetail }) {
 
       addToast({
         type: "warning",
-        title: "Motivo de rechazo",
-        message: doc.reject_reason,
+          title: "Motivo de rechazo",
+          message: doc.reject_reason,
       });
     },
     [doc?.reject_reason, addToast]
@@ -226,6 +230,7 @@ export function DocumentRow({ doc, onOpenDetail }) {
 
   return (
     <tr className="doc-row" onClick={handleOpenDetail}>
+      {/* Columna título + contrato + fecha */}
       <td className="doc-cell-title doc-cell-title-unified">
         <div className="doc-title-stack">
           <div className="doc-title-contract-row">
@@ -253,12 +258,14 @@ export function DocumentRow({ doc, onOpenDetail }) {
         </div>
       </td>
 
+      {/* Columna tipo / clasificación */}
       <td className="doc-cell-type">
         <span className="doc-chip-tipo" title={tipoLabel}>
           {tipoLabel}
         </span>
       </td>
 
+      {/* Columna estado */}
       <td className="doc-cell-status">
         <div className="doc-status-wrap">
           <span
@@ -272,6 +279,7 @@ export function DocumentRow({ doc, onOpenDetail }) {
         </div>
       </td>
 
+      {/* Columna participante principal */}
       <td className="doc-cell-signer">
         <div className="doc-signer-main">
           {displayParticipantePrincipal || participanteFallback}
@@ -281,6 +289,7 @@ export function DocumentRow({ doc, onOpenDetail }) {
         ) : null}
       </td>
 
+      {/* Columna acciones */}
       <td className="doc-cell-actions" onClick={(e) => e.stopPropagation()}>
         <div className="doc-actions">
           <button
