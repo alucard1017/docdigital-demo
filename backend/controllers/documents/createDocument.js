@@ -40,7 +40,7 @@ async function rollbackQuietly(client) {
   try {
     await client.query("ROLLBACK");
   } catch (_) {
-    // swallow rollback errors
+    // ignore
   }
 }
 
@@ -69,7 +69,9 @@ async function createDocument(req, res) {
       req.body?.nombre ??
       "";
 
-    const fileTitleFallback = getSafeBaseFileName(req.file?.originalname || "");
+    const fileTitleFallback = getSafeBaseFileName(
+      req.file?.originalname || ""
+    );
 
     const titulo =
       normalizeText(rawTitulo) ||
@@ -77,7 +79,8 @@ async function createDocument(req, res) {
       "Documento sin título";
 
     const descripcion =
-      normalizeText(req.body.descripcion || req.body.description || "") || null;
+      normalizeText(req.body.descripcion || req.body.description || "") ||
+      null;
 
     const signers = sanitizeSigners(
       req.body.signers || req.body.firmantes || req.body.participants
@@ -94,7 +97,9 @@ async function createDocument(req, res) {
         ? normalizeText(tipoTramiteRaw).toLowerCase()
         : null;
 
-    const remoteUrl = String(req.body.pdfUrl || req.body.fileUrl || "").trim();
+    const remoteUrl = String(
+      req.body.pdfUrl || req.body.fileUrl || ""
+    ).trim();
 
     console.log("[createDocument] Payload normalizado:", {
       companyId,
@@ -172,10 +177,10 @@ async function createDocument(req, res) {
     // 1) Generar preview con marca de agua, pero mantener el original limpio
     const watermarkedBuffer = await aplicarMarcaAguaLocal(originalBuffer);
 
-    // Hash del documento base: usar SIEMPRE el original limpio
+    // Hash del documento base: SIEMPRE el original limpio
     const documentHash = computeHash(originalBuffer);
 
-    // 2) Subir original limpio como archivo principal
+    // 2) Subir original limpio (purpose="original")
     const originalUploadResult = await uploadMainPdfToStorage(
       {
         buffer: originalBuffer,
@@ -183,14 +188,14 @@ async function createDocument(req, res) {
         mimetype: mimeType,
       },
       companyId,
-      verificationCode
+      verificationCode,
+      "original"
     );
 
     const originalStorageKey = originalUploadResult.key;
     const originalStorageUrl = originalUploadResult.url;
 
-    // 3) Subir preview con marca de agua (opcional, pero recomendado)
-    let previewStorageKey = null;
+    // 3) Subir preview con marca de agua (purpose="preview")
     let previewStorageUrl = null;
 
     try {
@@ -201,10 +206,10 @@ async function createDocument(req, res) {
           mimetype: mimeType,
         },
         companyId,
-        `${verificationCode}-preview`
+        verificationCode,
+        "preview"
       );
 
-      previewStorageKey = previewUploadResult.key;
       previewStorageUrl = previewUploadResult.url;
     } catch (previewErr) {
       console.warn(
@@ -238,9 +243,10 @@ async function createDocument(req, res) {
 
     const signatureToken = verificationCode;
 
-    // 1) documents (modelo moderno, fuente para pdf_final_url)
-    // file_path y storage_key apuntan al ORIGINAL limpio
-    // pdf_original_url apunta al preview con marca si existe
+    // 4) Insert en documents (modelo moderno)
+    // - original_storage_key / storage_key / file_path: original limpio
+    // - preview_file_url: preview con marca
+    // - pdf_original_url: compat, también preview si existe
     const { rows: documentRows } = await client.query(
       `
       INSERT INTO documents (
@@ -261,6 +267,7 @@ async function createDocument(req, res) {
         metadata,
         file_path,
         pdf_original_url,
+        preview_file_url,
         tipo_tramite,
         original_storage_key,
         created_at,
@@ -270,7 +277,7 @@ async function createDocument(req, res) {
         $1, $2, $3, $4, $5,
         $6, $7, $8, $9, $10,
         $11, $12, $13, $14, $15::jsonb,
-        $16, $17, $18, $19,
+        $16, $17, $18, $19, $20,
         NOW(), NOW()
       )
       RETURNING *
@@ -282,25 +289,26 @@ async function createDocument(req, res) {
         descripcion,
         initialDocumentStatus,
         originalFilename,
-        originalStorageUrl,        // file_url (histórico / compat)
-        originalStorageKey,        // storage_key (original limpio)
+        originalStorageUrl,              // file_url -> original limpio
+        originalStorageKey,              // storage_key -> original limpio
         documentHash,
-        null,                      // sealed_hash_sha256
+        null,                            // sealed_hash_sha256
         verificationCode,
         signatureToken,
         requiresVisado,
         userId,
         toJson(metadataPayload, "{}"),
-        originalStorageKey,        // file_path -> original limpio
-        previewStorageUrl,         // pdf_original_url -> preview con marca (si existe)
+        originalStorageKey,              // file_path -> original limpio
+        previewStorageUrl || null,       // pdf_original_url -> compat (preview)
+        previewStorageUrl || null,       // preview_file_url -> preview con marca
         tipoTramite,
-        originalStorageKey,        // original_storage_key -> original limpio
+        originalStorageKey,              // original_storage_key -> original limpio
       ]
     );
 
     const document = documentRows[0];
 
-    // 2) documentos (legacy, con código de verificación y número interno)
+    // 5) documentos (legacy)
     const { rows: legacyRows } = await client.query(
       `
       INSERT INTO documentos (
@@ -361,7 +369,7 @@ async function createDocument(req, res) {
       [document.id, documentoNuevo.id]
     );
 
-    // 3) firmantes legacy + canónicos + participants
+    // 6) firmantes legacy + canónicos + participants
     const legacySigners = await createLegacySigners(client, {
       documentoId: documentoNuevo.id,
       signers,
@@ -462,11 +470,10 @@ async function createDocument(req, res) {
     await client.query("COMMIT");
     committed = true;
 
-    // 4) Sellado post-commit (no bloquea la creación)
+    // 7) Sellado post-commit (no bloqueante) sobre el original limpio
     try {
       const sealResult = await sellarPdfConQr({
-        s3Key: originalStorageKey, // SIEMPRE desde el original limpio
-        // IMPORTANTE: usamos documents.id, que es el que pdfSeal actualiza
+        s3Key: originalStorageKey,
         documentoId: document.id,
         codigoVerificacion: verificationCode,
         categoriaFirma: requiresVisado ? "AVANZADA" : "SIMPLE",
@@ -517,7 +524,7 @@ async function createDocument(req, res) {
       recordatoriosCreados: remindersCreated,
       signersCount: canonicalSigners.length,
       participantsCount: participants.length,
-      fileUrl: originalStorageUrl, // URL del original limpio
+      fileUrl: originalStorageUrl,
       hash: documentHash,
       legacyFirmantes: legacySigners.length,
       tipoTramite,

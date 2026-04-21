@@ -1,6 +1,4 @@
 // backend/controllers/documents/publicDocuments.js
-const db = require("../../db");
-const { getSignedUrl } = require("../../services/storageR2");
 const { sellarPdfConQr } = require("../../services/pdfSeal");
 const { logAudit } = require("../../utils/auditLog");
 const { formatDateSafe } = require("./documentEventUtils");
@@ -17,147 +15,47 @@ const {
   validatePublicVisar,
   isTruthyVisado,
 } = require("./publicDocumentsValidations");
+const {
+  buildSignedPdfUrlOrFail,
+  buildSealSourceKey,
+  buildFinalDocumentFilePath,
+} = require("./publicDocumentFiles");
+const {
+  buildPublicDocumentPayload,
+  buildCurrentSignerPayload,
+  mapLegacySignerRow,
+  mapLegacyEventRow,
+} = require("./publicDocumentPayloads");
+const {
+  resolveParticipantIdForPublicEvent,
+  getDocumentAndSignerByDocumentToken,
+  getPublicSignerDocumentByToken,
+  getPublicDocumentBySignatureToken,
+  getPublicSignContextByToken,
+  getPublicRejectContextByToken,
+  getPublicVisadoContextByToken,
+  markSignerAsSigned,
+  markParticipantAsSigned,
+  markSignerAsRejected,
+  markParticipantAsRejected,
+  countSigningProgress,
+  updateDocumentStatuses,
+  rejectDocument,
+  updateDocumentToPendingFirma,
+  syncLegacySigned,
+  syncLegacyRejected,
+  getLegacyDocumentByVerificationCode,
+  getLegacySigners,
+  getLegacySignatureEvents,
+  getModernDocumentByLegacyId,
+  refreshPdfFields,
+} = require("./publicDocumentQueries");
+const db = require("../../db");
+const { getSignedUrl } = require("../../services/storageR2");
 
 const NOT_FOUND_MESSAGE = "Enlace inválido o documento no encontrado";
-const NO_FILE_MESSAGE = "Documento sin archivo asociado";
 const EXPIRED_LINK_MESSAGE =
   "El enlace público ha expirado. Solicita uno nuevo al emisor.";
-
-/**
- * Resuelve el id de document_participants para eventos públicos
- * (FK document_events.participant_id -> document_participants.id).
- */
-async function resolveParticipantIdForPublicEvent({
-  documentId,
-  email,
-  roleInDoc,
-}) {
-  if (!documentId || !email) return null;
-
-  try {
-    const res = await db.query(
-      `
-      SELECT id
-      FROM document_participants
-      WHERE document_id = $1
-        AND email = $2
-        AND ($3::text IS NULL OR role_in_doc = $3)
-      ORDER BY id ASC
-      LIMIT 1
-      `,
-      [documentId, email, roleInDoc || null]
-    );
-
-    if (!res.rows.length) {
-      return null;
-    }
-
-    return res.rows[0].id;
-  } catch (err) {
-    console.error("⚠️ Error resolviendo participant_id para evento público:", {
-      documentId,
-      email,
-      roleInDoc,
-      error: err,
-    });
-    return null;
-  }
-}
-
-/**
- * Devuelve la mejor ruta de archivo disponible para VISUALIZAR un documento.
- * Orden de preferencia:
- * 1) pdf_final_url / final_file_url / final_storage_key (PDF final, sellado)
- * 2) pdf_original_url (PDF original / preview con marca)
- * 3) file_path (legacy)
- */
-function buildDocumentFilePath(row) {
-  if (!row) return null;
-  return (
-    row.pdf_final_url ||
-    row.final_file_url ||
-    row.final_storage_key ||
-    row.pdf_original_url ||
-    row.file_path ||
-    null
-  );
-}
-
-/**
- * Devuelve la mejor ruta de archivo disponible como FUENTE PARA SELLAR.
- * Importante: prioriza original limpio si existe.
- * Orden sugerida:
- * 1) original_storage_key / original_file_url / clean_file_path (PDF limpio)
- * 2) file_path (legacy cuando era el original)
- * 3) pdf_original_url (solo fallback si no hay nada más)
- */
-function buildSealSourceKey(row) {
-  if (!row) return null;
-  return (
-    row.original_storage_key ||
-    row.original_file_url ||
-    row.clean_file_path ||
-    row.file_path ||
-    row.pdf_original_url ||
-    null
-  );
-}
-
-function buildPublicDocumentPayload(row, extra = {}) {
-  return {
-    id: row.id,
-    title: row.title,
-    status: row.status,
-    destinatario_nombre: row.destinatario_nombre,
-    empresa_rut: row.empresa_rut,
-    requires_visado: isTruthyVisado(row.requires_visado),
-    signature_status: row.signature_status,
-    firmante_nombre: row.firmante_nombre,
-    firmante_run: row.firmante_run,
-    numero_contrato_interno: row.numero_contrato_interno,
-    numero_contrato:
-      row.numero_contrato ||
-      row.numero_contrato_interno ||
-      "",
-    visador_nombre: row.visador_nombre || null,
-    pdf_final_url: row.pdf_final_url || null,
-    pdf_original_url: row.pdf_original_url || null,
-    ...extra,
-  };
-}
-
-/**
- * Devuelve una signed URL (S3) o envía el error HTTP y retorna null.
- * Siempre usa buildDocumentFilePath (prioriza el PDF final).
- */
-async function buildSignedPdfUrlOrFail(row, res) {
-  const basePath = buildDocumentFilePath(row);
-
-  if (!basePath) {
-    console.warn("[PUBLIC] documento sin archivo asociado", {
-      documentId: row?.id,
-    });
-    res.status(404).json({
-      code: "NO_FILE",
-      message: NO_FILE_MESSAGE,
-    });
-    return null;
-  }
-
-  try {
-    return await getSignedUrl(basePath, 3600);
-  } catch (err) {
-    console.error(
-      "⚠️ Error generando signed URL en buildSignedPdfUrlOrFail:",
-      err
-    );
-    res.status(500).json({
-      code: "SIGNED_URL_ERROR",
-      message: "No se pudo generar el enlace de descarga del documento.",
-    });
-    return null;
-  }
-}
 
 /**
  * Resuelve datos de verificación (código y categoría) desde legacy + metadata.
@@ -195,71 +93,8 @@ async function resolveVerificationData(doc) {
   return { codigoVerificacion, categoriaFirma };
 }
 
-/**
- * Recarga campos finales (pdf_final_url / final_*) desde DB
- * después de sellar.
- */
-async function refreshFinalPdfFields(docId, targetDoc) {
-  const updatedDocRes = await db.query(
-    `
-    SELECT
-      pdf_final_url,
-      final_storage_key,
-      final_file_url
-    FROM documents
-    WHERE id = $1
-    `,
-    [docId]
-  );
-
-  if (updatedDocRes.rowCount === 0) {
-    return targetDoc;
-  }
-
-  const updated = updatedDocRes.rows[0];
-
-  targetDoc.pdf_final_url =
-    updated.pdf_final_url || targetDoc.pdf_final_url || null;
-  targetDoc.final_storage_key =
-    updated.final_storage_key || targetDoc.final_storage_key || null;
-  targetDoc.final_file_url =
-    updated.final_file_url || targetDoc.final_file_url || null;
-
-  return targetDoc;
-}
-
-/**
- * SOLO lectura por token de documento (signature_token).
- * No usar para firmar/rechazar (se debe usar siempre sign_token).
- */
-async function getDocumentAndSignerByDocumentToken(
-  documentToken,
-  emailFromQuery = null
-) {
-  const { rows } = await db.query(
-    `
-    SELECT
-      d.*,
-      s.id     AS signer_id,
-      s.status AS signer_status,
-      s.name   AS signer_name,
-      s.email  AS signer_email
-    FROM documents d
-    LEFT JOIN document_signers s
-      ON s.document_id = d.id
-      AND ($2::text IS NULL OR s.email = $2)
-    WHERE d.signature_token = $1
-    LIMIT 1
-    `,
-    [documentToken, emailFromQuery]
-  );
-
-  return rows[0] || null;
-}
-
 /* ================================
    GET: Firma por sign_token
-   /api/public/docs/:token
    ================================ */
 
 async function getPublicDocBySignerToken(req, res) {
@@ -273,56 +108,23 @@ async function getPublicDocBySignerToken(req, res) {
       return res.status(tokenError.status).json(tokenError.body);
     }
 
-    const { rows } = await db.query(
-      `
-      SELECT 
-        d.*,
-        d.destinatario_nombre,
-        d.empresa_rut,
-        d.requires_visado,
-        d.signature_status,
-        d.signature_token_expires_at,
-        d.firmante_nombre,
-        d.firmante_run,
-        d.numero_contrato_interno,
-        COALESCE(
-          d.numero_contrato_interno,
-          d.metadata->>'numero_contrato',
-          d.metadata->>'numero_interno',
-          d.metadata->>'contract_number',
-          d.metadata->>'codigo_contrato'
-        ) AS numero_contrato,
-        s.id     AS signer_id,
-        s.name   AS signer_name,
-        s.email  AS signer_email,
-        s.status AS signer_status,
-        s.role   AS signer_role
-      FROM document_signers s
-      JOIN documents d ON d.id = s.document_id
-      WHERE s.sign_token = $1
-      `,
-      [token]
-    );
+    const row = await getPublicSignerDocumentByToken(token);
 
-    if (!rows.length) {
-      console.warn(
-        "[PUBLIC] getPublicDocBySignerToken → sin resultados para sign_token",
-        { token }
-      );
+    if (!row) {
       return res.status(404).json({
         code: "NOT_FOUND",
         message: NOT_FOUND_MESSAGE,
       });
     }
 
-    const row = rows[0];
-
     const accessError = validatePublicAccess(row, EXPIRED_LINK_MESSAGE);
     if (accessError) {
       return res.status(accessError.status).json(accessError.body);
     }
 
-    const pdfUrl = await buildSignedPdfUrlOrFail(row, res);
+    const pdfUrl = await buildSignedPdfUrlOrFail(row, res, {
+      mode: "preview",
+    });
     if (!pdfUrl) return;
 
     try {
@@ -353,21 +155,12 @@ async function getPublicDocBySignerToken(req, res) {
         },
       });
     } catch (eventErr) {
-      console.error(
-        "⚠️ Error registrando PUBLIC_LINK_OPENED_SIGNER:",
-        eventErr
-      );
+      console.error("⚠️ Error registrando PUBLIC_LINK_OPENED_SIGNER:", eventErr);
     }
 
     return res.json({
       document: buildPublicDocumentPayload(row),
-      currentSigner: {
-        id: row.signer_id,
-        name: row.signer_name,
-        email: row.signer_email,
-        status: row.signer_status,
-        role: row.signer_role || "FIRMANTE",
-      },
+      currentSigner: buildCurrentSignerPayload(row),
       pdfUrl,
       file_url: pdfUrl,
       public_mode: "firma",
@@ -384,7 +177,6 @@ async function getPublicDocBySignerToken(req, res) {
 
 /* ================================
    GET: Visualización/visado por signature_token
-   /api/public/docs/document/:token
    ================================ */
 
 async function getPublicDocByDocumentToken(req, res) {
@@ -401,51 +193,23 @@ async function getPublicDocByDocumentToken(req, res) {
       return res.status(tokenError.status).json(tokenError.body);
     }
 
-    const { rows } = await db.query(
-      `
-      SELECT 
-        d.*,
-        d.destinatario_nombre,
-        d.empresa_rut,
-        d.requires_visado,
-        d.signature_status,
-        d.signature_token_expires_at,
-        d.firmante_nombre,
-        d.firmante_run,
-        d.numero_contrato_interno,
-        d.visador_nombre,
-        COALESCE(
-          d.numero_contrato_interno,
-          d.metadata->>'numero_contrato',
-          d.metadata->>'numero_interno',
-          d.metadata->>'contract_number',
-          d.metadata->>'codigo_contrato'
-        ) AS numero_contrato
-      FROM documents d
-      WHERE d.signature_token = $1
-      `,
-      [token]
-    );
+    const doc = await getPublicDocumentBySignatureToken(token);
 
-    if (!rows.length) {
-      console.warn(
-        "[PUBLIC] getPublicDocByDocumentToken → sin resultados para signature_token",
-        { token }
-      );
+    if (!doc) {
       return res.status(404).json({
         code: "NOT_FOUND",
         message: NOT_FOUND_MESSAGE,
       });
     }
 
-    const doc = rows[0];
-
     const accessError = validatePublicAccess(doc, EXPIRED_LINK_MESSAGE);
     if (accessError) {
       return res.status(accessError.status).json(accessError.body);
     }
 
-    const pdfUrl = await buildSignedPdfUrlOrFail(doc, res);
+    const pdfUrl = await buildSignedPdfUrlOrFail(doc, res, {
+      mode: "preview",
+    });
     if (!pdfUrl) return;
 
     try {
@@ -466,10 +230,7 @@ async function getPublicDocByDocumentToken(req, res) {
         },
       });
     } catch (eventErr) {
-      console.error(
-        "⚠️ Error registrando INVITATION_OPENED (document_events):",
-        eventErr
-      );
+      console.error("⚠️ Error registrando INVITATION_OPENED:", eventErr);
     }
 
     const requiresVisadoBool = isTruthyVisado(doc.requires_visado);
@@ -492,7 +253,6 @@ async function getPublicDocByDocumentToken(req, res) {
 
 /* ================================
    POST: Firmar documento (sign_token)
-   /api/public/docs/:token/firmar
    ================================ */
 
 async function publicSignDocument(req, res) {
@@ -506,43 +266,14 @@ async function publicSignDocument(req, res) {
       return res.status(tokenError.status).json(tokenError.body);
     }
 
-    const currentRes = await db.query(
-      `
-      SELECT 
-        s.id     AS signer_id,
-        s.status AS signer_status,
-        s.name   AS signer_name,
-        s.email  AS signer_email,
-        s.role   AS signer_role,
-        s.must_sign,
-        s.must_review,
-        d.*,
-        COALESCE(
-          d.numero_contrato_interno,
-          d.metadata->>'numero_contrato',
-          d.metadata->>'numero_interno',
-          d.metadata->>'contract_number',
-          d.metadata->>'codigo_contrato'
-        ) AS numero_contrato
-      FROM document_signers s
-      JOIN documents d ON d.id = s.document_id
-      WHERE s.sign_token = $1
-      `,
-      [token]
-    );
+    const row = await getPublicSignContextByToken(token);
 
-    if (!currentRes.rows.length) {
-      console.warn(
-        "[PUBLIC] publicSignDocument → sin resultados para sign_token",
-        { token }
-      );
+    if (!row) {
       return res.status(404).json({
         code: "NOT_FOUND",
         message: NOT_FOUND_MESSAGE,
       });
     }
-
-    const row = currentRes.rows[0];
 
     const validationError = validatePublicSign(row);
     if (validationError) {
@@ -556,118 +287,41 @@ async function publicSignDocument(req, res) {
       });
     }
 
-    // 1) Actualizar signer y participants
-    await db.query(
-      `
-      UPDATE document_signers
-      SET status = 'FIRMADO',
-          signed_at = NOW()
-      WHERE id = $1
-      `,
-      [row.signer_id]
-    );
+    await markSignerAsSigned(row.signer_id);
 
     try {
-      await db.query(
-        `
-        UPDATE document_participants
-        SET status = 'FIRMADO',
-            signed_at = NOW(),
-            updated_at = NOW()
-        WHERE document_id = $1
-          AND email = $2
-        `,
-        [row.id, row.signer_email]
-      );
+      await markParticipantAsSigned(row.id, row.signer_email);
     } catch (errDp) {
-      console.error(
-        "⚠️ Error actualizando document_participants (publicSignDocument):",
-        errDp
-      );
+      console.error("⚠️ Error actualizando document_participants:", errDp);
     }
 
-    // 2) Recalcular estado del documento según firmantes
-    const countRes = await db.query(
-      `
-      SELECT 
-        COUNT(*) FILTER (WHERE status = 'FIRMADO' AND (must_sign = TRUE OR role != 'VISADOR')) AS signed_count,
-        COUNT(*) FILTER (WHERE (must_sign = TRUE OR role != 'VISADOR'))        AS total_signers
-      FROM document_signers
-      WHERE document_id = $1
-      `,
-      [row.id]
-    );
+    const { signed_count, total_signers } = await countSigningProgress(row.id);
 
-    const { signed_count, total_signers } = countRes.rows[0];
     const allSigned =
       Number(total_signers || 0) > 0 &&
       Number(signed_count) >= Number(total_signers);
 
-    let newDocStatus = row.status;
-    let newSignatureStatus = row.signature_status;
+    const newDocStatus = allSigned ? "FIRMADO" : "PENDIENTE_FIRMA";
+    const newSignatureStatus = allSigned ? "FIRMADO" : "PENDIENTE";
 
-    if (allSigned) {
-      newDocStatus = "FIRMADO";
-      newSignatureStatus = "FIRMADO";
-    } else {
-      newDocStatus = "PENDIENTE_FIRMA";
-      newSignatureStatus = "PENDIENTE";
-    }
-
-    const docUpdateRes = await db.query(
-      `
-      UPDATE documents
-      SET status = $1,
-          signature_status = $2,
-          updated_at = NOW()
-      WHERE id = $3
-      RETURNING *,
-      COALESCE(
-        numero_contrato_interno,
-        metadata->>'numero_contrato',
-        metadata->>'numero_interno',
-        metadata->>'contract_number',
-        metadata->>'codigo_contrato'
-      ) AS numero_contrato
-      `,
-      [newDocStatus, newSignatureStatus, row.id]
+    const doc = await updateDocumentStatuses(
+      row.id,
+      newDocStatus,
+      newSignatureStatus
     );
-    const doc = docUpdateRes.rows[0];
 
-    // 3) Sincronizar con legacy (documentos + firmantes)
-    if (doc.nuevo_documento_id) {
+    if (doc?.nuevo_documento_id) {
       try {
-        await db.query(
-          `
-          UPDATE documentos
-          SET estado = $1,
-              updated_at = NOW()
-          WHERE id = $2
-          `,
-          [allSigned ? "FIRMADO" : "PENDIENTE_FIRMA", doc.nuevo_documento_id]
-        );
-
-        await db.query(
-          `
-          UPDATE firmantes
-          SET estado = 'FIRMADO',
-              fecha_firma = NOW(),
-              tipo_firma = 'SIMPLE',
-              updated_at = NOW()
-          WHERE documento_id = $1
-            AND email = $2
-          `,
-          [doc.nuevo_documento_id, row.signer_email]
+        await syncLegacySigned(
+          doc.nuevo_documento_id,
+          row.signer_email,
+          allSigned
         );
       } catch (syncErr) {
-        console.error(
-          "⚠️ Error sincronizando estado con tabla documentos:",
-          syncErr
-        );
+        console.error("⚠️ Error sincronizando estado con legacy:", syncErr);
       }
     }
 
-    // 4) Eventos públicos
     const fromStatus = row.status;
     const toStatus = newDocStatus;
 
@@ -714,10 +368,7 @@ async function publicSignDocument(req, res) {
           },
         });
       } catch (eventErr) {
-        console.error(
-          "⚠️ Error registrando STATUS_CHANGED (publicSignDocument):",
-          eventErr
-        );
+        console.error("⚠️ Error registrando STATUS_CHANGED:", eventErr);
       }
     }
 
@@ -737,22 +388,12 @@ async function publicSignDocument(req, res) {
       req,
     });
 
-    // 5) SELLADO PDF: si todos firmaron, sellamos usando documents.id.
     if (allSigned) {
       try {
         const { codigoVerificacion, categoriaFirma } =
           await resolveVerificationData(doc);
 
         const baseKey = buildSealSourceKey(doc);
-
-        console.log("[PUBLIC] DEBUG SIGN PUBLIC SOURCE PDF >>", {
-          documentId: doc.id,
-          baseKey,
-          original_storage_key: doc.original_storage_key || null,
-          file_path: doc.file_path || null,
-          pdf_original_url: doc.pdf_original_url || null,
-          final_storage_key: doc.final_storage_key || null,
-        });
 
         if (!baseKey) {
           console.warn(
@@ -768,18 +409,16 @@ async function publicSignDocument(req, res) {
             numeroContratoInterno: doc.numero_contrato_interno,
           });
 
-          await refreshFinalPdfFields(doc.id, doc);
+          await refreshPdfFields(doc.id, doc);
         }
       } catch (sealError) {
-        console.error(
-          "⚠️ Error sellando PDF con QR (firma pública):",
-          sealError
-        );
+        console.error("⚠️ Error sellando PDF con QR:", sealError);
       }
     }
 
-    // 6) Devolver URL firmada (prioriza PDF final si existe)
-    const fileUrl = await buildSignedPdfUrlOrFail(doc, res);
+    const fileUrl = await buildSignedPdfUrlOrFail(doc, res, {
+      mode: allSigned ? "final" : "preview",
+    });
     if (!fileUrl) return;
 
     return res.json({
@@ -787,6 +426,7 @@ async function publicSignDocument(req, res) {
       numero_contrato_interno: doc.numero_contrato_interno,
       numero_contrato: doc.numero_contrato || doc.numero_contrato_interno,
       file_url: fileUrl,
+      pdfUrl: fileUrl,
       documentStatus: newDocStatus,
       public_mode: "firma",
       public_token_kind: "signer",
@@ -805,7 +445,6 @@ async function publicSignDocument(req, res) {
 
 /* ================================
    POST: Rechazar documento (sign_token)
-   /api/public/docs/:token/rechazar
    ================================ */
 
 async function publicRejectDocument(req, res) {
@@ -828,124 +467,35 @@ async function publicRejectDocument(req, res) {
       return res.status(reasonError.status).json(reasonError.body);
     }
 
-    const current = await db.query(
-      `
-      SELECT 
-        s.id     AS signer_id,
-        s.status AS signer_status,
-        s.name   AS signer_name,
-        s.email  AS signer_email,
-        s.role   AS signer_role,
-        d.*,
-        COALESCE(
-          d.numero_contrato_interno,
-          d.metadata->>'numero_contrato',
-          d.metadata->>'numero_interno',
-          d.metadata->>'contract_number',
-          d.metadata->>'codigo_contrato'
-        ) AS numero_contrato
-      FROM document_signers s
-      JOIN documents d ON d.id = s.document_id
-      WHERE s.sign_token = $1
-      `,
-      [token]
-    );
+    const row = await getPublicRejectContextByToken(token);
 
-    if (!current.rows.length) {
-      console.warn(
-        "[PUBLIC] publicRejectDocument → sin resultados para sign_token",
-        { token }
-      );
+    if (!row) {
       return res.status(404).json({
         code: "NOT_FOUND",
         message: NOT_FOUND_MESSAGE,
       });
     }
 
-    const row = current.rows[0];
-
     const validationError = validatePublicReject(row);
     if (validationError) {
       return res.status(validationError.status).json(validationError.body);
     }
 
-    await db.query(
-      `
-      UPDATE document_signers
-      SET status = 'RECHAZADO',
-          rejected_at = NOW(),
-          rejection_reason = $2
-      WHERE id = $1
-      `,
-      [row.signer_id, motivo]
-    );
+    await markSignerAsRejected(row.signer_id, motivo);
 
     try {
-      await db.query(
-        `
-        UPDATE document_participants
-        SET status = 'RECHAZADO',
-            updated_at = NOW()
-        WHERE document_id = $1
-          AND email = $2
-        `,
-        [row.id, row.signer_email]
-      );
+      await markParticipantAsRejected(row.id, row.signer_email);
     } catch (errDp) {
-      console.error(
-        "⚠️ Error actualizando document_participants (publicRejectDocument):",
-        errDp
-      );
+      console.error("⚠️ Error actualizando document_participants:", errDp);
     }
 
-    const docUpdateRes = await db.query(
-      `
-      UPDATE documents
-      SET status = 'RECHAZADO',
-          signature_status = 'RECHAZADO',
-          reject_reason = $2,
-          updated_at = NOW()
-      WHERE id = $1
-      RETURNING *,
-      COALESCE(
-        numero_contrato_interno,
-        metadata->>'numero_contrato',
-        metadata->>'numero_interno',
-        metadata->>'contract_number',
-        metadata->>'codigo_contrato'
-      ) AS numero_contrato
-      `,
-      [row.id, motivo]
-    );
-    const doc = docUpdateRes.rows[0];
+    const doc = await rejectDocument(row.id, motivo);
 
-    if (doc.nuevo_documento_id) {
+    if (doc?.nuevo_documento_id) {
       try {
-        await db.query(
-          `
-          UPDATE documentos
-          SET estado = 'RECHAZADO',
-              updated_at = NOW()
-          WHERE id = $1
-          `,
-          [doc.nuevo_documento_id]
-        );
-
-        await db.query(
-          `
-          UPDATE firmantes
-          SET estado = 'RECHAZADO',
-              updated_at = NOW()
-          WHERE documento_id = $1
-            AND email = $2
-          `,
-          [doc.nuevo_documento_id, row.signer_email]
-        );
+        await syncLegacyRejected(doc.nuevo_documento_id, row.signer_email);
       } catch (syncErr) {
-        console.error(
-          "⚠️ Error sincronizando rechazo con tabla documentos:",
-          syncErr
-        );
+        console.error("⚠️ Error sincronizando rechazo con legacy:", syncErr);
       }
     }
 
@@ -992,10 +542,7 @@ async function publicRejectDocument(req, res) {
         },
       });
     } catch (eventErr) {
-      console.error(
-        "⚠️ Error registrando STATUS_CHANGED (publicRejectDocument):",
-        eventErr
-      );
+      console.error("⚠️ Error registrando STATUS_CHANGED:", eventErr);
     }
 
     await logAudit({
@@ -1014,11 +561,15 @@ async function publicRejectDocument(req, res) {
       req,
     });
 
-    const filePath = buildDocumentFilePath(doc);
+    const fileUrl = await buildSignedPdfUrlOrFail(doc, res, {
+      mode: "preview",
+    });
+    if (!fileUrl) return;
 
     return res.json({
       ...doc,
-      file_url: filePath,
+      file_url: fileUrl,
+      pdfUrl: fileUrl,
       documentStatus: "RECHAZADO",
       public_mode: "firma",
       public_token_kind: "signer",
@@ -1035,7 +586,6 @@ async function publicRejectDocument(req, res) {
 
 /* ================================
    POST: Visar documento (signature_token)
-   /api/public/docs/document/:token/visar
    ================================ */
 
 async function publicVisarDocument(req, res) {
@@ -1051,59 +601,21 @@ async function publicVisarDocument(req, res) {
       return res.status(tokenError.status).json(tokenError.body);
     }
 
-    const current = await db.query(
-      `
-      SELECT * ,
-      COALESCE(
-        numero_contrato_interno,
-        metadata->>'numero_contrato',
-        metadata->>'numero_interno',
-        metadata->>'contract_number',
-        metadata->>'codigo_contrato'
-      ) AS numero_contrato
-      FROM documents
-      WHERE signature_token = $1
-      `,
-      [token]
-    );
+    const docActual = await getPublicVisadoContextByToken(token);
 
-    if (!current.rows.length) {
-      console.warn(
-        "[PUBLIC] publicVisarDocument → sin resultados para signature_token",
-        { token }
-      );
+    if (!docActual) {
       return res.status(404).json({
         code: "NOT_FOUND",
         message: NOT_FOUND_MESSAGE,
       });
     }
 
-    const docActual = current.rows[0];
-
     const validationError = validatePublicVisar(docActual);
     if (validationError) {
       return res.status(validationError.status).json(validationError.body);
     }
 
-    const result = await db.query(
-      `
-      UPDATE documents
-      SET status = $1,
-          signature_status = COALESCE(signature_status, 'PENDIENTE'),
-          updated_at = NOW()
-      WHERE id = $2
-      RETURNING *,
-      COALESCE(
-        numero_contrato_interno,
-        metadata->>'numero_contrato',
-        metadata->>'numero_interno',
-        metadata->>'contract_number',
-        metadata->>'codigo_contrato'
-      ) AS numero_contrato
-      `,
-      ["PENDIENTE_FIRMA", docActual.id]
-    );
-    const doc = result.rows[0];
+    const doc = await updateDocumentToPendingFirma(docActual.id);
 
     const fromStatus = docActual.status;
     const toStatus = "PENDIENTE_FIRMA";
@@ -1136,10 +648,7 @@ async function publicVisarDocument(req, res) {
         },
       });
     } catch (eventErr) {
-      console.error(
-        "⚠️ Error registrando STATUS_CHANGED (publicVisarDocument):",
-        eventErr
-      );
+      console.error("⚠️ Error registrando STATUS_CHANGED:", eventErr);
     }
 
     await logAudit({
@@ -1156,11 +665,15 @@ async function publicVisarDocument(req, res) {
       req,
     });
 
-    const filePath = buildDocumentFilePath(doc);
+    const fileUrl = await buildSignedPdfUrlOrFail(doc, res, {
+      mode: "preview",
+    });
+    if (!fileUrl) return;
 
     return res.json({
       ...doc,
-      file_url: filePath,
+      file_url: fileUrl,
+      pdfUrl: fileUrl,
       documentStatus: "PENDIENTE_FIRMA",
       public_mode: "visado",
       public_token_kind: "document",
@@ -1177,7 +690,6 @@ async function publicVisarDocument(req, res) {
 
 /* ================================
    GET: Verificación por código
-   /api/public/verificar/:codigo
    ================================ */
 
 async function verifyByCode(req, res) {
@@ -1193,61 +705,17 @@ async function verifyByCode(req, res) {
       });
     }
 
-    const docResult = await db.query(
-      `
-      SELECT *
-      FROM documentos
-      WHERE codigo_verificacion = $1
-      `,
-      [codigo]
-    );
+    const documento = await getLegacyDocumentByVerificationCode(codigo);
 
-    if (!docResult.rows.length) {
-      console.warn("[PUBLIC] verifyByCode → sin resultados para codigo", {
-        codigo,
-      });
+    if (!documento) {
       return res.status(404).json({
         code: "NOT_FOUND",
         message: "Documento no encontrado para este código",
       });
     }
 
-    const documento = docResult.rows[0];
-
-    const signersResult = await db.query(
-      `
-      SELECT
-        id,
-        nombre,
-        email,
-        rut,
-        rol,
-        orden_firma,
-        estado,
-        fecha_firma,
-        tipo_firma
-      FROM firmantes
-      WHERE documento_id = $1
-      ORDER BY orden_firma ASC
-      `,
-      [documento.id]
-    );
-
-    const eventosResult = await db.query(
-      `
-      SELECT
-        id,
-        tipo_evento,
-        ip,
-        user_agent,
-        metadata,
-        created_at
-      FROM eventos_firma
-      WHERE documento_id = $1
-      ORDER BY created_at ASC
-      `,
-      [documento.id]
-    );
+    const signersRows = await getLegacySigners(documento.id);
+    const eventRows = await getLegacySignatureEvents(documento.id);
 
     let basePath =
       documento.pdf_final_url ||
@@ -1259,35 +727,10 @@ async function verifyByCode(req, res) {
     let relatedDocument = null;
 
     if (!basePath) {
-      const modernDocRes = await db.query(
-        `
-        SELECT
-          id,
-          nuevo_documento_id,
-          file_path,
-          pdf_original_url,
-          pdf_final_url,
-          final_storage_key,
-          final_file_url,
-          original_storage_key,
-          company_id,
-          numero_contrato_interno,
-          status,
-          hash_final_file,
-          pdf_hash_final,
-          hash_original_file,
-          metadata
-        FROM documents
-        WHERE nuevo_documento_id = $1
-        ORDER BY id DESC
-        LIMIT 1
-        `,
-        [documento.id]
-      );
+      relatedDocument = await getModernDocumentByLegacyId(documento.id);
 
-      if (modernDocRes.rowCount > 0) {
-        relatedDocument = modernDocRes.rows[0];
-        basePath = buildDocumentFilePath(relatedDocument);
+      if (relatedDocument) {
+        basePath = buildFinalDocumentFilePath(relatedDocument);
       }
     }
 
@@ -1296,10 +739,7 @@ async function verifyByCode(req, res) {
       try {
         pdfUrl = await getSignedUrl(basePath, 3600);
       } catch (urlErr) {
-        console.error(
-          "⚠️ Error generando signed URL en verifyByCode:",
-          urlErr
-        );
+        console.error("⚠️ Error generando signed URL en verifyByCode:", urlErr);
       }
     }
 
@@ -1317,35 +757,8 @@ async function verifyByCode(req, res) {
       pdf_url: pdfUrl,
     };
 
-    const signers = signersResult.rows.map((s) => ({
-      id: s.id,
-      name: s.nombre,
-      email: s.email,
-      rut: s.rut,
-      role: s.rol,
-      order: s.orden_firma,
-      status: s.estado,
-      signed_at: s.fecha_firma,
-      tipo_firma: s.tipo_firma,
-    }));
-
-    const events = eventosResult.rows.map((e) => ({
-      id: e.id,
-      event_type: e.tipo_evento,
-      ip: e.ip,
-      user_agent: e.user_agent,
-      metadata: (() => {
-        if (!e.metadata) return null;
-        if (typeof e.metadata === "object") return e.metadata;
-        try {
-          return JSON.parse(e.metadata);
-        } catch {
-          return e.metadata;
-        }
-      })(),
-      created_at: e.created_at,
-      descripcion: e.tipo_evento,
-    }));
+    const signers = signersRows.map(mapLegacySignerRow);
+    const events = eventRows.map(mapLegacyEventRow);
 
     if (relatedDocument) {
       try {
@@ -1366,10 +779,7 @@ async function verifyByCode(req, res) {
           },
         });
       } catch (eventErr) {
-        console.error(
-          "⚠️ Error registrando VERIFY_PUBLIC_CODE en document_events:",
-          eventErr
-        );
+        console.error("⚠️ Error registrando VERIFY_PUBLIC_CODE:", eventErr);
       }
     }
 
