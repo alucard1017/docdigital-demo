@@ -1,5 +1,3 @@
-// backend/controllers/documents/sendFlow.js
-
 const {
   DOCUMENT_STATES,
   getDbClient,
@@ -9,19 +7,15 @@ const {
 } = require("./flowCommon");
 
 const { syncParticipantsFromFlow } = require("./flowParticipantsSync");
-
 const {
   logAudit,
   buildDocumentAuditMetadata,
 } = require("../../utils/auditLog");
-
 const { validateSendFlowParams } = require("./flowValidation");
 const { triggerWebhook } = require("../../services/webhookService");
 const { emitToCompany } = require("../../services/socketService");
-
 const { getClientIp, getUserAgent } = require("./documentEventUtils");
 const { insertDocumentEvent } = require("./documentEventInserts");
-
 const {
   getReminderConfig,
   createAutomaticReminders,
@@ -61,7 +55,15 @@ async function sendFlow(req, res) {
 
     const docRes = await client.query(
       `
-      SELECT id, titulo, estado, company_id, creado_por, fecha_expiracion, tipo_flujo, categoria_firma
+      SELECT
+        id,
+        titulo,
+        estado,
+        company_id,
+        creado_por,
+        fecha_expiracion,
+        tipo_flujo,
+        categoria_firma
       FROM documentos
       WHERE id = $1
       `,
@@ -153,6 +155,7 @@ async function sendFlow(req, res) {
       [legacyStatus, id]
     );
 
+    // Mirror en tabla moderna "documents"
     const newDocumentId = await upsertDocumentMirror(client, {
       nuevoDocumentoId: documento.id,
       title: documento.titulo,
@@ -168,6 +171,7 @@ async function sendFlow(req, res) {
       fechaExpiracion: documento.fecha_expiracion || null,
     });
 
+    // Registro legado en eventos_firma
     await client.query(
       `
       INSERT INTO eventos_firma (
@@ -191,7 +195,11 @@ async function sendFlow(req, res) {
       ]
     );
 
-    const reminderConfig = await getReminderConfig(client, documento.company_id);
+    // Configuración y cancelación/creación de recordatorios
+    const reminderConfig = await getReminderConfig(
+      client,
+      documento.company_id
+    );
     await cancelPendingReminders(client, documento.id);
 
     let recordatoriosCreados = 0;
@@ -205,6 +213,7 @@ async function sendFlow(req, res) {
       });
     }
 
+    // Sincronización a document_participants
     await syncParticipantsFromFlow(client, {
       documentId: newDocumentId,
       signers: firmantes
@@ -218,6 +227,7 @@ async function sendFlow(req, res) {
     const ipAddress = getClientIp(req);
     const userAgent = getUserAgent(req);
 
+    // Evento moderno para timeline
     await insertDocumentEvent({
       documentId: newDocumentId,
       participantId: null,
@@ -254,7 +264,9 @@ async function sendFlow(req, res) {
         estado: legacyStatus,
         firmantes: totalFirmantes,
         tieneVisador,
-      }).catch((err) => console.error("Error en webhook document.sent:", err));
+      }).catch((err) =>
+        console.error("Error en webhook document.sent:", err)
+      );
 
       emitToCompany(documento.company_id, "document:sent", {
         documentoId: documento.id,

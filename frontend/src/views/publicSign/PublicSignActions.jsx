@@ -26,16 +26,25 @@ export function PublicSignActions({
     return "Registrar firma";
   }, [signing, isVisado, signerRoleLabel]);
 
-  const helperText = useMemo(() => {
-    return `Al continuar, registrarás tu ${
-      isVisado ? "visado" : "firma electrónica"
-    }. Esta acción no se puede deshacer.`;
-  }, [isVisado]);
+  const helperText = useMemo(
+    () =>
+      `Al continuar, registrarás tu ${
+        isVisado ? "visado" : "firma electrónica"
+      }. Esta acción no se puede deshacer.`,
+    [isVisado]
+  );
 
-  const submitBlocked = !acceptedLegal || !canSubmitAction || signing || rejecting;
+  const submitBlocked =
+    !acceptedLegal || !canSubmitAction || signing || rejecting;
+
   const rejectTextareaErrorId = "public-sign-reject-error";
   const actionHelpId = "public-sign-action-help";
   const actionErrorId = "public-sign-action-error";
+
+  const actionAriaDescribedBy =
+    !canSubmitAction || legalError
+      ? `${actionHelpId} ${actionErrorId}`
+      : actionHelpId;
 
   return (
     <div className="public-sign-action-block">
@@ -45,25 +54,15 @@ export function PublicSignActions({
         mode={isVisado ? "visado" : "firma"}
       />
 
-      {legalError && (
+      {(legalError || !canSubmitAction) && (
         <div
           id={actionErrorId}
           className="public-sign-inline-error"
           role="alert"
           aria-live="polite"
         >
-          {legalError}
-        </div>
-      )}
-
-      {!canSubmitAction && (
-        <div
-          id={actionErrorId}
-          className="public-sign-inline-error"
-          role="alert"
-          aria-live="polite"
-        >
-          No se puede habilitar la acción para este enlace.
+          {legalError ||
+            "No se puede habilitar la acción para este enlace."}
         </div>
       )}
 
@@ -82,9 +81,7 @@ export function PublicSignActions({
             }`}
             onClick={onConfirm}
             disabled={submitBlocked}
-            aria-describedby={
-              !canSubmitAction || legalError ? `${actionHelpId} ${actionErrorId}` : actionHelpId
-            }
+            aria-describedby={actionAriaDescribedBy}
           >
             {actionLabel}
           </button>

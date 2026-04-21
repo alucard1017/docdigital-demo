@@ -301,10 +301,7 @@ async function getDocumentPdf(req, res) {
 
     const normalizedStatus = normalizeStatus(status);
 
-    // Regla explícita:
-    // - Si está FIRMADO y hay pdf_final_url -> usar SIEMPRE pdf_final_url (sin marca de agua).
-    // - Si está FIRMADO pero no hay pdf_final_url -> fallback a pdf_original_url o file_path (caso legacy).
-    // - Si NO está FIRMADO -> usar pdf_original_url o file_path (puede incluir marca de agua).
+    // FIRMADO: preferir siempre pdf_final_url (sin marca de agua)
     let storageKey = null;
     let isFinalPdf = false;
 

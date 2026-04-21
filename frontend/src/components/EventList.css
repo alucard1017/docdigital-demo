@@ -1,0 +1,149 @@
+.event-list {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  list-style: none;
+  padding: 0;
+  margin: 0;
+}
+
+.event-list-empty {
+  font-size: 0.85rem;
+  color: #9ca3af;
+  padding: 12px;
+  background: #f3f4f6;
+  border-radius: 6px;
+}
+
+.event-item {
+  display: flex;
+  gap: 12px;
+  padding: 12px;
+  border-radius: 8px;
+  background: #f9fafb;
+  border: 1px solid #e5e7eb;
+  border-left: 4px solid #cbd5e1;
+}
+
+.event-item--created {
+  border-color: #93c5fd;
+  border-left-color: #3b82f6;
+}
+
+.event-item--signed {
+  border-color: #86efac;
+  border-left-color: #10b981;
+}
+
+.event-item--approved {
+  border-color: #fcd34d;
+  border-left-color: #f59e0b;
+}
+
+.event-item--rejected {
+  border-color: #fca5a5;
+  border-left-color: #ef4444;
+}
+
+.event-item--neutral {
+  border-color: #e5e7eb;
+  border-left-color: #94a3b8;
+}
+
+.event-item-icon {
+  font-size: 1.5rem;
+  min-width: 32px;
+  text-align: center;
+  line-height: 1;
+}
+
+.event-item-body {
+  flex: 1;
+  min-width: 0;
+}
+
+.event-item-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 8px;
+  margin-bottom: 4px;
+}
+
+.event-item-title-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+
+.event-item-action {
+  font-weight: 700;
+  font-size: 0.9rem;
+  color: #1e293b;
+}
+
+.event-item-timestamp {
+  font-size: 0.75rem;
+  color: #9ca3af;
+  white-space: nowrap;
+}
+
+.event-item-details {
+  margin: 4px 0;
+  font-size: 0.85rem;
+  color: #4b5563;
+  line-height: 1.4;
+}
+
+.event-item-meta {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 12px;
+  margin-top: 6px;
+  padding: 0;
+  list-style: none;
+  font-size: 0.8rem;
+  color: #9ca3af;
+}
+
+.event-item-user-agent {
+  margin-top: 4px;
+  font-size: 0.75rem;
+  color: #a1a1aa;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.event-source-pill {
+  font-size: 0.7rem;
+  padding: 2px 6px;
+  border-radius: 999px;
+  text-transform: uppercase;
+}
+
+.event-source-pill--flow {
+  background: #dbeafe;
+  color: #1d4ed8;
+}
+
+.event-source-pill--audit {
+  background: #fef3c7;
+  color: #92400e;
+}
+
+.event-source-pill--public {
+  background: #dcfce7;
+  color: #166534;
+}
+
+.event-source-pill--owner {
+  background: #ede9fe;
+  color: #6d28d9;
+}
+
+.event-source-pill--internal {
+  background: #e5e7eb;
+  color: #374151;
+}

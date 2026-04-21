@@ -1,12 +1,11 @@
-// src/components/DetailActions.jsx
 import React, { useCallback, useMemo } from "react";
 import { API_BASE_URL } from "../constants";
 import { useToast } from "../hooks/useToast";
 
-const API_URL = API_BASE_URL;
+const API_URL = API_BASE_URL || "";
 
 function apiUrl(path) {
-  const base = (API_URL || "").replace(/\/+$/, "");
+  const base = API_URL.replace(/\/+$/, "");
   const cleanPath = path.startsWith("/") ? path : `/${path}`;
   return `${base}${cleanPath}`;
 }
@@ -38,7 +37,7 @@ export function DetailActions({
     [canAdminDocumentActions, puedeFirmar]
   );
   const canShowAdminCancel = useMemo(
-    () => canAdminDocumentActions,
+    () => Boolean(canAdminDocumentActions),
     [canAdminDocumentActions]
   );
 
@@ -70,7 +69,7 @@ export function DetailActions({
 
       const ok = await manejarAccionDocumento(documentId, action, payload);
 
-      if (ok) {
+      if (ok && successToast) {
         handleSuccessAndClose(successToast);
       }
     },
@@ -99,6 +98,8 @@ export function DetailActions({
   }, [documentId, addToast]);
 
   const handleRechazar = useCallback(async () => {
+    if (!documentId) return;
+
     const motivo = window.prompt("Indica el motivo de rechazo:");
     if (!motivo || !motivo.trim()) return;
 
@@ -110,23 +111,29 @@ export function DetailActions({
         message: "El documento fue rechazado correctamente.",
       }
     );
-  }, [runDocumentAction]);
+  }, [documentId, runDocumentAction]);
 
   const handleVisar = useCallback(async () => {
+    if (!documentId) return;
+
     await runDocumentAction("visar", undefined, {
       title: "Documento visado",
       message: "El documento fue visado correctamente.",
     });
-  }, [runDocumentAction]);
+  }, [documentId, runDocumentAction]);
 
   const handleFirmar = useCallback(async () => {
+    if (!documentId) return;
+
     await runDocumentAction("firmar", undefined, {
       title: "Documento firmado",
       message: "El documento fue firmado correctamente.",
     });
-  }, [runDocumentAction]);
+  }, [documentId, runDocumentAction]);
 
   const handleCancelarAdmin = useCallback(async () => {
+    if (!documentId) return;
+
     const okConfirm = window.confirm(
       "¿Deseas cancelar este trámite? Esta acción marcará el flujo como rechazado y no se puede deshacer."
     );
@@ -141,7 +148,7 @@ export function DetailActions({
         message: "El trámite fue cancelado por un administrador.",
       }
     );
-  }, [runDocumentAction]);
+  }, [documentId, runDocumentAction]);
 
   if (!selectedDoc || !documentId) return null;
 
@@ -163,7 +170,7 @@ export function DetailActions({
         Descargar PDF
       </button>
 
-      {canShowReject && (
+      {canShowReject ? (
         <button
           type="button"
           className="btn-main detail-actions-btn detail-actions-btn--reject"
@@ -171,9 +178,9 @@ export function DetailActions({
         >
           Rechazar
         </button>
-      )}
+      ) : null}
 
-      {canShowVisar && (
+      {canShowVisar ? (
         <button
           type="button"
           className="btn-main detail-actions-btn detail-actions-btn--visar"
@@ -181,9 +188,9 @@ export function DetailActions({
         >
           Visar documento
         </button>
-      )}
+      ) : null}
 
-      {canShowFirmar && (
+      {canShowFirmar ? (
         <button
           type="button"
           className="btn-main detail-actions-btn detail-actions-btn--primary"
@@ -191,9 +198,9 @@ export function DetailActions({
         >
           Firmar documento
         </button>
-      )}
+      ) : null}
 
-      {canShowAdminCancel && (
+      {canShowAdminCancel ? (
         <button
           type="button"
           className="btn-main detail-actions-btn detail-actions-btn--admin-cancel"
@@ -201,7 +208,7 @@ export function DetailActions({
         >
           Cancelar trámite
         </button>
-      )}
+      ) : null}
     </div>
   );
 }

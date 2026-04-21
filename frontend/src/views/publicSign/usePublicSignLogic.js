@@ -33,7 +33,10 @@ export function usePublicSignLogic({
   API_URL,
   cargarFirmaPublica,
 }) {
-  const API_BASE = useMemo(() => normalizePublicApiBase(API_URL), [API_URL]);
+  const API_BASE = useMemo(
+    () => normalizePublicApiBase(API_URL),
+    [API_URL]
+  );
 
   const [showReject, setShowReject] = useState(false);
   const [rejectReason, setRejectReason] = useState("");
@@ -43,59 +46,64 @@ export function usePublicSignLogic({
   const [legalError, setLegalError] = useState("");
   const [signing, setSigning] = useState(false);
   const [actionMessage, setActionMessage] = useState("");
-  const [actionMessageType, setActionMessageType] = useState("info");
+  const [actionMessageType, setActionMessageType] = useState("info"); // "info" | "success" | "error"
 
   const document = useMemo(
-    () => (publicSignDoc ? publicSignDoc?.document || publicSignDoc || null : null),
+    () =>
+      publicSignDoc
+        ? publicSignDoc.document ?? publicSignDoc ?? null
+        : null,
     [publicSignDoc]
   );
 
   const documentMeta = useMemo(
     () =>
-      document?.metadata ||
-      document?.meta ||
-      document?.document_metadata ||
-      publicSignDoc?.metadata ||
-      publicSignDoc?.meta ||
+      document?.metadata ??
+      document?.meta ??
+      document?.document_metadata ??
+      publicSignDoc?.metadata ??
+      publicSignDoc?.meta ??
       {},
     [document, publicSignDoc]
   );
 
   const signedDocument = useMemo(
     () =>
-      publicSignDoc?.signedDocument ||
-      publicSignDoc?.signed_document ||
-      publicSignDoc?.documento_firmado ||
+      publicSignDoc?.signedDocument ??
+      publicSignDoc?.signed_document ??
+      publicSignDoc?.documento_firmado ??
       null,
     [publicSignDoc]
   );
 
   const signer = useMemo(
     () =>
-      publicSignDoc?.signer ||
-      publicSignDoc?.currentSigner ||
-      (Array.isArray(publicSignDoc?.signers) ? publicSignDoc.signers[0] : null) ||
+      publicSignDoc?.signer ??
+      publicSignDoc?.currentSigner ??
+      (Array.isArray(publicSignDoc?.signers)
+        ? publicSignDoc.signers[0]
+        : null) ??
       null,
     [publicSignDoc]
   );
 
   const rawSignerRole = normalizeText(
-    signer?.role ||
-      signer?.rol ||
-      signer?.signer_role ||
+    signer?.role ??
+      signer?.rol ??
+      signer?.signer_role ??
       signer?.participant_role
   );
 
   const documentStatus = normalizeStatus(
-    document?.status ||
-      document?.document_status ||
-      document?.estado ||
-      signedDocument?.status ||
+    document?.status ??
+      document?.document_status ??
+      document?.estado ??
+      signedDocument?.status ??
       signedDocument?.estado
   );
 
   const signerStatus = normalizeStatus(
-    signer?.status || signer?.signer_status || signer?.estado
+    signer?.status ?? signer?.signer_status ?? signer?.estado
   );
 
   const requiresVisado = useMemo(() => {
@@ -126,15 +134,18 @@ export function usePublicSignLogic({
     return "signer";
   }, [publicTokenKind, publicSignMode]);
 
-  const isVisado = useMemo(() => {
-    return Boolean(
-      publicSignMode === "visado" || effectiveTokenKind === "document"
-    );
-  }, [publicSignMode, effectiveTokenKind]);
+  const isVisado = useMemo(
+    () =>
+      Boolean(
+        publicSignMode === "visado" || effectiveTokenKind === "document"
+      ),
+    [publicSignMode, effectiveTokenKind]
+  );
 
   const resolvedMode = isVisado ? "visado" : "firma";
-  const hasToken = !!String(publicSignToken || "").trim();
+  const hasToken = !!normalizeText(publicSignToken);
 
+  // Reset de estado cuando cambia el token o el modo efectivo
   useEffect(() => {
     setActionMessage("");
     setActionMessageType("info");
@@ -145,133 +156,169 @@ export function usePublicSignLogic({
     setRejectError("");
   }, [publicSignToken, resolvedMode, effectiveTokenKind]);
 
-  const pdfUrl = pickFirstNonEmpty(
-    publicSignPdfUrl,
-    publicSignDoc?.pdfUrl,
-    publicSignDoc?.file_url,
-    publicSignDoc?.previewUrl,
-    publicSignDoc?.signedPdfUrl,
-    document?.signedPdfUrl,
-    document?.previewUrl,
-    document?.pdf_final_url,
-    document?.pdf_url,
-    document?.archivo_url,
-    document?.file_url,
-    signedDocument?.pdfUrl,
-    signedDocument?.pdf_url,
-    signedDocument?.archivo_url
+  const pdfUrl = useMemo(
+    () =>
+      pickFirstNonEmpty(
+        publicSignPdfUrl,
+        publicSignDoc?.pdfUrl,
+        publicSignDoc?.file_url,
+        publicSignDoc?.previewUrl,
+        publicSignDoc?.signedPdfUrl,
+        document?.signedPdfUrl,
+        document?.previewUrl,
+        document?.pdf_final_url,
+        document?.pdf_url,
+        document?.archivo_url,
+        document?.file_url,
+        signedDocument?.pdfUrl,
+        signedDocument?.pdf_url,
+        signedDocument?.archivo_url
+      ),
+    [publicSignPdfUrl, publicSignDoc, document, signedDocument]
   );
 
-  const documentTitle = pickFirstNonEmpty(
-    document?.title,
-    document?.titulo,
-    document?.document_title,
-    document?.nombre,
-    document?.name,
-    signedDocument?.title,
-    signedDocument?.titulo,
-    "Documento"
+  const documentTitle = useMemo(
+    () =>
+      pickFirstNonEmpty(
+        document?.title,
+        document?.titulo,
+        document?.document_title,
+        document?.nombre,
+        document?.name,
+        signedDocument?.title,
+        signedDocument?.titulo,
+        "Documento"
+      ),
+    [document, signedDocument]
   );
 
-  const companyName = pickFirstNonEmpty(
-    document?.destinatario_nombre,
-    document?.empresa_nombre,
-    document?.nombre_empresa,
-    document?.company_name,
-    document?.companyName,
-    document?.razon_social,
-    document?.empresa,
-    documentMeta?.destinatario_nombre,
-    documentMeta?.empresa_nombre,
-    documentMeta?.nombre_empresa,
-    documentMeta?.company_name,
-    documentMeta?.companyName,
-    documentMeta?.razon_social,
-    documentMeta?.empresa,
-    signedDocument?.destinatario_nombre,
-    signedDocument?.empresa_nombre,
-    signedDocument?.nombre_empresa,
-    signedDocument?.razon_social,
-    publicSignDoc?.destinatario_nombre,
-    publicSignDoc?.empresa_nombre,
-    publicSignDoc?.nombre_empresa,
-    publicSignDoc?.company_name,
-    publicSignDoc?.companyName,
-    publicSignDoc?.razon_social,
-    "No informado"
+  const companyName = useMemo(
+    () =>
+      pickFirstNonEmpty(
+        document?.destinatario_nombre,
+        document?.empresa_nombre,
+        document?.nombre_empresa,
+        document?.company_name,
+        document?.companyName,
+        document?.razon_social,
+        document?.empresa,
+        documentMeta?.destinatario_nombre,
+        documentMeta?.empresa_nombre,
+        documentMeta?.nombre_empresa,
+        documentMeta?.company_name,
+        documentMeta?.companyName,
+        documentMeta?.razon_social,
+        documentMeta?.empresa,
+        signedDocument?.destinatario_nombre,
+        signedDocument?.empresa_nombre,
+        signedDocument?.nombre_empresa,
+        signedDocument?.razon_social,
+        publicSignDoc?.destinatario_nombre,
+        publicSignDoc?.empresa_nombre,
+        publicSignDoc?.nombre_empresa,
+        publicSignDoc?.company_name,
+        publicSignDoc?.companyName,
+        publicSignDoc?.razon_social,
+        "No informado"
+      ),
+    [document, documentMeta, signedDocument, publicSignDoc]
   );
 
-  const companyRut = pickFirstNonEmpty(
-    document?.empresa_rut,
-    document?.rut_empresa,
-    document?.company_rut,
-    document?.companyRut,
-    document?.rut,
-    documentMeta?.empresa_rut,
-    documentMeta?.rut_empresa,
-    documentMeta?.company_rut,
-    documentMeta?.companyRut,
-    documentMeta?.rut,
-    signedDocument?.empresa_rut,
-    signedDocument?.rut_empresa,
-    signedDocument?.rut,
-    publicSignDoc?.empresa_rut,
-    publicSignDoc?.rut_empresa,
-    publicSignDoc?.company_rut,
-    publicSignDoc?.companyRut,
-    publicSignDoc?.rut,
-    "No informado"
+  const companyRut = useMemo(
+    () =>
+      pickFirstNonEmpty(
+        document?.empresa_rut,
+        document?.rut_empresa,
+        document?.company_rut,
+        document?.companyRut,
+        document?.rut,
+        documentMeta?.empresa_rut,
+        documentMeta?.rut_empresa,
+        documentMeta?.company_rut,
+        documentMeta?.companyRut,
+        documentMeta?.rut,
+        signedDocument?.empresa_rut,
+        signedDocument?.rut_empresa,
+        signedDocument?.rut,
+        publicSignDoc?.empresa_rut,
+        publicSignDoc?.rut_empresa,
+        publicSignDoc?.company_rut,
+        publicSignDoc?.companyRut,
+        publicSignDoc?.rut,
+        "No informado"
+      ),
+    [document, documentMeta, signedDocument, publicSignDoc]
   );
 
-  const contractNumber = pickFirstNonEmpty(
-    document?.numero_contrato_interno,
-    document?.numerocontratointerno,
-    document?.numero_contrato,
-    document?.numeroContrato,
-    document?.contract_number,
-    document?.n_contrato,
-    documentMeta?.numeroContratoInterno,
-    documentMeta?.numero_contrato_interno,
-    documentMeta?.numerocontratointerno,
-    documentMeta?.numero_contrato,
-    documentMeta?.numeroContrato,
-    documentMeta?.contract_number,
-    signedDocument?.numero_contrato_interno,
-    signedDocument?.numerocontratointerno,
-    signedDocument?.numero_contrato,
-    signedDocument?.contract_number,
-    publicSignDoc?.numero_contrato_interno,
-    publicSignDoc?.numerocontratointerno,
-    publicSignDoc?.numero_contrato,
-    publicSignDoc?.contract_number,
-    "Sin número"
+  const contractNumber = useMemo(
+    () =>
+      pickFirstNonEmpty(
+        document?.numero_contrato_interno,
+        document?.numerocontratointerno,
+        document?.numero_contrato,
+        document?.numeroContrato,
+        document?.contract_number,
+        document?.n_contrato,
+        documentMeta?.numeroContratoInterno,
+        documentMeta?.numero_contrato_interno,
+        documentMeta?.numerocontratointerno,
+        documentMeta?.numero_contrato,
+        documentMeta?.numeroContrato,
+        documentMeta?.contract_number,
+        signedDocument?.numero_contrato_interno,
+        signedDocument?.numerocontratointerno,
+        signedDocument?.numero_contrato,
+        signedDocument?.contract_number,
+        publicSignDoc?.numero_contrato_interno,
+        publicSignDoc?.numerocontratointerno,
+        publicSignDoc?.numero_contrato,
+        publicSignDoc?.contract_number,
+        "Sin número"
+      ),
+    [document, documentMeta, signedDocument, publicSignDoc]
   );
 
-  const procedureFieldLabel = getProcedureFieldLabel({
-    ...document,
-    metadata: documentMeta,
-  });
+  const procedureFieldLabel = useMemo(
+    () =>
+      getProcedureFieldLabel({
+        ...document,
+        metadata: documentMeta,
+      }),
+    [document, documentMeta]
+  );
 
-  const baseProcedureLabel = getProcedureLabel({
-    ...document,
-    metadata: documentMeta,
-  });
+  const baseProcedureLabel = useMemo(
+    () =>
+      getProcedureLabel({
+        ...document,
+        metadata: documentMeta,
+      }),
+    [document, documentMeta]
+  );
 
-  const procedureLabel = isVisado
-    ? documentStatus === "VISADO"
-      ? "Visado registrado"
-      : requiresVisado
-      ? "Con visado"
-      : baseProcedureLabel
-    : baseProcedureLabel;
+  const procedureLabel = useMemo(() => {
+    if (!isVisado) return baseProcedureLabel;
 
-  const signerRoleLabel = resolveSignerRoleLabel(signer, isVisado);
+    if (documentStatus === "VISADO") return "Visado registrado";
+    if (requiresVisado) return "Con visado";
 
-  const participantInfo = getReadableParticipantLabel({
-    signer,
-    isVisado,
-    document,
-  });
+    return baseProcedureLabel;
+  }, [isVisado, baseProcedureLabel, documentStatus, requiresVisado]);
+
+  const signerRoleLabel = useMemo(
+    () => resolveSignerRoleLabel(signer, isVisado),
+    [signer, isVisado]
+  );
+
+  const participantInfo = useMemo(
+    () =>
+      getReadableParticipantLabel({
+        signer,
+        isVisado,
+        document,
+      }),
+    [signer, isVisado, document]
+  );
 
   const viewState = useMemo(
     () =>
@@ -328,6 +375,7 @@ export function usePublicSignLogic({
     !!publicSignToken &&
     !!API_BASE;
 
+  // Reset de errores cuando se deshabilitan acciones
   useEffect(() => {
     if (!canRenderActions) {
       setShowReject(false);
@@ -351,7 +399,7 @@ export function usePublicSignLogic({
       return null;
     }
 
-    return await cargarFirmaPublica(publicSignToken, {
+    return cargarFirmaPublica(publicSignToken, {
       mode: resolvedMode,
       tokenKind: effectiveTokenKind,
     });
@@ -394,11 +442,17 @@ export function usePublicSignLogic({
 
       await reloadPublicState();
 
-      setActionMessage(buildActionSuccessMessage(isVisado, data?.message));
+      setActionMessage(
+        buildActionSuccessMessage(isVisado, data?.message)
+      );
       setActionMessageType("success");
       window.scrollTo({ top: 0, behavior: "smooth" });
     } catch (err) {
-      setActionMessage(buildActionErrorMessage(isVisado, err?.message));
+      const message =
+        err && typeof err === "object" && "message" in err
+          ? err.message
+          : "Ocurrió un error al registrar la acción.";
+      setActionMessage(buildActionErrorMessage(isVisado, message));
       setActionMessageType("error");
       window.scrollTo({ top: 0, behavior: "smooth" });
     } finally {
@@ -419,7 +473,7 @@ export function usePublicSignLogic({
   const handleReject = useCallback(async () => {
     if (rejecting || signing || !canReject) return;
 
-    const motivo = String(rejectReason || "").trim();
+    const motivo = normalizeText(rejectReason);
 
     if (!motivo) {
       setRejectError("Debes ingresar un motivo de rechazo.");
@@ -458,7 +512,11 @@ export function usePublicSignLogic({
       setRejectError("");
       window.scrollTo({ top: 0, behavior: "smooth" });
     } catch (err) {
-      setRejectError(buildRejectErrorMessage(err?.message));
+      const message =
+        err && typeof err === "object" && "message" in err
+          ? err.message
+          : "No se pudo registrar el rechazo.";
+      setRejectError(buildRejectErrorMessage(message));
     } finally {
       setRejecting(false);
     }

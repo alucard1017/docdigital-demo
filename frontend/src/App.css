@@ -8,7 +8,7 @@
 @import "./styles/badges.css";
 @import "./styles/states.css";
 
-/* Opcional: estilos realmente globales del shell principal */
+/* Estilos globales del shell principal */
 .dashboard-root {
   min-height: 100vh;
   background: var(--bg-main);

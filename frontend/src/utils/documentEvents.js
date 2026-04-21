@@ -1,5 +1,3 @@
-// frontend/src/utils/documentEvents.js
-
 /* ============================
    Helpers básicos
    ============================ */
@@ -25,7 +23,6 @@ export function toValidDate(value) {
 export function formatTimelineTimestamp(value) {
   const date = toValidDate(value);
   if (!date) return "";
-
   return date.toLocaleString("es-CO", {
     day: "2-digit",
     month: "2-digit",
@@ -112,15 +109,21 @@ export function getRawTimestamp(raw) {
 }
 
 export function getRawEventType(raw) {
-  return normalizeUpper(raw?.eventType || raw?.event_type);
+  return normalizeUpper(
+    raw?.eventType || raw?.event_type || raw?.tipo_evento || ""
+  );
 }
 
 export function getRawAction(raw) {
-  return normalizeText(raw?.action || raw?.metadata?.action);
+  return normalizeText(
+    raw?.action ||
+      raw?.metadata?.action ||
+      raw?.tipo_evento ||
+      raw?.eventType
+  );
 }
 
 export function getRawSource(raw) {
-  // backend mete source en metadata.source
   return normalizeText(
     raw?.source ||
       raw?.metadata?.source ||
@@ -158,7 +161,9 @@ export function getRawRequestId(raw) {
 }
 
 export function getMetadataActorType(raw) {
-  return normalizeUpper(raw?.metadata?.actor_type || raw?.metadata?.actorType);
+  return normalizeUpper(
+    raw?.metadata?.actor_type || raw?.metadata?.actorType
+  );
 }
 
 /* ============================
@@ -212,8 +217,16 @@ export function getEventKind(raw) {
 
   if (eventType === "DOCUMENT_CREATED") return "created";
   if (eventType === "DOCUMENT_SENT") return "sent";
-  if (eventType === "PUBLIC_LINK_OPENED_SIGNER") return "opened";
-  if (eventType === "INVITATION_OPENED") return "opened";
+
+  if (
+    eventType === "PUBLIC_LINK_OPENED_SIGNER" ||
+    eventType === "INVITATION_OPENED" ||
+    eventType === "PUBLIC_LINK_OPENED" ||
+    eventType === "PUBLIC_LINK_OPENED_VISADOR"
+  ) {
+    return "opened";
+  }
+
   if (
     eventType === "SIGNED_OWNER" ||
     eventType === "SIGNED_PUBLIC" ||
@@ -222,6 +235,7 @@ export function getEventKind(raw) {
   ) {
     return "signed";
   }
+
   if (
     eventType === "VISADO_OWNER" ||
     eventType === "VISADO_PUBLIC" ||
@@ -230,6 +244,7 @@ export function getEventKind(raw) {
   ) {
     return "approved";
   }
+
   if (
     eventType === "REJECTED_OWNER" ||
     eventType === "REJECTED_PUBLIC" ||
@@ -237,10 +252,13 @@ export function getEventKind(raw) {
   ) {
     return "rejected";
   }
+
   if (eventType === "DOCUMENT_COMPLETED") return "completed";
+
   if (eventType.includes("VERIFY") || eventType.includes("VERIFIED")) {
     return "verified";
   }
+
   if (isAuditEvent(raw)) return "audit";
   if (isSystemEvent(raw)) return "system";
 
@@ -413,7 +431,6 @@ export function getHumanDetails(raw, kind = getEventKind(raw)) {
 
 // Nombre legible del actor (string) para la UI
 export function getActorLabel(raw) {
-  // Primero, actor directo
   const actorDirect = normalizeText(raw?.actor);
   if (actorDirect) {
     const lower = actorDirect.toLowerCase();
@@ -422,7 +439,6 @@ export function getActorLabel(raw) {
     return actorDirect;
   }
 
-  // Luego, metadata
   const meta = raw?.metadata || {};
   const signerName = normalizeText(meta.signer_name);
   const ownerName = normalizeText(meta.owner_name);
@@ -479,15 +495,15 @@ export function mapDocumentEvent(raw) {
   const actorLabel = getActorLabel(raw);
 
   return {
-    id: raw?.id ?? null,
+    id: raw?.id ?? raw?.event_id ?? null,
     documentId: raw?.documentId ?? raw?.document_id ?? null,
     eventType: getRawEventType(raw),
     actionRaw: getRawAction(raw),
     title: getEventTitle(raw, kind),
     kind,
     icon: getEventIconByKind(kind),
-    actor: actorLabel, // string legible (Sistema, Juan, etc.)
-    actorType, // "system" | "user" | "audit"
+    actor: actorLabel,
+    actorType,
     fromStatus,
     toStatus,
     fromStatusNorm: normalizeStatus(fromStatus),
@@ -531,9 +547,6 @@ export function getEventVisualStatus(index, total) {
    ============================ */
 
 export function normalizeTimeline(rawTimeline) {
-  // backend responde:
-  // - getTimeline: { document, participants, timeline: { events, progress, currentStep, nextStep } }
-  // - getLegalTimeline: { document, events }
   const rawEvents =
     (Array.isArray(rawTimeline?.events) && rawTimeline.events) ||
     (Array.isArray(rawTimeline?.timeline?.events) &&
@@ -565,9 +578,7 @@ export function normalizeTimeline(rawTimeline) {
     events: mappedEvents,
     hasEvents: mappedEvents.length > 0,
     progress: clampProgress(rawProgress),
-    currentStep:
-      normalizeText(rawCurrentStep) || "En curso",
-    nextStep:
-      normalizeText(rawNextStep) || "Por definir",
+    currentStep: normalizeText(rawCurrentStep) || "En curso",
+    nextStep: normalizeText(rawNextStep) || "Por definir",
   };
 }

@@ -1,4 +1,3 @@
-// src/components/DetailView.jsx
 import React, {
   useCallback,
   useEffect,
@@ -49,6 +48,180 @@ function getButtonStateStyle(isLoading) {
   };
 }
 
+function DetailSection({ title, subtitle, children }) {
+  return (
+    <section className="detail-section">
+      <div className="detail-section__header">
+        <h3 className="detail-section__title">{title}</h3>
+        {subtitle ? (
+          <p className="detail-section__subtitle">{subtitle}</p>
+        ) : null}
+      </div>
+      {children}
+    </section>
+  );
+}
+
+function PdfViewerPanel({
+  currentDocId,
+  pdfUrl,
+  loadingPdf,
+  pdfError,
+  downloadUrl,
+  mostrarBotonRecordatorio,
+  mostrarBotonReenvioVisado,
+  recordatorioLoading,
+  reenviarLoadingVisado,
+  onEnviarRecordatorioATodos,
+  onReenviarVisado,
+}) {
+  return (
+    <DetailSection
+      title="Documento y acciones"
+      subtitle="Visualiza el PDF final, descarga el archivo o reenvía recordatorios según el estado actual."
+    >
+      <div className="detail-toolbar">
+        <span className="detail-toolbar-label">
+          Visualización del documento final
+        </span>
+
+        <div className="detail-toolbar-actions">
+          {mostrarBotonRecordatorio ? (
+            <button
+              type="button"
+              className="btn-main detail-btn-reminder-all"
+              onClick={onEnviarRecordatorioATodos}
+              disabled={recordatorioLoading}
+              style={getButtonStateStyle(recordatorioLoading)}
+            >
+              {recordatorioLoading
+                ? "Enviando recordatorio..."
+                : "🔔 Recordatorio a todos"}
+            </button>
+          ) : null}
+
+          {mostrarBotonReenvioVisado ? (
+            <button
+              type="button"
+              className="btn-main detail-btn-reminder-visado"
+              onClick={onReenviarVisado}
+              disabled={reenviarLoadingVisado}
+              style={getButtonStateStyle(reenviarLoadingVisado)}
+            >
+              {reenviarLoadingVisado
+                ? "Reenviando visado..."
+                : "Reenviar visado"}
+            </button>
+          ) : null}
+
+          {downloadUrl ? (
+            <a
+              href={downloadUrl}
+              className="btn-main detail-btn-download"
+              target="_blank"
+              rel="noopener noreferrer"
+            >
+              📥 Descargar PDF
+            </a>
+          ) : null}
+
+          {pdfUrl && !loadingPdf ? (
+            <a
+              href={pdfUrl}
+              target="_blank"
+              rel="noopener noreferrer"
+              className="btn-main detail-btn-view"
+            >
+              👁️ Abrir PDF en otra pestaña
+            </a>
+          ) : null}
+        </div>
+      </div>
+
+      <div className="detail-pdf-wrapper">
+        {loadingPdf ? (
+          <div className="detail-pdf-empty" role="status" aria-live="polite">
+            Cargando vista previa del PDF...
+          </div>
+        ) : pdfUrl ? (
+          <iframe
+            title={`PDF del documento ${currentDocId || ""}`}
+            src={pdfUrl}
+            className="detail-pdf-iframe"
+          />
+        ) : (
+          <div className="detail-pdf-empty" role="status" aria-live="polite">
+            {pdfError ||
+              'No se pudo cargar la vista previa del PDF. Usa "Descargar PDF" para ver el documento.'}
+          </div>
+        )}
+      </div>
+    </DetailSection>
+  );
+}
+
+function LegalValidationSection({
+  puedeFirmar,
+  puedeVisar,
+  isSigned,
+  isRejected,
+  acceptedLegalSign,
+  acceptedLegalVisado,
+  signError,
+  visadoError,
+  setAcceptedLegalSign,
+  setAcceptedLegalVisado,
+  setSignError,
+  setVisadoError,
+}) {
+  if ((!puedeFirmar && !puedeVisar) || isSigned || isRejected) {
+    return null;
+  }
+
+  return (
+    <DetailSection
+      title="Validaciones previas"
+      subtitle="Antes de firmar o visar, deja constancia de aceptación del aviso legal correspondiente."
+    >
+      {puedeFirmar ? (
+        <>
+          <ElectronicSignatureNotice
+            mode="firma"
+            checked={acceptedLegalSign}
+            onChange={(value) => {
+              setAcceptedLegalSign(value);
+              if (value) setSignError("");
+            }}
+          />
+          {signError ? (
+            <p className="detail-inline-error" role="alert">
+              {signError}
+            </p>
+          ) : null}
+        </>
+      ) : null}
+
+      {puedeVisar ? (
+        <>
+          <ElectronicSignatureNotice
+            mode="visado"
+            checked={acceptedLegalVisado}
+            onChange={(value) => {
+              setAcceptedLegalVisado(value);
+              if (value) setVisadoError("");
+            }}
+          />
+          {visadoError ? (
+            <p className="detail-inline-error" role="alert">
+              {visadoError}
+            </p>
+          ) : null}
+        </>
+      ) : null}
+    </DetailSection>
+  );
+}
+
 export function DetailView({
   selectedDoc,
   pdfUrl,
@@ -87,19 +260,22 @@ export function DetailView({
   const timelineToastShownRef = useRef(false);
   const signersToastShownRef = useRef(false);
 
-  const canSeeActionHistory = useMemo(() => {
-    return canViewAuditLogs(currentUser);
-  }, [currentUser]);
+  const canSeeActionHistory = useMemo(
+    () => canViewAuditLogs(currentUser),
+    [currentUser]
+  );
 
-  const canManageDocumentReminders = useMemo(() => {
-    return canManageReminders(currentUser);
-  }, [currentUser]);
+  const canManageDocumentReminders = useMemo(
+    () => canManageReminders(currentUser),
+    [currentUser]
+  );
 
   const currentTimelineDoc = timeline?.document || null;
 
-  const currentDocId = useMemo(() => {
-    return selectedDoc?.id ?? currentTimelineDoc?.id ?? null;
-  }, [selectedDoc?.id, currentTimelineDoc?.id]);
+  const currentDocId = useMemo(
+    () => selectedDoc?.id ?? currentTimelineDoc?.id ?? null,
+    [selectedDoc?.id, currentTimelineDoc?.id]
+  );
 
   const mergedDoc = useMemo(() => {
     return {
@@ -112,52 +288,64 @@ export function DetailView({
     };
   }, [selectedDoc, currentTimelineDoc]);
 
-  const safeEvents = useMemo(() => {
-    return getTimelineEvents(timeline, events);
-  }, [timeline, events]);
+  const safeEvents = useMemo(
+    () => getTimelineEvents(timeline, events),
+    [timeline, events]
+  );
 
-  const displayName = useMemo(() => {
-    return buildUserDisplayName(currentUser);
-  }, [currentUser]);
+  const displayName = useMemo(
+    () => buildUserDisplayName(currentUser),
+    [currentUser]
+  );
 
-  const numeroInterno = useMemo(() => {
-    return getDocumentNumber(selectedDoc, timeline);
-  }, [selectedDoc, timeline]);
+  const numeroInterno = useMemo(
+    () => getDocumentNumber(selectedDoc, timeline),
+    [selectedDoc, timeline]
+  );
 
-  const numeroInternoDisplay = useMemo(() => {
-    return numeroInterno || (currentDocId ? `#${currentDocId}` : "N/D");
-  }, [numeroInterno, currentDocId]);
+  const numeroInternoDisplay = useMemo(
+    () => numeroInterno || (currentDocId ? `#${currentDocId}` : "N/D"),
+    [numeroInterno, currentDocId]
+  );
 
-  const titleDocumento = useMemo(() => {
-    return getDocumentTitle(selectedDoc, timeline);
-  }, [selectedDoc, timeline]);
+  const titleDocumento = useMemo(
+    () => getDocumentTitle(selectedDoc, timeline),
+    [selectedDoc, timeline]
+  );
 
-  const clasificacionFieldLabel = useMemo(() => {
-    return getProcedureFieldLabel(mergedDoc);
-  }, [mergedDoc]);
+  const clasificacionFieldLabel = useMemo(
+    () => getProcedureFieldLabel(mergedDoc),
+    [mergedDoc]
+  );
 
-  const clasificacionLabel = useMemo(() => {
-    return getProcedureLabel(mergedDoc);
-  }, [mergedDoc]);
+  const clasificacionLabel = useMemo(
+    () => getProcedureLabel(mergedDoc),
+    [mergedDoc]
+  );
 
-  const tramiteLabel = useMemo(() => {
-    return getNotaryLabel(mergedDoc) || "No informado";
-  }, [mergedDoc]);
+  const tramiteLabel = useMemo(
+    () => getNotaryLabel(mergedDoc) || "No informado",
+    [mergedDoc]
+  );
 
-  const documentoLabel = useMemo(() => {
-    return getDocumentKindLabel(mergedDoc) || "No informado";
-  }, [mergedDoc]);
+  const documentoLabel = useMemo(
+    () => getDocumentKindLabel(mergedDoc) || "No informado",
+    [mergedDoc]
+  );
 
-  const currentStatus = useMemo(() => {
-    return currentTimelineDoc?.status ?? selectedDoc?.status ?? null;
-  }, [currentTimelineDoc?.status, selectedDoc?.status]);
+  const currentStatus = useMemo(
+    () => currentTimelineDoc?.status ?? selectedDoc?.status ?? null,
+    [currentTimelineDoc?.status, selectedDoc?.status]
+  );
 
   const isSigned = currentStatus === "FIRMADO";
   const isRejected = currentStatus === "RECHAZADO";
 
   const mostrarBotonReenvioVisado = useMemo(() => {
-    return canManageDocumentReminders &&
-      shouldShowVisadoReminder(mergedDoc, currentStatus);
+    return (
+      canManageDocumentReminders &&
+      shouldShowVisadoReminder(mergedDoc, currentStatus)
+    );
   }, [canManageDocumentReminders, mergedDoc, currentStatus]);
 
   const mostrarBotonRecordatorio = useMemo(() => {
@@ -169,26 +357,24 @@ export function DetailView({
     ? `${baseUrl}/documents/${currentDocId}/download`
     : null;
 
-  const documentStateMeta = useMemo(() => {
-    return buildDocumentStateMeta(currentStatus);
-  }, [currentStatus]);
+  const documentStateMeta = useMemo(
+    () => buildDocumentStateMeta(currentStatus),
+    [currentStatus]
+  );
 
-  const flowParticipants = useMemo(() => {
-    return buildFlowParticipants(participants, signers);
-  }, [participants, signers]);
+  const flowParticipants = useMemo(
+    () => buildFlowParticipants(participants, signers),
+    [participants, signers]
+  );
 
-  const nextPendingParticipant = useMemo(() => {
-    return flowParticipants.find((p) => p.statusKey === "pending") || null;
-  }, [flowParticipants]);
+  const nextPendingParticipant = useMemo(
+    () => flowParticipants.find((p) => p.statusKey === "pending") || null,
+    [flowParticipants]
+  );
 
   const handleBackToList = useCallback(() => {
-    if (typeof setView === "function") {
-      setView("list");
-    }
-
-    if (typeof setSelectedDoc === "function") {
-      setSelectedDoc(null);
-    }
+    if (typeof setView === "function") setView("list");
+    if (typeof setSelectedDoc === "function") setSelectedDoc(null);
   }, [setView, setSelectedDoc]);
 
   const showErrorToastOnce = useCallback(
@@ -270,7 +456,6 @@ export function DetailView({
   const refreshAll = useCallback(
     async (docId, signal) => {
       if (!docId) return;
-
       await Promise.allSettled([
         refreshTimeline(docId),
         refreshSigners(docId, signal),
@@ -283,18 +468,26 @@ export function DetailView({
     if (!selectedDoc?.id) return;
 
     const docId = selectedDoc.id;
+    let isMounted = true;
     const controller = new AbortController();
 
     timelineToastShownRef.current = false;
     signersToastShownRef.current = false;
 
-    refreshAll(docId, controller.signal);
+    const runInitialLoad = async () => {
+      if (!isMounted) return;
+      await refreshAll(docId, controller.signal);
+    };
+
+    runInitialLoad();
 
     const intervalId = window.setInterval(() => {
+      if (!isMounted || controller.signal.aborted) return;
       refreshAll(docId, controller.signal);
     }, DETAIL_POLL_INTERVAL_MS);
 
     return () => {
+      isMounted = false;
       controller.abort();
       window.clearInterval(intervalId);
     };
@@ -511,10 +704,7 @@ export function DetailView({
                     <span className="detail-meta-label">
                       {clasificacionFieldLabel}:
                     </span>{" "}
-                    <span
-                      className="detail-meta-value"
-                      title={clasificacionLabel}
-                    >
+                    <span className="detail-meta-value" title={clasificacionLabel}>
                       {clasificacionLabel}
                     </span>
                   </p>
@@ -545,160 +735,53 @@ export function DetailView({
               </div>
             </div>
 
-            {mergedDoc.description && (
+            {mergedDoc.description ? (
               <div className="detail-description">
                 <strong>Descripción:</strong> {mergedDoc.description}
               </div>
-            )}
+            ) : null}
 
-            {isRejected && mergedDoc.reject_reason && (
+            {isRejected && mergedDoc.reject_reason ? (
               <div className="detail-reject-box">
                 <strong>Motivo de rechazo:</strong> {mergedDoc.reject_reason}
               </div>
-            )}
+            ) : null}
 
-            <section className="detail-section">
-              <div className="detail-section__header">
-                <h3 className="detail-section__title">Documento y acciones</h3>
-                <p className="detail-section__subtitle">
-                  Visualiza el PDF final, descarga el archivo o reenvía recordatorios
-                  según el estado actual.
-                </p>
-              </div>
+            <PdfViewerPanel
+              currentDocId={currentDocId}
+              pdfUrl={pdfUrl}
+              loadingPdf={loadingPdf}
+              pdfError={pdfError}
+              downloadUrl={downloadUrl}
+              mostrarBotonRecordatorio={mostrarBotonRecordatorio}
+              mostrarBotonReenvioVisado={mostrarBotonReenvioVisado}
+              recordatorioLoading={recordatorioLoading}
+              reenviarLoadingVisado={reenviarLoadingVisado}
+              onEnviarRecordatorioATodos={handleEnviarRecordatorioATodos}
+              onReenviarVisado={handleReenviarVisado}
+            />
 
-              <div className="detail-toolbar">
-                <span className="detail-toolbar-label">
-                  Visualización del documento final
-                </span>
+            <LegalValidationSection
+              puedeFirmar={puedeFirmar}
+              puedeVisar={puedeVisar}
+              isSigned={isSigned}
+              isRejected={isRejected}
+              acceptedLegalSign={acceptedLegalSign}
+              acceptedLegalVisado={acceptedLegalVisado}
+              signError={signError}
+              visadoError={visadoError}
+              setAcceptedLegalSign={setAcceptedLegalSign}
+              setAcceptedLegalVisado={setAcceptedLegalVisado}
+              setSignError={setSignError}
+              setVisadoError={setVisadoError}
+            />
 
-                <div className="detail-toolbar-actions">
-                  {mostrarBotonRecordatorio && (
-                    <button
-                      type="button"
-                      className="btn-main detail-btn-reminder-all"
-                      onClick={handleEnviarRecordatorioATodos}
-                      disabled={recordatorioLoading}
-                      style={getButtonStateStyle(recordatorioLoading)}
-                    >
-                      {recordatorioLoading
-                        ? "Enviando recordatorio..."
-                        : "🔔 Recordatorio a todos"}
-                    </button>
-                  )}
-
-                  {mostrarBotonReenvioVisado && (
-                    <button
-                      type="button"
-                      className="btn-main detail-btn-reminder-visado"
-                      onClick={handleReenviarVisado}
-                      disabled={reenviarLoadingVisado}
-                      style={getButtonStateStyle(reenviarLoadingVisado)}
-                    >
-                      {reenviarLoadingVisado
-                        ? "Reenviando visado..."
-                        : "Reenviar visado"}
-                    </button>
-                  )}
-
-                  {downloadUrl && (
-                    <a
-                      href={downloadUrl}
-                      className="btn-main detail-btn-download"
-                      target="_blank"
-                      rel="noopener noreferrer"
-                    >
-                      📥 Descargar PDF
-                    </a>
-                  )}
-
-                  {pdfUrl && !loadingPdf && (
-                    <a
-                      href={pdfUrl}
-                      target="_blank"
-                      rel="noopener noreferrer"
-                      className="btn-main detail-btn-view"
-                    >
-                      👁️ Abrir PDF en otra pestaña
-                    </a>
-                  )}
-                </div>
-              </div>
-
-              <div className="detail-pdf-wrapper">
-                {loadingPdf ? (
-                  <div className="detail-pdf-empty">
-                    Cargando vista previa del PDF...
-                  </div>
-                ) : pdfUrl ? (
-                  <iframe
-                    title={`PDF del documento ${currentDocId || ""}`}
-                    src={pdfUrl}
-                    className="detail-pdf-iframe"
-                  />
-                ) : (
-                  <div className="detail-pdf-empty">
-                    {pdfError ||
-                      'No se pudo cargar la vista previa del PDF. Usa "Descargar PDF" para ver el documento.'}
-                  </div>
-                )}
-              </div>
-            </section>
-
-            {(puedeFirmar || puedeVisar) && !isSigned && !isRejected && (
-              <section className="detail-section">
-                <div className="detail-section__header">
-                  <h3 className="detail-section__title">Validaciones previas</h3>
-                  <p className="detail-section__subtitle">
-                    Antes de firmar o visar, deja constancia de aceptación del aviso
-                    legal correspondiente.
-                  </p>
-                </div>
-
-                {puedeFirmar && (
-                  <>
-                    <ElectronicSignatureNotice
-                      mode="firma"
-                      checked={acceptedLegalSign}
-                      onChange={(value) => {
-                        setAcceptedLegalSign(value);
-                        if (value) setSignError("");
-                      }}
-                    />
-                    {signError && (
-                      <p className="detail-inline-error">{signError}</p>
-                    )}
-                  </>
-                )}
-
-                {puedeVisar && (
-                  <>
-                    <ElectronicSignatureNotice
-                      mode="visado"
-                      checked={acceptedLegalVisado}
-                      onChange={(value) => {
-                        setAcceptedLegalVisado(value);
-                        if (value) setVisadoError("");
-                      }}
-                    />
-                    {visadoError && (
-                      <p className="detail-inline-error">{visadoError}</p>
-                    )}
-                  </>
-                )}
-              </section>
-            )}
-
-            <section className="detail-section">
-              <div className="detail-section__header">
-                <h3 className="detail-section__title">Flujo de participantes</h3>
-                <p className="detail-section__subtitle">
-                  Revisa el orden del proceso, el rol de cada participante y quién
-                  sigue en el flujo secuencial.
-                </p>
-              </div>
-
+            <DetailSection
+              title="Flujo de participantes"
+              subtitle="Revisa el orden del proceso, el rol de cada participante y quién sigue en el flujo secuencial."
+            >
               {loadingParticipants || loadingSigners ? (
-                <p className="detail-signers-loading">
+                <p className="detail-signers-loading" role="status" aria-live="polite">
                   Cargando flujo de participantes...
                 </p>
               ) : flowParticipants.length === 0 ? (
@@ -799,20 +882,19 @@ export function DetailView({
                   </ul>
                 </>
               )}
-            </section>
+            </DetailSection>
 
-            <section className="detail-section">
-              <div className="detail-section__header">
-                <h3 className="detail-section__title">Timeline del documento</h3>
-                <p className="detail-section__subtitle">
-                  Consulta el avance general y distingue eventos automáticos de
-                  acciones realizadas por usuarios.
-                </p>
-              </div>
-
+            <DetailSection
+              title="Timeline del documento"
+              subtitle="Consulta el avance general y distingue eventos automáticos de acciones realizadas por usuarios."
+            >
               <div className="detail-timeline-wrapper">
                 {loadingTimeline ? (
-                  <div className="detail-timeline-loading">
+                  <div
+                    className="detail-timeline-loading"
+                    role="status"
+                    aria-live="polite"
+                  >
                     Cargando progreso...
                   </div>
                 ) : timeline ? (
@@ -823,23 +905,18 @@ export function DetailView({
                   </div>
                 )}
               </div>
-            </section>
+            </DetailSection>
 
-            {canSeeActionHistory && (
-              <section className="detail-section">
-                <div className="detail-section__header">
-                  <h3 className="detail-section__title">Historial de acciones</h3>
-                  <p className="detail-section__subtitle">
-                    Registro detallado de eventos del documento para seguimiento y
-                    auditoría.
-                  </p>
-                </div>
-
+            {canSeeActionHistory ? (
+              <DetailSection
+                title="Historial de acciones"
+                subtitle="Registro detallado de eventos del documento para seguimiento y auditoría."
+              >
                 <div className="detail-history">
                   <EventList events={safeEvents} />
                 </div>
-              </section>
-            )}
+              </DetailSection>
+            ) : null}
 
             <DetailActions
               puedeFirmar={puedeFirmar}

@@ -65,10 +65,10 @@ async function resolveParticipantIdForPublicEvent({
 }
 
 /**
- * Devuelve la mejor ruta de archivo disponible para un documento.
+ * Devuelve la mejor ruta de archivo disponible para VISUALIZAR un documento.
  * Orden de preferencia:
  * 1) pdf_final_url / final_file_url / final_storage_key (PDF final, sellado)
- * 2) pdf_original_url (PDF original)
+ * 2) pdf_original_url (PDF original / preview con marca)
  * 3) file_path (legacy)
  */
 function buildDocumentFilePath(row) {
@@ -79,6 +79,26 @@ function buildDocumentFilePath(row) {
     row.final_storage_key ||
     row.pdf_original_url ||
     row.file_path ||
+    null
+  );
+}
+
+/**
+ * Devuelve la mejor ruta de archivo disponible como FUENTE PARA SELLAR.
+ * Importante: prioriza original limpio si existe.
+ * Orden sugerida:
+ * 1) original_storage_key / original_file_url / clean_file_path (PDF limpio)
+ * 2) file_path (legacy cuando era el original)
+ * 3) pdf_original_url (solo fallback si no hay nada más)
+ */
+function buildSealSourceKey(row) {
+  if (!row) return null;
+  return (
+    row.original_storage_key ||
+    row.original_file_url ||
+    row.clean_file_path ||
+    row.file_path ||
+    row.pdf_original_url ||
     null
   );
 }
@@ -108,6 +128,7 @@ function buildPublicDocumentPayload(row, extra = {}) {
 
 /**
  * Devuelve una signed URL (S3) o envía el error HTTP y retorna null.
+ * Siempre usa buildDocumentFilePath (prioriza el PDF final).
  */
 async function buildSignedPdfUrlOrFail(row, res) {
   const basePath = buildDocumentFilePath(row);
@@ -136,6 +157,75 @@ async function buildSignedPdfUrlOrFail(row, res) {
     });
     return null;
   }
+}
+
+/**
+ * Resuelve datos de verificación (código y categoría) desde legacy + metadata.
+ */
+async function resolveVerificationData(doc) {
+  let codigoVerificacion = null;
+  let categoriaFirma = "SIMPLE";
+
+  if (doc.nuevo_documento_id) {
+    const docNuevoRes = await db.query(
+      `
+      SELECT id, codigo_verificacion, categoria_firma
+      FROM documentos
+      WHERE id = $1
+      `,
+      [doc.nuevo_documento_id]
+    );
+
+    if (docNuevoRes.rowCount > 0) {
+      const docNuevo = docNuevoRes.rows[0];
+      codigoVerificacion = docNuevo.codigo_verificacion || null;
+      categoriaFirma = docNuevo.categoria_firma || "SIMPLE";
+    }
+  }
+
+  if (!codigoVerificacion) {
+    const meta = doc.metadata || {};
+    codigoVerificacion =
+      meta.codigo_verificacion ||
+      meta.verification_code ||
+      doc.signature_token ||
+      `DOC-${doc.id}`;
+  }
+
+  return { codigoVerificacion, categoriaFirma };
+}
+
+/**
+ * Recarga campos finales (pdf_final_url / final_*) desde DB
+ * después de sellar.
+ */
+async function refreshFinalPdfFields(docId, targetDoc) {
+  const updatedDocRes = await db.query(
+    `
+    SELECT
+      pdf_final_url,
+      final_storage_key,
+      final_file_url
+    FROM documents
+    WHERE id = $1
+    `,
+    [docId]
+  );
+
+  if (updatedDocRes.rowCount === 0) {
+    return targetDoc;
+  }
+
+  const updated = updatedDocRes.rows[0];
+
+  targetDoc.pdf_final_url =
+    updated.pdf_final_url || targetDoc.pdf_final_url || null;
+  targetDoc.final_storage_key =
+    updated.final_storage_key || targetDoc.final_storage_key || null;
+  targetDoc.final_file_url =
+    updated.final_file_url || targetDoc.final_file_url || null;
+
+  return targetDoc;
 }
 
 /**
@@ -647,42 +737,30 @@ async function publicSignDocument(req, res) {
       req,
     });
 
-    // 5) SELLADO PDF: si todos firmaron, sellamos usando documents.id (fuente de pdf_final_url).
+    // 5) SELLADO PDF: si todos firmaron, sellamos usando documents.id.
     if (allSigned) {
       try {
-        let codigoVerificacion = null;
-        let categoriaFirma = "SIMPLE";
+        const { codigoVerificacion, categoriaFirma } =
+          await resolveVerificationData(doc);
 
-        if (doc.nuevo_documento_id) {
-          const docNuevoRes = await db.query(
-            `
-            SELECT id, codigo_verificacion, categoria_firma
-            FROM documentos
-            WHERE id = $1
-            `,
-            [doc.nuevo_documento_id]
-          );
+        const baseKey = buildSealSourceKey(doc);
 
-          if (docNuevoRes.rowCount > 0) {
-            const docNuevo = docNuevoRes.rows[0];
-            codigoVerificacion = docNuevo.codigo_verificacion || null;
-            categoriaFirma = docNuevo.categoria_firma || "SIMPLE";
-          }
-        }
-
-        const baseKey =
-          doc.pdf_original_url ||
-          doc.file_path ||
-          doc.final_storage_key ||
-          doc.final_file_url;
+        console.log("[PUBLIC] DEBUG SIGN PUBLIC SOURCE PDF >>", {
+          documentId: doc.id,
+          baseKey,
+          original_storage_key: doc.original_storage_key || null,
+          file_path: doc.file_path || null,
+          pdf_original_url: doc.pdf_original_url || null,
+          final_storage_key: doc.final_storage_key || null,
+        });
 
         if (!baseKey) {
           console.warn(
-            "[PUBLIC] publicSignDocument → sin baseKey para sellar PDF",
+            "[PUBLIC] publicSignDocument → sin fuente limpia para sellar PDF",
             { documentId: doc.id }
           );
         } else {
-          const sealResult = await sellarPdfConQr({
+          await sellarPdfConQr({
             s3Key: baseKey,
             documentoId: doc.id,
             codigoVerificacion,
@@ -690,27 +768,7 @@ async function publicSignDocument(req, res) {
             numeroContratoInterno: doc.numero_contrato_interno,
           });
 
-          const updatedDocRes = await db.query(
-            `
-            SELECT
-              pdf_final_url,
-              final_storage_key,
-              final_file_url
-            FROM documents
-            WHERE id = $1
-            `,
-            [doc.id]
-          );
-
-          if (updatedDocRes.rowCount > 0) {
-            const updatedDoc = updatedDocRes.rows[0];
-            doc.pdf_final_url =
-              updatedDoc.pdf_final_url ||
-              updatedDoc.final_storage_key ||
-              updatedDoc.final_file_url ||
-              sealResult?.finalKey ||
-              null;
-          }
+          await refreshFinalPdfFields(doc.id, doc);
         }
       } catch (sealError) {
         console.error(
@@ -1209,6 +1267,9 @@ async function verifyByCode(req, res) {
           file_path,
           pdf_original_url,
           pdf_final_url,
+          final_storage_key,
+          final_file_url,
+          original_storage_key,
           company_id,
           numero_contrato_interno,
           status,
@@ -1226,11 +1287,7 @@ async function verifyByCode(req, res) {
 
       if (modernDocRes.rowCount > 0) {
         relatedDocument = modernDocRes.rows[0];
-        basePath =
-          relatedDocument.pdf_final_url ||
-          relatedDocument.pdf_original_url ||
-          relatedDocument.file_path ||
-          null;
+        basePath = buildDocumentFilePath(relatedDocument);
       }
     }
 

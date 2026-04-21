@@ -1,12 +1,10 @@
-// src/utils/permissions.js
-
 export const ROLES = {
   SUPER_ADMIN: "SUPER_ADMIN",
   ADMIN_GLOBAL: "ADMIN_GLOBAL",
   ADMIN: "ADMIN",
 };
 
-// Opcional: mover a config/env si luego quieres cambiarlo sin tocar código
+// Idealmente esto luego viene de env/config
 const OWNER_ID = 7;
 
 function isOwner(user) {
@@ -26,11 +24,7 @@ export function isCompanyAdmin(user) {
 }
 
 export function isAnyAdmin(user) {
-  return (
-    isSuperAdmin(user) ||
-    isGlobalAdmin(user) ||
-    isCompanyAdmin(user)
-  );
+  return isSuperAdmin(user) || isGlobalAdmin(user) || isCompanyAdmin(user);
 }
 
 // Admin global efectivo (incluye owner)
@@ -79,11 +73,10 @@ export function canManageReminders(user) {
   return isAnyAdmin(user);
 }
 
-/* ==========
+/* ==========  
    Helpers por vista protegida
    ========== */
 
-// Devuelve true si el usuario puede acceder a una view protegida concreta
 export function canAccessProtectedView(user, view) {
   if (!view) return false;
 
@@ -93,7 +86,8 @@ export function canAccessProtectedView(user, view) {
     case "upload":
     case "pricing":
     case "profile":
-      return true;
+    case "detail":
+      return Boolean(user);
 
     // Admin scoped (empresa)
     case "users":
@@ -117,10 +111,6 @@ export function canAccessProtectedView(user, view) {
     case "audit-logs":
     case "auth-logs":
       return canViewAuditLogs(user);
-
-    // Detail no se controla aquí porque se maneja aparte con selectedDoc
-    case "detail":
-      return true;
 
     default:
       return false;

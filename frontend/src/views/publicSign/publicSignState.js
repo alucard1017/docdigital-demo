@@ -1,5 +1,9 @@
+// Normalización de URLs y API base
+
 export function stripTrailingSlashes(value = "") {
-  return String(value || "").trim().replace(/\/+$/, "");
+  return String(value ?? "")
+    .trim()
+    .replace(/\/+$/, "");
 }
 
 export function normalizePublicApiBase(API_URL) {
@@ -9,12 +13,14 @@ export function normalizePublicApiBase(API_URL) {
   return trimmed.endsWith("/api") ? trimmed : `${trimmed}/api`;
 }
 
+// Normalización de texto/estado
+
 export function normalizeStatus(value = "") {
-  return String(value || "").trim().toUpperCase();
+  return String(value ?? "").trim().toUpperCase();
 }
 
 export function normalizeText(value = "") {
-  return String(value || "").trim().toLowerCase();
+  return String(value ?? "").trim().toLowerCase();
 }
 
 export function pickFirstNonEmpty(...values) {
@@ -26,8 +32,10 @@ export function pickFirstNonEmpty(...values) {
   return "";
 }
 
+// Sanitización de mensajes de error para UI pública
+
 export function sanitizePublicMessage(message, fallback) {
-  const raw = String(message || "").trim();
+  const raw = String(message ?? "").trim();
   if (!raw) return fallback;
 
   const lowered = raw.toLowerCase();
@@ -46,6 +54,8 @@ export function sanitizePublicMessage(message, fallback) {
 
   return raw;
 }
+
+// Fetch seguro con JSON y mensaje de error amigable
 
 export async function fetchJsonSafe(url, options = {}) {
   const res = await fetch(url, options);
@@ -68,8 +78,10 @@ export async function fetchJsonSafe(url, options = {}) {
   return data;
 }
 
+// Clasificación de errores de carga inicial del enlace público
+
 export function classifyPublicError(error) {
-  const text = String(error || "").toLowerCase();
+  const text = String(error ?? "").toLowerCase().trim();
 
   if (!text) {
     return {
@@ -134,27 +146,35 @@ export function classifyPublicError(error) {
   };
 }
 
+// Roles legibles para la UI pública
+
 export function resolveSignerRoleLabel(signer, isVisado) {
   const rawRole = normalizeText(
-    signer?.role ||
-      signer?.rol ||
-      signer?.signer_role ||
+    signer?.role ??
+      signer?.rol ??
+      signer?.signer_role ??
       signer?.participant_role
   );
+
+  if (!rawRole) {
+    return isVisado ? "Visador" : "Firmante";
+  }
 
   if (rawRole.includes("vis")) return "Visador";
   if (rawRole.includes("firmante_final")) return "Firmante final";
   if (rawRole.includes("final")) return "Firmante final";
   if (rawRole.includes("firm")) return "Firmante";
   if (rawRole.includes("revi")) return "Revisor";
-  if (rawRole.includes("owner") || rawRole.includes("prop")) return "Propietario";
+  if (rawRole.includes("owner") || rawRole.includes("prop")) {
+    return "Propietario";
+  }
 
   return isVisado ? "Visador" : "Firmante";
 }
 
 export function buildMetaTitle(label, value, extra = "") {
-  const main = String(value || "").trim();
-  const secondary = String(extra || "").trim();
+  const main = String(value ?? "").trim();
+  const secondary = String(extra ?? "").trim();
 
   if (main && secondary) return `${label}: ${main} · ${secondary}`;
   if (main) return `${label}: ${main}`;
@@ -206,6 +226,8 @@ export function getReadableParticipantLabel({ signer, isVisado, document }) {
   };
 }
 
+// Endpoints de acciones públicas
+
 export function buildActionEndpoint({ apiBase, token, isVisado }) {
   const encoded = encodeURIComponent(token);
 
@@ -225,6 +247,8 @@ export function buildRejectEndpoint({ apiBase, token, tokenKind }) {
 
   return `${apiBase}/public/docs/${encoded}/rechazar`;
 }
+
+// Mensajes para acciones (firma / visado / rechazo)
 
 export function buildActionSuccessMessage(isVisado, responseMessage) {
   return sanitizePublicMessage(
@@ -250,6 +274,8 @@ export function buildRejectErrorMessage(responseMessage) {
     "No se pudo registrar el rechazo. Intenta nuevamente."
   );
 }
+
+// Resolución de viewState de la vista pública
 
 export function resolveViewState({
   hasToken,
@@ -384,6 +410,8 @@ export function resolveViewState({
     canRetry: false,
   };
 }
+
+// Badge de estado para el header público
 
 export function getStatusBadge(viewState, isVisado) {
   switch (viewState.kind) {

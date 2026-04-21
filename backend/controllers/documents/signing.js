@@ -1,4 +1,3 @@
-// backend/controllers/documents/signing.js
 const { db, sellarPdfConQr, DOCUMENT_STATES } = require("./common");
 const { logAudit } = require("../../utils/auditLog");
 const {
@@ -15,6 +14,118 @@ const parseId = (raw) => {
   const id = Number(raw);
   return Number.isFinite(id) ? id : null;
 };
+
+/**
+ * Ruta preferida para ENTREGAR / VISUALIZAR el PDF al cliente.
+ * Prioriza siempre el PDF final sellado.
+ */
+function buildPreferredFileUrl(doc) {
+  if (!doc) return null;
+
+  return (
+    doc.pdf_final_url ||
+    doc.final_file_url ||
+    doc.final_storage_key ||
+    doc.pdf_original_url ||
+    doc.file_path ||
+    doc.original_storage_key ||
+    null
+  );
+}
+
+/**
+ * Ruta preferida para SELLAR el documento.
+ * Importante: debe salir del original limpio.
+ */
+function buildSealSourceKey(doc) {
+  if (!doc) return null;
+
+  return (
+    doc.original_storage_key ||
+    doc.file_path ||
+    doc.original_file_url ||
+    doc.clean_file_path ||
+    doc.pdf_original_url ||
+    null
+  );
+}
+
+/**
+ * Resuelve datos de verificación desde legacy + metadata.
+ */
+async function resolveVerificationData(doc) {
+  let codigoVerificacion = null;
+  let categoriaFirma = "SIMPLE";
+
+  if (doc.nuevo_documento_id) {
+    const docNuevoRes = await db.query(
+      `
+      SELECT id, codigo_verificacion, categoria_firma
+      FROM documentos
+      WHERE id = $1
+      `,
+      [doc.nuevo_documento_id]
+    );
+
+    if (docNuevoRes.rowCount > 0) {
+      const docNuevo = docNuevoRes.rows[0];
+      codigoVerificacion = docNuevo.codigo_verificacion || null;
+      categoriaFirma = docNuevo.categoria_firma || "SIMPLE";
+    }
+  }
+
+  if (!codigoVerificacion) {
+    const meta = doc.metadata || {};
+    codigoVerificacion =
+      meta.codigo_verificacion ||
+      meta.verification_code ||
+      doc.signature_token ||
+      `DOC-${doc.id}`;
+  }
+
+  return {
+    codigoVerificacion,
+    categoriaFirma,
+  };
+}
+
+/**
+ * Refresca campos finales luego del sellado.
+ */
+async function refreshFinalPdfFields(docId, targetDoc) {
+  const updatedDocRes = await db.query(
+    `
+    SELECT
+      pdf_final_url,
+      final_storage_key,
+      final_file_url,
+      sealed_hash_sha256
+    FROM documents
+    WHERE id = $1
+    `,
+    [docId]
+  );
+
+  if (updatedDocRes.rowCount === 0) {
+    return targetDoc;
+  }
+
+  const finalRow = updatedDocRes.rows[0];
+
+  targetDoc.pdf_final_url =
+    finalRow.pdf_final_url || targetDoc.pdf_final_url || null;
+
+  targetDoc.final_storage_key =
+    finalRow.final_storage_key || targetDoc.final_storage_key || null;
+
+  targetDoc.final_file_url =
+    finalRow.final_file_url || targetDoc.final_file_url || null;
+
+  targetDoc.sealed_hash_sha256 =
+    finalRow.sealed_hash_sha256 || targetDoc.sealed_hash_sha256 || null;
+
+  return targetDoc;
+}
 
 /* ================================
    POST: Firmar documento (propietario)
@@ -69,14 +180,13 @@ async function signDocument(req, res) {
     const doc = updateRes.rows[0];
     const fromStatus = docActual.status;
     const toStatus = DOCUMENT_STATES.SIGNED;
-    const eventType = "SIGNED_OWNER";
 
     await insertOwnerEvent({
       req,
       doc,
       fromStatus,
       toStatus,
-      eventType,
+      eventType: "SIGNED_OWNER",
       action: "DOCUMENT_SIGNED_OWNER",
       details:
         "Firmado por propietario (aceptó aviso legal de uso de firma electrónica simple, con equivalencia a firma manuscrita conforme a la Ley N° 19.799).",
@@ -118,85 +228,61 @@ async function signDocument(req, res) {
       req,
     });
 
-    // === Sellar PDF con QR siempre que tengamos sourceKey ===
     try {
-      const sourceKey = doc.pdf_original_url || doc.file_path;
+      const sourceKey = buildSealSourceKey(doc);
+
+      console.log("[SIGN OWNER] DEBUG SOURCE PDF >>", {
+        documentId: doc.id,
+        sourceKey,
+        original_storage_key: doc.original_storage_key || null,
+        file_path: doc.file_path || null,
+        pdf_original_url: doc.pdf_original_url || null,
+        final_storage_key: doc.final_storage_key || null,
+      });
 
       if (!sourceKey) {
         console.warn(
-          "[signDocument] Documento sin pdf_original_url ni file_path. No se puede sellar.",
+          "[signDocument] Documento sin fuente limpia para sellado.",
           { documentId: doc.id }
         );
       } else {
-        // Preferimos datos de verificación desde documento legacy (si existe)
-        let codigoVerificacion = null;
-        let categoriaFirma = "SIMPLE";
+        const { codigoVerificacion, categoriaFirma } =
+          await resolveVerificationData(doc);
 
-        if (doc.nuevo_documento_id) {
-          const docNuevoRes = await db.query(
-            `
-            SELECT id, codigo_verificacion, categoria_firma
-            FROM documentos
-            WHERE id = $1
-            `,
-            [doc.nuevo_documento_id]
-          );
-
-          if (docNuevoRes.rowCount > 0) {
-            const docNuevo = docNuevoRes.rows[0];
-            codigoVerificacion = docNuevo.codigo_verificacion || null;
-            categoriaFirma = docNuevo.categoria_firma || "SIMPLE";
-          }
-        }
-
-        // Fallback: metadata de documents (sigue manteniendo unicidad)
-        if (!codigoVerificacion) {
-          const meta = doc.metadata || {};
-          codigoVerificacion =
-            meta.codigo_verificacion ||
-            meta.verification_code ||
-            doc.signature_token ||
-            `DOC-${doc.id}`;
-        }
-
-        await sellarPdfConQr({
+        const sealResult = await sellarPdfConQr({
           s3Key: sourceKey,
-          // IMPORTANTE: usamos el id de documents, que es donde se actualiza pdf_final_url
           documentoId: doc.id,
           codigoVerificacion,
           categoriaFirma,
           numeroContratoInterno: doc.numero_contrato_interno,
         });
 
-        // Recargar campos finales después del sellado
-        const updatedDocRes = await db.query(
-          `
-          SELECT
-            pdf_final_url,
-            final_storage_key,
-            final_file_url
-          FROM documents
-          WHERE id = $1
-          `,
-          [doc.id]
-        );
-
-        if (updatedDocRes.rowCount > 0) {
-          const finalRow = updatedDocRes.rows[0];
-          doc.pdf_final_url =
-            finalRow.pdf_final_url ||
-            finalRow.final_file_url ||
-            finalRow.final_storage_key ||
-            doc.pdf_final_url;
+        if (sealResult?.finalHash) {
+          try {
+            await db.query(
+              `
+              UPDATE documents
+              SET sealed_hash_sha256 = $2,
+                  updated_at = NOW()
+              WHERE id = $1
+              `,
+              [doc.id, sealResult.finalHash]
+            );
+          } catch (hashErr) {
+            console.warn(
+              "⚠️ No se pudo actualizar sealed_hash_sha256 en signDocument:",
+              hashErr.message
+            );
+          }
         }
+
+        await refreshFinalPdfFields(doc.id, doc);
       }
     } catch (sealError) {
       console.error("⚠️ Error sellando PDF con QR (signDocument):", sealError);
-      // No rompemos la firma por error de sellado.
     }
 
-    // Preferimos siempre el PDF final si existe
-    const fileUrl = doc.pdf_final_url || doc.file_path;
+    const fileUrl = buildPreferredFileUrl(doc);
 
     return res.json({
       ...doc,
@@ -265,7 +351,6 @@ async function viserDocumentInternalUpdate(id, userId, req = null) {
   );
 
   const doc = result.rows[0];
-
   const fromStatus = docActual.status;
   const toStatus = "PENDIENTE_FIRMA";
 
@@ -330,7 +415,7 @@ async function visarDocument(req, res) {
       req,
     });
 
-    const fileUrl = doc.pdf_final_url || doc.file_path;
+    const fileUrl = buildPreferredFileUrl(doc);
 
     return res.json({
       ...doc,
@@ -408,7 +493,6 @@ async function rejectDocument(req, res) {
     );
 
     const doc = result.rows[0];
-
     const fromStatus = docActual.status;
     const toStatus = DOCUMENT_STATES.REJECTED;
 
@@ -458,7 +542,7 @@ async function rejectDocument(req, res) {
       req,
     });
 
-    const fileUrl = doc.pdf_final_url || doc.file_path;
+    const fileUrl = buildPreferredFileUrl(doc);
 
     return res.json({
       ...doc,

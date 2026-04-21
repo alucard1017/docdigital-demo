@@ -1,5 +1,8 @@
 const { db, uploadPdfToS3 } = require("./common");
-const { toJson, buildSafeStorageFileName } = require("./documentUtils");
+const {
+  toJson,
+  buildSafeStorageFileName,
+} = require("./documentUtils");
 const { generarSignToken } = require("./documentSignerHelpers");
 
 const pool = db?.pool || db;
@@ -318,10 +321,8 @@ async function syncParticipantsFromSigners(client, { documentId, companyId, sign
   const inserted = [];
   const flowGroup = 0;
 
-  // Ordenamos por orden de firma
   const sorted = [...signers].sort((a, b) => a.orden - b.orden);
 
-  // Deduplicamos por email, quedándonos con la primera aparición
   const uniqueByEmail = [];
   const seenEmails = new Set();
 
@@ -332,7 +333,6 @@ async function syncParticipantsFromSigners(client, { documentId, companyId, sign
     uniqueByEmail.push(signer);
   }
 
-  // Asignamos flow_order incremental 1..N
   for (let i = 0; i < uniqueByEmail.length; i++) {
     const signer = uniqueByEmail[i];
     const email = (signer.email || "").trim().toLowerCase();
@@ -376,7 +376,7 @@ async function syncParticipantsFromSigners(client, { documentId, companyId, sign
         participantRole,
         flowGroup,
         flowOrder,
-        signer.orden, // sort_order = orden visual original
+        signer.orden,
         toJson(
           {
             tipo_original: signer.tipo,
@@ -400,7 +400,31 @@ async function syncParticipantsFromSigners(client, { documentId, companyId, sign
    STORAGE
    ================================ */
 
-async function uploadMainPdfToStorage(file, companyId, code) {
+/**
+ * Genera un key estable para S3/Storage.
+ * - companyId -> carpeta raíz
+ * - code -> sufijo único ligado al documento/version
+ * - purpose -> indica si es 'original', 'preview' o 'final'
+ */
+function buildPdfStorageKey(companyId, baseName, code, purpose = "original") {
+  const safeFileName = buildSafeStorageFileName(baseName, code);
+
+  const normalizedPurpose =
+    purpose && typeof purpose === "string"
+      ? purpose.toLowerCase()
+      : "original";
+
+  return `documents/${companyId}/${normalizedPurpose}/${safeFileName}`;
+}
+
+/**
+ * Sube un PDF a storage con un key estructurado.
+ * Se usa tanto para:
+ * - original limpio (purpose='original')
+ * - preview con marca de agua (purpose='preview')
+ * - otros usos futuros ('final', etc.)
+ */
+async function uploadMainPdfToStorage(file, companyId, code, purpose = "original") {
   if (!file?.buffer) {
     throw new Error("Archivo inválido en uploadMainPdfToStorage");
   }
@@ -413,8 +437,8 @@ async function uploadMainPdfToStorage(file, companyId, code) {
     throw new Error("code requerido en uploadMainPdfToStorage");
   }
 
-  const safeFileName = buildSafeStorageFileName(file.originalname, code);
-  const key = `documents/${companyId}/${safeFileName}`;
+  const baseName = file.originalname || "documento.pdf";
+  const key = buildPdfStorageKey(companyId, baseName, code, purpose);
 
   const uploaded = await uploadPdfToS3(
     file.buffer,
@@ -438,4 +462,5 @@ module.exports = {
   createCanonicalSigners,
   syncParticipantsFromSigners,
   uploadMainPdfToStorage,
+  buildPdfStorageKey,
 };
