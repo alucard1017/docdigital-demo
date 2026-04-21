@@ -5,7 +5,6 @@ const { getClientIp, getUserAgent } = require("./documentEventUtils");
 /**
  * Contrato uniforme de salida para eventos del timeline.
  *
- * El frontend puede asumir SIEMPRE este shape:
  * {
  *   id: string | number,
  *   eventType: string,
@@ -15,14 +14,9 @@ const { getClientIp, getUserAgent } = require("./documentEventUtils");
  *   toStatus: string | null,
  *   ip: string | null,
  *   userAgent: string | null,
- *   createdAt: string,       // ISO 8601
- *   metadata: object | null
+ *   createdAt: string, // ISO 8601
+ *   metadata: object
  * }
- *
- * Notas:
- * - getTimeline() mezcla document_events + audit_log, ambos normalizados a este contrato.
- * - getLegalTimeline() usa solo document_events, también normalizados al mismo contrato.
- * - metadata.source siempre viene informado.
  */
 
 /* ================================
@@ -307,14 +301,32 @@ async function getDocumentPdf(req, res) {
 
     const normalizedStatus = normalizeStatus(status);
 
-    const key =
-      normalizedStatus === "FIRMADO" && pdf_final_url
-        ? pdf_final_url
-        : pdf_original_url || file_path;
+    // Regla explícita:
+    // - Si está FIRMADO y hay pdf_final_url -> usar SIEMPRE pdf_final_url (sin marca de agua).
+    // - Si está FIRMADO pero no hay pdf_final_url -> fallback a pdf_original_url o file_path (caso legacy).
+    // - Si NO está FIRMADO -> usar pdf_original_url o file_path (puede incluir marca de agua).
+    let storageKey = null;
+    let isFinalPdf = false;
 
-    if (pdf_hash_final) {
+    if (normalizedStatus === "FIRMADO" && pdf_final_url) {
+      storageKey = pdf_final_url;
+      isFinalPdf = true;
+    } else {
+      storageKey = pdf_original_url || file_path;
+      isFinalPdf = false;
+    }
+
+    if (!storageKey) {
+      return res.status(404).json({
+        code: "NO_FILE_KEY",
+        message: "No se encontró una ruta de archivo para este documento",
+      });
+    }
+
+    // Verificación de integridad solo para el PDF final
+    if (isFinalPdf && pdf_hash_final) {
       try {
-        const signedUrl = await getSignedUrl(key, 600);
+        const signedUrl = await getSignedUrl(storageKey, 600);
 
         const fileResponse = await axios.get(signedUrl, {
           responseType: "arraybuffer",
@@ -325,7 +337,7 @@ async function getDocumentPdf(req, res) {
 
         if (currentHash !== pdf_hash_final) {
           console.error("❌ Hash de PDF no coincide", docId, {
-            key,
+            storageKey,
             stored_hash: pdf_hash_final,
             current_hash: currentHash,
           });
@@ -339,7 +351,7 @@ async function getDocumentPdf(req, res) {
               document_id: docId,
               company_id,
               title,
-              key,
+              key: storageKey,
               stored_hash: pdf_hash_final,
               current_hash: currentHash,
               context: "getDocumentPdf",
@@ -369,7 +381,7 @@ async function getDocumentPdf(req, res) {
             document_id: docId,
             company_id,
             title,
-            key,
+            key: storageKey,
             error: verifyErr.message,
             context: "getDocumentPdf",
           },
@@ -383,7 +395,7 @@ async function getDocumentPdf(req, res) {
       }
     }
 
-    const finalSignedUrl = await getSignedUrl(key, 600);
+    const finalSignedUrl = await getSignedUrl(storageKey, 600);
 
     await logAudit({
       user: req.user || null,
@@ -394,8 +406,8 @@ async function getDocumentPdf(req, res) {
         document_id: docId,
         company_id,
         title,
-        key,
-        final_pdf: normalizedStatus === "FIRMADO" && !!pdf_final_url,
+        key: storageKey,
+        final_pdf: isFinalPdf,
         ip: getClientIp(req),
         user_agent: getUserAgent(req),
       },
@@ -404,7 +416,7 @@ async function getDocumentPdf(req, res) {
 
     return res.json({
       url: finalSignedUrl,
-      final: normalizedStatus === "FIRMADO" && !!pdf_final_url,
+      final: isFinalPdf,
     });
   } catch (err) {
     console.error("❌ Error obteniendo PDF:", err);
@@ -542,7 +554,6 @@ async function getTimeline(req, res) {
     });
 
     const requiresVisadoBool = normalizeBoolean(doc.requires_visado);
-
     const { currentStep, nextStep, progress } = buildTimelineProgress(
       doc.status,
       requiresVisadoBool

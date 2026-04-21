@@ -64,13 +64,21 @@ async function resolveParticipantIdForPublicEvent({
   }
 }
 
+/**
+ * Devuelve la mejor ruta de archivo disponible para un documento.
+ * Orden de preferencia:
+ * 1) pdf_final_url / final_file_url / final_storage_key (PDF final, sellado)
+ * 2) pdf_original_url (PDF original)
+ * 3) file_path (legacy)
+ */
 function buildDocumentFilePath(row) {
+  if (!row) return null;
   return (
-    row?.pdf_final_url ||
-    row?.final_file_url ||
-    row?.final_storage_key ||
-    row?.pdf_original_url ||
-    row?.file_path ||
+    row.pdf_final_url ||
+    row.final_file_url ||
+    row.final_storage_key ||
+    row.pdf_original_url ||
+    row.file_path ||
     null
   );
 }
@@ -87,7 +95,10 @@ function buildPublicDocumentPayload(row, extra = {}) {
     firmante_nombre: row.firmante_nombre,
     firmante_run: row.firmante_run,
     numero_contrato_interno: row.numero_contrato_interno,
-    numero_contrato: row.numero_contrato || row.numero_contrato_interno || "",
+    numero_contrato:
+      row.numero_contrato ||
+      row.numero_contrato_interno ||
+      "",
     visador_nombre: row.visador_nombre || null,
     pdf_final_url: row.pdf_final_url || null,
     pdf_original_url: row.pdf_original_url || null,
@@ -95,6 +106,9 @@ function buildPublicDocumentPayload(row, extra = {}) {
   };
 }
 
+/**
+ * Devuelve una signed URL (S3) o envía el error HTTP y retorna null.
+ */
 async function buildSignedPdfUrlOrFail(row, res) {
   const basePath = buildDocumentFilePath(row);
 
@@ -109,7 +123,19 @@ async function buildSignedPdfUrlOrFail(row, res) {
     return null;
   }
 
-  return getSignedUrl(basePath, 3600);
+  try {
+    return await getSignedUrl(basePath, 3600);
+  } catch (err) {
+    console.error(
+      "⚠️ Error generando signed URL en buildSignedPdfUrlOrFail:",
+      err
+    );
+    res.status(500).json({
+      code: "SIGNED_URL_ERROR",
+      message: "No se pudo generar el enlace de descarga del documento.",
+    });
+    return null;
+  }
 }
 
 /**
@@ -440,6 +466,7 @@ async function publicSignDocument(req, res) {
       });
     }
 
+    // 1) Actualizar signer y participants
     await db.query(
       `
       UPDATE document_signers
@@ -469,6 +496,7 @@ async function publicSignDocument(req, res) {
       );
     }
 
+    // 2) Recalcular estado del documento según firmantes
     const countRes = await db.query(
       `
       SELECT 
@@ -516,6 +544,7 @@ async function publicSignDocument(req, res) {
     );
     const doc = docUpdateRes.rows[0];
 
+    // 3) Sincronizar con legacy (documentos + firmantes)
     if (doc.nuevo_documento_id) {
       try {
         await db.query(
@@ -548,6 +577,7 @@ async function publicSignDocument(req, res) {
       }
     }
 
+    // 4) Eventos públicos
     const fromStatus = row.status;
     const toStatus = newDocStatus;
 
@@ -617,7 +647,7 @@ async function publicSignDocument(req, res) {
       req,
     });
 
-    // SELLADO PDF: si todos firmaron, sellamos usando documents.id (fuente de pdf_final_url).
+    // 5) SELLADO PDF: si todos firmaron, sellamos usando documents.id (fuente de pdf_final_url).
     if (allSigned) {
       try {
         let codigoVerificacion = null;
@@ -635,7 +665,7 @@ async function publicSignDocument(req, res) {
 
           if (docNuevoRes.rowCount > 0) {
             const docNuevo = docNuevoRes.rows[0];
-            codigoVerificacion = docNuevo.codigo_verificacion;
+            codigoVerificacion = docNuevo.codigo_verificacion || null;
             categoriaFirma = docNuevo.categoria_firma || "SIMPLE";
           }
         }
@@ -655,7 +685,7 @@ async function publicSignDocument(req, res) {
           const sealResult = await sellarPdfConQr({
             s3Key: baseKey,
             documentoId: doc.id,
-            codigoVerificacion: codigoVerificacion || null,
+            codigoVerificacion,
             categoriaFirma,
             numeroContratoInterno: doc.numero_contrato_interno,
           });
@@ -690,6 +720,7 @@ async function publicSignDocument(req, res) {
       }
     }
 
+    // 6) Devolver URL firmada (prioriza PDF final si existe)
     const fileUrl = await buildSignedPdfUrlOrFail(doc, res);
     if (!fileUrl) return;
 
@@ -925,11 +956,11 @@ async function publicRejectDocument(req, res) {
       req,
     });
 
-    const fileUrl = buildDocumentFilePath(doc);
+    const filePath = buildDocumentFilePath(doc);
 
     return res.json({
       ...doc,
-      file_url: fileUrl,
+      file_url: filePath,
       documentStatus: "RECHAZADO",
       public_mode: "firma",
       public_token_kind: "signer",
@@ -1067,11 +1098,11 @@ async function publicVisarDocument(req, res) {
       req,
     });
 
-    const fileUrl = buildDocumentFilePath(doc);
+    const filePath = buildDocumentFilePath(doc);
 
     return res.json({
       ...doc,
-      file_url: fileUrl,
+      file_url: filePath,
       documentStatus: "PENDIENTE_FIRMA",
       public_mode: "visado",
       public_token_kind: "document",

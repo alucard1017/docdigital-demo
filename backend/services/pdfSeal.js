@@ -60,8 +60,6 @@ function normalizeRoleLabel(role, actionType) {
 
 /**
  * Normaliza un participante moderno a partir de document_participants + metadata.
- * Esta función es el punto único donde se admite diversidad de claves en metadata,
- * así el resto del código no depende de nombres frágiles.
  */
 function normalizeParticipantFromMetadata(row, source) {
   const meta = parseJsonSafe(row.metadata) || {};
@@ -78,14 +76,14 @@ function normalizeParticipantFromMetadata(row, source) {
   const fecha =
     row.completed_at ||
     row.signed_at ||
-    row.reviewed_at || // si algún día la agregas, la usamos
+    row.reviewed_at ||
     row.updated_at ||
     meta.completed_at ||
     meta.signed_at ||
     null;
 
   const ip =
-    row.ip_address || // si se agrega como columna fuerte
+    row.ip_address ||
     meta.ip_address ||
     meta.ip ||
     meta.ip_firma ||
@@ -124,12 +122,11 @@ function normalizeParticipantFromMetadata(row, source) {
 }
 
 /**
- * Construye la lista de participantes que aparecerán en el certificado,
+ * Construye la lista de participantes para el certificado
  * combinando legacy (firmantes) y modelo moderno (document_participants).
- * Nunca lanza error por cambios de columnas: cualquier fallo loguea y sigue.
  */
 async function obtenerParticipantesEvidencia(documentoId) {
-  // 1) Fuente legacy: tabla firmantes (no se toca por compatibilidad histórica)
+  // 1) Fuente legacy
   const legacyRes = await db.query(
     `
     SELECT
@@ -158,6 +155,7 @@ async function obtenerParticipantesEvidencia(documentoId) {
   const legacyParticipants = legacyRows.map((row) => {
     const roleUpper = String(row.rol || "").trim().toUpperCase();
     const isVisador = roleUpper === "VISADOR";
+
     return {
       nombre: row.nombre || "Sin nombre",
       email: row.email || "N/A",
@@ -176,7 +174,7 @@ async function obtenerParticipantesEvidencia(documentoId) {
     legacyParticipants.map((p) => `${p.email}|${p.actionType}|${p.role}`)
   );
 
-  // 2) Fuente moderna: document_participants, alineado con el flujo actual
+  // 2) Fuente moderna: document_participants
   let canonicalRows = [];
   try {
     const modernDocRes = await db.query(
@@ -206,7 +204,6 @@ async function obtenerParticipantesEvidencia(documentoId) {
           updated_at,
           signed_at,
           completed_at,
-          -- columnas opcionales, pueden no existir en algunas migraciones
           NULL::text AS ip_address,
           NULL::text AS user_agent,
           NULL::jsonb AS geo_location
@@ -231,7 +228,6 @@ async function obtenerParticipantesEvidencia(documentoId) {
       const roleUpper = String(row.role || "").trim().toUpperCase();
       const statusUpper = String(row.status || "").trim().toUpperCase();
       const isVisador = roleUpper === "VISADOR";
-      // Consideramos firmado/visado o visador (aunque el status venga raro)
       return (
         statusUpper === "FIRMADO" ||
         statusUpper === "VISADO" ||
@@ -248,7 +244,6 @@ async function obtenerParticipantesEvidencia(documentoId) {
 
   const all = [...legacyParticipants, ...canonicalParticipants];
 
-  // Orden cronológico por fecha de acción; si no hay fecha, lo mandamos al final
   return all.sort((a, b) => {
     const da = a.fecha ? new Date(a.fecha).getTime() : Number.MAX_SAFE_INTEGER;
     const dbb = b.fecha ? new Date(b.fecha).getTime() : Number.MAX_SAFE_INTEGER;

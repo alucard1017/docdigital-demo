@@ -1,12 +1,15 @@
 // backend/controllers/documents/flowHelpers.js
 
 async function getReminderConfig(client, companyId) {
+  // Config por defecto si no hay compañía asociada o no hay fila en la tabla
+  const DEFAULT_CONFIG = {
+    intervalDays: 3,
+    maxAttempts: 3,
+    enabled: true,
+  };
+
   if (!companyId) {
-    return {
-      intervalDays: 3,
-      maxAttempts: 3,
-      enabled: true,
-    };
+    return DEFAULT_CONFIG;
   }
 
   const configRes = await client.query(
@@ -19,18 +22,17 @@ async function getReminderConfig(client, companyId) {
   );
 
   if (configRes.rowCount === 0) {
-    return {
-      intervalDays: 3,
-      maxAttempts: 3,
-      enabled: true,
-    };
+    return DEFAULT_CONFIG;
   }
 
   const config = configRes.rows[0];
 
+  const intervalDays = Number(config.interval_days);
+  const maxAttempts = Number(config.max_attempts);
+
   return {
-    intervalDays: Number(config.interval_days) > 0 ? Number(config.interval_days) : 3,
-    maxAttempts: Number(config.max_attempts) > 0 ? Number(config.max_attempts) : 3,
+    intervalDays: Number.isFinite(intervalDays) && intervalDays > 0 ? intervalDays : DEFAULT_CONFIG.intervalDays,
+    maxAttempts: Number.isFinite(maxAttempts) && maxAttempts > 0 ? maxAttempts : DEFAULT_CONFIG.maxAttempts,
     enabled: Boolean(config.enabled),
   };
 }
@@ -39,7 +41,9 @@ async function createAutomaticReminders(
   client,
   { documentId, signers, intervalDays, maxAttempts, companyId }
 ) {
-  if (!documentId || !Array.isArray(signers) || !signers.length) return 0;
+  if (!documentId || !Array.isArray(signers) || signers.length === 0) {
+    return 0;
+  }
 
   const safeIntervalDays =
     Number.isFinite(Number(intervalDays)) && Number(intervalDays) > 0
@@ -53,6 +57,8 @@ async function createAutomaticReminders(
 
   // Primera corrida: 12h después del envío para que no spamee al minuto 1
   const firstReminderAt = new Date(Date.now() + 12 * 60 * 60 * 1000);
+
+  let createdCount = 0;
 
   for (const signer of signers) {
     if (!signer?.email) continue;
@@ -96,9 +102,11 @@ async function createAutomaticReminders(
         safeMaxAttempts,
       ]
     );
+
+    createdCount += 1;
   }
 
-  return signers.length;
+  return createdCount;
 }
 
 async function cancelPendingReminders(client, documentId) {

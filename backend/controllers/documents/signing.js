@@ -67,7 +67,6 @@ async function signDocument(req, res) {
     );
 
     const doc = updateRes.rows[0];
-
     const fromStatus = docActual.status;
     const toStatus = DOCUMENT_STATES.SIGNED;
     const eventType = "SIGNED_OWNER";
@@ -193,8 +192,10 @@ async function signDocument(req, res) {
       }
     } catch (sealError) {
       console.error("⚠️ Error sellando PDF con QR (signDocument):", sealError);
+      // No rompemos la firma por error de sellado.
     }
 
+    // Preferimos siempre el PDF final si existe
     const fileUrl = doc.pdf_final_url || doc.file_path;
 
     return res.json({

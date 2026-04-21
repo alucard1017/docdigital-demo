@@ -19,17 +19,11 @@ const {
 } = require("./flowEventInserts");
 
 const { updateParticipantStatus } = require("./flowParticipantsSync");
-
-const {
-  logAudit,
-  buildDocumentAuditMetadata,
-} = require("../../utils/auditLog");
-
+const { logAudit, buildDocumentAuditMetadata } = require("../../utils/auditLog");
 const { triggerWebhook } = require("../../services/webhookService");
 const { emitToCompany } = require("../../services/socketService");
 const { getGeoFromIP } = require("../../utils/geoLocation");
 const { getClientIp, getUserAgent } = require("./documentEventUtils");
-
 const { cancelPendingReminders } = require("./flowHelpers");
 
 function normalizeRole(rawRole) {
@@ -40,6 +34,11 @@ function normalizeRole(rawRole) {
   if (role.includes("FINAL")) return "FIRMANTE_FINAL";
   if (role.includes("FIRM")) return "FIRMANTE";
   return role;
+}
+
+function buildProgressLabel(firmados, total) {
+  if (!total || total <= 0) return "0.0%";
+  return ((firmados / total) * 100).toFixed(1) + "%";
 }
 
 async function signFlow(req, res) {
@@ -240,6 +239,7 @@ async function signFlow(req, res) {
     );
 
     const allSigned = totalNum > 0 && firmadosNum >= totalNum;
+    const progressLabel = buildProgressLabel(firmadosNum, totalNum);
 
     let nuevoEstadoDocumento = firmante.documento_estado;
     let nuevoEstadoDocuments = mapLegacyStatusToDocumentsStatus(
@@ -324,9 +324,10 @@ async function signFlow(req, res) {
           WHERE id = $2
           `,
           [documentsStatus, newDocumentId]
-        );
+          );
       }
 
+      // Si el actor es visador, al completar su acción cancelamos recordatorios
       if (actorIsReviewer) {
         await cancelPendingReminders(client, firmante.documento_id);
       }
@@ -348,7 +349,10 @@ async function signFlow(req, res) {
       await insertFlowActorEvent({
         req,
         doc: flowDoc,
-        actor: firmante.nombre || firmante.email || "Participante interno",
+        actor:
+          firmante.nombre ||
+          firmante.email ||
+          "Participante interno",
         fromStatus,
         toStatus: nuevoEstadoDocuments,
         eventType: actorIsReviewer ? "VISADO_INTERNAL" : "SIGNED_INTERNAL",
@@ -366,10 +370,7 @@ async function signFlow(req, res) {
           actor_email: firmante.email,
           actor_id: firmante.id,
           all_signed: allSigned,
-          progress:
-            totalNum > 0
-              ? ((firmadosNum / totalNum) * 100).toFixed(1) + "%"
-              : "0.0%",
+          progress: progressLabel,
           firmados_legacy: firmadosNum,
           total_legacy: totalNum,
           firmados_dp: firmadosDpNum,
@@ -451,10 +452,7 @@ async function signFlow(req, res) {
         tipo_flujo: tipoFlujo,
         actor_type: actorIsReviewer ? "REVIEWER" : "SIGNER",
         all_signed: allSigned,
-        progress:
-          totalNum > 0
-            ? ((firmadosNum / totalNum) * 100).toFixed(1) + "%"
-            : "0.0%",
+        progress: progressLabel,
         legacy_status: nuevoEstadoDocumento,
         documents_equivalent_id: newDocumentId,
         documents_status: nuevoEstadoDocuments,
@@ -487,10 +485,7 @@ async function signFlow(req, res) {
       documentsId: newDocumentId,
       allSigned,
       actorType: actorIsReviewer ? "REVIEWER" : "SIGNER",
-      progress:
-        totalNum > 0
-          ? ((firmadosNum / totalNum) * 100).toFixed(1) + "%"
-          : "0.0%",
+      progress: progressLabel,
     });
   } catch (error) {
     await rollbackSafely(client);
