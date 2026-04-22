@@ -57,6 +57,14 @@ const rollbackSafely = async (client) => {
   }
 };
 
+/**
+ * upsertDocumentMirror
+ *
+ * Regla importante:
+ * - original_storage_key SIEMPRE apunta al PDF limpio.
+ * - file_path se mantiene como compatibilidad, pero el código nuevo
+ *   debe usar original_storage_key para generar previews y sellar.
+ */
 const upsertDocumentMirror = async (
   client,
   {
@@ -65,7 +73,7 @@ const upsertDocumentMirror = async (
     status,
     companyId,
     ownerId,
-    filePath = null,
+    filePath = null,          // ruta original limpia (key de S3 o path)
     description = null,
     signFlowType = "SEQUENTIAL",
     notaryMode = "NONE",
@@ -73,19 +81,23 @@ const upsertDocumentMirror = async (
     enviadoEn = null,
     firmadoEn = null,
     fechaExpiracion = null,
-    signedFilePath = null,
+    signedFilePath = null,    // compatibilidad: copia informativa firmada
     legalSummary = null,
     hashOriginalFile = null,
     hashFinalFile = null,
     rutEmisor = null,
   }
 ) => {
+  // Normalizar original_storage_key: siempre lo mismo que filePath
+  const originalStorageKey = filePath || null;
+
   const query = `
     INSERT INTO documents (
       nuevo_documento_id,
       title,
       description,
       file_path,
+      original_storage_key,
       status,
       company_id,
       owner_id,
@@ -105,29 +117,30 @@ const upsertDocumentMirror = async (
     )
     VALUES (
       $1,$2,$3,$4,$5,$6,$7,$8,$9,$10,
-      $11,$12,$13,$14,$15,$16,$17,$18,
+      $11,$12,$13,$14,$15,$16,$17,$18,$19,
       NOW(),NOW()
     )
     ON CONFLICT (nuevo_documento_id)
     DO UPDATE SET
-      title = EXCLUDED.title,
-      description = EXCLUDED.description,
-      file_path = EXCLUDED.file_path,
-      status = EXCLUDED.status,
-      company_id = EXCLUDED.company_id,
-      owner_id = EXCLUDED.owner_id,
-      sign_flow_type = EXCLUDED.sign_flow_type,
-      notary_mode = EXCLUDED.notary_mode,
-      country_code = EXCLUDED.country_code,
-      enviado_en = EXCLUDED.enviado_en,
-      firmado_en = EXCLUDED.firmado_en,
-      fecha_expiracion = EXCLUDED.fecha_expiracion,
-      signed_file_path = EXCLUDED.signed_file_path,
-      legal_summary = EXCLUDED.legal_summary,
-      hash_original_file = EXCLUDED.hash_original_file,
-      hash_final_file = EXCLUDED.hash_final_file,
-      rut_emisor = EXCLUDED.rut_emisor,
-      updated_at = NOW()
+      title                = EXCLUDED.title,
+      description          = EXCLUDED.description,
+      file_path            = EXCLUDED.file_path,
+      original_storage_key = EXCLUDED.original_storage_key,
+      status               = EXCLUDED.status,
+      company_id           = EXCLUDED.company_id,
+      owner_id             = EXCLUDED.owner_id,
+      sign_flow_type       = EXCLUDED.sign_flow_type,
+      notary_mode          = EXCLUDED.notary_mode,
+      country_code         = EXCLUDED.country_code,
+      enviado_en           = EXCLUDED.enviado_en,
+      firmado_en           = EXCLUDED.firmado_en,
+      fecha_expiracion     = EXCLUDED.fecha_expiracion,
+      signed_file_path     = EXCLUDED.signed_file_path,
+      legal_summary        = EXCLUDED.legal_summary,
+      hash_original_file   = EXCLUDED.hash_original_file,
+      hash_final_file      = EXCLUDED.hash_final_file,
+      rut_emisor           = EXCLUDED.rut_emisor,
+      updated_at           = NOW()
     RETURNING id;
   `;
 
@@ -136,6 +149,7 @@ const upsertDocumentMirror = async (
     title,
     description,
     filePath,
+    originalStorageKey,
     status,
     companyId,
     ownerId,
@@ -158,12 +172,6 @@ const upsertDocumentMirror = async (
 
 /**
  * Cuenta participantes legacy del flujo.
- *
- * Importante:
- * - Hoy considera "completado" únicamente estado = 'FIRMADO'.
- * - Incluye todas las filas de firmantes del documento.
- * - Si el modelo de negocio decide excluir ciertos roles del cierre final,
- *   este es el punto donde debe ajustarse el criterio.
  */
 const countLegacySignatures = async (client, documentId) => {
   if (!isPositiveNumber(documentId)) {
@@ -192,14 +200,6 @@ const countLegacySignatures = async (client, documentId) => {
   };
 };
 
-/**
- * Cuenta participantes del modelo nuevo.
- *
- * Importante:
- * - Mantiene la lógica vigente: completado = status 'FIRMADO'.
- * - Incluye todas las filas en document_participants del documento.
- * - Sirve para contrastar consistencia con legacy.
- */
 const countParticipantSignatures = async (client, documentId) => {
   if (!isPositiveNumber(documentId)) {
     return {
@@ -250,14 +250,6 @@ const getDocumentFlowType = async (client, documentId) => {
   return LEGACY_FLOW_TYPES.SEQUENTIAL;
 };
 
-/**
- * Retorna cuántos participantes anteriores siguen pendientes
- * para un firmante/visador dado en flujo secuencial.
- *
- * Regla actual:
- * - Todos los registros con orden_firma menor deben estar en estado FIRMADO.
- * - Si están PENDIENTE o RECHAZADO, cuentan como bloqueantes.
- */
 const validateSequentialSigning = async (client, { documentId, order }) => {
   if (!isPositiveNumber(documentId) || !isPositiveNumber(order)) {
     return 0;
