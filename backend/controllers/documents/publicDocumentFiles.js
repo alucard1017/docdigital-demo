@@ -20,54 +20,68 @@ function pickFirstFilePath(...candidates) {
 }
 
 function normalizeStatus(value) {
-  return String(value || "")
-    .trim()
-    .toUpperCase();
+  return String(value || "").trim().toUpperCase();
 }
 
 /**
  * Para vistas públicas de firma/visado/preview.
  * Mientras el documento NO esté finalizado, debe priorizar el preview.
  *
- * Importante:
- * - Soporta esquemas parciales donde quizás aún no existe preview_storage_key
- * - Si no hay preview, cae al original limpio
- * - Como último fallback usa final, pero NO es lo ideal
+ * Regla:
+ * - Intentar siempre preview (storage_key/url)
+ * - Si no hay preview, usar original limpio
+ * - NUNCA usar el final aquí; eso es responsabilidad de buildFinalDocumentFilePath
  */
 function buildPreviewDocumentFilePath(row) {
   if (!row) return null;
 
-  return pickFirstFilePath(
+  const previewPath = pickFirstFilePath(
     row.preview_storage_key,
     row.preview_file_url,
-    row.pdf_preview_url,
-    row.pdf_original_url,
+    row.pdf_preview_url
+  );
+
+  if (previewPath) return previewPath;
+
+  // Fallback: original limpio
+  return pickFirstFilePath(
     row.original_storage_key,
     row.storage_key,
     row.file_path,
     row.file_url,
-    row.archivo_url,
-    row.pdf_final_url,
-    row.final_file_url,
-    row.final_storage_key
+    row.archivo_url
   );
 }
 
 /**
  * Para verificación/descarga final.
  * Debe priorizar SIEMPRE la versión final sellada.
+ *
+ * Regla:
+ * - Primero final (storage_key/url)
+ * - Si no hay final (caso legacy), puede caer a preview/original
  */
 function buildFinalDocumentFilePath(row) {
   if (!row) return null;
 
-  return pickFirstFilePath(
+  const finalPath = pickFirstFilePath(
     row.final_storage_key,
     row.pdf_final_url,
-    row.final_file_url,
+    row.final_file_url
+  );
+
+  if (finalPath) return finalPath;
+
+  // Fallbacks legacy: si no hay final, usar lo que haya (preview/original)
+  const previewPath = pickFirstFilePath(
     row.preview_storage_key,
     row.preview_file_url,
-    row.pdf_preview_url,
-    row.pdf_original_url,
+    row.pdf_preview_url
+  );
+
+  if (previewPath) return previewPath;
+
+  return pickFirstFilePath(
     row.original_storage_key,
     row.storage_key,
     row.file_path,
@@ -86,7 +100,6 @@ function buildSealSourceKey(row) {
 
   return pickFirstFilePath(
     row.original_storage_key,
-    row.pdf_original_url,
     row.storage_key,
     row.file_path,
     row.file_url,
@@ -96,6 +109,9 @@ function buildSealSourceKey(row) {
 
 /**
  * Decide automáticamente qué modo usar según estado.
+ *
+ * - FIRMADO/SIGNED/FINALIZADO/COMPLETED → "final"
+ * - Resto → "preview"
  */
 function resolveDocumentFileMode(row, fallbackMode = "preview") {
   const status = normalizeStatus(row?.status || row?.estado);
@@ -115,6 +131,13 @@ function resolveDocumentFilePath(row, mode = "preview") {
   return buildPreviewDocumentFilePath(row);
 }
 
+/**
+ * Construye una signed URL para el PDF público.
+ *
+ * options:
+ * - mode: "preview" | "final" (default "preview")
+ * - autoDetectByStatus: si true, ignora mode y decide según estado
+ */
 async function buildSignedPdfUrlOrFail(row, res, options = {}) {
   const {
     mode = "preview",

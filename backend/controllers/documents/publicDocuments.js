@@ -127,7 +127,7 @@ async function getPublicDocBySignerToken(req, res) {
       return res.status(accessError.status).json(accessError.body);
     }
 
-    // Auto‑detect: mientras no esté FIRMADO usa preview, cuando pase a FIRMADO servirá el final
+    // Mientras no esté firmado, entrega preview; cuando pase a FIRMADO, entregará final
     const pdfUrl = await buildSignedPdfUrlOrFail(row, res, {
       mode: "preview",
       autoDetectByStatus: true,
@@ -424,6 +424,8 @@ async function publicSignDocument(req, res) {
       }
     }
 
+    // Importante: aunque allSigned sea true, usamos autoDetectByStatus
+    // para que la lógica central decida final vs preview según estado.
     const fileUrl = await buildSignedPdfUrlOrFail(doc, res, {
       mode: allSigned ? "final" : "preview",
       autoDetectByStatus: true,
@@ -569,6 +571,7 @@ async function publicRejectDocument(req, res) {
       req,
     });
 
+    // RECHAZADO → queremos seguir mostrando preview (o original) nunca final
     const fileUrl = await buildSignedPdfUrlOrFail(doc, res, {
       mode: "preview",
       autoDetectByStatus: true,
@@ -686,6 +689,7 @@ async function publicVisarDocument(req, res) {
       req,
     });
 
+    // Tras visado pasa a PENDIENTE_FIRMA → queremos preview con watermark
     const fileUrl = await buildSignedPdfUrlOrFail(doc, res, {
       mode: "preview",
       autoDetectByStatus: true,
