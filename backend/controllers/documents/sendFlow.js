@@ -1,3 +1,5 @@
+// backend/controllers/documents/sendFlow.js
+
 const {
   DOCUMENT_STATES,
   getDbClient,
@@ -5,7 +7,6 @@ const {
   upsertDocumentMirror,
   mapFlowStateAfterSend,
 } = require("./flowCommon");
-
 const { syncParticipantsFromFlow } = require("./flowParticipantsSync");
 const {
   logAudit,
@@ -21,6 +22,7 @@ const {
   createAutomaticReminders,
   cancelPendingReminders,
 } = require("./flowHelpers");
+const { generarPdfPreviewConMarcaDeAgua } = require("../../services/pdfPreview");
 
 function normalizeRole(rawRole) {
   const role = String(rawRole || "").trim().toUpperCase();
@@ -30,6 +32,52 @@ function normalizeRole(rawRole) {
   if (role.includes("FINAL")) return "FIRMANTE_FINAL";
   if (role.includes("FIRM")) return "FIRMANTE";
   return role;
+}
+
+async function ensurePreviewForModernDocument(client, newDocumentId) {
+  const modernDocRes = await client.query(
+    `
+    SELECT *
+    FROM documents
+    WHERE id = $1
+    LIMIT 1
+    `,
+    [newDocumentId]
+  );
+
+  if (modernDocRes.rowCount === 0) {
+    throw new Error(`No se encontró documents.id=${newDocumentId} para generar preview`);
+  }
+
+  const modernDoc = modernDocRes.rows[0];
+
+  if (modernDoc.preview_storage_key || modernDoc.pdf_preview_url) {
+    return {
+      previewKey:
+        modernDoc.preview_storage_key ||
+        modernDoc.pdf_preview_url,
+      generated: false,
+    };
+  }
+
+  const { previewKey } = await generarPdfPreviewConMarcaDeAgua(modernDoc);
+
+  await client.query(
+    `
+    UPDATE documents
+    SET
+      preview_storage_key = $1,
+      pdf_preview_url = $2,
+      updated_at = NOW()
+    WHERE id = $3
+    `,
+    [previewKey, previewKey, newDocumentId]
+  );
+
+  return {
+    previewKey,
+    generated: true,
+  };
 }
 
 async function sendFlow(req, res) {
@@ -53,6 +101,7 @@ async function sendFlow(req, res) {
   try {
     await client.query("BEGIN");
 
+    // 1) Cargar documento legacy con path del archivo original
     const docRes = await client.query(
       `
       SELECT
@@ -63,7 +112,11 @@ async function sendFlow(req, res) {
         creado_por,
         fecha_expiracion,
         tipo_flujo,
-        categoria_firma
+        categoria_firma,
+        archivo_url,
+        pdf_original_url,
+        storage_key,
+        file_path
       FROM documentos
       WHERE id = $1
       `,
@@ -80,6 +133,7 @@ async function sendFlow(req, res) {
 
     const documento = docRes.rows[0];
 
+    // 2) Validaciones de compañía y estado
     if (
       documento.company_id &&
       req.user.company_id &&
@@ -100,6 +154,7 @@ async function sendFlow(req, res) {
       });
     }
 
+    // 3) Cargar firmantes
     const firmantesRes = await client.query(
       `
       SELECT id, rol, orden_firma, email, nombre
@@ -137,12 +192,23 @@ async function sendFlow(req, res) {
       });
     }
 
+    // 4) Tipo de flujo normalizado
     const rawFlowType = (documento.tipo_flujo || "SECUENCIAL").toUpperCase();
     const normalizedFlowType =
       rawFlowType === "PARALELO" ? "PARALELO" : "SECUENCIAL";
 
+    // 5) Estados nuevo modelo
     const { legacyStatus, documentsStatus } = mapFlowStateAfterSend();
 
+    // Resolver archivo base del documento legacy
+    const sourceFilePath =
+      documento.pdf_original_url ||
+      documento.storage_key ||
+      documento.file_path ||
+      documento.archivo_url ||
+      null;
+
+    // 6) Actualizar documento legacy
     await client.query(
       `
       UPDATE documentos
@@ -154,14 +220,14 @@ async function sendFlow(req, res) {
       [legacyStatus, id]
     );
 
-    // Mirror en tabla moderna "documents"
+    // 7) Mirror en tabla moderna "documents"
     const newDocumentId = await upsertDocumentMirror(client, {
       nuevoDocumentoId: documento.id,
       title: documento.titulo,
       status: documentsStatus,
       companyId: documento.company_id,
       ownerId: documento.creado_por,
-      filePath: null,
+      filePath: sourceFilePath,
       signFlowType:
         normalizedFlowType === "PARALELO" ? "PARALLEL" : "SEQUENTIAL",
       notaryMode: "NONE",
@@ -170,7 +236,13 @@ async function sendFlow(req, res) {
       fechaExpiracion: documento.fecha_expiracion || null,
     });
 
-    // Registro legado en eventos_firma
+    // 8) Asegurar preview con marca de agua en documents
+    const previewResult = await ensurePreviewForModernDocument(
+      client,
+      newDocumentId
+    );
+
+    // 9) Registro legado en eventos_firma
     await client.query(
       `
       INSERT INTO eventos_firma (
@@ -190,11 +262,13 @@ async function sendFlow(req, res) {
           total_firmantes: totalFirmantes,
           total_visadores: totalVisadores,
           tiene_visador: tieneVisador,
+          preview_generado: previewResult.generated,
+          preview_storage_key: previewResult.previewKey || null,
         }),
       ]
     );
 
-    // Configuración y cancelación/creación de recordatorios
+    // 10) Recordatorios automáticos
     const reminderConfig = await getReminderConfig(
       client,
       documento.company_id
@@ -214,7 +288,7 @@ async function sendFlow(req, res) {
       });
     }
 
-    // Sincronización a document_participants
+    // 11) Sincronizar a document_participants
     await syncParticipantsFromFlow(client, {
       documentId: newDocumentId,
       signers: firmantes
@@ -228,7 +302,7 @@ async function sendFlow(req, res) {
     const ipAddress = getClientIp(req);
     const userAgent = getUserAgent(req);
 
-    // Evento moderno para timeline
+    // 12) Evento moderno para timeline
     await insertDocumentEvent({
       documentId: newDocumentId,
       participantId: null,
@@ -253,11 +327,14 @@ async function sendFlow(req, res) {
         categoria_firma: documento.categoria_firma,
         fecha_expiracion: documento.fecha_expiracion,
         tipo_flujo: normalizedFlowType,
+        preview_generado: previewResult.generated,
+        preview_storage_key: previewResult.previewKey || null,
       },
     });
 
     await client.query("COMMIT");
 
+    // 13) Webhooks / sockets
     if (documento.company_id) {
       triggerWebhook(documento.company_id, "document.sent", {
         documentoId: documento.id,
@@ -277,6 +354,7 @@ async function sendFlow(req, res) {
       });
     }
 
+    // 14) Audit log
     const metadata = buildDocumentAuditMetadata({
       documentId: documento.id,
       title: documento.titulo,
@@ -290,6 +368,8 @@ async function sendFlow(req, res) {
         documents_equivalent_id: newDocumentId,
         documents_status: documentsStatus,
         legacy_status: legacyStatus,
+        preview_storage_key: previewResult.previewKey || null,
+        preview_generado: previewResult.generated,
       },
     });
 
@@ -307,12 +387,15 @@ async function sendFlow(req, res) {
       documentsId: newDocumentId,
       estado: legacyStatus,
       recordatoriosCreados,
+      previewGenerado: previewResult.generated,
+      previewStorageKey: previewResult.previewKey || null,
       message: "Documento enviado a firma correctamente",
     });
   } catch (error) {
     await rollbackSafely(client);
     console.error("❌ Error enviando flujo de documento:", error.message);
     console.error(error.stack);
+
     return res.status(500).json({
       code: "FLOW_SEND_ERROR",
       message: "Error enviando flujo de documento",

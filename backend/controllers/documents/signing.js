@@ -1,3 +1,4 @@
+// backend/controllers/documents/signing.js
 const { db, sellarPdfConQr, DOCUMENT_STATES } = require("./common");
 const { logAudit } = require("../../utils/auditLog");
 const {
@@ -16,7 +17,7 @@ const parseId = (raw) => {
 };
 
 /**
- * Ruta preferida para ENTREGAR / VISUALIZAR el PDF al cliente.
+ * URL preferida para ENTREGAR / VISUALIZAR el PDF al cliente.
  * Prioriza siempre el PDF final sellado.
  */
 function buildPreferredFileUrl(doc) {
@@ -34,7 +35,7 @@ function buildPreferredFileUrl(doc) {
 }
 
 /**
- * Ruta preferida para SELLAR el documento.
+ * Clave de S3 preferida para SELLAR el documento.
  * Importante: debe salir del original limpio.
  */
 function buildSealSourceKey(doc) {
@@ -90,7 +91,7 @@ async function resolveVerificationData(doc) {
 }
 
 /**
- * Refresca campos finales luego del sellado.
+ * Refresca campos finales en el objeto doc después del sellado.
  */
 async function refreshFinalPdfFields(docId, targetDoc) {
   const updatedDocRes = await db.query(
@@ -99,7 +100,8 @@ async function refreshFinalPdfFields(docId, targetDoc) {
       pdf_final_url,
       final_storage_key,
       final_file_url,
-      sealed_hash_sha256
+      sealed_hash_sha256,
+      final_hash_sha256
     FROM documents
     WHERE id = $1
     `,
@@ -123,6 +125,9 @@ async function refreshFinalPdfFields(docId, targetDoc) {
 
   targetDoc.sealed_hash_sha256 =
     finalRow.sealed_hash_sha256 || targetDoc.sealed_hash_sha256 || null;
+
+  targetDoc.final_hash_sha256 =
+    finalRow.final_hash_sha256 || targetDoc.final_hash_sha256 || null;
 
   return targetDoc;
 }
@@ -228,6 +233,7 @@ async function signDocument(req, res) {
       req,
     });
 
+    // Sellado PDF final (desde original limpio)
     try {
       const sourceKey = buildSealSourceKey(doc);
 

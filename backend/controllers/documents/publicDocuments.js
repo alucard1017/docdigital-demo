@@ -132,7 +132,6 @@ async function getPublicDocBySignerToken(req, res) {
     });
     if (!pdfUrl) return;
 
-    // Evento de apertura de enlace por firmante
     try {
       const participantId =
         (await resolveParticipantIdForPublicEvent({
@@ -221,7 +220,6 @@ async function getPublicDocByDocumentToken(req, res) {
     });
     if (!pdfUrl) return;
 
-    // Evento de apertura de invitación pública
     try {
       await insertPublicEvent({
         req,
@@ -297,10 +295,8 @@ async function publicSignDocument(req, res) {
       });
     }
 
-    // Marca firmante como firmado (legacy)
     await markSignerAsSigned(row.signer_id);
 
-    // Marca participante moderno como firmado (si existe)
     try {
       await markParticipantAsSigned(row.id, row.signer_email);
     } catch (errDp) {
@@ -401,7 +397,6 @@ async function publicSignDocument(req, res) {
       req,
     });
 
-    // Si quedó completamente firmado, sellar PDF con QR
     if (allSigned) {
       try {
         const { codigoVerificacion, categoriaFirma } =
@@ -495,10 +490,8 @@ async function publicRejectDocument(req, res) {
       return res.status(validationError.status).json(validationError.body);
     }
 
-    // Marca firmante como rechazado (legacy)
     await markSignerAsRejected(row.signer_id, motivo);
 
-    // Marca participante moderno como rechazado (si existe)
     try {
       await markParticipantAsRejected(row.id, row.signer_email);
     } catch (errDp) {

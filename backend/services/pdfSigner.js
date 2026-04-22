@@ -1,11 +1,12 @@
 // backend/services/pdfSigner.js
 const { PDFDocument, StandardFonts, rgb } = require("pdf-lib");
-const axios = require("axios");
-const { getSignedUrl, uploadBufferToS3 } = require("./storageR2");
+const {
+  getObjectBuffer,
+  uploadBufferToS3,
+} = require("./storageR2");
 
 /**
- * Helper opcional.
- * Genera una copia informativa firmada SIN QR ni certificado.
+ * Genera una copia informativa firmada SIN QR ni certificado oficial.
  *
  * IMPORTANTE:
  * - NO actualiza pdf_final_url
@@ -21,9 +22,7 @@ async function createSignedCopyFromS3({ originalPath, doc, signerName }) {
     throw new Error("doc.id es obligatorio para createSignedCopyFromS3");
   }
 
-  const url = await getSignedUrl(originalPath, 3600);
-  const res = await axios.get(url, { responseType: "arraybuffer" });
-  const existingPdfBytes = res.data;
+  const existingPdfBytes = await getObjectBuffer(originalPath);
 
   const pdfDoc = await PDFDocument.load(existingPdfBytes, {
     updateMetadata: false,
@@ -31,6 +30,7 @@ async function createSignedCopyFromS3({ originalPath, doc, signerName }) {
 
   const page = pdfDoc.addPage();
   const { width, height } = page.getSize();
+
   const font = await pdfDoc.embedFont(StandardFonts.Helvetica);
   const fontBold = await pdfDoc.embedFont(StandardFonts.HelveticaBold);
 
@@ -43,6 +43,9 @@ async function createSignedCopyFromS3({ originalPath, doc, signerName }) {
     timeZone: "America/Santiago",
   });
 
+  const effectiveSignerName =
+    signerName || doc.firmante_nombre || doc.owner_name || "N/A";
+
   page.drawText("Documento firmado electrónicamente", {
     x: 50,
     y: height - 80,
@@ -51,7 +54,7 @@ async function createSignedCopyFromS3({ originalPath, doc, signerName }) {
     color: rgb(0, 0.2, 0.6),
   });
 
-  page.drawText(`Firmante: ${signerName || doc.firmante_nombre || "N/A"}`, {
+  page.drawText(`Firmante: ${effectiveSignerName}`, {
     x: 50,
     y: height - 120,
     size: 12,
@@ -75,6 +78,7 @@ async function createSignedCopyFromS3({ originalPath, doc, signerName }) {
       size: 11,
       font,
       color: rgb(0.2, 0.2, 0.2),
+      maxWidth: width - 100,
     }
   );
 
@@ -103,4 +107,6 @@ async function createSignedCopyFromS3({ originalPath, doc, signerName }) {
   };
 }
 
-module.exports = { createSignedCopyFromS3 };
+module.exports = {
+  createSignedCopyFromS3,
+};

@@ -593,7 +593,7 @@ router.post(
   documentsController.sendFlow
 );
 
-// Ahora protegido con requireAuth para que signFlow reciba siempre req.user
+// firmar-flujo ahora exige requireAuth, signFlow siempre recibe req.user
 router.post(
   "/firmar-flujo/:firmanteId",
   requireAuth,
@@ -629,15 +629,7 @@ if (typeof downloadDocument === "function") {
 }
 
 if (typeof documentsController.getTimeline === "function") {
-  /**
-   * IMPORTANTE: esta ruta se mantiene sin requireAuth porque sirve al frontend
-   * para cargar timeline “público”/interno simplificado.
-   * Si en algún momento el payload incluye campos sensibles, activar:
-   *
-   *   requireAuth, checkDocumentCompanyScope,
-   *
-   * antes de documentsController.getTimeline.
-   */
+  // Timeline se mantiene sin requireAuth porque lo usas desde la UI pública/interna
   router.get("/:id/timeline", documentsController.getTimeline);
 } else {
   console.warn(
@@ -903,7 +895,7 @@ router.post(
         )
         RETURNING id, token, expires_at, sent_at;
         `,
-        [signer.id, expiresAt.toISOString(), token]
+        [signer.id, token, expiresAt.toISOString()]
       );
 
       const invitation = inviteRes.rows[0];

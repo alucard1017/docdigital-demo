@@ -12,9 +12,9 @@ const {
 const db = require("../db");
 const crypto = require("crypto");
 
-/**
- * Helpers de parsing tolerantes a cambios de schema / tipos.
- */
+/* ================================
+   Helpers
+   ================================ */
 
 function parseJsonSafe(value) {
   if (!value) return null;
@@ -58,9 +58,6 @@ function normalizeRoleLabel(role, actionType) {
   return "Firmante";
 }
 
-/**
- * Normaliza un participante moderno a partir de document_participants + metadata.
- */
 function normalizeParticipantFromMetadata(row, source) {
   const meta = parseJsonSafe(row.metadata) || {};
   const roleUpper = String(row.role || "").trim().toUpperCase();
@@ -121,12 +118,7 @@ function normalizeParticipantFromMetadata(row, source) {
   };
 }
 
-/**
- * Construye la lista de participantes para el certificado
- * combinando legacy (firmantes) y modelo moderno (document_participants).
- */
 async function obtenerParticipantesEvidencia(documentoId) {
-  // 1) Fuente legacy
   const legacyRes = await db.query(
     `
     SELECT
@@ -150,9 +142,7 @@ async function obtenerParticipantesEvidencia(documentoId) {
     [documentoId]
   );
 
-  const legacyRows = legacyRes.rows || [];
-
-  const legacyParticipants = legacyRows.map((row) => {
+  const legacyParticipants = (legacyRes.rows || []).map((row) => {
     const roleUpper = String(row.rol || "").trim().toUpperCase();
     const isVisador = roleUpper === "VISADOR";
 
@@ -174,7 +164,6 @@ async function obtenerParticipantesEvidencia(documentoId) {
     legacyParticipants.map((p) => `${p.email}|${p.actionType}|${p.role}`)
   );
 
-  // 2) Fuente moderna: document_participants
   let canonicalRows = [];
   try {
     const modernDocRes = await db.query(
@@ -228,6 +217,7 @@ async function obtenerParticipantesEvidencia(documentoId) {
       const roleUpper = String(row.role || "").trim().toUpperCase();
       const statusUpper = String(row.status || "").trim().toUpperCase();
       const isVisador = roleUpper === "VISADOR";
+
       return (
         statusUpper === "FIRMADO" ||
         statusUpper === "VISADO" ||
@@ -242,20 +232,17 @@ async function obtenerParticipantesEvidencia(documentoId) {
       return true;
     });
 
-  const all = [...legacyParticipants, ...canonicalParticipants];
-
-  return all.sort((a, b) => {
+  return [...legacyParticipants, ...canonicalParticipants].sort((a, b) => {
     const da = a.fecha ? new Date(a.fecha).getTime() : Number.MAX_SAFE_INTEGER;
     const dbb = b.fecha ? new Date(b.fecha).getTime() : Number.MAX_SAFE_INTEGER;
     return da - dbb;
   });
 }
 
-/**
- * Sella un PDF existente añadiendo footer, QR, barra lateral
- * y certificado de evidencias, subiendo una nueva versión final
- * y actualizando la fila en documents (final_storage_key, pdf_final_url, etc.).
- */
+/* ================================
+   Sellado final
+   ================================ */
+
 async function sellarPdfConQr({
   s3Key,
   documentoId,
@@ -264,9 +251,7 @@ async function sellarPdfConQr({
   numeroContratoInterno,
 }) {
   if (!s3Key) throw new Error("s3Key es obligatorio para sellar el PDF");
-  if (!documentoId) {
-    throw new Error("documentoId es obligatorio para sellar el PDF");
-  }
+  if (!documentoId) throw new Error("documentoId es obligatorio para sellar el PDF");
   if (!codigoVerificacion) {
     throw new Error("codigoVerificacion es obligatorio para sellar el PDF");
   }
@@ -282,6 +267,7 @@ async function sellarPdfConQr({
 
   const pages = pdfDoc.getPages();
   const totalPages = pages.length;
+
   if (!pages || totalPages === 0) {
     throw new Error("El PDF no tiene páginas");
   }
@@ -292,7 +278,6 @@ async function sellarPdfConQr({
   const numeroInternoTexto =
     numeroContratoInterno != null ? String(numeroContratoInterno) : "—";
 
-  // 1) Footer en todas las páginas
   const footerFontSize = 8;
   const footerMarginY = 30;
   const footerColor = rgb(0.4, 0.4, 0.4);
@@ -313,7 +298,6 @@ async function sellarPdfConQr({
     });
   });
 
-  // 2) Última página: logo, N° interno, QR, barra lateral, bloque legal
   const lastPage = pages[pages.length - 1];
   const { width, height } = lastPage.getSize();
 
@@ -325,10 +309,8 @@ async function sellarPdfConQr({
 
     const logoWidth = 78;
     const logoHeight = (logoImage.height / logoImage.width) * logoWidth;
-    const marginRight = 32;
-    const marginTop = 52;
-    const logoX = width - logoWidth - marginRight;
-    const logoY = height - logoHeight - marginTop;
+    const logoX = width - logoWidth - 32;
+    const logoY = height - logoHeight - 52;
 
     lastPage.drawImage(logoImage, {
       x: logoX,
@@ -431,7 +413,7 @@ async function sellarPdfConQr({
     console.error("⚠️ Error generando/embebiendo código de barras:", err);
   }
 
-  const esAvanzada = categoriaFirma === "AVANZADA";
+  const esAvanzada = String(categoriaFirma || "").toUpperCase() === "AVANZADA";
 
   const textoLegal = [
     "Certificado de firma electrónica",
@@ -457,7 +439,6 @@ async function sellarPdfConQr({
     lineHeight: 10,
   });
 
-  // 3) Páginas de certificado de evidencias
   let participantes = [];
   try {
     participantes = await obtenerParticipantesEvidencia(documentoId);
@@ -483,21 +464,22 @@ async function sellarPdfConQr({
 
   evY -= 30;
 
-  const resumenDocLines = [
-    `Número interno: ${numeroInternoTexto}`,
-    `ID del documento (documents.id): ${documentoId}`,
-    `Código de verificación: ${codigoVerificacion}`,
-    `Verificación en línea: ${urlVerificacion}`,
-  ];
-
-  evidencesPage.drawText(resumenDocLines.join("\n"), {
-    x: 50,
-    y: evY,
-    size: 9,
-    font,
-    color: rgb(0.1, 0.1, 0.1),
-    lineHeight: 12,
-  });
+  evidencesPage.drawText(
+    [
+      `Número interno: ${numeroInternoTexto}`,
+      `ID del documento (documents.id): ${documentoId}`,
+      `Código de verificación: ${codigoVerificacion}`,
+      `Verificación en línea: ${urlVerificacion}`,
+    ].join("\n"),
+    {
+      x: 50,
+      y: evY,
+      size: 9,
+      font,
+      color: rgb(0.1, 0.1, 0.1),
+      lineHeight: 12,
+    }
+  );
 
   evY -= 70;
 
@@ -573,7 +555,6 @@ async function sellarPdfConQr({
     );
   }
 
-  // 4) Guardar y subir versión final
   const newPdfBytes = await pdfDoc.save();
   const newBuffer = Buffer.from(newPdfBytes);
 
@@ -604,9 +585,9 @@ async function sellarPdfConQr({
     SET
       final_storage_key = $1,
       final_hash_sha256 = $2,
-      final_file_url    = $3,
-      pdf_final_url     = $4,
-      updated_at        = NOW()
+      final_file_url = $3,
+      pdf_final_url = $4,
+      updated_at = NOW()
     WHERE id = $5
     `,
     [finalKey, finalHash, finalUrl, finalKey, documentoId]

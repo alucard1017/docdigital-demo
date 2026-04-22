@@ -1,331 +1,213 @@
-// backend/services/pdfSeal.js
-const fs = require("fs");
-const path = require("path");
-const QRCode = require("qrcode");
-const bwipjs = require("@bwip-js/node");
-const { PDFDocument, rgb, StandardFonts, degrees } = require("pdf-lib");
-const { getObjectBuffer, uploadBufferToS3 } = require("./storageR2");
-const db = require("../db");
+// backend/services/s3PdfHelpers.js
 const crypto = require("crypto");
+const {
+  getSignedUrl,
+  getObjectBuffer,
+  uploadBufferToS3,
+} = require("./storageR2");
+
+function isNonEmptyString(value) {
+  return typeof value === "string" && value.trim().length > 0;
+}
+
+function cleanPath(value) {
+  if (!isNonEmptyString(value)) return null;
+  return value.trim();
+}
+
+function pickFirstPath(...candidates) {
+  for (const value of candidates) {
+    const cleaned = cleanPath(value);
+    if (cleaned) return cleaned;
+  }
+  return null;
+}
+
+function normalizeDocumentStatus(value) {
+  return String(value || "")
+    .trim()
+    .toUpperCase();
+}
+
+function buildPdfStorageKey({ documentoId, prefix = "other", buffer }) {
+  if (!documentoId) {
+    throw new Error("documentoId es obligatorio en buildPdfStorageKey");
+  }
+
+  if (!buffer || !Buffer.isBuffer(buffer)) {
+    throw new Error("buffer inválido en buildPdfStorageKey");
+  }
+
+  const hashSha256 = crypto.createHash("sha256").update(buffer).digest("hex");
+  const safePrefix = String(prefix || "other")
+    .trim()
+    .toLowerCase()
+    .replace(/[^a-z0-9_-]/g, "") || "other";
+
+  const key = `documents/${documentoId}/${safePrefix}-${hashSha256}.pdf`;
+
+  return {
+    key,
+    hashSha256,
+  };
+}
+
+/* =====================================================
+   Resolución de archivos por rol
+   ===================================================== */
 
 /**
- * Sella el PDF del documento con QR, evidencias y certificación,
- * sube la versión final y guarda su hash en la tabla documents.
+ * Devuelve la fuente ORIGINAL limpia.
+ * Debe apuntar al archivo base, no al preview ni al final sellado.
  */
-async function sellarPdfConQr({
-  s3Key,
+function getOriginalSourceKey(docRow) {
+  if (!docRow) return null;
+
+  return pickFirstPath(
+    docRow.original_storage_key,
+    docRow.pdf_original_url,
+    docRow.storage_key,
+    docRow.file_path,
+    docRow.file_url,
+    docRow.archivo_url
+  );
+}
+
+/**
+ * Devuelve el PREVIEW (watermarked) si existe;
+ * si no existe, cae al original limpio.
+ */
+function getPreviewKey(docRow) {
+  if (!docRow) return null;
+
+  return pickFirstPath(
+    docRow.preview_storage_key,
+    docRow.preview_file_url,
+    docRow.pdf_preview_url,
+    getOriginalSourceKey(docRow)
+  );
+}
+
+/**
+ * Devuelve el FINAL sellado si existe;
+ * si no existe, cae a preview y luego a original.
+ */
+function getFinalKey(docRow) {
+  if (!docRow) return null;
+
+  return pickFirstPath(
+    docRow.final_storage_key,
+    docRow.pdf_final_url,
+    docRow.final_file_url,
+    getPreviewKey(docRow)
+  );
+}
+
+/**
+ * Decide qué archivo debe usarse en base al estado.
+ */
+function resolveKeyByStatus(docRow) {
+  const status = normalizeDocumentStatus(docRow?.status || docRow?.estado);
+
+  if (
+    ["FIRMADO", "SIGNED", "COMPLETED", "FINALIZADO"].includes(status)
+  ) {
+    return getFinalKey(docRow);
+  }
+
+  return getPreviewKey(docRow);
+}
+
+/* =====================================================
+   Signed URLs
+   ===================================================== */
+
+async function buildSignedUrlForKey(basePath, expiresInSeconds = 3600) {
+  const cleaned = cleanPath(basePath);
+  if (!cleaned) {
+    throw new Error("basePath es obligatorio para buildSignedUrlForKey");
+  }
+  return getSignedUrl(cleaned, expiresInSeconds);
+}
+
+async function buildSignedUrlForDocument(docRow, options = {}) {
+  const { mode = "auto", expiresIn = 3600 } = options;
+
+  if (!docRow) {
+    throw new Error("docRow es obligatorio en buildSignedUrlForDocument");
+  }
+
+  let basePath = null;
+
+  switch (mode) {
+    case "original":
+      basePath = getOriginalSourceKey(docRow);
+      break;
+    case "preview":
+      basePath = getPreviewKey(docRow);
+      break;
+    case "final":
+      basePath = getFinalKey(docRow);
+      break;
+    case "auto":
+    default:
+      basePath = resolveKeyByStatus(docRow);
+      break;
+  }
+
+  if (!basePath) {
+    const err = new Error("Documento sin archivo asociado para el modo solicitado");
+    err.code = "NO_FILE";
+    throw err;
+  }
+
+  return buildSignedUrlForKey(basePath, expiresIn);
+}
+
+/* =====================================================
+   Buffers
+   ===================================================== */
+
+async function getPdfBufferFromKey(storageKey) {
+  const cleaned = cleanPath(storageKey);
+  if (!cleaned) {
+    throw new Error("storageKey es obligatorio para getPdfBufferFromKey");
+  }
+
+  return getObjectBuffer(cleaned);
+}
+
+async function uploadPdfBufferForDocument({
+  buffer,
   documentoId,
-  codigoVerificacion,
-  categoriaFirma,
-  numeroContratoInterno,
+  prefix = "other",
 }) {
-  if (!s3Key) throw new Error("s3Key es obligatorio para sellar el PDF");
-  if (!documentoId) throw new Error("documentoId es obligatorio para sellar el PDF");
-  if (!codigoVerificacion) {
-    throw new Error("codigoVerificacion es obligatorio para sellar el PDF");
-  }
-
-  console.log("📄 Sellando PDF con evidencias completas...", {
+  const { key, hashSha256 } = buildPdfStorageKey({
     documentoId,
-    s3Key,
-    codigoVerificacion,
+    prefix,
+    buffer,
   });
 
-  const pdfBytes = await getObjectBuffer(s3Key);
-  const pdfDoc = await PDFDocument.load(pdfBytes, { updateMetadata: false });
+  await uploadBufferToS3(key, buffer, "application/pdf");
 
-  const pages = pdfDoc.getPages();
-  const totalPages = pages.length;
-  if (!pages || totalPages === 0) {
-    throw new Error("El PDF no tiene páginas");
-  }
-
-  const font = await pdfDoc.embedFont(StandardFonts.Helvetica);
-  const fontBold = await pdfDoc.embedFont(StandardFonts.HelveticaBold);
-
-  const numeroInternoTexto = numeroContratoInterno || "N° interno: —";
-
-  // Footer en todas las páginas
-  const footerFontSize = 8;
-  const footerMarginY = 30;
-  const footerColor = rgb(0.4, 0.4, 0.4);
-
-  pages.forEach((page, index) => {
-    const { width } = page.getSize();
-    const pageNumber = index + 1;
-
-    const footerText = `${numeroInternoTexto} · Página ${pageNumber} de ${totalPages} · verifirma.cl`;
-    const textWidth = font.widthOfTextAtSize(footerText, footerFontSize);
-    const x = (width - textWidth) / 2;
-
-    page.drawText(footerText, {
-      x,
-      y: footerMarginY,
-      size: footerFontSize,
-      font,
-      color: footerColor,
-    });
-  });
-
-  const lastPage = pages[pages.length - 1];
-  const { width, height } = lastPage.getSize();
-
-  // Logo
-  try {
-    const logoPngBytes = await fs.promises.readFile(
-      path.join(__dirname, "../assets/verifirma-logo.png")
-    );
-    const logoImage = await pdfDoc.embedPng(logoPngBytes);
-    const logoWidth = 90;
-    const logoHeight = (logoImage.height / logoImage.width) * logoWidth;
-
-    const logoX = width - logoWidth - 15;
-    const logoY = height - logoHeight - 40;
-
-    lastPage.drawImage(logoImage, {
-      x: logoX,
-      y: logoY,
-      width: logoWidth,
-      height: logoHeight,
-    });
-
-    lastPage.drawText(numeroInternoTexto, {
-      x: logoX,
-      y: logoY - 16,
-      size: 9,
-      font,
-      color: rgb(0.1, 0.1, 0.1),
-    });
-  } catch (err) {
-    console.error("⚠️ Error embebiendo logo en PDF sellado:", err);
-  }
-
-  // QR
-  const urlVerificacion = `https://verifirma.cl/verificar/${codigoVerificacion}`;
-  try {
-    const qrDataUrl = await QRCode.toDataURL(urlVerificacion, {
-      errorCorrectionLevel: "M",
-    });
-    const qrImage = await pdfDoc.embedPng(qrDataUrl);
-    const qrSize = 80;
-
-    const qrX = width - qrSize - 40;
-    const qrY = 40;
-
-    lastPage.drawImage(qrImage, {
-      x: qrX,
-      y: qrY,
-      width: qrSize,
-      height: qrSize,
-    });
-
-    lastPage.drawText(
-      "Verifique este documento\nescaneando el código QR\no visitando verifirma.cl",
-      {
-        x: qrX,
-        y: qrY - 28,
-        size: 7,
-        font,
-        color: rgb(0.25, 0.25, 0.25),
-        lineHeight: 9,
-      }
-    );
-  } catch (err) {
-    console.error("⚠️ Error generando/embebiendo QR en PDF sellado:", err);
-  }
-
-  // Código de barras lateral
-  try {
-    const barcodePngBuffer = await bwipjs.toBuffer({
-      bcid: "code128",
-      text: codigoVerificacion,
-      scale: 1.1,
-      height: 12,
-      includetext: false,
-      textxalign: "center",
-      rotate: "R",
-    });
-
-    const barcodePng = await pdfDoc.embedPng(barcodePngBuffer);
-    const barcodeWidth = 35;
-    const barcodeHeight =
-      (barcodePng.height / barcodePng.width) * barcodeWidth;
-
-    const marginRight = 15;
-    const barcodeX = width - barcodeWidth - marginRight;
-    const barcodeY = height / 2 - barcodeHeight / 2;
-
-    lastPage.drawImage(barcodePng, {
-      x: barcodeX,
-      y: barcodeY,
-      width: barcodeWidth,
-      height: barcodeHeight,
-    });
-
-    const textoLateral =
-      "VeriFirma · Plataforma de firma electrónica · Seguridad digital sin fronteras · verifirma.cl";
-
-    lastPage.drawText(textoLateral, {
-      x: width - 5,
-      y: barcodeY + barcodeHeight / 2 - 7,
-      size: 7,
-      font,
-      color: rgb(0.2, 0.2, 0.2),
-      rotate: degrees(90),
-      maxWidth: height - 80,
-      lineHeight: 9,
-    });
-  } catch (err) {
-    console.error("⚠️ Error generando/embebiendo código de barras:", err);
-  }
-
-  // Evidencias de firma
-  let tableY = 350;
-
-  lastPage.drawText("EVIDENCIAS DE FIRMA ELECTRÓNICA", {
-    x: 40,
-    y: tableY,
-    size: 11,
-    font: fontBold,
-    color: rgb(0, 0, 0),
-  });
-
-  tableY -= 20;
-
-  const firmantesRes = await db.query(
-    `
-    SELECT 
-      nombre,
-      email,
-      fecha_firma,
-      ip_firma,
-      geo_location,
-      tipo_firma
-    FROM firmantes
-    WHERE documento_id = $1 AND estado = 'FIRMADO'
-    ORDER BY fecha_firma ASC
-    `,
-    [documentoId]
-  );
-  const firmantes = firmantesRes.rows || [];
-
-  if (firmantes.length > 0) {
-    firmantes.forEach((f, idx) => {
-      let location = "Desconocido";
-      try {
-        const geo = f.geo_location ? JSON.parse(f.geo_location) : null;
-        if (geo && geo.city && geo.country) {
-          location = `${geo.city}, ${geo.country}`;
-        }
-      } catch (err) {
-        console.error("⚠️ Error parseando geo_location en PDF sellado:", err);
-      }
-
-      const fecha = f.fecha_firma
-        ? new Date(f.fecha_firma).toLocaleString("es-CL", {
-            timeZone: "America/Santiago",
-          })
-        : "N/A";
-
-      const firmText = [
-        `Firmante ${idx + 1}: ${f.nombre}`,
-        `Email: ${f.email}`,
-        `Fecha: ${fecha}`,
-        `IP: ${f.ip_firma || "N/A"}`,
-        `Ubicación: ${location}`,
-        `Tipo: ${f.tipo_firma || "SIMPLE"}`,
-        "",
-      ].join("\n");
-
-      lastPage.drawText(firmText, {
-        x: 40,
-        y: tableY,
-        size: 8,
-        font,
-        color: rgb(0.1, 0.1, 0.1),
-        lineHeight: 10,
-      });
-
-      tableY -= 80;
-    });
-  } else {
-    lastPage.drawText("No hay firmas registradas", {
-      x: 40,
-      y: tableY,
-      size: 8,
-      font,
-      color: rgb(0.5, 0.5, 0.5),
-    });
-    tableY -= 20;
-  }
-
-  // Línea y bloque legal
-  lastPage.drawLine({
-    start: { x: 40, y: 75 },
-    end: { x: width - 120, y: 75 },
-    thickness: 0.5,
-    color: rgb(0.8, 0.8, 0.8),
-  });
-
-  const esAvanzada = categoriaFirma === "AVANZADA";
-
-  const textoLegal = [
-    "Certificado de firma electrónica",
-    "",
-    `Número interno: ${numeroInternoTexto}`,
-    `Documento ID: ${documentoId}`,
-    `Código de verificación: ${codigoVerificacion}`,
-    `Verificación en línea: ${urlVerificacion}`,
-    "",
-    esAvanzada
-      ? "Este documento ha sido firmado mediante Firma Electrónica Avanzada conforme a la Ley N° 19.799."
-      : "Este documento ha sido firmado mediante Firma Electrónica Simple conforme a la Ley N° 19.799.",
-    "La validez del presente documento puede ser verificada en el sitio indicado.",
-    "Proveedor de servicios de firma: VeriFirma SpA – RUT 77.777.777-7.",
-    "Zona horaria: America/Santiago (Chile/Continental).",
-  ].join("\n");
-
-  lastPage.drawText(textoLegal, {
-    x: 40,
-    y: 60,
-    size: 8,
-    font,
-    color: rgb(0, 0, 0),
-    lineHeight: 10,
-  });
-
-  // Guardar, hash y key inmutable
-  const newPdfBytes = await pdfDoc.save();
-  const newBuffer = Buffer.from(newPdfBytes);
-
-  const finalHash = crypto
-    .createHash("sha256")
-    .update(newBuffer)
-    .digest("hex");
-
-  const newKey = `documentos/${documentoId}/final-${finalHash}.pdf`;
-
-  await uploadBufferToS3(newKey, newBuffer, "application/pdf");
-
-  console.log("DEBUG HASH SELLADO >>", {
-    documentoId,
-    newKey,
-    finalHash,
-  });
-
-  await db.query(
-    `UPDATE documents
-     SET pdf_final_url = $1,
-         pdf_hash_final = $2
-     WHERE id = $3`,
-    [newKey, finalHash, documentoId]
-  );
-
-  console.log(`✅ PDF sellado con ${firmantes.length} evidencias: ${newKey}`);
-
-  return newKey;
+  return {
+    key,
+    hashSha256,
+  };
 }
 
 module.exports = {
-  sellarPdfConQr,
+  isNonEmptyString,
+  cleanPath,
+  pickFirstPath,
+  normalizeDocumentStatus,
+  buildPdfStorageKey,
+  getOriginalSourceKey,
+  getPreviewKey,
+  getFinalKey,
+  resolveKeyByStatus,
+  buildSignedUrlForKey,
+  buildSignedUrlForDocument,
+  getPdfBufferFromKey,
+  uploadPdfBufferForDocument,
 };
