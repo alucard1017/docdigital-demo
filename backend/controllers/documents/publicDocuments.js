@@ -62,9 +62,10 @@ const NOT_FOUND_MESSAGE = "Enlace inválido o documento no encontrado";
 const EXPIRED_LINK_MESSAGE =
   "El enlace público ha expirado. Solicita uno nuevo al emisor.";
 
-/**
- * Resuelve datos de verificación (código y categoría) desde legacy + metadata.
- */
+/* ================================
+   Utils
+   ================================ */
+
 async function resolveVerificationData(doc) {
   let codigoVerificacion = null;
   let categoriaFirma = "SIMPLE";
@@ -114,7 +115,6 @@ async function getPublicDocBySignerToken(req, res) {
     }
 
     const row = await getPublicSignerDocumentByToken(token);
-
     if (!row) {
       return res.status(404).json({
         code: "NOT_FOUND",
@@ -128,7 +128,7 @@ async function getPublicDocBySignerToken(req, res) {
     }
 
     const pdfUrl = await buildSignedPdfUrlOrFail(row, res, {
-      mode: "preview",
+      mode: "preview", // mientras no esté FIRMADO debería ser preview
     });
     if (!pdfUrl) return;
 
@@ -202,7 +202,6 @@ async function getPublicDocByDocumentToken(req, res) {
     }
 
     const doc = await getPublicDocumentBySignatureToken(token);
-
     if (!doc) {
       return res.status(404).json({
         code: "NOT_FOUND",
@@ -275,7 +274,6 @@ async function publicSignDocument(req, res) {
     }
 
     const row = await getPublicSignContextByToken(token);
-
     if (!row) {
       return res.status(404).json({
         code: "NOT_FOUND",
@@ -304,7 +302,6 @@ async function publicSignDocument(req, res) {
     }
 
     const { signed_count, total_signers } = await countSigningProgress(row.id);
-
     const allSigned =
       Number(total_signers || 0) > 0 &&
       Number(signed_count) >= Number(total_signers);
@@ -397,13 +394,13 @@ async function publicSignDocument(req, res) {
       req,
     });
 
+    // Si está totalmente firmado, sellar PDF final
     if (allSigned) {
       try {
         const { codigoVerificacion, categoriaFirma } =
           await resolveVerificationData(doc);
 
         const baseKey = buildSealSourceKey(doc);
-
         if (!baseKey) {
           console.warn(
             "[PUBLIC] publicSignDocument → sin fuente limpia para sellar PDF",
@@ -477,7 +474,6 @@ async function publicRejectDocument(req, res) {
     }
 
     const row = await getPublicRejectContextByToken(token);
-
     if (!row) {
       return res.status(404).json({
         code: "NOT_FOUND",
@@ -611,7 +607,6 @@ async function publicVisarDocument(req, res) {
     }
 
     const docActual = await getPublicVisadoContextByToken(token);
-
     if (!docActual) {
       return res.status(404).json({
         code: "NOT_FOUND",
@@ -728,7 +723,6 @@ async function verifyByCode(req, res) {
     }
 
     const documento = await getLegacyDocumentByVerificationCode(codigo);
-
     if (!documento) {
       return res.status(404).json({
         code: "NOT_FOUND",

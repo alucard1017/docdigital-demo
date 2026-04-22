@@ -1,4 +1,5 @@
 // backend/services/pdfPreview.js
+const crypto = require("crypto");
 const { PDFDocument, StandardFonts, rgb, degrees } = require("pdf-lib");
 const {
   getOriginalSourceKey,
@@ -18,48 +19,51 @@ function resolveWatermarkText(docRow) {
     return "DOCUMENTO RECHAZADO";
   }
 
+  if (status === "BORRADOR" || status === "DRAFT") {
+    return "DOCUMENTO BORRADOR";
+  }
+
   return "DOCUMENTO EN PROCESO DE FIRMA";
 }
 
 function drawPageWatermark(page, text, font) {
   const { width, height } = page.getSize();
 
-  const baseSize = Math.max(32, Math.min(width, height) * 0.06);
-  const largeSize = baseSize;
-  const smallSize = Math.max(18, baseSize * 0.55);
+  const diagonalSize = Math.max(34, Math.min(width, height) * 0.06);
+  const secondarySize = Math.max(18, diagonalSize * 0.52);
 
   const centerX = width / 2;
   const centerY = height / 2;
 
-  const largeTextWidth = font.widthOfTextAtSize(text, largeSize);
-  const smallTextWidth = font.widthOfTextAtSize(text, smallSize);
+  const mainTextWidth = font.widthOfTextAtSize(text, diagonalSize);
+  const secondaryTextWidth = font.widthOfTextAtSize(text, secondarySize);
 
   page.drawText(text, {
-    x: centerX - largeTextWidth / 2,
-    y: centerY - largeSize / 2,
-    size: largeSize,
+    x: centerX - mainTextWidth / 2,
+    y: centerY - diagonalSize / 2,
+    size: diagonalSize,
     font,
-    color: rgb(0.72, 0.72, 0.72),
+    color: rgb(0.7, 0.7, 0.7),
     rotate: degrees(35),
-    opacity: 0.14,
+    opacity: 0.16,
   });
 
   page.drawText(text, {
-    x: Math.max(24, width * 0.12 - smallTextWidth / 2),
-    y: Math.max(80, height * 0.2),
-    size: smallSize,
+    x: Math.max(24, width * 0.14 - secondaryTextWidth / 2),
+    y: Math.max(90, height * 0.24),
+    size: secondarySize,
     font,
-    color: rgb(0.82, 0.82, 0.82),
+    color: rgb(0.8, 0.8, 0.8),
     rotate: degrees(35),
     opacity: 0.1,
   });
 
   page.drawText(text, {
-    x: Math.max(24, width * 0.62 - smallTextWidth / 2),
-    y: Math.max(50, height * 0.68),
-    size: smallSize,
+    x: Math.max(24, width * 0.62 - secondaryTextWidth / 2),
+    y: Math.max(55, height * 0.7),
+    size: secondarySize,
     font,
-    color: rgb(0.82, 0.82, 0.82),
+    color: rgb(0.8, 0.8, 0.8),
     rotate: degrees(35),
     opacity: 0.1,
   });
@@ -67,6 +71,7 @@ function drawPageWatermark(page, text, font) {
 
 function drawPreviewFooter(page, font, docRow, pageIndex, totalPages) {
   const { width } = page.getSize();
+
   const footerText = [
     "Vista previa de documento",
     docRow?.title || docRow?.titulo || null,
@@ -75,26 +80,23 @@ function drawPreviewFooter(page, font, docRow, pageIndex, totalPages) {
     .filter(Boolean)
     .join(" · ");
 
-  const size = 8;
-  const textWidth = font.widthOfTextAtSize(footerText, size);
+  const fontSize = 8;
+  const textWidth = font.widthOfTextAtSize(footerText, fontSize);
 
   page.drawText(footerText, {
     x: Math.max(20, (width - textWidth) / 2),
     y: 18,
-    size,
+    size: fontSize,
     font,
-    color: rgb(0.45, 0.45, 0.45),
-    opacity: 0.95,
+    color: rgb(0.42, 0.42, 0.42),
+    opacity: 0.96,
   });
 }
 
 /**
- * Genera un PDF de PREVIEW con marca de agua a partir del original limpio.
+ * Genera un PDF de preview con marca de agua a partir del original limpio.
  *
- * - NO toca el PDF final ni lo sella.
- * - Solo genera un PDF visualmente marcado para usar en el flujo de firma/visado.
- *
- * @param {object} docRow Fila de documents.* o estructura compatible
+ * @param {object} docRow
  * @param {object} options
  * @param {string} [options.watermarkText]
  * @param {string} [options.prefix]
@@ -141,12 +143,16 @@ async function generarPdfPreviewConMarcaDeAgua(docRow, options = {}) {
   const previewBytes = await pdfDoc.save();
   const previewBuffer = Buffer.from(previewBytes);
 
-  const { key: previewKey, hashSha256: previewHash } =
-    await uploadPdfBufferForDocument({
-      buffer: previewBuffer,
-      documentoId,
-      prefix: options.prefix || "preview",
-    });
+  const previewHash = crypto
+    .createHash("sha256")
+    .update(previewBuffer)
+    .digest("hex");
+
+  const { key: previewKey } = await uploadPdfBufferForDocument({
+    buffer: previewBuffer,
+    documentoId,
+    prefix: options.prefix || `preview-${previewHash.slice(0, 12)}`,
+  });
 
   return {
     previewKey,

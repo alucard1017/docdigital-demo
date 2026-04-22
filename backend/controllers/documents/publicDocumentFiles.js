@@ -7,32 +7,46 @@ function isNonEmptyString(value) {
   return typeof value === "string" && value.trim().length > 0;
 }
 
+function cleanValue(value) {
+  return isNonEmptyString(value) ? value.trim() : null;
+}
+
 function pickFirstFilePath(...candidates) {
   for (const value of candidates) {
-    if (isNonEmptyString(value)) {
-      return value.trim();
-    }
+    const cleaned = cleanValue(value);
+    if (cleaned) return cleaned;
   }
   return null;
 }
 
+function normalizeStatus(value) {
+  return String(value || "")
+    .trim()
+    .toUpperCase();
+}
+
 /**
  * Para vistas públicas de firma/visado/preview.
- * Durante el flujo debe priorizar SIEMPRE el PDF preview
- * (idealmente con marca de agua).
+ * Mientras el documento NO esté finalizado, debe priorizar el preview.
+ *
+ * Importante:
+ * - Soporta esquemas parciales donde quizás aún no existe preview_storage_key
+ * - Si no hay preview, cae al original limpio
+ * - Como último fallback usa final, pero NO es lo ideal
  */
 function buildPreviewDocumentFilePath(row) {
   if (!row) return null;
 
   return pickFirstFilePath(
-    row.preview_file_url,
     row.preview_storage_key,
+    row.preview_file_url,
     row.pdf_preview_url,
     row.pdf_original_url,
     row.original_storage_key,
     row.storage_key,
     row.file_path,
     row.file_url,
+    row.archivo_url,
     row.pdf_final_url,
     row.final_file_url,
     row.final_storage_key
@@ -40,70 +54,67 @@ function buildPreviewDocumentFilePath(row) {
 }
 
 /**
- * Para verificación final o descarga final.
- * Debe priorizar SIEMPRE el PDF final sellado.
+ * Para verificación/descarga final.
+ * Debe priorizar SIEMPRE la versión final sellada.
  */
 function buildFinalDocumentFilePath(row) {
   if (!row) return null;
 
   return pickFirstFilePath(
+    row.final_storage_key,
     row.pdf_final_url,
     row.final_file_url,
-    row.final_storage_key,
-    row.preview_file_url,
     row.preview_storage_key,
+    row.preview_file_url,
     row.pdf_preview_url,
     row.pdf_original_url,
     row.original_storage_key,
     row.storage_key,
     row.file_path,
-    row.file_url
+    row.file_url,
+    row.archivo_url
   );
 }
 
 /**
- * Fuente para sellado.
- * Debe salir SIEMPRE del original limpio, nunca del preview ni del final.
+ * Fuente para sellado del PDF final.
+ * Debe salir SIEMPRE del original limpio,
+ * nunca del preview ni del final.
  */
 function buildSealSourceKey(row) {
   if (!row) return null;
 
   return pickFirstFilePath(
     row.original_storage_key,
+    row.pdf_original_url,
     row.storage_key,
     row.file_path,
     row.file_url,
-    row.pdf_original_url
+    row.archivo_url
   );
 }
 
 /**
- * Decide automáticamente si corresponde preview o final
- * según el estado del documento.
+ * Decide automáticamente qué modo usar según estado.
  */
 function resolveDocumentFileMode(row, fallbackMode = "preview") {
-  const status = String(row?.status || "").trim().toUpperCase();
+  const status = normalizeStatus(row?.status || row?.estado);
 
-  if (status === "FIRMADO" || status === "SIGNED") {
+  if (["FIRMADO", "SIGNED", "FINALIZADO", "COMPLETED"].includes(status)) {
     return "final";
   }
 
   return fallbackMode === "final" ? "final" : "preview";
 }
 
-/**
- * Obtiene el path base según el modo solicitado.
- */
 function resolveDocumentFilePath(row, mode = "preview") {
   if (mode === "final") {
     return buildFinalDocumentFilePath(row);
   }
+
   return buildPreviewDocumentFilePath(row);
 }
 
-/**
- * Devuelve una signed URL o responde con error HTTP y retorna null.
- */
 async function buildSignedPdfUrlOrFail(row, res, options = {}) {
   const {
     mode = "preview",
@@ -121,7 +132,7 @@ async function buildSignedPdfUrlOrFail(row, res, options = {}) {
     console.warn("[PUBLIC] documento sin archivo asociado", {
       documentId: row?.id || null,
       mode: resolvedMode,
-      status: row?.status || null,
+      status: row?.status || row?.estado || null,
     });
 
     res.status(404).json({
@@ -137,7 +148,7 @@ async function buildSignedPdfUrlOrFail(row, res, options = {}) {
     console.error("⚠️ Error generando signed URL:", {
       documentId: row?.id || null,
       mode: resolvedMode,
-      status: row?.status || null,
+      status: row?.status || row?.estado || null,
       basePath,
       error: err?.message || err,
     });

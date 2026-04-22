@@ -6,13 +6,16 @@ const {
   uploadBufferToS3,
 } = require("./storageR2");
 
+/* ================================
+   Utilidades básicas
+   ================================ */
+
 function isNonEmptyString(value) {
   return typeof value === "string" && value.trim().length > 0;
 }
 
 function cleanPath(value) {
-  if (!isNonEmptyString(value)) return null;
-  return value.trim();
+  return isNonEmptyString(value) ? value.trim() : null;
 }
 
 function pickFirstPath(...candidates) {
@@ -24,10 +27,12 @@ function pickFirstPath(...candidates) {
 }
 
 function normalizeDocumentStatus(value) {
-  return String(value || "")
-    .trim()
-    .toUpperCase();
+  return String(value || "").trim().toUpperCase();
 }
+
+/* ================================
+   Claves en S3
+   ================================ */
 
 function buildPdfStorageKey({ documentoId, prefix = "other", buffer }) {
   if (!documentoId) {
@@ -39,10 +44,12 @@ function buildPdfStorageKey({ documentoId, prefix = "other", buffer }) {
   }
 
   const hashSha256 = crypto.createHash("sha256").update(buffer).digest("hex");
-  const safePrefix = String(prefix || "other")
-    .trim()
-    .toLowerCase()
-    .replace(/[^a-z0-9_-]/g, "") || "other";
+
+  const safePrefix =
+    String(prefix || "other")
+      .trim()
+      .toLowerCase()
+      .replace(/[^a-z0-9_-]/g, "") || "other";
 
   const key = `documents/${documentoId}/${safePrefix}-${hashSha256}.pdf`;
 
@@ -105,13 +112,14 @@ function getFinalKey(docRow) {
 
 /**
  * Decide qué archivo debe usarse en base al estado.
+ *
+ * - FIRMADO/COMPLETED → final (si hay); si no, preview/original
+ * - Estados intermedios → preview (si hay); si no, original
  */
 function resolveKeyByStatus(docRow) {
   const status = normalizeDocumentStatus(docRow?.status || docRow?.estado);
 
-  if (
-    ["FIRMADO", "SIGNED", "COMPLETED", "FINALIZADO"].includes(status)
-  ) {
+  if (["FIRMADO", "SIGNED", "COMPLETED", "FINALIZADO"].includes(status)) {
     return getFinalKey(docRow);
   }
 
@@ -130,6 +138,13 @@ async function buildSignedUrlForKey(basePath, expiresInSeconds = 3600) {
   return getSignedUrl(cleaned, expiresInSeconds);
 }
 
+/**
+ * Devuelve una signed URL según el modo:
+ * - original
+ * - preview
+ * - final
+ * - auto (por estado del documento)
+ */
 async function buildSignedUrlForDocument(docRow, options = {}) {
   const { mode = "auto", expiresIn = 3600 } = options;
 
@@ -177,11 +192,7 @@ async function getPdfBufferFromKey(storageKey) {
   return getObjectBuffer(cleaned);
 }
 
-async function uploadPdfBufferForDocument({
-  buffer,
-  documentoId,
-  prefix = "other",
-}) {
+async function uploadPdfBufferForDocument({ buffer, documentoId, prefix = "other" }) {
   const { key, hashSha256 } = buildPdfStorageKey({
     documentoId,
     prefix,

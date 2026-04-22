@@ -22,7 +22,11 @@ const {
   createAutomaticReminders,
   cancelPendingReminders,
 } = require("./flowHelpers");
-const { generarPdfPreviewConMarcaDeAgua } = require("../../services/pdfPreview");
+const {
+  generarPdfPreviewConMarcaDeAgua,
+} = require("../../services/pdfPreview");
+
+/* Helpers */
 
 function normalizeRole(rawRole) {
   const role = String(rawRole || "").trim().toUpperCase();
@@ -34,10 +38,24 @@ function normalizeRole(rawRole) {
   return role;
 }
 
+/**
+ * Asegura que el documento moderno (tabla documents) tenga un preview
+ * con marca de agua generado y persistido.
+ */
 async function ensurePreviewForModernDocument(client, newDocumentId) {
   const modernDocRes = await client.query(
     `
-    SELECT *
+    SELECT
+      id,
+      title,
+      status,
+      original_storage_key,
+      file_path,
+      storage_key,
+      pdf_original_url,
+      preview_storage_key,
+      preview_file_url,
+      pdf_preview_url
     FROM documents
     WHERE id = $1
     LIMIT 1
@@ -46,20 +64,23 @@ async function ensurePreviewForModernDocument(client, newDocumentId) {
   );
 
   if (modernDocRes.rowCount === 0) {
-    throw new Error(`No se encontró documents.id=${newDocumentId} para generar preview`);
+    throw new Error(
+      `No se encontró documents.id=${newDocumentId} para generar preview`
+    );
   }
 
   const modernDoc = modernDocRes.rows[0];
 
+  // Si ya hay preview, reutilizarlo
   if (modernDoc.preview_storage_key || modernDoc.pdf_preview_url) {
     return {
       previewKey:
-        modernDoc.preview_storage_key ||
-        modernDoc.pdf_preview_url,
+        modernDoc.preview_storage_key || modernDoc.pdf_preview_url,
       generated: false,
     };
   }
 
+  // Generar preview a partir del documento moderno
   const { previewKey } = await generarPdfPreviewConMarcaDeAgua(modernDoc);
 
   await client.query(
@@ -67,8 +88,8 @@ async function ensurePreviewForModernDocument(client, newDocumentId) {
     UPDATE documents
     SET
       preview_storage_key = $1,
-      pdf_preview_url = $2,
-      updated_at = NOW()
+      pdf_preview_url     = $2,
+      updated_at          = NOW()
     WHERE id = $3
     `,
     [previewKey, previewKey, newDocumentId]
