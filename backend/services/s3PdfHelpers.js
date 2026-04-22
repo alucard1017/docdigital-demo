@@ -1,4 +1,3 @@
-// backend/services/s3PdfHelpers.js
 const crypto = require("crypto");
 const {
   getSignedUrl,
@@ -64,15 +63,14 @@ function buildPdfStorageKey({ documentoId, prefix = "other", buffer }) {
    ===================================================== */
 
 /**
- * Devuelve la fuente ORIGINAL limpia.
- * Debe apuntar al archivo base, no al preview ni al final sellado.
+ * Fuente ORIGINAL limpia (base del documento).
+ * No debe apuntar al preview ni al final sellado.
  */
 function getOriginalSourceKey(docRow) {
   if (!docRow) return null;
 
   return pickFirstPath(
     docRow.original_storage_key,
-    docRow.pdf_original_url,
     docRow.storage_key,
     docRow.file_path,
     docRow.file_url,
@@ -81,40 +79,42 @@ function getOriginalSourceKey(docRow) {
 }
 
 /**
- * Devuelve el PREVIEW (watermarked) si existe;
- * si no existe, cae al original limpio.
+ * PREVIEW (watermarked) si existe; si no, original limpio.
  */
 function getPreviewKey(docRow) {
   if (!docRow) return null;
 
-  return pickFirstPath(
+  const previewPath = pickFirstPath(
     docRow.preview_storage_key,
     docRow.preview_file_url,
-    docRow.pdf_preview_url,
-    getOriginalSourceKey(docRow)
+    docRow.pdf_preview_url
   );
+
+  if (previewPath) return previewPath;
+
+  return getOriginalSourceKey(docRow);
 }
 
 /**
- * Devuelve el FINAL sellado si existe;
- * si no existe, cae a preview y luego a original.
+ * FINAL sellado si existe; si no, preview/original.
  */
 function getFinalKey(docRow) {
   if (!docRow) return null;
 
-  return pickFirstPath(
+  const finalPath = pickFirstPath(
     docRow.final_storage_key,
     docRow.pdf_final_url,
-    docRow.final_file_url,
-    getPreviewKey(docRow)
+    docRow.final_file_url
   );
+
+  if (finalPath) return finalPath;
+
+  return getPreviewKey(docRow);
 }
 
 /**
- * Decide qué archivo debe usarse en base al estado.
- *
- * - FIRMADO/COMPLETED → final (si hay); si no, preview/original
- * - Estados intermedios → preview (si hay); si no, original
+ * - FIRMADO/COMPLETED → final (si hay), si no preview/original
+ * - Resto de estados → preview (si hay), si no original
  */
 function resolveKeyByStatus(docRow) {
   const status = normalizeDocumentStatus(docRow?.status || docRow?.estado);
@@ -139,11 +139,11 @@ async function buildSignedUrlForKey(basePath, expiresInSeconds = 3600) {
 }
 
 /**
- * Devuelve una signed URL según el modo:
- * - original
- * - preview
- * - final
- * - auto (por estado del documento)
+ * mode:
+ * - "original": original limpio
+ * - "preview": preview si hay, si no original
+ * - "final": final si hay, si no preview/original
+ * - "auto": según estado (signed → final; resto → preview)
  */
 async function buildSignedUrlForDocument(docRow, options = {}) {
   const { mode = "auto", expiresIn = 3600 } = options;
@@ -171,7 +171,9 @@ async function buildSignedUrlForDocument(docRow, options = {}) {
   }
 
   if (!basePath) {
-    const err = new Error("Documento sin archivo asociado para el modo solicitado");
+    const err = new Error(
+      "Documento sin archivo asociado para el modo solicitado"
+    );
     err.code = "NO_FILE";
     throw err;
   }

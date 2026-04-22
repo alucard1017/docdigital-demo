@@ -593,7 +593,6 @@ router.post(
   documentsController.sendFlow
 );
 
-// firmar-flujo ahora exige requireAuth, signFlow siempre recibe req.user
 router.post(
   "/firmar-flujo/:firmanteId",
   requireAuth,
@@ -613,6 +612,7 @@ if (typeof documentsController.getDocumentPdf === "function") {
 }
 
 if (typeof previewDocument === "function") {
+  // Esta vista interna debe respetar la lógica de preview (marca de agua)
   router.get("/:id/preview", previewDocument);
 } else {
   console.warn(
@@ -629,7 +629,6 @@ if (typeof downloadDocument === "function") {
 }
 
 if (typeof documentsController.getTimeline === "function") {
-  // Timeline se mantiene sin requireAuth porque lo usas desde la UI pública/interna
   router.get("/:id/timeline", documentsController.getTimeline);
 } else {
   console.warn(
@@ -895,7 +894,7 @@ router.post(
         )
         RETURNING id, token, expires_at, sent_at;
         `,
-        [signer.id, token, expiresAt.toISOString()]
+        [signer.id, expiresAt.toISOString(), token]
       );
 
       const invitation = inviteRes.rows[0];
