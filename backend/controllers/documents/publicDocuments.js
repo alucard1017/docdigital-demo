@@ -127,8 +127,10 @@ async function getPublicDocBySignerToken(req, res) {
       return res.status(accessError.status).json(accessError.body);
     }
 
+    // Auto‑detect: mientras no esté FIRMADO usa preview, cuando pase a FIRMADO servirá el final
     const pdfUrl = await buildSignedPdfUrlOrFail(row, res, {
-      mode: "preview", // mientras no esté FIRMADO debería ser preview
+      mode: "preview",
+      autoDetectByStatus: true,
     });
     if (!pdfUrl) return;
 
@@ -216,6 +218,7 @@ async function getPublicDocByDocumentToken(req, res) {
 
     const pdfUrl = await buildSignedPdfUrlOrFail(doc, res, {
       mode: "preview",
+      autoDetectByStatus: true,
     });
     if (!pdfUrl) return;
 
@@ -394,7 +397,6 @@ async function publicSignDocument(req, res) {
       req,
     });
 
-    // Si está totalmente firmado, sellar PDF final
     if (allSigned) {
       try {
         const { codigoVerificacion, categoriaFirma } =
@@ -424,6 +426,7 @@ async function publicSignDocument(req, res) {
 
     const fileUrl = await buildSignedPdfUrlOrFail(doc, res, {
       mode: allSigned ? "final" : "preview",
+      autoDetectByStatus: true,
     });
     if (!fileUrl) return;
 
@@ -568,6 +571,7 @@ async function publicRejectDocument(req, res) {
 
     const fileUrl = await buildSignedPdfUrlOrFail(doc, res, {
       mode: "preview",
+      autoDetectByStatus: true,
     });
     if (!fileUrl) return;
 
@@ -684,6 +688,7 @@ async function publicVisarDocument(req, res) {
 
     const fileUrl = await buildSignedPdfUrlOrFail(doc, res, {
       mode: "preview",
+      autoDetectByStatus: true,
     });
     if (!fileUrl) return;
 
