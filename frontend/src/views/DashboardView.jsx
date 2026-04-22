@@ -35,6 +35,53 @@ function formatNumber(value) {
   return new Intl.NumberFormat("es-CL").format(n);
 }
 
+function isAbortLikeError(err) {
+  return err?.name === "CanceledError" || err?.code === "ERR_CANCELED";
+}
+
+function mapTipoTramiteLabel(raw = "") {
+  const value = String(raw || "").trim().toLowerCase();
+
+  if (value === "propio") return "Trámite propio";
+  if (value === "notaria" || value === "notaría") return "Con notaría";
+
+  return raw || "Sin tipo";
+}
+
+function sanitizeKpis(raw) {
+  const source = raw || {};
+  return {
+    total: Number(source.total ?? 0),
+    pendientes: Number(source.pendientes ?? 0),
+    firmados: Number(source.firmados ?? 0),
+    rechazados: Number(source.rechazados ?? 0),
+  };
+}
+
+function sanitizePerDayData(raw) {
+  if (!Array.isArray(raw)) return [];
+  return raw.map((item) => ({
+    date: item?.date || "",
+    count: Number(item?.count || 0),
+  }));
+}
+
+function sanitizeTipoTramiteData(raw) {
+  if (!Array.isArray(raw)) return [];
+  return raw.map((item) => ({
+    name: mapTipoTramiteLabel(item?.tipo_tramite),
+    value: Number(item?.count || 0),
+  }));
+}
+
+function buildStatusData(kpis) {
+  return [
+    { status: "Pendientes", count: Number(kpis?.pendientes ?? 0) },
+    { status: "Firmados", count: Number(kpis?.firmados ?? 0) },
+    { status: "Rechazados", count: Number(kpis?.rechazados ?? 0) },
+  ].filter((item) => item.count > 0);
+}
+
 function buildInsight(kpis) {
   const pendientes = Number(kpis?.pendientes ?? 0);
   const firmados = Number(kpis?.firmados ?? 0);
@@ -60,15 +107,6 @@ function buildInsight(kpis) {
   return "La operación se ve estable. Úsalo para confirmar tendencia diaria y detectar si algún tipo de trámite se está acumulando más que el resto.";
 }
 
-function mapTipoTramiteLabel(raw = "") {
-  const value = String(raw || "").toLowerCase();
-
-  if (value === "propio") return "Trámite propio";
-  if (value === "notaria" || value === "notaría") return "Con notaría";
-
-  return raw || "Sin tipo";
-}
-
 function EmptyPanel({ title, description }) {
   return (
     <div className="rounded-2xl border border-slate-200 bg-white p-8 text-center shadow-sm">
@@ -88,7 +126,9 @@ function EmptyPanel({ title, description }) {
           <path d="M8 17v-7" />
         </svg>
       </div>
+
       <h3 className="mb-2 text-base font-semibold text-slate-900">{title}</h3>
+
       <p className="mx-auto max-w-xl text-sm leading-6 text-slate-500">
         {description}
       </p>
@@ -127,7 +167,13 @@ function KpiCard({ label, value, tone = "slate", helper }) {
   );
 }
 
-function ChartCard({ title, description, children, actions = null }) {
+function ChartCard({
+  title,
+  description,
+  summary,
+  children,
+  actions = null,
+}) {
   return (
     <section className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
       <div className="mb-4 flex items-start justify-between gap-4">
@@ -138,6 +184,9 @@ function ChartCard({ title, description, children, actions = null }) {
               {description}
             </p>
           ) : null}
+          {summary ? (
+            <p className="mt-2 text-xs leading-5 text-slate-400">{summary}</p>
+          ) : null}
         </div>
         {actions}
       </div>
@@ -146,8 +195,17 @@ function ChartCard({ title, description, children, actions = null }) {
   );
 }
 
+function ChartEmpty({ message }) {
+  return (
+    <div className="flex h-[280px] items-center justify-center text-sm text-slate-500">
+      {message}
+    </div>
+  );
+}
+
 export function DashboardView({ user }) {
   const [loading, setLoading] = useState(true);
+  const [refreshing, setRefreshing] = useState(false);
   const [error, setError] = useState("");
   const [kpis, setKpis] = useState({
     total: 0,
@@ -161,51 +219,30 @@ export function DashboardView({ user }) {
 
   const displayName = user?.name || user?.fullName || "Usuario";
 
-  const fetchStats = useCallback(async (signal) => {
+  const loadStats = useCallback(async (signal, { silent = false } = {}) => {
     try {
-      setLoading(true);
+      if (silent) {
+        setRefreshing(true);
+      } else {
+        setLoading(true);
+      }
+
       setError("");
 
       const res = await api.get("/docs/stats", signal ? { signal } : undefined);
       const data = res?.data || {};
-      const safeKpis = data?.kpis || {};
 
-      const nextKpis = {
-        total: Number(safeKpis.total ?? 0),
-        pendientes: Number(safeKpis.pendientes ?? 0),
-        firmados: Number(safeKpis.firmados ?? 0),
-        rechazados: Number(safeKpis.rechazados ?? 0),
-      };
+      const nextKpis = sanitizeKpis(data?.kpis);
+      const nextStatus = buildStatusData(nextKpis);
+      const nextPerDay = sanitizePerDayData(data?.perDay);
+      const nextTipoTramite = sanitizeTipoTramiteData(data?.porTipoTramite);
 
       setKpis(nextKpis);
-
-      const nextStatus = [
-        { status: "Pendientes", count: nextKpis.pendientes },
-        { status: "Firmados", count: nextKpis.firmados },
-        { status: "Rechazados", count: nextKpis.rechazados },
-      ].filter((item) => item.count > 0);
-
       setStatusData(nextStatus);
-
-      setPerDayData(
-        Array.isArray(data?.perDay)
-          ? data.perDay.map((d) => ({
-              date: d?.date || "",
-              count: Number(d?.count || 0),
-            }))
-          : []
-      );
-
-      setTipoTramiteData(
-        Array.isArray(data?.porTipoTramite)
-          ? data.porTipoTramite.map((t) => ({
-              name: mapTipoTramiteLabel(t?.tipo_tramite),
-              value: Number(t?.count || 0),
-            }))
-          : []
-      );
+      setPerDayData(nextPerDay);
+      setTipoTramiteData(nextTipoTramite);
     } catch (err) {
-      if (err?.name === "CanceledError" || err?.code === "ERR_CANCELED") return;
+      if (isAbortLikeError(err)) return;
 
       console.error("Error cargando stats:", err);
       const msg =
@@ -215,14 +252,15 @@ export function DashboardView({ user }) {
       setError(msg);
     } finally {
       setLoading(false);
+      setRefreshing(false);
     }
   }, []);
 
   useEffect(() => {
     const controller = new AbortController();
-    fetchStats(controller.signal);
+    loadStats(controller.signal);
     return () => controller.abort();
-  }, [fetchStats]);
+  }, [loadStats]);
 
   const hasAnyData = useMemo(
     () =>
@@ -273,6 +311,64 @@ export function DashboardView({ user }) {
           },
           grid: { color: "rgba(148,163,184,0.12)", drawBorder: false },
           border: { display: false },
+        },
+      },
+    }),
+    []
+  );
+
+  const lineChartOptions = useMemo(
+    () => ({
+      ...baseChartOptions,
+      plugins: {
+        ...baseChartOptions.plugins,
+        legend: {
+          ...baseChartOptions.plugins.legend,
+          display: true,
+        },
+      },
+      elements: {
+        line: { borderWidth: 2.5 },
+      },
+    }),
+    [baseChartOptions]
+  );
+
+  const barChartOptions = useMemo(
+    () => ({
+      ...baseChartOptions,
+      plugins: {
+        ...baseChartOptions.plugins,
+        legend: {
+          ...baseChartOptions.plugins.legend,
+          display: false,
+        },
+      },
+    }),
+    [baseChartOptions]
+  );
+
+  const doughnutOptions = useMemo(
+    () => ({
+      responsive: true,
+      maintainAspectRatio: false,
+      cutout: "58%",
+      plugins: {
+        legend: {
+          position: "bottom",
+          labels: {
+            color: "#64748b",
+            font: { size: 12 },
+            padding: 14,
+          },
+        },
+        tooltip: {
+          backgroundColor: "#0f172a",
+          borderColor: "#cbd5e1",
+          borderWidth: 1,
+          titleColor: "#f8fafc",
+          bodyColor: "#e2e8f0",
+          padding: 10,
         },
       },
     }),
@@ -336,36 +432,31 @@ export function DashboardView({ user }) {
     [tipoTramiteData]
   );
 
-  const doughnutOptions = useMemo(
-    () => ({
-      responsive: true,
-      maintainAspectRatio: false,
-      cutout: "58%",
-      plugins: {
-        legend: {
-          position: "bottom",
-          labels: {
-            color: "#64748b",
-            font: { size: 12 },
-            padding: 14,
-          },
-        },
-        tooltip: {
-          backgroundColor: "#0f172a",
-          borderColor: "#cbd5e1",
-          borderWidth: 1,
-          titleColor: "#f8fafc",
-          bodyColor: "#e2e8f0",
-          padding: 10,
-        },
-      },
-    }),
-    []
-  );
+  const statusSummary = useMemo(() => {
+    if (!statusData.length) return "Sin distribución disponible.";
+    return statusData
+      .map((item) => `${item.status}: ${formatNumber(item.count)}`)
+      .join(" · ");
+  }, [statusData]);
 
-  const handleRefresh = () => {
-    fetchStats();
-  };
+  const perDaySummary = useMemo(() => {
+    if (!perDayData.length) return "No hay serie diaria disponible.";
+    const totalMov = perDayData.reduce((acc, item) => acc + Number(item.count || 0), 0);
+    return `${formatNumber(totalMov)} documentos registrados en ${formatNumber(
+      perDayData.length
+    )} días visibles.`;
+  }, [perDayData]);
+
+  const tipoSummary = useMemo(() => {
+    if (!tipoTramiteData.length) return "Sin composición por tipo de trámite.";
+    return tipoTramiteData
+      .map((item) => `${item.name}: ${formatNumber(item.value)}`)
+      .join(" · ");
+  }, [tipoTramiteData]);
+
+  const handleRefresh = useCallback(() => {
+    loadStats(undefined, { silent: true });
+  }, [loadStats]);
 
   return (
     <div className="min-h-full bg-slate-50 p-6">
@@ -375,9 +466,11 @@ export function DashboardView({ user }) {
             <div className="mb-2 inline-flex rounded-full border border-slate-200 bg-white px-3 py-1 text-xs font-medium text-slate-600">
               Panel ejecutivo
             </div>
+
             <h1 className="text-3xl font-semibold tracking-tight text-slate-950">
               Dashboard de actividad
             </h1>
+
             <p className="mt-2 max-w-3xl text-sm leading-6 text-slate-500">
               Hola {displayName}, aquí tienes un resumen claro del volumen,
               avance y estado de tus trámites recientes.
@@ -387,9 +480,11 @@ export function DashboardView({ user }) {
           <button
             type="button"
             onClick={handleRefresh}
-            className="inline-flex items-center justify-center rounded-xl border border-slate-300 bg-white px-4 py-2 text-sm font-medium text-slate-700 shadow-sm transition hover:bg-slate-100"
+            disabled={refreshing}
+            className="inline-flex items-center justify-center rounded-xl border border-slate-300 bg-white px-4 py-2 text-sm font-medium text-slate-700 shadow-sm transition hover:bg-slate-100 disabled:cursor-not-allowed disabled:opacity-60"
+            aria-busy={refreshing}
           >
-            Actualizar panel
+            {refreshing ? "Actualizando..." : "Actualizar panel"}
           </button>
         </header>
 
@@ -401,6 +496,7 @@ export function DashboardView({ user }) {
               <SkeletonCard />
               <SkeletonCard />
             </div>
+
             <div className="grid grid-cols-1 gap-6 xl:grid-cols-2">
               <div className="h-96 animate-pulse rounded-2xl border border-slate-200 bg-white" />
               <div className="h-96 animate-pulse rounded-2xl border border-slate-200 bg-white" />
@@ -411,7 +507,9 @@ export function DashboardView({ user }) {
             <h2 className="text-base font-semibold text-rose-900">
               No pudimos cargar el dashboard
             </h2>
+
             <p className="mt-2 text-sm leading-6 text-rose-700">{error}</p>
+
             <button
               type="button"
               onClick={handleRefresh}
@@ -467,14 +565,17 @@ export function DashboardView({ user }) {
               <ChartCard
                 title="Documentos por estado"
                 description="Distribución actual para detectar carga operativa y avance hacia firma."
+                summary={statusSummary}
               >
                 {statusData.length === 0 ? (
-                  <div className="flex h-[280px] items-center justify-center text-sm text-slate-500">
-                    No hay datos de estado suficientes para graficar.
-                  </div>
+                  <ChartEmpty message="No hay datos de estado suficientes para graficar." />
                 ) : (
-                  <div className="h-[280px]">
-                    <Bar data={statusChartData} options={baseChartOptions} />
+                  <div
+                    className="h-[280px]"
+                    role="img"
+                    aria-label={`Gráfico de barras de documentos por estado. ${statusSummary}`}
+                  >
+                    <Bar data={statusChartData} options={barChartOptions} />
                   </div>
                 )}
               </ChartCard>
@@ -482,14 +583,17 @@ export function DashboardView({ user }) {
               <ChartCard
                 title="Actividad por día"
                 description="Tendencia reciente de creación de documentos para ver ritmo operativo."
+                summary={perDaySummary}
               >
                 {perDayData.length === 0 ? (
-                  <div className="flex h-[280px] items-center justify-center text-sm text-slate-500">
-                    Aún no hay actividad diaria suficiente.
-                  </div>
+                  <ChartEmpty message="Aún no hay actividad diaria suficiente." />
                 ) : (
-                  <div className="h-[280px]">
-                    <Line data={perDayChartData} options={baseChartOptions} />
+                  <div
+                    className="h-[280px]"
+                    role="img"
+                    aria-label={`Gráfico de línea de actividad por día. ${perDaySummary}`}
+                  >
+                    <Line data={perDayChartData} options={lineChartOptions} />
                   </div>
                 )}
               </ChartCard>
@@ -499,13 +603,16 @@ export function DashboardView({ user }) {
               <ChartCard
                 title="Tipos de trámite"
                 description="Participación relativa por categoría para entender la mezcla operativa."
+                summary={tipoSummary}
               >
                 {tipoTramiteData.length === 0 ? (
-                  <div className="flex h-[280px] items-center justify-center text-sm text-slate-500">
-                    No hay tipos de trámite suficientes para mostrar proporciones.
-                  </div>
+                  <ChartEmpty message="No hay tipos de trámite suficientes para mostrar proporciones." />
                 ) : (
-                  <div className="h-[280px]">
+                  <div
+                    className="h-[280px]"
+                    role="img"
+                    aria-label={`Gráfico de dona con composición por tipo de trámite. ${tipoSummary}`}
+                  >
                     <Doughnut
                       data={tipoTramiteChartData}
                       options={doughnutOptions}
@@ -518,14 +625,17 @@ export function DashboardView({ user }) {
                 <div className="mb-2 inline-flex rounded-full border border-slate-700 px-3 py-1 text-[11px] font-medium uppercase tracking-wide text-slate-300">
                   Recomendación
                 </div>
+
                 <h2 className="text-base font-semibold text-white">
                   Siguiente foco operativo
                 </h2>
+
                 <p className="mt-3 text-sm leading-7 text-slate-300">
                   Si los pendientes crecen más rápido que los firmados, conviene
                   revisar recordatorios, tiempos entre pasos y fricción en el
                   enlace público.
                 </p>
+
                 <p className="mt-3 text-sm leading-7 text-slate-400">
                   Si la creación diaria cae, prueba el flujo completo como
                   usuario real para validar envío, apertura, firma y verificación

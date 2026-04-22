@@ -1,11 +1,15 @@
 // backend/controllers/documents/publicDocuments.js
+const db = require("../../db");
+const { getSignedUrl } = require("../../services/storageR2");
 const { sellarPdfConQr } = require("../../services/pdfSeal");
 const { logAudit } = require("../../utils/auditLog");
 const { formatDateSafe } = require("./documentEventUtils");
+
 const {
   insertPublicEvent,
   insertPublicStatusChangedEvent,
 } = require("./documentEventInserts");
+
 const {
   validatePublicToken,
   validatePublicRejectReason,
@@ -15,17 +19,20 @@ const {
   validatePublicVisar,
   isTruthyVisado,
 } = require("./publicDocumentsValidations");
+
 const {
   buildSignedPdfUrlOrFail,
   buildSealSourceKey,
   buildFinalDocumentFilePath,
 } = require("./publicDocumentFiles");
+
 const {
   buildPublicDocumentPayload,
   buildCurrentSignerPayload,
   mapLegacySignerRow,
   mapLegacyEventRow,
 } = require("./publicDocumentPayloads");
+
 const {
   resolveParticipantIdForPublicEvent,
   getDocumentAndSignerByDocumentToken,
@@ -50,8 +57,6 @@ const {
   getModernDocumentByLegacyId,
   refreshPdfFields,
 } = require("./publicDocumentQueries");
-const db = require("../../db");
-const { getSignedUrl } = require("../../services/storageR2");
 
 const NOT_FOUND_MESSAGE = "Enlace inválido o documento no encontrado";
 const EXPIRED_LINK_MESSAGE =
@@ -127,6 +132,7 @@ async function getPublicDocBySignerToken(req, res) {
     });
     if (!pdfUrl) return;
 
+    // Evento de apertura de enlace por firmante
     try {
       const participantId =
         (await resolveParticipantIdForPublicEvent({
@@ -155,7 +161,10 @@ async function getPublicDocBySignerToken(req, res) {
         },
       });
     } catch (eventErr) {
-      console.error("⚠️ Error registrando PUBLIC_LINK_OPENED_SIGNER:", eventErr);
+      console.error(
+        "⚠️ Error registrando PUBLIC_LINK_OPENED_SIGNER:",
+        eventErr
+      );
     }
 
     return res.json({
@@ -164,7 +173,7 @@ async function getPublicDocBySignerToken(req, res) {
       pdfUrl,
       file_url: pdfUrl,
       public_mode: "firma",
-      public_token_kind: "signer",
+      public_token_kind: "sign_token",
     });
   } catch (err) {
     console.error("❌ Error cargando documento público (firmante):", err);
@@ -212,6 +221,7 @@ async function getPublicDocByDocumentToken(req, res) {
     });
     if (!pdfUrl) return;
 
+    // Evento de apertura de invitación pública
     try {
       await insertPublicEvent({
         req,
@@ -240,7 +250,7 @@ async function getPublicDocByDocumentToken(req, res) {
       pdfUrl,
       file_url: pdfUrl,
       public_mode: requiresVisadoBool ? "visado" : "firma",
-      public_token_kind: "document",
+      public_token_kind: "signature_token",
     });
   } catch (err) {
     console.error("❌ Error cargando documento público (document):", err);
@@ -283,12 +293,14 @@ async function publicSignDocument(req, res) {
     if (row.signer_role && row.signer_role.toUpperCase() === "VISADOR") {
       return res.status(400).json({
         code: "WRONG_MODE",
-        message: "Este enlace corresponde a visado, no a firma",
+        message: "Este enlace corresponde a visado, no a firma.",
       });
     }
 
+    // Marca firmante como firmado (legacy)
     await markSignerAsSigned(row.signer_id);
 
+    // Marca participante moderno como firmado (si existe)
     try {
       await markParticipantAsSigned(row.id, row.signer_email);
     } catch (errDp) {
@@ -362,9 +374,10 @@ async function publicSignDocument(req, res) {
           toStatus,
           details: "Cambio de estado por firma pública",
           extraMetadata: {
-            reason: "all_signers_completed_public",
+            reason: "public_sign",
             signer_email: row.signer_email,
             signer_name: row.signer_name,
+            all_signed: allSigned,
           },
         });
       } catch (eventErr) {
@@ -388,6 +401,7 @@ async function publicSignDocument(req, res) {
       req,
     });
 
+    // Si quedó completamente firmado, sellar PDF con QR
     if (allSigned) {
       try {
         const { codigoVerificacion, categoriaFirma } =
@@ -429,7 +443,7 @@ async function publicSignDocument(req, res) {
       pdfUrl: fileUrl,
       documentStatus: newDocStatus,
       public_mode: "firma",
-      public_token_kind: "signer",
+      public_token_kind: "sign_token",
       message: allSigned
         ? "Documento firmado correctamente por todos los firmantes"
         : "Firma registrada. Aún faltan firmantes por completar la firma",
@@ -481,8 +495,10 @@ async function publicRejectDocument(req, res) {
       return res.status(validationError.status).json(validationError.body);
     }
 
+    // Marca firmante como rechazado (legacy)
     await markSignerAsRejected(row.signer_id, motivo);
 
+    // Marca participante moderno como rechazado (si existe)
     try {
       await markParticipantAsRejected(row.id, row.signer_email);
     } catch (errDp) {
@@ -572,7 +588,7 @@ async function publicRejectDocument(req, res) {
       pdfUrl: fileUrl,
       documentStatus: "RECHAZADO",
       public_mode: "firma",
-      public_token_kind: "signer",
+      public_token_kind: "sign_token",
       message: "Documento rechazado correctamente",
     });
   } catch (err) {
@@ -610,6 +626,13 @@ async function publicVisarDocument(req, res) {
       });
     }
 
+    console.log("[PUBLIC] publicVisarDocument → contexto", {
+      documentId: docActual.id,
+      status: docActual.status,
+      review_status: docActual.review_status,
+      requires_visado: docActual.requires_visado,
+    });
+
     const validationError = validatePublicVisar(docActual);
     if (validationError) {
       return res.status(validationError.status).json(validationError.body);
@@ -620,11 +643,17 @@ async function publicVisarDocument(req, res) {
     const fromStatus = docActual.status;
     const toStatus = "PENDIENTE_FIRMA";
 
+    const visadorNombre =
+      doc.visador_nombre ||
+      docActual.visador_nombre ||
+      docActual.visador_name ||
+      "Visador externo";
+
     await insertPublicEvent({
       req,
       doc,
       participantId: null,
-      actor: doc.visador_nombre || "Visador externo",
+      actor: visadorNombre,
       action: "VISADO_PUBLIC",
       details: "Documento visado desde enlace público",
       fromStatus,
@@ -632,7 +661,7 @@ async function publicVisarDocument(req, res) {
       eventType: "VISADO_PUBLIC",
       extraMetadata: {
         actor_type: "PUBLIC_VISADOR",
-        visador_nombre: doc.visador_nombre || "Visador externo",
+        visador_nombre: visadorNombre,
       },
     });
 
@@ -657,7 +686,7 @@ async function publicVisarDocument(req, res) {
       entityType: "document",
       entityId: doc.id,
       metadata: {
-        visador_nombre: doc.visador_nombre || "Visador externo",
+        visador_nombre: visadorNombre,
         previous_status: fromStatus,
         new_status: toStatus,
         source: "public_link",
@@ -676,7 +705,7 @@ async function publicVisarDocument(req, res) {
       pdfUrl: fileUrl,
       documentStatus: "PENDIENTE_FIRMA",
       public_mode: "visado",
-      public_token_kind: "document",
+      public_token_kind: "signature_token",
       message: "Documento visado correctamente desde enlace público",
     });
   } catch (err) {

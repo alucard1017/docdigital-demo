@@ -18,7 +18,11 @@ const {
   insertFlowStatusChangedEvent,
 } = require("./flowEventInserts");
 
-const { updateParticipantStatus } = require("./flowParticipantsSync");
+const {
+  updateParticipantStatus,
+  PARTICIPANT_ROLES,
+} = require("./flowParticipantsSync");
+
 const { logAudit, buildDocumentAuditMetadata } = require("../../utils/auditLog");
 const { triggerWebhook } = require("../../services/webhookService");
 const { emitToCompany } = require("../../services/socketService");
@@ -29,10 +33,10 @@ const { cancelPendingReminders } = require("./flowHelpers");
 function normalizeRole(rawRole) {
   const role = String(rawRole || "").trim().toUpperCase();
   if (!role) return null;
-  if (role.includes("VIS")) return "VISADOR";
-  if (role.includes("REV")) return "VISADOR";
-  if (role.includes("FINAL")) return "FIRMANTE_FINAL";
-  if (role.includes("FIRM")) return "FIRMANTE";
+  if (role.includes("VIS")) return PARTICIPANT_ROLES.REVIEWER;
+  if (role.includes("REV")) return PARTICIPANT_ROLES.REVIEWER;
+  if (role.includes("FINAL")) return PARTICIPANT_ROLES.FINAL_SIGNER;
+  if (role.includes("FIRM")) return PARTICIPANT_ROLES.SIGNER;
   return role;
 }
 
@@ -43,6 +47,15 @@ function buildProgressLabel(firmados, total) {
 
 async function signFlow(req, res) {
   const { firmanteId } = req.params;
+
+  // Guard 401 antes de abrir conexión
+  if (!req.user) {
+    return res.status(401).json({
+      code: "UNAUTHORIZED",
+      message: "Usuario no autenticado",
+    });
+  }
+
   const client = await getDbClient();
 
   try {
@@ -75,12 +88,14 @@ async function signFlow(req, res) {
     }
 
     const firmanteRaw = firmanteRes.rows[0];
+    const normalizedRole = normalizeRole(firmanteRaw.rol);
+
     const firmante = {
       ...firmanteRaw,
-      rol: normalizeRole(firmanteRaw.rol),
+      rol: normalizedRole,
     };
 
-    const actorIsReviewer = firmante.rol === "VISADOR";
+    const actorIsReviewer = firmante.rol === PARTICIPANT_ROLES.REVIEWER;
 
     // 2) Validar estado actual del firmante
     if (firmante.estado === "FIRMADO") {
@@ -97,7 +112,9 @@ async function signFlow(req, res) {
       await rollbackSafely(client);
       return res.status(400).json({
         code: "ALREADY_REJECTED",
-        message: "Este firmante rechazó el documento",
+        message: actorIsReviewer
+          ? "Este visador rechazó el documento"
+          : "Este firmante rechazó el documento",
       });
     }
 
@@ -109,7 +126,7 @@ async function signFlow(req, res) {
         FROM firmantes
         WHERE documento_id = $1
           AND email = $2
-          AND rol = 'VISADOR'
+          AND rol IN ('VISADOR', 'REVISOR')
           AND estado = 'FIRMADO'
         `,
         [firmante.documento_id, firmante.email]
@@ -126,7 +143,7 @@ async function signFlow(req, res) {
       }
     }
 
-    // 4) Validar flujo secuencial (orden de firma)
+    // 4) Validar flujo secuencial (orden de firma/visado)
     const tipoFlujo = await getDocumentFlowType(client, firmante.documento_id);
 
     if (tipoFlujo === "SECUENCIAL") {
@@ -194,6 +211,7 @@ async function signFlow(req, res) {
         documentId: newDocumentId,
         email: firmante.email,
         role: firmante.rol,
+        flowOrder: firmante.orden_firma || null,
       });
     }
 
@@ -223,6 +241,7 @@ async function signFlow(req, res) {
           tipo_flujo: tipoFlujo,
           actor_role: firmante.rol,
           actor_email: firmante.email,
+          actor_id: firmante.id,
         }),
       ]
     );
@@ -324,10 +343,9 @@ async function signFlow(req, res) {
           WHERE id = $2
           `,
           [documentsStatus, newDocumentId]
-          );
+        );
       }
 
-      // Si el actor es visador, al completar su acción cancelamos recordatorios
       if (actorIsReviewer) {
         await cancelPendingReminders(client, firmante.documento_id);
       }
@@ -362,7 +380,7 @@ async function signFlow(req, res) {
         details: actorIsReviewer
           ? `Visado registrado para ${firmante.email}`
           : `Firma registrada para ${firmante.email}`,
-        userId: null,
+        userId: req.user.id || null,
         extraMetadata: {
           via: "signFlow",
           tipo_flujo: tipoFlujo,
@@ -460,11 +478,13 @@ async function signFlow(req, res) {
         total_legacy: totalNum,
         firmados_dp: firmadosDpNum,
         total_dp: totalDpNum,
+        actor_user_id: req.user.id || null,
+        actor_name: req.user.name || null,
       },
     });
 
     logAudit({
-      user: null,
+      user: req.user,
       action: actorIsReviewer
         ? "DOCUMENT_FLOW_REVIEWED"
         : "DOCUMENT_FLOW_SIGNED",

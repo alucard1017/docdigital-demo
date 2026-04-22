@@ -13,6 +13,10 @@ export function normalizeText(value) {
   return String(value).trim().toLowerCase();
 }
 
+export function normalizeUpper(value = "") {
+  return String(value ?? "").trim().toUpperCase();
+}
+
 export function getErrorMessage(err, fallback) {
   return err?.response?.data?.message || err?.message || fallback;
 }
@@ -88,9 +92,7 @@ export function getTimelineEvents(timeline, fallbackEvents) {
       timeline.timeline.events) ||
     [];
 
-  if (Array.isArray(events) && events.length > 0) {
-    return events;
-  }
+  if (events.length > 0) return events;
 
   return Array.isArray(fallbackEvents) ? fallbackEvents : [];
 }
@@ -101,7 +103,11 @@ export function getTimelineEvents(timeline, fallbackEvents) {
 export function normalizeParticipantRole(value = "") {
   const roleRaw = String(value || "").trim().toLowerCase();
 
-  if (roleRaw === "visador" || roleRaw === "visor" || roleRaw === "visador_final") {
+  if (
+    roleRaw === "visador" ||
+    roleRaw === "visor" ||
+    roleRaw === "visador_final"
+  ) {
     return FLOW_ROLE_BADGES.visador;
   }
 
@@ -188,6 +194,19 @@ export function normalizeFlowStatus(value = "") {
     label: status || STATUS_LABEL_FALLBACK,
     className: "detail-flow-status detail-flow-status--neutral",
   };
+}
+
+/**
+ * Devuelve el estado normalizado del documento (a partir de selectedDoc/timeline).
+ */
+export function getNormalizedDocumentStatus(selectedDoc, timeline) {
+  const raw =
+    timeline?.document?.status ??
+    selectedDoc?.status ??
+    selectedDoc?.estado ??
+    null;
+
+  return String(raw || "").trim().toUpperCase();
 }
 
 /**

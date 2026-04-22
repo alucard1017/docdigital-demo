@@ -11,29 +11,32 @@ function toSafeNumber(value, fallback = 0) {
 }
 
 function parseOptionalCompanyId(value) {
-  if (value == null || value === "") return null;
+  if (value == null || value === "") {
+    return { value: null, error: null };
+  }
 
   const parsed = Number(value);
   if (!Number.isInteger(parsed) || parsed <= 0) {
-    return { error: "company_id inválido" };
+    return { value: null, error: "company_id inválido" };
   }
 
-  return { value: parsed };
+  return { value: parsed, error: null };
 }
 
 function buildScope(user, queryCompanyId) {
   if (isGlobalAdmin(user)) {
-    const parsed = parseOptionalCompanyId(queryCompanyId);
+    const { value, error } = parseOptionalCompanyId(queryCompanyId);
 
-    if (parsed?.error) {
-      return { error: parsed.error };
+    if (error) {
+      return { error };
     }
 
-    const targetCompanyId = parsed?.value ?? null;
+    const targetCompanyId = value ?? null;
 
     return {
       targetCompanyId,
       scopeLabel: targetCompanyId ? `company_${targetCompanyId}` : "global",
+      error: null,
     };
   }
 
@@ -44,6 +47,7 @@ function buildScope(user, queryCompanyId) {
   return {
     targetCompanyId: user.company_id,
     scopeLabel: `company_${user.company_id}`,
+    error: null,
   };
 }
 
@@ -85,9 +89,10 @@ async function getDocumentStats(req, res) {
     const { targetCompanyId, scopeLabel } = scope;
     const { whereSql, params } = buildWhereClause(targetCompanyId);
 
-    const andCreatedLast30Days = whereSql
-      ? `${whereSql} AND created_at >= NOW() - INTERVAL '30 days'`
-      : `WHERE created_at >= NOW() - INTERVAL '30 days'`;
+    const baseWhere = whereSql || "";
+    const perDayWhere = baseWhere
+      ? `${baseWhere} AND created_at >= NOW() - INTERVAL '30 days'`
+      : "WHERE created_at >= NOW() - INTERVAL '30 days'";
 
     const kpiSql = `
       SELECT
@@ -99,7 +104,7 @@ async function getDocumentStats(req, res) {
         COUNT(*) FILTER (WHERE status = 'FIRMADO') AS firmados,
         COUNT(*) FILTER (WHERE status = 'RECHAZADO') AS rechazados
       FROM documents
-      ${whereSql}
+      ${baseWhere}
     `;
 
     const perDaySql = `
@@ -107,7 +112,7 @@ async function getDocumentStats(req, res) {
         to_char(created_at::date, 'YYYY-MM-DD') AS date,
         COUNT(*) AS count
       FROM documents
-      ${andCreatedLast30Days}
+      ${perDayWhere}
       GROUP BY created_at::date
       ORDER BY date ASC
     `;
@@ -117,7 +122,7 @@ async function getDocumentStats(req, res) {
         COALESCE(NULLIF(tipo_tramite, ''), 'SIN_TIPO') AS tipo_tramite,
         COUNT(*) AS count
       FROM documents
-      ${whereSql}
+      ${baseWhere}
       GROUP BY COALESCE(NULLIF(tipo_tramite, ''), 'SIN_TIPO')
       ORDER BY count DESC, tipo_tramite ASC
     `;

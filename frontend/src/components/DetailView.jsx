@@ -26,6 +26,7 @@ import {
   getDocumentTitle,
   getErrorMessage,
   getTimelineEvents,
+  getNormalizedDocumentStatus,
   isAbortLikeError,
   shouldShowGlobalReminder,
   shouldShowVisadoReminder,
@@ -40,6 +41,7 @@ import {
   canViewAuditLogs,
   canManageReminders,
 } from "../utils/permissions";
+import { DOC_STATUS } from "../constants";
 
 function getButtonStateStyle(isLoading) {
   return {
@@ -277,16 +279,17 @@ export function DetailView({
     [selectedDoc?.id, currentTimelineDoc?.id]
   );
 
-  const mergedDoc = useMemo(() => {
-    return {
+  const mergedDoc = useMemo(
+    () => ({
       ...(selectedDoc || {}),
       ...(currentTimelineDoc || {}),
       metadata: {
         ...(selectedDoc?.metadata || selectedDoc?.meta || {}),
         ...(currentTimelineDoc?.metadata || currentTimelineDoc?.meta || {}),
       },
-    };
-  }, [selectedDoc, currentTimelineDoc]);
+    }),
+    [selectedDoc, currentTimelineDoc]
+  );
 
   const safeEvents = useMemo(
     () => getTimelineEvents(timeline, events),
@@ -299,8 +302,8 @@ export function DetailView({
   );
 
   const numeroInterno = useMemo(
-    () => getDocumentNumber(selectedDoc, timeline),
-    [selectedDoc, timeline]
+    () => getDocumentNumber(mergedDoc, timeline),
+    [mergedDoc, timeline]
   );
 
   const numeroInternoDisplay = useMemo(
@@ -309,8 +312,8 @@ export function DetailView({
   );
 
   const titleDocumento = useMemo(
-    () => getDocumentTitle(selectedDoc, timeline),
-    [selectedDoc, timeline]
+    () => getDocumentTitle(mergedDoc, timeline),
+    [mergedDoc, timeline]
   );
 
   const clasificacionFieldLabel = useMemo(
@@ -334,23 +337,27 @@ export function DetailView({
   );
 
   const currentStatus = useMemo(
-    () => currentTimelineDoc?.status ?? selectedDoc?.status ?? null,
-    [currentTimelineDoc?.status, selectedDoc?.status]
+    () => getNormalizedDocumentStatus(mergedDoc, timeline),
+    [mergedDoc, timeline]
   );
 
-  const isSigned = currentStatus === "FIRMADO";
-  const isRejected = currentStatus === "RECHAZADO";
+  const isSigned = currentStatus === DOC_STATUS.FIRMADO;
+  const isRejected = currentStatus === DOC_STATUS.RECHAZADO;
+  const flujoFinalizado = isSigned || isRejected;
 
-  const mostrarBotonReenvioVisado = useMemo(() => {
-    return (
+  const mostrarBotonReenvioVisado = useMemo(
+    () =>
       canManageDocumentReminders &&
-      shouldShowVisadoReminder(mergedDoc, currentStatus)
-    );
-  }, [canManageDocumentReminders, mergedDoc, currentStatus]);
+      shouldShowVisadoReminder(mergedDoc, currentStatus),
+    [canManageDocumentReminders, mergedDoc, currentStatus]
+  );
 
-  const mostrarBotonRecordatorio = useMemo(() => {
-    return canManageDocumentReminders && shouldShowGlobalReminder(currentStatus);
-  }, [canManageDocumentReminders, currentStatus]);
+  const mostrarBotonRecordatorio = useMemo(
+    () =>
+      canManageDocumentReminders &&
+      shouldShowGlobalReminder(currentStatus),
+    [canManageDocumentReminders, currentStatus]
+  );
 
   const baseUrl = api.defaults.baseURL || "";
   const downloadUrl = currentDocId
@@ -397,7 +404,9 @@ export function DetailView({
         const data = await getDocumentTimeline(docId);
 
         setTimeline(data || null);
-        setParticipants(Array.isArray(data?.participants) ? data.participants : []);
+        setParticipants(
+          Array.isArray(data?.participants) ? data.participants : []
+        );
         timelineToastShownRef.current = false;
       } catch (err) {
         if (isAbortLikeError(err)) return;
@@ -456,6 +465,7 @@ export function DetailView({
   const refreshAll = useCallback(
     async (docId, signal) => {
       if (!docId) return;
+
       await Promise.allSettled([
         refreshTimeline(docId),
         refreshSigners(docId, signal),
@@ -468,8 +478,8 @@ export function DetailView({
     if (!selectedDoc?.id) return;
 
     const docId = selectedDoc.id;
-    let isMounted = true;
     const controller = new AbortController();
+    let isMounted = true;
 
     timelineToastShownRef.current = false;
     signersToastShownRef.current = false;
@@ -529,7 +539,7 @@ export function DetailView({
   );
 
   const handleReenviarVisado = useCallback(async () => {
-    if (!currentDocId) return;
+    if (!currentDocId || flujoFinalizado) return;
 
     await runRefreshableAction({
       loadingSetter: setReenviarLoadingVisado,
@@ -547,11 +557,11 @@ export function DetailView({
         logLabel: "Error reenviando visado:",
       },
     });
-  }, [currentDocId, runRefreshableAction]);
+  }, [currentDocId, flujoFinalizado, runRefreshableAction]);
 
   const handleReenviarFirma = useCallback(
     async (signerId) => {
-      if (!currentDocId || !signerId) return;
+      if (!currentDocId || !signerId || flujoFinalizado) return;
 
       try {
         setReenviarSignerId(signerId);
@@ -565,7 +575,8 @@ export function DetailView({
           type: "success",
           title: "Recordatorio enviado",
           message:
-            res.data?.message || "Recordatorio de firma reenviado correctamente.",
+            res.data?.message ||
+            "Recordatorio de firma reenviado correctamente.",
         });
 
         await refreshAll(currentDocId);
@@ -584,11 +595,11 @@ export function DetailView({
         setReenviarSignerId(null);
       }
     },
-    [currentDocId, addToast, refreshAll]
+    [currentDocId, flujoFinalizado, addToast, refreshAll]
   );
 
   const handleEnviarRecordatorioATodos = useCallback(async () => {
-    if (!currentDocId) return;
+    if (!currentDocId || flujoFinalizado) return;
 
     await runRefreshableAction({
       loadingSetter: setRecordatorioLoading,
@@ -603,10 +614,12 @@ export function DetailView({
         logLabel: "Error enviando recordatorio a todos:",
       },
     });
-  }, [currentDocId, runRefreshableAction]);
+  }, [currentDocId, flujoFinalizado, runRefreshableAction]);
 
   const manejarAccionDocumentoConLegal = useCallback(
     async (id, accion, extraData = {}) => {
+      if (flujoFinalizado) return false;
+
       if (accion === "firmar") {
         if (!acceptedLegalSign) {
           setSignError(
@@ -645,6 +658,7 @@ export function DetailView({
     [
       acceptedLegalSign,
       acceptedLegalVisado,
+      flujoFinalizado,
       manejarAccionDocumento,
       currentDocId,
       refreshAll,
@@ -704,13 +718,18 @@ export function DetailView({
                     <span className="detail-meta-label">
                       {clasificacionFieldLabel}:
                     </span>{" "}
-                    <span className="detail-meta-value" title={clasificacionLabel}>
+                    <span
+                      className="detail-meta-value"
+                      title={clasificacionLabel}
+                    >
                       {clasificacionLabel}
                     </span>
                   </p>
 
                   <p>
-                    <span className="detail-meta-label">Condición notarial:</span>{" "}
+                    <span className="detail-meta-label">
+                      Condición notarial:
+                    </span>{" "}
                     <span className="detail-meta-value" title={tramiteLabel}>
                       {tramiteLabel}
                     </span>
@@ -718,7 +737,10 @@ export function DetailView({
 
                   <p>
                     <span className="detail-meta-label">Tipo de documento:</span>{" "}
-                    <span className="detail-meta-value" title={documentoLabel}>
+                    <span
+                      className="detail-meta-value"
+                      title={documentoLabel}
+                    >
                       {documentoLabel}
                     </span>
                   </p>
@@ -781,7 +803,11 @@ export function DetailView({
               subtitle="Revisa el orden del proceso, el rol de cada participante y quién sigue en el flujo secuencial."
             >
               {loadingParticipants || loadingSigners ? (
-                <p className="detail-signers-loading" role="status" aria-live="polite">
+                <p
+                  className="detail-signers-loading"
+                  role="status"
+                  aria-live="polite"
+                >
                   Cargando flujo de participantes...
                 </p>
               ) : flowParticipants.length === 0 ? (
@@ -791,11 +817,21 @@ export function DetailView({
               ) : (
                 <>
                   <div className="detail-flow-summary">
-                    <div className="detail-flow-summary__label">Próximo paso</div>
+                    <div className="detail-flow-summary__label">
+                      {flujoFinalizado ? "Estado del flujo" : "Próximo paso"}
+                    </div>
                     <div className="detail-flow-summary__value">
-                      {nextPendingParticipant
-                        ? `#${nextPendingParticipant.order} · ${nextPendingParticipant.roleLabel} · ${nextPendingParticipant.name}`
-                        : "No hay participantes pendientes"}
+                      {flujoFinalizado ? (
+                        isSigned ? (
+                          "✅ Flujo completado"
+                        ) : (
+                          "❌ Flujo cerrado por rechazo"
+                        )
+                      ) : nextPendingParticipant ? (
+                        `#${nextPendingParticipant.order} · ${nextPendingParticipant.roleLabel} · ${nextPendingParticipant.name}`
+                      ) : (
+                        "No hay participantes pendientes"
+                      )}
                     </div>
                   </div>
 
@@ -805,11 +841,13 @@ export function DetailView({
                         participant.email || ""
                       ).toLowerCase();
 
-                      const signerMatch = signers.find((s) => {
-                        const signerEmail = String(s?.email || "").toLowerCase();
+                      const signerMatch = signers.find((signer) => {
+                        const signerEmail = String(
+                          signer?.email || ""
+                        ).toLowerCase();
 
                         return (
-                          String(s?.id) === String(participant.id) ||
+                          String(signer?.id) === String(participant.id) ||
                           (normalizedParticipantEmail &&
                             signerEmail &&
                             signerEmail === normalizedParticipantEmail)
@@ -817,11 +855,13 @@ export function DetailView({
                       });
 
                       const signerId = signerMatch?.id;
+
                       const canRemind =
                         canManageDocumentReminders &&
                         participant.roleKey === FLOW_ROLE_KEYS.FIRMANTE &&
                         participant.statusKey === "pending" &&
-                        Boolean(signerId);
+                        Boolean(signerId) &&
+                        !flujoFinalizado;
 
                       return (
                         <li key={participant.id} className="detail-flow-item">
@@ -836,7 +876,8 @@ export function DetailView({
                                   {participant.name}
                                 </div>
                                 <div className="detail-flow-item__email">
-                                  {participant.email || "Sin correo registrado"}
+                                  {participant.email ||
+                                    "Sin correo registrado"}
                                 </div>
                               </div>
 
@@ -853,7 +894,8 @@ export function DetailView({
                             <div className="detail-flow-item__meta">
                               {participant.signedAt ? (
                                 <span>
-                                  Registrado el {formatDateTime(participant.signedAt)}
+                                  Registrado el{" "}
+                                  {formatDateTime(participant.signedAt)}
                                 </span>
                               ) : (
                                 <span>Aún no registra acción</span>
@@ -926,7 +968,7 @@ export function DetailView({
               setView={setView}
               setSelectedDoc={setSelectedDoc}
               manejarAccionDocumento={manejarAccionDocumentoConLegal}
-              isAdmin={canSeeActionHistory}
+              canAdminDocumentActions={canSeeActionHistory}
             />
           </div>
         </div>

@@ -539,13 +539,13 @@ export function usePublicSignLogic({
   }, [canReject]);
 
   if (import.meta.env.DEV) {
-    console.log("[PUBLIC VIEW STATE]", {
+    console.log("[PublicSignView]", {
       hasToken,
       hasDocument: !!document,
-      publicSignLoading,
-      hasError: !!publicSignError,
+      loading: publicSignLoading,
+      error: !!publicSignError,
       effectiveTokenKind,
-      publicSignMode,
+      mode: publicSignMode,
       rawSignerRole,
       requiresVisado,
       isVisado,

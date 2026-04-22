@@ -1,3 +1,5 @@
+// frontend/src/utils/documentEvents.js
+
 /* ============================
    Helpers básicos
    ============================ */
@@ -71,7 +73,7 @@ export function safeJsonPreview(value, maxLength = 180) {
   try {
     const text = JSON.stringify(value);
     if (!text) return "";
-    return text.length > maxLength ? `${text.slice(0, maxLength)}…` : text;
+  return text.length > maxLength ? `${text.slice(0, maxLength)}…` : text;
   } catch {
     return "";
   }

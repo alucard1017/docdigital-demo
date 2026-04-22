@@ -1,5 +1,5 @@
 import React, { useCallback, useMemo } from "react";
-import { API_BASE_URL } from "../constants";
+import { API_BASE_URL, DOC_STATUS } from "../constants";
 import { useToast } from "../hooks/useToast";
 
 const API_URL = API_BASE_URL || "";
@@ -8,6 +8,10 @@ function apiUrl(path) {
   const base = API_URL.replace(/\/+$/, "");
   const cleanPath = path.startsWith("/") ? path : `/${path}`;
   return `${base}${cleanPath}`;
+}
+
+function normalizeStatus(value) {
+  return String(value || "").trim().toUpperCase();
 }
 
 export function DetailActions({
@@ -24,21 +28,33 @@ export function DetailActions({
 
   const documentId = selectedDoc?.id ?? null;
 
+  const currentStatus = useMemo(
+    () => normalizeStatus(selectedDoc?.status || selectedDoc?.estado),
+    [selectedDoc?.status, selectedDoc?.estado]
+  );
+
+  const isSigned = currentStatus === DOC_STATUS.FIRMADO;
+  const isRejected = currentStatus === DOC_STATUS.RECHAZADO;
+  const isTerminalState = isSigned || isRejected;
+
   const canShowReject = useMemo(
-    () => !canAdminDocumentActions && puedeRechazar,
-    [canAdminDocumentActions, puedeRechazar]
+    () => !canAdminDocumentActions && puedeRechazar && !isTerminalState,
+    [canAdminDocumentActions, puedeRechazar, isTerminalState]
   );
+
   const canShowVisar = useMemo(
-    () => !canAdminDocumentActions && puedeVisar,
-    [canAdminDocumentActions, puedeVisar]
+    () => !canAdminDocumentActions && puedeVisar && !isTerminalState,
+    [canAdminDocumentActions, puedeVisar, isTerminalState]
   );
+
   const canShowFirmar = useMemo(
-    () => !canAdminDocumentActions && puedeFirmar,
-    [canAdminDocumentActions, puedeFirmar]
+    () => !canAdminDocumentActions && puedeFirmar && !isTerminalState,
+    [canAdminDocumentActions, puedeFirmar, isTerminalState]
   );
+
   const canShowAdminCancel = useMemo(
-    () => Boolean(canAdminDocumentActions),
-    [canAdminDocumentActions]
+    () => Boolean(canAdminDocumentActions) && !isTerminalState,
+    [canAdminDocumentActions, isTerminalState]
   );
 
   const handleVolver = useCallback(() => {
@@ -65,15 +81,22 @@ export function DetailActions({
 
   const runDocumentAction = useCallback(
     async (action, payload, successToast) => {
-      if (!documentId) return;
+      if (!documentId || isTerminalState) return false;
 
       const ok = await manejarAccionDocumento(documentId, action, payload);
 
       if (ok && successToast) {
         handleSuccessAndClose(successToast);
       }
+
+      return ok;
     },
-    [documentId, manejarAccionDocumento, handleSuccessAndClose]
+    [
+      documentId,
+      isTerminalState,
+      manejarAccionDocumento,
+      handleSuccessAndClose,
+    ]
   );
 
   const handleDownload = useCallback(() => {
@@ -98,7 +121,7 @@ export function DetailActions({
   }, [documentId, addToast]);
 
   const handleRechazar = useCallback(async () => {
-    if (!documentId) return;
+    if (!documentId || isTerminalState) return;
 
     const motivo = window.prompt("Indica el motivo de rechazo:");
     if (!motivo || !motivo.trim()) return;
@@ -111,28 +134,28 @@ export function DetailActions({
         message: "El documento fue rechazado correctamente.",
       }
     );
-  }, [documentId, runDocumentAction]);
+  }, [documentId, isTerminalState, runDocumentAction]);
 
   const handleVisar = useCallback(async () => {
-    if (!documentId) return;
+    if (!documentId || isTerminalState) return;
 
     await runDocumentAction("visar", undefined, {
       title: "Documento visado",
       message: "El documento fue visado correctamente.",
     });
-  }, [documentId, runDocumentAction]);
+  }, [documentId, isTerminalState, runDocumentAction]);
 
   const handleFirmar = useCallback(async () => {
-    if (!documentId) return;
+    if (!documentId || isTerminalState) return;
 
     await runDocumentAction("firmar", undefined, {
       title: "Documento firmado",
       message: "El documento fue firmado correctamente.",
     });
-  }, [documentId, runDocumentAction]);
+  }, [documentId, isTerminalState, runDocumentAction]);
 
   const handleCancelarAdmin = useCallback(async () => {
-    if (!documentId) return;
+    if (!documentId || isTerminalState) return;
 
     const okConfirm = window.confirm(
       "¿Deseas cancelar este trámite? Esta acción marcará el flujo como rechazado y no se puede deshacer."
@@ -148,7 +171,7 @@ export function DetailActions({
         message: "El trámite fue cancelado por un administrador.",
       }
     );
-  }, [documentId, runDocumentAction]);
+  }, [documentId, isTerminalState, runDocumentAction]);
 
   if (!selectedDoc || !documentId) return null;
 

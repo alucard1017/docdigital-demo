@@ -19,16 +19,34 @@ const TERMINAL_VIEW_STATES = new Set([
   "blocked_by_review",
 ]);
 
+function getMessageVariant(kind, preferred = "info") {
+  if (preferred) return preferred;
+
+  const normalized = String(kind || "").toLowerCase();
+
+  if (normalized === "error" || normalized === "invalid" || normalized === "expired") {
+    return "error";
+  }
+
+  if (normalized === "completed" || normalized === "used") {
+    return "success";
+  }
+
+  return "info";
+}
+
 function PublicStatusMessageCard({
   viewState,
   onRetry,
   variant = "info",
   showSpinner = false,
 }) {
+  const resolvedVariant = getMessageVariant(viewState?.kind, variant);
+
   const className = `public-sign-message-card ${
-    variant === "error"
+    resolvedVariant === "error"
       ? "public-sign-message-card--error"
-      : variant === "success"
+      : resolvedVariant === "success"
       ? "public-sign-message-card--success"
       : "public-sign-message-card--info"
   }`;
@@ -42,7 +60,9 @@ function PublicStatusMessageCard({
       ) : null}
 
       {viewState?.message ? (
-        <div className="public-sign-message-card__text">{viewState.message}</div>
+        <div className="public-sign-message-card__text">
+          {viewState.message}
+        </div>
       ) : null}
 
       {viewState?.canRetry ? (
@@ -71,6 +91,8 @@ function PublicDocumentSummary({
   actionBlock,
   onRetry,
 }) {
+  const canShowInlineStatus = viewState.kind !== "ready";
+
   return (
     <aside className="public-sign-sidebar">
       <div className="public-sign-summary">
@@ -81,21 +103,20 @@ function PublicDocumentSummary({
         </div>
 
         <div className="public-sign-summary__text">
-          Revisa la información principal antes de abrir el documento completo.
+          Revisa la información principal antes de confirmar la acción sobre el
+          documento.
         </div>
       </div>
 
       <div className="public-sign-meta-grid">
         <div className="public-sign-meta-card">
           <div className="public-sign-meta-card__label">Empresa</div>
-
           <div
             className="public-sign-meta-card__value"
             title={buildMetaTitle("Empresa", companyName, `RUT: ${companyRut}`)}
           >
             {companyName}
           </div>
-
           <div
             className="public-sign-meta-card__subvalue"
             title={`RUT: ${companyRut}`}
@@ -106,7 +127,6 @@ function PublicDocumentSummary({
 
         <div className="public-sign-meta-card">
           <div className="public-sign-meta-card__label">Número de contrato</div>
-
           <div
             className="public-sign-meta-card__value public-sign-meta-card__value--contract"
             title={contractNumber}
@@ -116,8 +136,9 @@ function PublicDocumentSummary({
         </div>
 
         <div className="public-sign-meta-card">
-          <div className="public-sign-meta-card__label">{procedureFieldLabel}</div>
-
+          <div className="public-sign-meta-card__label">
+            {procedureFieldLabel}
+          </div>
           <div
             className="public-sign-meta-card__value"
             title={procedureLabel}
@@ -130,7 +151,6 @@ function PublicDocumentSummary({
           <div className="public-sign-meta-card__label">
             {participantInfo.title}
           </div>
-
           <div
             className="public-sign-meta-card__value"
             title={buildMetaTitle(
@@ -141,7 +161,6 @@ function PublicDocumentSummary({
           >
             {participantInfo.primary}
           </div>
-
           <div
             className="public-sign-meta-card__subvalue"
             title={participantInfo.secondary}
@@ -162,11 +181,11 @@ function PublicDocumentSummary({
         </a>
       ) : null}
 
-      {viewState.kind !== "ready" ? (
+      {canShowInlineStatus ? (
         <PublicStatusMessageCard
           viewState={viewState}
           onRetry={onRetry}
-          variant="info"
+          variant={getMessageVariant(viewState.kind)}
         />
       ) : null}
 
@@ -192,8 +211,8 @@ function PublicDocumentPanel({ pdfUrl, documentTitle, actionBlock }) {
           <PublicPdfViewer fileUrl={pdfUrl} />
         ) : (
           <div className="public-sign-pdf-empty">
-            No hay una vista previa disponible en este momento. Puedes abrir el
-            documento completo en una nueva pestaña si el enlace está habilitado.
+            No hay una vista previa disponible en este momento. Si el enlace lo
+            permite, puedes abrir el documento completo en una nueva pestaña.
           </div>
         )}
       </div>
@@ -205,7 +224,6 @@ function PublicDocumentPanel({ pdfUrl, documentTitle, actionBlock }) {
 
 export function PublicSignView(props) {
   const {
-    document,
     isVisado,
     pdfUrl,
     documentTitle,
@@ -240,9 +258,17 @@ export function PublicSignView(props) {
     setLegalError,
   } = usePublicSignLogic(props);
 
-  const isTerminalWithoutDocument = useMemo(() => {
-    return TERMINAL_VIEW_STATES.has(viewState.kind) && !canRenderDocument;
-  }, [viewState.kind, canRenderDocument]);
+  const isLoading = viewState.kind === "loading";
+
+  const isTerminal = useMemo(
+    () => TERMINAL_VIEW_STATES.has(viewState.kind),
+    [viewState.kind]
+  );
+
+  const isTerminalWithoutDocument = useMemo(
+    () => isTerminal && !canRenderDocument,
+    [isTerminal, canRenderDocument]
+  );
 
   const introTitle = useMemo(() => {
     if (viewState.kind !== "ready") return viewState.title;
@@ -257,6 +283,18 @@ export function PublicSignView(props) {
 
     return "Revisa este documento para registrar tu firma";
   }, [viewState.kind, viewState.title, isVisado, signerRoleLabel]);
+
+  const introText = useMemo(() => {
+    if (viewState.kind !== "ready") {
+      return viewState.message;
+    }
+
+    if (isVisado) {
+      return "Cuando confirmes el visado, el documento quedará habilitado para continuar con la firma.";
+    }
+
+    return "Lee el documento completo, valida la información y luego confirma la acción correspondiente.";
+  }, [viewState.kind, viewState.message, isVisado]);
 
   const actionBlock = useMemo(() => {
     if (!canRenderActions) return null;
@@ -347,16 +385,22 @@ export function PublicSignView(props) {
 
         <section className={introClassName}>
           <div className={introTitleClassName}>{introTitle}</div>
-          <div className="public-sign-intro__text">{viewState.message}</div>
+          <div className="public-sign-intro__text">{introText}</div>
         </section>
 
         {actionMessage ? (
-          <div className={actionMessageClassName} role="status" aria-live="polite">
-            <div className="public-sign-message-card__text">{actionMessage}</div>
+          <div
+            className={actionMessageClassName}
+            role="status"
+            aria-live="polite"
+          >
+            <div className="public-sign-message-card__text">
+              {actionMessage}
+            </div>
           </div>
         ) : null}
 
-        {viewState.kind === "loading" ? (
+        {isLoading ? (
           <PublicStatusMessageCard
             viewState={viewState}
             onRetry={handleRetryLoad}
@@ -365,22 +409,17 @@ export function PublicSignView(props) {
           />
         ) : null}
 
-        {isTerminalWithoutDocument ? (
+        {isTerminalWithoutDocument && !isLoading ? (
           <PublicStatusMessageCard
             viewState={viewState}
             onRetry={handleRetryLoad}
-            variant={
-              viewState.kind === "completed" || viewState.kind === "used"
-                ? "info"
-                : "error"
-            }
+            variant={getMessageVariant(viewState.kind)}
           />
         ) : null}
 
         {canRenderDocument ? (
           <div className="public-sign-layout">
             <PublicDocumentSummary
-              document={document}
               documentTitle={documentTitle}
               companyName={companyName}
               companyRut={companyRut}

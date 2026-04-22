@@ -16,12 +16,56 @@ function getActorPrefix(actorType) {
   return actorType === "user" ? "Por:" : "Origen:";
 }
 
-function shouldShowStatusTransition(event) {
+function hasStatusTransition(event) {
   return Boolean(event?.fromStatus || event?.toStatus);
 }
 
+function normalizeStatus(value) {
+  return String(value || "").trim().toUpperCase();
+}
+
+function isSignedStatus(value) {
+  return normalizeStatus(value) === "FIRMADO";
+}
+
+function isRejectedStatus(value) {
+  return normalizeStatus(value) === "RECHAZADO";
+}
+
+function clampProgress(value) {
+  const parsed = Number(value);
+  if (!Number.isFinite(parsed)) return 0;
+  return Math.max(0, Math.min(100, parsed));
+}
+
+function getTimelineHint(currentStep, nextStep) {
+  const normalizedCurrentStep = normalizeStatus(currentStep);
+  const flujoFirmado = isSignedStatus(normalizedCurrentStep);
+  const flujoRechazado = isRejectedStatus(normalizedCurrentStep);
+  const flujoFinalizado = flujoFirmado || flujoRechazado;
+
+  if (flujoFirmado) {
+    return {
+      label: "Resultado del flujo",
+      value: "✅ Flujo completado",
+    };
+  }
+
+  if (flujoRechazado) {
+    return {
+      label: "Resultado del flujo",
+      value: "❌ Flujo cerrado por rechazo",
+    };
+  }
+
+  return {
+    label: "Próximo paso",
+    value: nextStep || "Sin definir",
+  };
+}
+
 function StatusTransition({ event }) {
-  if (!shouldShowStatusTransition(event)) return null;
+  if (!hasStatusTransition(event)) return null;
 
   const from = event.fromStatus || "Sin estado";
   const to = event.toStatus || "Sin estado";
@@ -48,7 +92,10 @@ const EventTechMeta = memo(function EventTechMeta({ event }) {
   if (!event.ip && !event.userAgent && !event.requestId) return null;
 
   return (
-    <div className="timeline-audit-meta" aria-label="Metadatos técnicos del evento">
+    <div
+      className="timeline-audit-meta"
+      aria-label="Metadatos técnicos del evento"
+    >
       {event.ip ? (
         <div title={event.ip}>IP: {ellipsisMiddle(event.ip, 28)}</div>
       ) : null}
@@ -76,15 +123,17 @@ const TimelineEventCard = memo(function TimelineEventCard({
   const visualStatus = getEventVisualStatus(index, total);
   const isLast = index === total - 1;
 
-  const badgeLabel = getBadgeLabel(event.actorType);
-  const badgeClass = getBadgeClass(event.actorType);
-  const actorType = event.actorType || "system";
-  const actorLabel = event.actor;
+  const badgeLabel = getBadgeLabel(event?.actorType);
+  const badgeClass = getBadgeClass(event?.actorType);
+  const actorType = event?.actorType || "system";
+  const actorLabel = event?.actor;
 
   return (
     <article
-      className={`timeline-event-wrapper timeline-event--${event.kind || "default"}`}
-      aria-label={event.title || "Evento del timeline"}
+      className={`timeline-event-wrapper timeline-event--${
+        event?.kind || "default"
+      }`}
+      aria-label={event?.title || "Evento del timeline"}
     >
       {!isLast ? (
         <div
@@ -97,13 +146,13 @@ const TimelineEventCard = memo(function TimelineEventCard({
         className={`timeline-dot timeline-dot-${visualStatus}`}
         aria-hidden="true"
       >
-        <span className="timeline-icon">{event.icon}</span>
+        <span className="timeline-icon">{event?.icon}</span>
       </div>
 
       <div className={`timeline-content timeline-content-${visualStatus}`}>
         <div className="timeline-event-top">
-          <h4 className="timeline-event-title" title={event.title || ""}>
-            {event.title || "Evento"}
+          <h4 className="timeline-event-title" title={event?.title || ""}>
+            {event?.title || "Evento"}
           </h4>
 
           <span
@@ -114,7 +163,7 @@ const TimelineEventCard = memo(function TimelineEventCard({
           </span>
         </div>
 
-        {event.details ? (
+        {event?.details ? (
           <p className="timeline-event-details" title={event.details}>
             {event.details}
           </p>
@@ -123,7 +172,7 @@ const TimelineEventCard = memo(function TimelineEventCard({
         <StatusTransition event={event} />
 
         <div className="timeline-event-meta-row">
-          {event.createdAt ? (
+          {event?.createdAt ? (
             <p className="timeline-event-timestamp">
               {formatTimelineTimestamp(event.createdAt)}
             </p>
@@ -146,6 +195,9 @@ const TimelineEventCard = memo(function TimelineEventCard({
 });
 
 function TimelineHeader({ progress, currentStep, nextStep }) {
+  const safeProgress = clampProgress(progress);
+  const hint = getTimelineHint(currentStep, nextStep);
+
   return (
     <header className="timeline-header">
       <h3 className="timeline-heading">Progreso del documento</h3>
@@ -156,18 +208,19 @@ function TimelineHeader({ progress, currentStep, nextStep }) {
           role="progressbar"
           aria-valuemin={0}
           aria-valuemax={100}
-          aria-valuenow={progress}
-          aria-label={`Progreso del documento ${progress}%`}
+          aria-valuenow={safeProgress}
+          aria-valuetext={`${safeProgress}% completado`}
+          aria-label={`Progreso del documento ${safeProgress}%`}
         >
           <div
             className="progress-bar-fill"
-            style={{ width: `${progress}%` }}
+            style={{ width: `${safeProgress}%` }}
           />
         </div>
 
         <div className="timeline-progress-meta">
           <span>Inicio</span>
-          <span className="timeline-progress-value">{progress}%</span>
+          <span className="timeline-progress-value">{safeProgress}%</span>
           <span>Completado</span>
         </div>
       </div>
@@ -183,11 +236,30 @@ function TimelineHeader({ progress, currentStep, nextStep }) {
         </div>
 
         <div className="timeline-current-state-card__hint">
-          Próximo paso: <span title={nextStep || ""}>{nextStep || "Sin definir"}</span>
+          {hint.label}: <span title={hint.value}>{hint.value}</span>
         </div>
       </div>
     </header>
   );
+}
+
+function TimelineBody({ events, hasEvents }) {
+  if (!hasEvents) {
+    return (
+      <div className="timeline-empty-state" role="status" aria-live="polite">
+        Este documento todavía no tiene eventos para mostrar.
+      </div>
+    );
+  }
+
+  return events.map((event, index) => (
+    <TimelineEventCard
+      key={getStableEventKey(event)}
+      event={event}
+      index={index}
+      total={events.length}
+    />
+  ));
 }
 
 export function Timeline({ timeline }) {
@@ -198,7 +270,13 @@ export function Timeline({ timeline }) {
     [hasTimelineObject, timeline]
   );
 
-  const { events, hasEvents, progress, currentStep, nextStep } = normalizedTimeline;
+  const {
+    events = [],
+    hasEvents = false,
+    progress = 0,
+    currentStep = "",
+    nextStep = "",
+  } = normalizedTimeline;
 
   if (!hasTimelineObject) {
     return (
@@ -217,20 +295,7 @@ export function Timeline({ timeline }) {
       />
 
       <div className="timeline-events">
-        {!hasEvents ? (
-          <div className="timeline-empty-state" role="status" aria-live="polite">
-            Este documento todavía no tiene eventos para mostrar.
-          </div>
-        ) : (
-          events.map((event, index) => (
-            <TimelineEventCard
-              key={getStableEventKey(event)}
-              event={event}
-              index={index}
-              total={events.length}
-            />
-          ))
-        )}
+        <TimelineBody events={events} hasEvents={hasEvents} />
       </div>
     </section>
   );

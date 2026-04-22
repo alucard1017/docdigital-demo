@@ -137,10 +137,9 @@ async function sendFlow(req, res) {
       });
     }
 
+    const rawFlowType = (documento.tipo_flujo || "SECUENCIAL").toUpperCase();
     const normalizedFlowType =
-      (documento.tipo_flujo || "SECUENCIAL").toUpperCase() === "PARALELO"
-        ? "PARALELO"
-        : "SECUENCIAL";
+      rawFlowType === "PARALELO" ? "PARALELO" : "SECUENCIAL";
 
     const { legacyStatus, documentsStatus } = mapFlowStateAfterSend();
 
@@ -206,7 +205,9 @@ async function sendFlow(req, res) {
     if (reminderConfig.enabled) {
       recordatoriosCreados = await createAutomaticReminders(client, {
         documentId: documento.id,
-        signers: firmantes.filter((f) => f.rol !== "VISADOR"),
+        signers: firmantes
+          .filter((f) => f.rol !== "VISADOR")
+          .map((f) => ({ id: f.id, name: f.nombre, email: f.email })),
         intervalDays: reminderConfig.intervalDays,
         maxAttempts: reminderConfig.maxAttempts,
         companyId: documento.company_id,

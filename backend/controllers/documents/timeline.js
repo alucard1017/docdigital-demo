@@ -1,3 +1,4 @@
+// backend/controllers/documents/timeline.js
 const { db, getSignedUrl, computeHash, axios } = require("./common");
 const { logAudit } = require("../../utils/auditLog");
 const { getClientIp, getUserAgent } = require("./documentEventUtils");
@@ -104,6 +105,8 @@ function buildNormalizedEvent({
   createdAt,
   metadata,
 }) {
+  const createdAtIso = normalizeCreatedAt(createdAt);
+
   return {
     id,
     eventType: eventType || "UNKNOWN",
@@ -113,7 +116,7 @@ function buildNormalizedEvent({
     toStatus: normalizeStatus(toStatus),
     ip: ip || null,
     userAgent: userAgent || null,
-    createdAt: normalizeCreatedAt(createdAt),
+    createdAt: createdAtIso,
     metadata: metadata || {},
   };
 }
@@ -128,16 +131,10 @@ function normalizeDocumentEvent(evt) {
   const action = baseAction || "UNKNOWN";
 
   const fromStatusRaw =
-    evt.from_status ||
-    metadata.from_status ||
-    metadata.legacy_status ||
-    null;
+    evt.from_status || metadata.from_status || metadata.legacy_status || null;
 
   const toStatusRaw =
-    evt.to_status ||
-    metadata.to_status ||
-    metadata.documents_status ||
-    null;
+    evt.to_status || metadata.to_status || metadata.documents_status || null;
 
   const actor =
     evt.actor ||
@@ -180,9 +177,7 @@ function normalizeAuditEvent(evt) {
     metadata.eventType || metadata.event_type || `AUDIT_${baseAction}`;
 
   const actor =
-    metadata.actor ||
-    (evt.user_id ? `user:${evt.user_id}` : null) ||
-    "system";
+    metadata.actor || (evt.user_id ? `user:${evt.user_id}` : null) || "system";
 
   return buildNormalizedEvent({
     id: `audit-${evt.id}`,
@@ -222,20 +217,20 @@ function buildTimelineProgress(status, requiresVisado) {
       };
     case "FIRMADO":
       return {
-        currentStep: "Firmado",
+        currentStep: "FIRMADO",
         nextStep: "✅ Completado",
         progress: 100,
       };
     case "RECHAZADO":
       return {
-        currentStep: "Rechazado",
+        currentStep: "RECHAZADO",
         nextStep: "❌ Rechazado",
         progress: 100,
       };
     case "BORRADOR":
     default:
       return {
-        currentStep: normalized || "Pendiente",
+        currentStep: normalized || "PENDIENTE",
         nextStep: "",
         progress: 0,
       };
@@ -301,7 +296,6 @@ async function getDocumentPdf(req, res) {
 
     const normalizedStatus = normalizeStatus(status);
 
-    // FIRMADO: preferir siempre pdf_final_url (sin marca de agua)
     let storageKey = null;
     let isFinalPdf = false;
 
@@ -320,7 +314,6 @@ async function getDocumentPdf(req, res) {
       });
     }
 
-    // Verificación de integridad solo para el PDF final
     if (isFinalPdf && pdf_hash_final) {
       try {
         const signedUrl = await getSignedUrl(storageKey, 600);
@@ -545,9 +538,9 @@ async function getTimeline(req, res) {
       ...documentEvents.map(normalizeDocumentEvent),
       ...auditEvents.map(normalizeAuditEvent),
     ].sort((a, b) => {
-      const da = a.createdAt ? new Date(a.createdAt).getTime() : 0;
-      const dbT = b.createdAt ? new Date(b.createdAt).getTime() : 0;
-      return da - dbT;
+      const ta = a.createdAt ? new Date(a.createdAt).getTime() : 0;
+      const tb = b.createdAt ? new Date(b.createdAt).getTime() : 0;
+      return ta - tb;
     });
 
     const requiresVisadoBool = normalizeBoolean(doc.requires_visado);

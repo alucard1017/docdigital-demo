@@ -141,7 +141,9 @@ async function checkLegacyDocumentCompanyScope(req, res, next) {
     return next();
   } catch (err) {
     console.error("❌ Error verificando permisos de documento legacy:", err);
-    return res.status(500).json({ message: "Error interno del servidor" });
+    return res
+      .status(500)
+      .json({ message: "Error interno del servidor" });
   }
 }
 
@@ -591,7 +593,12 @@ router.post(
   documentsController.sendFlow
 );
 
-router.post("/firmar-flujo/:firmanteId", documentsController.signFlow);
+// Ahora protegido con requireAuth para que signFlow reciba siempre req.user
+router.post(
+  "/firmar-flujo/:firmanteId",
+  requireAuth,
+  documentsController.signFlow
+);
 
 /* ================================
    Rutas GET - con :id
@@ -622,7 +629,15 @@ if (typeof downloadDocument === "function") {
 }
 
 if (typeof documentsController.getTimeline === "function") {
-  // IMPORTANTE: aquí NO hay requireAuth/checkDocumentCompanyScope
+  /**
+   * IMPORTANTE: esta ruta se mantiene sin requireAuth porque sirve al frontend
+   * para cargar timeline “público”/interno simplificado.
+   * Si en algún momento el payload incluye campos sensibles, activar:
+   *
+   *   requireAuth, checkDocumentCompanyScope,
+   *
+   * antes de documentsController.getTimeline.
+   */
   router.get("/:id/timeline", documentsController.getTimeline);
 } else {
   console.warn(
@@ -888,7 +903,7 @@ router.post(
         )
         RETURNING id, token, expires_at, sent_at;
         `,
-        [signer.id, token, expiresAt.toISOString()]
+        [signer.id, expiresAt.toISOString(), token]
       );
 
       const invitation = inviteRes.rows[0];

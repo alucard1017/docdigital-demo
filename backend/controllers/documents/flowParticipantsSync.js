@@ -7,23 +7,96 @@ const LEGACY_SIGNER_STATES = {
 const PARTICIPANT_ROLES = {
   REVIEWER: "VISADOR",
   SIGNER: "FIRMANTE",
+  FINAL_SIGNER: "FIRMANTE_FINAL",
 };
 
+function normalizeParticipantRole(rawRole) {
+  const role = String(rawRole || "").trim().toUpperCase();
+
+  if (!role) return PARTICIPANT_ROLES.SIGNER;
+  if (role.includes("VIS")) return PARTICIPANT_ROLES.REVIEWER;
+  if (role.includes("REV")) return PARTICIPANT_ROLES.REVIEWER;
+  if (role.includes("FINAL")) return PARTICIPANT_ROLES.FINAL_SIGNER;
+  if (role.includes("FIRM")) return PARTICIPANT_ROLES.SIGNER;
+
+  return role;
+}
+
+function normalizeParticipants(participants = [], flowType = "SECUENCIAL") {
+  const normalizedFlowType =
+    String(flowType || "SECUENCIAL").trim().toUpperCase() === "PARALELO"
+      ? "PARALELO"
+      : "SECUENCIAL";
+
+  const sorted = participants
+    .map((p, index) => {
+      const role = normalizeParticipantRole(p.role || p.rol);
+
+      const rawOrder =
+        typeof p.flowOrder === "number" && p.flowOrder > 0
+          ? p.flowOrder
+          : typeof p.stepOrder === "number" && p.stepOrder > 0
+          ? p.stepOrder
+          : typeof p.ordenFirma === "number" && p.ordenFirma > 0
+          ? p.ordenFirma
+          : index + 1;
+
+      return {
+        role,
+        name: String(p.name || p.nombre || "").trim(),
+        email: String(p.email || "").trim().toLowerCase(),
+        stepOrder:
+          typeof p.stepOrder === "number" && p.stepOrder > 0
+            ? p.stepOrder
+            : index + 1,
+        flowOrder: rawOrder,
+        flowGroup:
+          typeof p.flowGroup === "number" && p.flowGroup > 0
+            ? p.flowGroup
+            : normalizedFlowType === "PARALELO"
+            ? 1
+            : rawOrder,
+      };
+    })
+    .sort((a, b) => {
+      if (a.flowOrder !== b.flowOrder) return a.flowOrder - b.flowOrder;
+      if (a.stepOrder !== b.stepOrder) return a.stepOrder - b.stepOrder;
+      return a.email.localeCompare(b.email);
+    });
+
+  return sorted.map((p, index) => ({
+    ...p,
+    stepOrder:
+      normalizedFlowType === "PARALELO"
+        ? index + 1
+        : typeof p.stepOrder === "number" && p.stepOrder > 0
+        ? p.stepOrder
+        : index + 1,
+    flowOrder:
+      typeof p.flowOrder === "number" && p.flowOrder > 0
+        ? p.flowOrder
+        : index + 1,
+    flowGroup:
+      typeof p.flowGroup === "number" && p.flowGroup > 0
+        ? p.flowGroup
+        : normalizedFlowType === "PARALELO"
+        ? 1
+        : index + 1,
+  }));
+}
+
 /**
- * Sincroniza document_participants a partir de la configuración
- * de firmantes/visadores del flujo legacy.
+ * Sincroniza document_participants preservando el orden real del flujo.
  *
- * Reglas actuales:
- * - Se borran todos los participants previos del documento.
- * - Cada visador entra primero en el flujo (flow_order 1..N, flow_group = 1).
- * - Cada firmante entra después de los visadores:
- *   - flow_order continúa (offset + 1..M),
- *   - flow_group = 2 si hay visadores, si no, 1.
- * - step_order y flow_order arrancan en 1 y siguen correlativamente.
+ * Reglas:
+ * - Se borran participants previos del documento dentro de la misma transacción.
+ * - El orden lo define `participants`, no una separación artificial visadores/firma.
+ * - Soporta SECUENCIAL y PARALELO mediante `flowGroup`.
+ * - step_order y flow_order quedan persistidos de forma explícita.
  */
 async function syncParticipantsFromFlow(
   client,
-  { documentId, signers = [], visadores = [] }
+  { documentId, participants = [], flowType = "SECUENCIAL" }
 ) {
   if (!documentId) {
     console.warn(
@@ -32,17 +105,14 @@ async function syncParticipantsFromFlow(
     return;
   }
 
-  // Borrado completo para dejar el mirror limpio
   await client.query(
     `DELETE FROM document_participants WHERE document_id = $1`,
     [documentId]
   );
 
-  const hasVisadores = Array.isArray(visadores) && visadores.length > 0;
-  const hasSigners = Array.isArray(signers) && signers.length > 0;
+  const normalizedParticipants = normalizeParticipants(participants, flowType);
 
-  if (!hasVisadores && !hasSigners) {
-    // No hay participantes configurados. No insertamos filas nuevas.
+  if (!normalizedParticipants.length) {
     return;
   }
 
@@ -50,58 +120,36 @@ async function syncParticipantsFromFlow(
   const valueTuples = [];
   let idx = 1;
 
-  const now = "NOW()"; // más legible en el SQL que repetir en JS
+  normalizedParticipants.forEach((participant) => {
+    valueTuples.push(
+      `(
+        $${idx++},
+        $${idx++},
+        '${LEGACY_SIGNER_STATES.PENDING}',
+        NULL,
+        NULL,
+        NOW(),
+        NOW(),
+        $${idx++},
+        $${idx++},
+        $${idx++},
+        $${idx++},
+        $${idx++},
+        $${idx++}
+      )`
+    );
 
-  // Primero, visadores
-  if (hasVisadores) {
-    visadores.forEach((v, i) => {
-      const stepOrder = i + 1;
-      const flowOrder = i + 1;
-      const flowGroup = 1; // grupo de visación
-
-      valueTuples.push(
-        `($${idx++}, $${idx++}, '${LEGACY_SIGNER_STATES.PENDING}', NULL, NULL, ${now}, ${now}, $${idx++}, $${idx++}, $${idx++}, $${idx++}, $${idx++})`
-      );
-
-      values.push(
-        documentId, // document_id
-        PARTICIPANT_ROLES.REVIEWER, // role_in_doc
-        stepOrder,
-        flowOrder,
-        PARTICIPANT_ROLES.REVIEWER, // "role"
-        v.name,
-        v.email,
-        flowGroup
-      );
-    });
-  }
-
-  const visadoresOffset = hasVisadores ? visadores.length : 0;
-
-  // Después, firmantes
-  if (hasSigners) {
-    signers.forEach((s, i) => {
-      const pos = visadoresOffset + i + 1;
-      const stepOrder = pos;
-      const flowOrder = pos;
-      const flowGroup = hasVisadores ? 2 : 1; // grupo de firma posterior al visado
-
-      valueTuples.push(
-        `($${idx++}, $${idx++}, '${LEGACY_SIGNER_STATES.PENDING}', NULL, NULL, ${now}, ${now}, $${idx++}, $${idx++}, $${idx++}, $${idx++}, $${idx++})`
-      );
-
-      values.push(
-        documentId, // document_id
-        PARTICIPANT_ROLES.SIGNER, // role_in_doc
-        stepOrder,
-        flowOrder,
-        PARTICIPANT_ROLES.SIGNER, // "role"
-        s.name,
-        s.email,
-        flowGroup
-      );
-    });
-  }
+    values.push(
+      documentId,
+      participant.role,
+      participant.stepOrder,
+      participant.flowOrder,
+      participant.role,
+      participant.name,
+      participant.email,
+      participant.flowGroup
+    );
+  });
 
   const sql = `
     INSERT INTO document_participants (
@@ -128,12 +176,16 @@ async function syncParticipantsFromFlow(
 /**
  * Actualiza el estado de un participant a FIRMADO.
  *
- * Reglas actuales:
+ * Reglas:
  * - Matchea por document_id + email.
- * - Si se pasa role, también exige role_in_doc = role.
- * - No toca otros estados (no maneja RECHAZADO aún).
+ * - Si se pasa role, exige role_in_doc = role.
+ * - Si se pasa flowOrder, exige flow_order = flowOrder.
+ * - Actualiza una sola fila objetivo.
  */
-const updateParticipantStatus = async (client, { documentId, email, role }) => {
+const updateParticipantStatus = async (
+  client,
+  { documentId, email, role, flowOrder }
+) => {
   if (!documentId || !email) {
     console.warn(
       "[updateParticipantStatus] llamado sin documentId/email. Se omite update."
@@ -141,21 +193,31 @@ const updateParticipantStatus = async (client, { documentId, email, role }) => {
     return;
   }
 
+  const normalizedRole = role ? normalizeParticipantRole(role) : null;
+
   await client.query(
     `
     UPDATE document_participants
     SET status = $3,
         signed_at = NOW(),
         updated_at = NOW()
-    WHERE document_id = $1
-      AND email = $2
-      AND role_in_doc = COALESCE($4, role_in_doc)
+    WHERE id = (
+      SELECT dp.id
+      FROM document_participants dp
+      WHERE dp.document_id = $1
+        AND LOWER(dp.email) = LOWER($2)
+        AND dp.role_in_doc = COALESCE($4, dp.role_in_doc)
+        AND dp.flow_order = COALESCE($5, dp.flow_order)
+      ORDER BY dp.flow_order ASC, dp.step_order ASC, dp.id ASC
+      LIMIT 1
+    )
     `,
     [
       documentId,
       email,
       LEGACY_SIGNER_STATES.SIGNED,
-      role || null,
+      normalizedRole,
+      flowOrder || null,
     ]
   );
 };

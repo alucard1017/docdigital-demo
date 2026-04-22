@@ -1,29 +1,58 @@
 const { isExpired } = require("./documentEventUtils");
 
+function normalizeState(value) {
+  return String(value ?? "")
+    .trim()
+    .toUpperCase();
+}
+
+function buildValidationError(status, message, code = null) {
+  return {
+    status,
+    body: {
+      ...(code ? { code } : {}),
+      message,
+    },
+  };
+}
+
 function validatePublicToken(token) {
-  if (!token || typeof token !== "string") {
-    return { status: 400, body: { message: "Token inválido" } };
+  if (!token || typeof token !== "string" || !token.trim()) {
+    return buildValidationError(400, "Token inválido", "INVALID_TOKEN");
   }
+
   return null;
 }
 
 function validatePublicRejectReason(motivo) {
-  if (!motivo || !motivo.trim()) {
-    return {
-      status: 400,
-      body: { message: "Debes indicar un motivo de rechazo." },
-    };
+  if (!motivo || !String(motivo).trim()) {
+    return buildValidationError(
+      400,
+      "Debes indicar un motivo de rechazo.",
+      "INVALID_REJECT_REASON"
+    );
   }
+
   return null;
 }
 
 function validatePublicAccess(row, expiredMessage) {
-  if (isExpired(row.signature_token_expires_at)) {
-    return {
-      status: 410,
-      body: { message: expiredMessage },
-    };
+  if (!row) {
+    return buildValidationError(
+      404,
+      "Enlace inválido o documento no encontrado",
+      "NOT_FOUND"
+    );
   }
+
+  if (isExpired(row.signature_token_expires_at)) {
+    return buildValidationError(
+      410,
+      expiredMessage,
+      "LINK_EXPIRED"
+    );
+  }
+
   return null;
 }
 
@@ -35,119 +64,187 @@ function isTruthyVisado(value) {
     .trim()
     .toLowerCase();
 
-  return [
-    "true",
-    "t",
-    "1",
-    "yes",
-    "si",
-    "sí",
-  ].includes(normalized);
+  return ["true", "t", "1", "yes", "si", "sí"].includes(normalized);
+}
+
+function getDocumentState(row) {
+  return normalizeState(row?.status ?? row?.estado);
+}
+
+function getReviewState(row) {
+  return normalizeState(
+    row?.review_status ??
+      row?.reviewStatus ??
+      row?.estado_revision ??
+      row?.review_state
+  );
+}
+
+function getSignerState(row) {
+  return normalizeState(
+    row?.signer_status ??
+      row?.participant_status ??
+      row?.estado_firmante
+  );
+}
+
+function isDocumentRejected(row) {
+  return getDocumentState(row) === "RECHAZADO";
+}
+
+function isDocumentSigned(row) {
+  return getDocumentState(row) === "FIRMADO";
+}
+
+function isSignerSigned(row) {
+  return getSignerState(row) === "FIRMADO";
+}
+
+function isSignerRejected(row) {
+  return getSignerState(row) === "RECHAZADO";
 }
 
 function validatePublicSign(row) {
-  const expired = validatePublicAccess(
+  const accessError = validatePublicAccess(
     row,
-    "El enlace de firma ha expirado"
+    "El enlace de firma ha expirado."
   );
-  if (expired) return expired;
+  if (accessError) return accessError;
 
-  if (row.status === "RECHAZADO") {
-    return {
-      status: 400,
-      body: { message: "Documento rechazado, no se puede firmar" },
-    };
+  const documentState = getDocumentState(row);
+
+  if (isDocumentRejected(row)) {
+    return buildValidationError(
+      400,
+      "Documento rechazado, no se puede firmar.",
+      "DOCUMENT_REJECTED"
+    );
+  }
+
+  if (isDocumentSigned(row)) {
+    return buildValidationError(
+      400,
+      "Documento ya firmado, no se puede volver a firmar.",
+      "DOCUMENT_ALREADY_SIGNED"
+    );
   }
 
   if (
     isTruthyVisado(row.requires_visado) &&
-    row.status === "PENDIENTE_VISADO"
+    documentState === "PENDIENTE_VISADO"
   ) {
-    return {
-      status: 400,
-      body: { message: "Este documento requiere visación antes de firmar" },
-    };
+    return buildValidationError(
+      400,
+      "Este documento requiere visación antes de firmar.",
+      "VISADO_REQUIRED"
+    );
   }
 
-  if (row.signer_status === "FIRMADO") {
-    return {
-      status: 400,
-      body: { message: "Este firmante ya firmó el documento" },
-    };
+  if (isSignerSigned(row)) {
+    return buildValidationError(
+      400,
+      "Este firmante ya firmó el documento.",
+      "SIGNER_ALREADY_SIGNED"
+    );
+  }
+
+  if (isSignerRejected(row)) {
+    return buildValidationError(
+      400,
+      "Este firmante ya rechazó el documento.",
+      "SIGNER_ALREADY_REJECTED"
+    );
   }
 
   return null;
 }
 
 function validatePublicReject(row) {
-  const expired = validatePublicAccess(
+  const accessError = validatePublicAccess(
     row,
-    "El enlace de firma ha expirado"
+    "El enlace de firma ha expirado."
   );
-  if (expired) return expired;
+  if (accessError) return accessError;
 
-  if (row.status === "FIRMADO") {
-    return {
-      status: 400,
-      body: { message: "Documento ya firmado, no se puede rechazar" },
-    };
+  if (isDocumentSigned(row)) {
+    return buildValidationError(
+      400,
+      "Documento ya firmado, no se puede rechazar.",
+      "DOCUMENT_ALREADY_SIGNED"
+    );
   }
 
-  if (row.status === "RECHAZADO") {
-    return {
-      status: 400,
-      body: { message: "Documento ya fue rechazado anteriormente" },
-    };
+  if (isDocumentRejected(row)) {
+    return buildValidationError(
+      400,
+      "Documento ya fue rechazado anteriormente.",
+      "DOCUMENT_ALREADY_REJECTED"
+    );
   }
 
-  if (row.signer_status === "FIRMADO") {
-    return {
-      status: 400,
-      body: {
-        message:
-          "Este firmante ya firmó el documento, no puede rechazarlo ahora",
-      },
-    };
+  if (isSignerSigned(row)) {
+    return buildValidationError(
+      400,
+      "Este firmante ya firmó el documento, no puede rechazarlo ahora.",
+      "SIGNER_ALREADY_SIGNED"
+    );
   }
 
-  if (row.signer_status === "RECHAZADO") {
-    return {
-      status: 400,
-      body: { message: "Este firmante ya rechazó el documento" },
-    };
+  if (isSignerRejected(row)) {
+    return buildValidationError(
+      400,
+      "Este firmante ya rechazó el documento.",
+      "SIGNER_ALREADY_REJECTED"
+    );
   }
 
   return null;
 }
 
-function validatePublicVisar(docActual) {
-  const expired = validatePublicAccess(
-    docActual,
-    "El enlace de visado ha expirado"
+function validatePublicVisar(row) {
+  const accessError = validatePublicAccess(
+    row,
+    "El enlace de visado ha expirado."
   );
-  if (expired) return expired;
+  if (accessError) return accessError;
 
-  if (docActual.status === "RECHAZADO") {
-    return {
-      status: 400,
-      body: { message: "Documento rechazado, no se puede visar" },
-    };
+  const documentState = getDocumentState(row);
+  const reviewState = getReviewState(row);
+
+  if (isDocumentRejected(row)) {
+    return buildValidationError(
+      400,
+      "Documento rechazado, no se puede visar.",
+      "DOCUMENT_REJECTED"
+    );
   }
 
-  if (!isTruthyVisado(docActual.requires_visado)) {
-    return {
-      status: 400,
-      body: { message: "Este documento no requiere visación" },
-    };
+  if (isDocumentSigned(row)) {
+    return buildValidationError(
+      400,
+      "Documento ya firmado, no requiere visado.",
+      "DOCUMENT_ALREADY_SIGNED"
+    );
   }
 
-  if (docActual.status !== "PENDIENTE_VISADO") {
-    return {
-      status: 400,
-      body: {
-        message: "Solo se pueden visar documentos en estado PENDIENTE_VISADO",
-      },
-    };
+  if (!isTruthyVisado(row.requires_visado)) {
+    return buildValidationError(
+      400,
+      "Este documento no requiere visación.",
+      "VISADO_NOT_REQUIRED"
+    );
+  }
+
+  const isPendingVisado =
+    reviewState === "PENDIENTE_VISADO" ||
+    documentState === "PENDIENTE_VISADO";
+
+  if (!isPendingVisado) {
+    return buildValidationError(
+      400,
+      "Solo se pueden visar documentos en estado PENDIENTE_VISADO.",
+      "INVALID_VISADO_STATE"
+    );
   }
 
   return null;

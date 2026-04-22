@@ -24,12 +24,15 @@ async function resolveParticipantIdForPublicEvent({
 
     return res.rows[0]?.id || null;
   } catch (err) {
-    console.error("⚠️ Error resolviendo participant_id para evento público:", {
-      documentId,
-      email,
-      roleInDoc,
-      error: err,
-    });
+    console.error(
+      "⚠️ Error resolviendo participant_id para evento público:",
+      {
+        documentId,
+        email,
+        roleInDoc,
+        error: err,
+      }
+    );
     return null;
   }
 }
@@ -183,16 +186,17 @@ async function getPublicRejectContextByToken(token) {
 async function getPublicVisadoContextByToken(token) {
   const { rows } = await db.query(
     `
-    SELECT *,
-    COALESCE(
-      numero_contrato_interno,
-      metadata->>'numero_contrato',
-      metadata->>'numero_interno',
-      metadata->>'contract_number',
-      metadata->>'codigo_contrato'
-    ) AS numero_contrato
-    FROM documents
-    WHERE signature_token = $1
+    SELECT 
+      d.*,
+      COALESCE(
+        d.numero_contrato_interno,
+        d.metadata->>'numero_contrato',
+        d.metadata->>'numero_interno',
+        d.metadata->>'contract_number',
+        d.metadata->>'codigo_contrato'
+      ) AS numero_contrato
+    FROM documents d
+    WHERE d.signature_token = $1
     `,
     [token]
   );
@@ -256,8 +260,13 @@ async function countSigningProgress(documentId) {
   const { rows } = await db.query(
     `
     SELECT 
-      COUNT(*) FILTER (WHERE status = 'FIRMADO' AND (must_sign = TRUE OR role != 'VISADOR')) AS signed_count,
-      COUNT(*) FILTER (WHERE (must_sign = TRUE OR role != 'VISADOR')) AS total_signers
+      COUNT(*) FILTER (
+        WHERE status = 'FIRMADO'
+          AND (must_sign = TRUE OR role != 'VISADOR')
+      ) AS signed_count,
+      COUNT(*) FILTER (
+        WHERE (must_sign = TRUE OR role != 'VISADOR')
+      ) AS total_signers
     FROM document_signers
     WHERE document_id = $1
     `,
@@ -276,13 +285,13 @@ async function updateDocumentStatuses(documentId, status, signatureStatus) {
         updated_at = NOW()
     WHERE id = $3
     RETURNING *,
-    COALESCE(
-      numero_contrato_interno,
-      metadata->>'numero_contrato',
-      metadata->>'numero_interno',
-      metadata->>'contract_number',
-      metadata->>'codigo_contrato'
-    ) AS numero_contrato
+      COALESCE(
+        numero_contrato_interno,
+        metadata->>'numero_contrato',
+        metadata->>'numero_interno',
+        metadata->>'contract_number',
+        metadata->>'codigo_contrato'
+      ) AS numero_contrato
     `,
     [status, signatureStatus, documentId]
   );
@@ -300,13 +309,13 @@ async function rejectDocument(documentId, motivo) {
         updated_at = NOW()
     WHERE id = $1
     RETURNING *,
-    COALESCE(
-      numero_contrato_interno,
-      metadata->>'numero_contrato',
-      metadata->>'numero_interno',
-      metadata->>'contract_number',
-      metadata->>'codigo_contrato'
-    ) AS numero_contrato
+      COALESCE(
+        numero_contrato_interno,
+        metadata->>'numero_contrato',
+        metadata->>'numero_interno',
+        metadata->>'contract_number',
+        metadata->>'codigo_contrato'
+      ) AS numero_contrato
     `,
     [documentId, motivo]
   );
@@ -323,13 +332,13 @@ async function updateDocumentToPendingFirma(documentId) {
         updated_at = NOW()
     WHERE id = $2
     RETURNING *,
-    COALESCE(
-      numero_contrato_interno,
-      metadata->>'numero_contrato',
-      metadata->>'numero_interno',
-      metadata->>'contract_number',
-      metadata->>'codigo_contrato'
-    ) AS numero_contrato
+      COALESCE(
+        numero_contrato_interno,
+        metadata->>'numero_contrato',
+        metadata->>'numero_interno',
+        metadata->>'contract_number',
+        metadata->>'codigo_contrato'
+      ) AS numero_contrato
     `,
     ["PENDIENTE_FIRMA", documentId]
   );
