@@ -1,3 +1,4 @@
+// src/views/PublicSignView.jsx
 import React, { useMemo } from "react";
 import "./PublicSignView.css";
 import { PublicHeader } from "../components/PublicHeader";
@@ -56,7 +57,9 @@ function PublicStatusMessageCard({
       {showSpinner ? <div className="spinner public-sign-spinner" /> : null}
 
       {viewState?.title ? (
-        <div className="public-sign-message-card__title">{viewState.title}</div>
+        <div className="public-sign-message-card__title">
+          {viewState.title}
+        </div>
       ) : null}
 
       {viewState?.message ? (
@@ -126,7 +129,9 @@ function PublicDocumentSummary({
         </div>
 
         <div className="public-sign-meta-card">
-          <div className="public-sign-meta-card__label">Número de contrato</div>
+          <div className="public-sign-meta-card__label">
+            Número de contrato
+          </div>
           <div
             className="public-sign-meta-card__value public-sign-meta-card__value--contract"
             title={contractNumber}
@@ -374,7 +379,9 @@ export function PublicSignView(props) {
 
         <header className="public-sign-heading">
           <div>
-            <div className="public-sign-eyebrow">VeriFirma · Portal público</div>
+            <div className="public-sign-eyebrow">
+              VeriFirma · Portal público
+            </div>
             <h1 className="public-sign-title">
               {isVisado ? "Visado de documento" : "Firma electrónica"}
             </h1>

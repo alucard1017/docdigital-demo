@@ -73,7 +73,7 @@ export function safeJsonPreview(value, maxLength = 180) {
   try {
     const text = JSON.stringify(value);
     if (!text) return "";
-  return text.length > maxLength ? `${text.slice(0, maxLength)}…` : text;
+    return text.length > maxLength ? `${text.slice(0, maxLength)}…` : text;
   } catch {
     return "";
   }
@@ -87,8 +87,15 @@ export function normalizeStatus(value) {
   const text = normalizeUpper(value);
 
   if (text === "BORRADOR" || text === "DRAFT") return "DRAFT";
-  if (text === "PENDIENTE_FIRMA" || text === "PENDING_SIGNATURE") {
+  if (
+    text === "PENDIENTE_FIRMA" ||
+    text === "PENDING_SIGNATURE" ||
+    text === "EN_FIRMA"
+  ) {
     return "PENDING_SIGNATURE";
+  }
+  if (text === "PENDIENTE_VISADO" || text === "PENDING_REVIEW") {
+    return "PENDING_REVIEW";
   }
   if (text === "FIRMADO" || text === "SIGNED") return "SIGNED";
   if (text === "RECHAZADO" || text === "REJECTED") return "REJECTED";

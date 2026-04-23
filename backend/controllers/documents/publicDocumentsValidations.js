@@ -1,9 +1,8 @@
+// backend/controllers/documents/publicDocumentsValidations.js
 const { isExpired } = require("./documentEventUtils");
 
 function normalizeState(value) {
-  return String(value ?? "")
-    .trim()
-    .toUpperCase();
+  return String(value ?? "").trim().toUpperCase();
 }
 
 function buildValidationError(status, message, code = null) {
@@ -46,11 +45,7 @@ function validatePublicAccess(row, expiredMessage) {
   }
 
   if (isExpired(row.signature_token_expires_at)) {
-    return buildValidationError(
-      410,
-      expiredMessage,
-      "LINK_EXPIRED"
-    );
+    return buildValidationError(410, expiredMessage, "LINK_EXPIRED");
   }
 
   return null;
@@ -60,9 +55,7 @@ function isTruthyVisado(value) {
   if (value === true || value === 1) return true;
   if (value === false || value === 0) return false;
 
-  const normalized = String(value ?? "")
-    .trim()
-    .toLowerCase();
+  const normalized = String(value ?? "").trim().toLowerCase();
 
   return ["true", "t", "1", "yes", "si", "sí"].includes(normalized);
 }

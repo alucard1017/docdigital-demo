@@ -314,6 +314,7 @@ async function getDocumentPdf(req, res) {
       });
     }
 
+    // Si es PDF final y tenemos hash, hacemos verificación de integridad
     if (isFinalPdf && pdf_hash_final) {
       try {
         const signedUrl = await getSignedUrl(storageKey, 600);

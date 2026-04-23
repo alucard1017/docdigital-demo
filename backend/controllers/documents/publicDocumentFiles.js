@@ -56,10 +56,6 @@ function buildPreviewDocumentFilePath(row) {
 /**
  * Para verificación/descarga final.
  * Debe priorizar SIEMPRE la versión final sellada.
- *
- * Regla:
- * - Primero final (storage_key/url)
- * - Si no hay final (caso legacy), puede caer a preview/original
  */
 function buildFinalDocumentFilePath(row) {
   if (!row) return null;
@@ -92,8 +88,7 @@ function buildFinalDocumentFilePath(row) {
 
 /**
  * Fuente para sellado del PDF final.
- * Debe salir SIEMPRE del original limpio,
- * nunca del preview ni del final.
+ * Siempre original limpio, nunca preview ni final.
  */
 function buildSealSourceKey(row) {
   if (!row) return null;
@@ -108,8 +103,7 @@ function buildSealSourceKey(row) {
 }
 
 /**
- * Decide automáticamente qué modo usar según estado.
- *
+ * Decide automáticamente qué modo usar según estado:
  * - FIRMADO/SIGNED/FINALIZADO/COMPLETED → "final"
  * - Resto → "preview"
  */
@@ -133,9 +127,8 @@ function resolveDocumentFilePath(row, mode = "preview") {
 
 /**
  * Construye una signed URL para el PDF público.
- *
  * options:
- * - mode: "preview" | "final" (default "preview")
+ * - mode: "preview" | "final"
  * - autoDetectByStatus: si true, ignora mode y decide según estado
  */
 async function buildSignedPdfUrlOrFail(row, res, options = {}) {

@@ -1,3 +1,4 @@
+// src/components/DetailView.jsx
 import React, {
   useCallback,
   useEffect,

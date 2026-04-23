@@ -71,7 +71,6 @@ async function ensurePreviewForModernDocument(client, newDocumentId) {
 
   const modernDoc = modernDocRes.rows[0];
 
-  // Si ya hay preview, reutilizarlo
   if (modernDoc.preview_storage_key || modernDoc.pdf_preview_url) {
     return {
       previewKey:
@@ -80,7 +79,6 @@ async function ensurePreviewForModernDocument(client, newDocumentId) {
     };
   }
 
-  // Generar preview a partir del documento moderno
   const { previewKey } = await generarPdfPreviewConMarcaDeAgua(modernDoc);
 
   await client.query(
@@ -122,7 +120,7 @@ async function sendFlow(req, res) {
   try {
     await client.query("BEGIN");
 
-    // 1) Cargar documento legacy con path del archivo original
+    // 1) Cargar documento legacy
     const docRes = await client.query(
       `
       SELECT
@@ -175,7 +173,7 @@ async function sendFlow(req, res) {
       });
     }
 
-    // 3) Cargar firmantes
+    // 3) Cargar firmantes legacy
     const firmantesRes = await client.query(
       `
       SELECT id, rol, orden_firma, email, nombre
@@ -218,10 +216,10 @@ async function sendFlow(req, res) {
     const normalizedFlowType =
       rawFlowType === "PARALELO" ? "PARALELO" : "SECUENCIAL";
 
-    // 5) Estados nuevo modelo
+    // 5) Estados nuevo modelo tras envío
     const { legacyStatus, documentsStatus } = mapFlowStateAfterSend();
 
-    // Resolver archivo base del documento legacy
+    // 6) Resolver archivo base (original) del documento legacy
     const sourceFilePath =
       documento.pdf_original_url ||
       documento.storage_key ||
@@ -229,7 +227,7 @@ async function sendFlow(req, res) {
       documento.archivo_url ||
       null;
 
-    // 6) Actualizar documento legacy
+    // 7) Actualizar documento legacy a ENVIADO
     await client.query(
       `
       UPDATE documentos
@@ -241,7 +239,7 @@ async function sendFlow(req, res) {
       [legacyStatus, id]
     );
 
-    // 7) Mirror en tabla moderna "documents"
+    // 8) Mirror en tabla moderna "documents"
     const newDocumentId = await upsertDocumentMirror(client, {
       nuevoDocumentoId: documento.id,
       title: documento.titulo,
@@ -257,13 +255,13 @@ async function sendFlow(req, res) {
       fechaExpiracion: documento.fecha_expiracion || null,
     });
 
-    // 8) Asegurar preview con marca de agua en documents
+    // 9) Asegurar preview con marca de agua en documents
     const previewResult = await ensurePreviewForModernDocument(
       client,
       newDocumentId
     );
 
-    // 9) Registro legado en eventos_firma
+    // 10) Registro legacy en eventos_firma (compat)
     await client.query(
       `
       INSERT INTO eventos_firma (
@@ -289,7 +287,7 @@ async function sendFlow(req, res) {
       ]
     );
 
-    // 10) Recordatorios automáticos
+    // 11) Recordatorios automáticos
     const reminderConfig = await getReminderConfig(
       client,
       documento.company_id
@@ -309,7 +307,7 @@ async function sendFlow(req, res) {
       });
     }
 
-    // 11) Sincronizar a document_participants
+    // 12) Sincronizar participants moderno (separando firmantes/visadores)
     await syncParticipantsFromFlow(client, {
       documentId: newDocumentId,
       signers: firmantes
@@ -320,10 +318,10 @@ async function sendFlow(req, res) {
         .map((f) => ({ id: f.id, name: f.nombre, email: f.email })),
     });
 
+    // 13) Evento moderno para timeline (DOCUMENT_SENT)
     const ipAddress = getClientIp(req);
     const userAgent = getUserAgent(req);
 
-    // 12) Evento moderno para timeline
     await insertDocumentEvent({
       documentId: newDocumentId,
       participantId: null,
@@ -355,7 +353,7 @@ async function sendFlow(req, res) {
 
     await client.query("COMMIT");
 
-    // 13) Webhooks / sockets
+    // 14) Webhooks / sockets
     if (documento.company_id) {
       triggerWebhook(documento.company_id, "document.sent", {
         documentoId: documento.id,
@@ -375,7 +373,7 @@ async function sendFlow(req, res) {
       });
     }
 
-    // 14) Audit log
+    // 15) Audit log
     const metadata = buildDocumentAuditMetadata({
       documentId: documento.id,
       title: documento.titulo,

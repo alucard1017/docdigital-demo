@@ -1,3 +1,4 @@
+// src/components/Timeline.jsx
 import React, { memo, useMemo } from "react";
 import "./Timeline.css";
 import {
@@ -42,7 +43,6 @@ function getTimelineHint(currentStep, nextStep) {
   const normalizedCurrentStep = normalizeStatus(currentStep);
   const flujoFirmado = isSignedStatus(normalizedCurrentStep);
   const flujoRechazado = isRejectedStatus(normalizedCurrentStep);
-  const flujoFinalizado = flujoFirmado || flujoRechazado;
 
   if (flujoFirmado) {
     return {
@@ -226,7 +226,9 @@ function TimelineHeader({ progress, currentStep, nextStep }) {
       </div>
 
       <div className="timeline-current-state-card">
-        <div className="timeline-current-state-card__label">Estado actual</div>
+        <div className="timeline-current-state-card__label">
+          Estado actual
+        </div>
 
         <div
           className="timeline-current-state-card__value"

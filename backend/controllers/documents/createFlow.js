@@ -1,3 +1,5 @@
+// backend/controllers/documents/createFlow.js
+
 const {
   crypto,
   DOCUMENT_STATES,
@@ -8,17 +10,20 @@ const {
 } = require("./flowCommon");
 
 const { syncParticipantsFromFlow } = require("./flowParticipantsSync");
-
 const {
   logAudit,
   buildDocumentAuditMetadata,
 } = require("../../utils/auditLog");
-
 const { validateCreateFlowBody } = require("./flowValidation");
-
 const { getClientIp, getUserAgent } = require("./documentEventUtils");
 const { insertDocumentEvent } = require("./documentEventInserts");
 
+/**
+ * Normaliza el rol en el dominio del flujo.
+ * VIS*, REV* -> VISADOR
+ * FINAL*     -> FIRMANTE_FINAL
+ * FIRM*      -> FIRMANTE
+ */
 function normalizeRole(rawRole) {
   const role = String(rawRole || "").trim().toUpperCase();
   if (!role) return null;
@@ -31,12 +36,22 @@ function normalizeRole(rawRole) {
   return role;
 }
 
+/**
+ * Normaliza el tipo de flujo.
+ * Cualquier valor distinto de PARALELO se trata como SECUENCIAL.
+ */
 function normalizeFlowType(rawFlowType) {
   return String(rawFlowType || "SECUENCIAL").trim().toUpperCase() === "PARALELO"
     ? "PARALELO"
     : "SECUENCIAL";
 }
 
+/**
+ * Convierte los firmantes de la request en una lista de participantes
+ * normalizados con información suficiente para:
+ * - tabla legacy "firmantes"
+ * - tabla moderna "document_participants"
+ */
 function buildNormalizedParticipants(firmantes = [], tipoFlujo = "SECUENCIAL") {
   const normalizedFlowType = normalizeFlowType(tipoFlujo);
 
@@ -57,6 +72,7 @@ function buildNormalizedParticipants(firmantes = [], tipoFlujo = "SECUENCIAL") {
     })
     .sort((a, b) => a.ordenFirma - b.ordenFirma);
 
+  // En paralelo usamos orden de firma original y agrupamos en un solo grupo
   if (normalizedFlowType === "PARALELO") {
     return baseParticipants.map((p, index) => ({
       ...p,
@@ -68,6 +84,7 @@ function buildNormalizedParticipants(firmantes = [], tipoFlujo = "SECUENCIAL") {
     }));
   }
 
+  // En secuencial cada participante es su propio step/flowGroup
   return baseParticipants.map((p, index) => ({
     ...p,
     stepOrder: index + 1,
@@ -81,6 +98,7 @@ function buildNormalizedParticipants(firmantes = [], tipoFlujo = "SECUENCIAL") {
 async function createFlow(req, res) {
   console.log("DEBUG crear-flujo body >>>", req.body);
 
+  // Guard 401 consistente
   if (!req.user) {
     return res.status(401).json({
       code: "UNAUTHORIZED",
@@ -112,9 +130,7 @@ async function createFlow(req, res) {
     normalizedFlowType
   );
 
-  const hasAtLeastOneSigner = normalizedParticipants.some(
-    (p) => p.isSigner
-  );
+  const hasAtLeastOneSigner = normalizedParticipants.some((p) => p.isSigner);
 
   if (!hasAtLeastOneSigner) {
     return res.status(400).json({
@@ -131,6 +147,7 @@ async function createFlow(req, res) {
 
     const codigoVerificacion = crypto.randomUUID().slice(0, 8);
 
+    // 1) Documento legacy base (BORRADOR)
     const docResult = await client.query(
       `
       INSERT INTO documentos (
@@ -166,6 +183,7 @@ async function createFlow(req, res) {
     const documento = docResult.rows[0];
     const documentsStatus = mapLegacyStatusToDocumentsStatus(documento.estado);
 
+    // 2) Tabla legacy firmantes
     for (const participant of normalizedParticipants) {
       await client.query(
         `
@@ -193,6 +211,7 @@ async function createFlow(req, res) {
       );
     }
 
+    // 3) Evento legacy de creación (compat legacy)
     await client.query(
       `
       INSERT INTO eventos_firma (
@@ -223,6 +242,7 @@ async function createFlow(req, res) {
       ]
     );
 
+    // 4) Espejo moderno en documents
     const newDocumentId = await upsertDocumentMirror(client, {
       nuevoDocumentoId: documento.id,
       title: documento.titulo,
@@ -238,6 +258,7 @@ async function createFlow(req, res) {
       fechaExpiracion: documento.fecha_expiracion || null,
     });
 
+    // 5) document_participants alineado al flujo normalizado
     await syncParticipantsFromFlow(client, {
       documentId: newDocumentId,
       participants: normalizedParticipants.map((p) => ({
@@ -252,6 +273,7 @@ async function createFlow(req, res) {
       flowType: normalizedFlowType,
     });
 
+    // 6) Evento moderno para timeline (contrato unificado)
     const ipAddress = getClientIp(req);
     const userAgent = getUserAgent(req);
 
@@ -289,6 +311,7 @@ async function createFlow(req, res) {
 
     await client.query("COMMIT");
 
+    // 7) Audit log
     const metadata = buildDocumentAuditMetadata({
       documentId: documento.id,
       title: documento.titulo,

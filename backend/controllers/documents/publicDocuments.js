@@ -127,13 +127,14 @@ async function getPublicDocBySignerToken(req, res) {
       return res.status(accessError.status).json(accessError.body);
     }
 
-    // Mientras no esté firmado, entrega preview; cuando pase a FIRMADO, entregará final
+    // Mientras no esté firmado, entrega preview; cuando esté firmado, final
     const pdfUrl = await buildSignedPdfUrlOrFail(row, res, {
       mode: "preview",
       autoDetectByStatus: true,
     });
     if (!pdfUrl) return;
 
+    // Timeline de apertura de enlace de firmante
     try {
       const participantId =
         (await resolveParticipantIdForPublicEvent({
@@ -158,7 +159,7 @@ async function getPublicDocBySignerToken(req, res) {
           signer_email: row.signer_email,
           signer_name: row.signer_name,
           opened_at: formatDateSafe(new Date()),
-          link_type: "signer_token",
+          link_type: "sign_token",
         },
       });
     } catch (eventErr) {
@@ -169,7 +170,7 @@ async function getPublicDocBySignerToken(req, res) {
     }
 
     return res.json({
-      document: buildPublicDocumentPayload(row),
+      document: buildPublicDocumentPayload(row, { pdfUrl }),
       currentSigner: buildCurrentSignerPayload(row),
       pdfUrl,
       file_url: pdfUrl,
@@ -222,6 +223,7 @@ async function getPublicDocByDocumentToken(req, res) {
     });
     if (!pdfUrl) return;
 
+    // Timeline de apertura de invitación pública
     try {
       await insertPublicEvent({
         req,
@@ -296,6 +298,7 @@ async function publicSignDocument(req, res) {
       });
     }
 
+    // Marcar firmante y participante como firmados
     await markSignerAsSigned(row.signer_id);
 
     try {
@@ -318,6 +321,7 @@ async function publicSignDocument(req, res) {
       newSignatureStatus
     );
 
+    // Sincronización con modelo legacy
     if (doc?.nuevo_documento_id) {
       try {
         await syncLegacySigned(
@@ -340,6 +344,7 @@ async function publicSignDocument(req, res) {
         roleInDoc: row.signer_role,
       })) || null;
 
+    // Evento público de firma
     await insertPublicEvent({
       req,
       doc,
@@ -397,6 +402,7 @@ async function publicSignDocument(req, res) {
       req,
     });
 
+    // Si está todo firmado, intentamos sello y actualizar PDF final
     if (allSigned) {
       try {
         const { codigoVerificacion, categoriaFirma } =
@@ -424,8 +430,7 @@ async function publicSignDocument(req, res) {
       }
     }
 
-    // Importante: aunque allSigned sea true, usamos autoDetectByStatus
-    // para que la lógica central decida final vs preview según estado.
+    // Preview durante el flujo, final cuando está firmado (autoDetectByStatus)
     const fileUrl = await buildSignedPdfUrlOrFail(doc, res, {
       mode: allSigned ? "final" : "preview",
       autoDetectByStatus: true,
@@ -571,7 +576,7 @@ async function publicRejectDocument(req, res) {
       req,
     });
 
-    // RECHAZADO → queremos seguir mostrando preview (o original) nunca final
+    // RECHAZADO: siempre preview (nunca final)
     const fileUrl = await buildSignedPdfUrlOrFail(doc, res, {
       mode: "preview",
       autoDetectByStatus: true,
@@ -633,6 +638,7 @@ async function publicVisarDocument(req, res) {
       return res.status(validationError.status).json(validationError.body);
     }
 
+    // Tras visado pasa a PENDIENTE_FIRMA
     const doc = await updateDocumentToPendingFirma(docActual.id);
 
     const fromStatus = docActual.status;
@@ -689,7 +695,7 @@ async function publicVisarDocument(req, res) {
       req,
     });
 
-    // Tras visado pasa a PENDIENTE_FIRMA → queremos preview con watermark
+    // PENDIENTE_FIRMA → preview con watermark
     const fileUrl = await buildSignedPdfUrlOrFail(doc, res, {
       mode: "preview",
       autoDetectByStatus: true,
@@ -764,7 +770,10 @@ async function verifyByCode(req, res) {
       try {
         pdfUrl = await getSignedUrl(basePath, 3600);
       } catch (urlErr) {
-        console.error("⚠️ Error generando signed URL en verifyByCode:", urlErr);
+        console.error(
+          "⚠️ Error generando signed URL en verifyByCode:",
+          urlErr
+        );
       }
     }
 

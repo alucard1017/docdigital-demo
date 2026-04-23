@@ -47,6 +47,7 @@ export function sanitizePublicMessage(message, fallback) {
     lowered.includes("sequelize") ||
     lowered.includes("postgres") ||
     lowered.includes("token malformed") ||
+    lowered.includes("invalid signature") ||
     lowered.includes("internal server error")
   ) {
     return fallback;
@@ -93,7 +94,12 @@ export function classifyPublicError(error) {
     };
   }
 
-  if (text.includes("expir") || text.includes("expired")) {
+  if (
+    text.includes("expir") ||
+    text.includes("expired") ||
+    text.includes("token_expired") ||
+    text.includes("token expired")
+  ) {
     return {
       kind: "expired",
       title: "Este enlace venció",

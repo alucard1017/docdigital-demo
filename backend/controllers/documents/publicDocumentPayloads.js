@@ -1,7 +1,5 @@
 // backend/controllers/documents/publicDocumentPayloads.js
-const {
-  isTruthyVisado,
-} = require("./publicDocumentsValidations");
+const { isTruthyVisado } = require("./publicDocumentsValidations");
 
 function buildPublicDocumentPayload(row, extra = {}) {
   return {
@@ -15,13 +13,14 @@ function buildPublicDocumentPayload(row, extra = {}) {
     firmante_nombre: row.firmante_nombre,
     firmante_run: row.firmante_run,
     numero_contrato_interno: row.numero_contrato_interno,
-    numero_contrato:
-      row.numero_contrato || row.numero_contrato_interno || "",
+    numero_contrato: row.numero_contrato || row.numero_contrato_interno || "",
     visador_nombre: row.visador_nombre || null,
     pdf_final_url: row.pdf_final_url || null,
     pdf_original_url: row.pdf_original_url || null,
+    // Para público, pdf_preview_url apunta a lo que se verá por defecto
     pdf_preview_url:
       row.preview_file_url ||
+      row.pdf_preview_url ||
       row.pdf_original_url ||
       null,
     ...extra,

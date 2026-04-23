@@ -27,6 +27,12 @@ const { getGeoFromIP } = require("../../utils/geoLocation");
 const { getClientIp, getUserAgent } = require("./documentEventUtils");
 const { cancelPendingReminders } = require("./flowHelpers");
 
+/**
+ * Normaliza el rol legacy al dominio de PARTICIPANT_ROLES.
+ * VIS*, REV* -> REVIEWER
+ * FINAL* -> FINAL_SIGNER
+ * FIRM* -> SIGNER
+ */
 function normalizeRole(rawRole) {
   const role = String(rawRole || "").trim().toUpperCase();
   if (!role) return null;
@@ -45,6 +51,7 @@ function buildProgressLabel(firmados, total) {
 async function signFlow(req, res) {
   const { firmanteId } = req.params;
 
+  // Guard 401 consistente
   if (!req.user) {
     return res.status(401).json({
       code: "UNAUTHORIZED",
@@ -93,7 +100,7 @@ async function signFlow(req, res) {
 
     const actorIsReviewer = firmante.rol === PARTICIPANT_ROLES.REVIEWER;
 
-    // 2) Validar estado actual del firmante
+    // 2) Validar estado actual del firmante (no repetir ni sobreescribir rechazo)
     if (firmante.estado === "FIRMADO") {
       await rollbackSafely(client);
       return res.status(400).json({
@@ -114,7 +121,7 @@ async function signFlow(req, res) {
       });
     }
 
-    // 3) Evitar doble visado por email
+    // 3) Evitar doble visado por email en el mismo documento
     if (actorIsReviewer) {
       const dupVisadorRes = await client.query(
         `
@@ -134,12 +141,13 @@ async function signFlow(req, res) {
         await rollbackSafely(client);
         return res.status(400).json({
           code: "REVIEWER_ALREADY_SIGNED",
-          message: "Este visador ya registró su visado para este documento",
+          message:
+            "Este visador ya registró su visado para este documento",
         });
       }
     }
 
-    // 4) Validar orden de firma en flujo secuencial
+    // 4) Validar orden de firma en flujo secuencial (no saltar pasos)
     const tipoFlujo = await getDocumentFlowType(client, firmante.documento_id);
 
     if (tipoFlujo === "SECUENCIAL") {
@@ -159,10 +167,11 @@ async function signFlow(req, res) {
       }
     }
 
-    // 5) IP/UA + geolocalización
+    // 5) IP/UA + geolocalización para audit trail
     const ipAddress = getClientIp(req);
     const userAgent = getUserAgent(req);
     const geoData = await getGeoFromIP(ipAddress);
+    // IP + UA + geoloc en el log de firmas es estándar en plataformas e‑signature.[web:36][web:41][web:44]
 
     // 6) Actualizar firmante legacy
     await client.query(
@@ -188,7 +197,7 @@ async function signFlow(req, res) {
       ]
     );
 
-    // 7) Documento nuevo (documents) + participant
+    // 7) Documento moderno (documents) + participant
     const newDocRes = await client.query(
       `
       SELECT id, company_id, status, hash_sha256, hash_documento
@@ -211,7 +220,7 @@ async function signFlow(req, res) {
       });
     }
 
-    // 8) Evento legacy en eventos_firma
+    // 8) Evento legacy en eventos_firma (compat)
     await client.query(
       `
       INSERT INTO eventos_firma (
@@ -242,7 +251,7 @@ async function signFlow(req, res) {
       ]
     );
 
-    // 9) Conteos de firmas
+    // 9) Conteos de firmas (legacy y moderno) para progreso y estados
     const { firmadosNum, totalNum } = await countLegacySignatures(
       client,
       firmante.documento_id
@@ -315,9 +324,7 @@ async function signFlow(req, res) {
         ]
       );
 
-      // TODO (watermark):
-      // - Aquí es el lugar ideal para generar el PDF final limpio (sin watermark),
-      //   subirlo a S3 y actualizar pdf_final_url / pdf_hash_final en "documents"
+      // Aquí se engancha el sellado/QR y el PDF final limpio en tabla documents.[web:37][web:38][web:39]
     } else {
       const { legacyStatus, documentsStatus } = mapFlowStateWhileSigning();
 
@@ -346,12 +353,13 @@ async function signFlow(req, res) {
         );
       }
 
+      // Si actúa un visador, opcionalmente cancelas recordatorios (ya lo haces)
       if (actorIsReviewer) {
         await cancelPendingReminders(client, firmante.documento_id);
       }
     }
 
-    // 11) Eventos en document_events (flow actor + cambio de estado)
+    // 11) Eventos modernos en document_events (actor + cambio de estado)
     if (newDocumentId) {
       const flowDoc = {
         id: newDocumentId,
@@ -364,6 +372,7 @@ async function signFlow(req, res) {
         firmante.documento_estado
       );
 
+      // Evento de acción del actor (firma/visado)
       await insertFlowActorEvent({
         req,
         doc: flowDoc,
@@ -396,6 +405,7 @@ async function signFlow(req, res) {
         },
       });
 
+      // Evento de cambio de estado del flujo
       await insertFlowStatusChangedEvent({
         req,
         doc: flowDoc,
@@ -415,6 +425,7 @@ async function signFlow(req, res) {
         },
       });
 
+      // Evento explícito de documento completado
       if (allSigned) {
         await insertFlowActorEvent({
           req,
@@ -438,7 +449,7 @@ async function signFlow(req, res) {
 
     await client.query("COMMIT");
 
-    // 12) Webhooks / sockets
+    // 12) Webhooks / sockets cuando el documento queda completamente firmado
     if (allSigned && firmante.company_id) {
       triggerWebhook(firmante.company_id, "document.signed", {
         documentoId: firmante.documento_id,
@@ -454,7 +465,7 @@ async function signFlow(req, res) {
       });
     }
 
-    // 13) Audit log
+    // 13) Audit log estructurado
     const metadata = buildDocumentAuditMetadata({
       documentId: firmante.documento_id,
       title: firmante.titulo,
@@ -479,6 +490,9 @@ async function signFlow(req, res) {
         total_dp: totalDpNum,
         actor_user_id: req.user.id || null,
         actor_name: req.user.name || null,
+        ip: ipAddress || null,
+        user_agent: userAgent || null,
+        geo_location: geoData || null,
       },
     });
 

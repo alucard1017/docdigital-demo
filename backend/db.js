@@ -67,7 +67,11 @@ const poolConfig = {
   max: toNumber(process.env.DB_POOL_MAX, 10),
   min: toNumber(process.env.DB_POOL_MIN, 0),
   idleTimeoutMillis: toNumber(process.env.DB_IDLE_TIMEOUT, 30000),
-  connectionTimeoutMillis: toNumber(process.env.DB_CONNECT_TIMEOUT, 5000),
+  // subimos bastante el timeout por conexión para dev
+  connectionTimeoutMillis: toNumber(
+    process.env.DB_CONNECT_TIMEOUT,
+    isProd ? 10000 : 30000
+  ),
   keepAlive: true,
   keepAliveInitialDelayMillis: toNumber(
     process.env.DB_KEEPALIVE_INITIAL_DELAY,
@@ -170,10 +174,15 @@ async function testConnection() {
       console.error(
         "🧭 Diagnóstico rápido: verifica que PostgreSQL esté encendido, escuchando en el puerto configurado y que DATABASE_URL tenga usuario/clave/DB correctos."
       );
+      // EN DEV: no tiramos process.exit; dejamos que el pool reintente luego
+    } else {
+      // EN PROD puedes decidir si quieres matar el proceso o no
+      console.error("⛔ En producción, fallo crítico de conexión a DB");
     }
   }
 }
 
+// Lanzamos el test de forma no bloqueante
 void testConnection();
 
 async function query(text, params) {

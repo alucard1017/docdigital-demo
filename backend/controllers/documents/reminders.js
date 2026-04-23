@@ -13,13 +13,13 @@ const SIGNING_PORTAL_URL =
 const REVIEW_PORTAL_URL =
   process.env.REVIEW_PORTAL_URL || "https://firmar.verifirma.cl";
 
-function buildPublicSignUrl(token) {
-  return `${SIGNING_PORTAL_URL}/?token=${encodeURIComponent(token)}`;
+function buildPublicSignUrl(signToken) {
+  return `${SIGNING_PORTAL_URL}/?token=${encodeURIComponent(signToken)}`;
 }
 
-function buildVisadoUrl(token) {
+function buildVisadoUrl(signatureToken) {
   return `${REVIEW_PORTAL_URL}/?token=${encodeURIComponent(
-    token
+    signatureToken
   )}&mode=visado`;
 }
 
@@ -42,9 +42,11 @@ async function resendReminder(req, res) {
     }
 
     const docRes = await db.query(
-      `SELECT *
-       FROM documents
-       WHERE id = $1 AND owner_id = $2`,
+      `
+      SELECT *
+      FROM documents
+      WHERE id = $1 AND owner_id = $2
+      `,
       [id, req.user.id]
     );
 
@@ -86,10 +88,12 @@ async function resendReminder(req, res) {
       );
 
       await db.query(
-        `INSERT INTO document_events (
-           document_id, actor, action, details, from_status, to_status
-         )
-         VALUES ($1, $2, $3, $4, $5, $6)`,
+        `
+        INSERT INTO document_events (
+          document_id, actor, action, details, from_status, to_status
+        )
+        VALUES ($1, $2, $3, $4, $5, $6)
+        `,
         [
           doc.id,
           getActorName(req),
@@ -125,9 +129,11 @@ async function resendReminder(req, res) {
       }
 
       const signerRes = await db.query(
-        `SELECT *
-         FROM document_signers
-         WHERE id = $1 AND document_id = $2`,
+        `
+        SELECT *
+        FROM document_signers
+        WHERE id = $1 AND document_id = $2
+        `,
         [signerId, id]
       );
 
@@ -160,10 +166,12 @@ async function resendReminder(req, res) {
       );
 
       await db.query(
-        `INSERT INTO document_events (
-           document_id, actor, action, details, from_status, to_status
-         )
-         VALUES ($1, $2, $3, $4, $5, $6)`,
+        `
+        INSERT INTO document_events (
+          document_id, actor, action, details, from_status, to_status
+        )
+        VALUES ($1, $2, $3, $4, $5, $6)
+        `,
         [
           doc.id,
           getActorName(req),
@@ -218,20 +226,23 @@ async function sendAutomaticReminders(req, res) {
     }
 
     const docsRes = await db.query(
-      `SELECT d.id,
-              d.title,
-              d.status,
-              d.requires_visado,
-              d.visador_email,
-              d.signature_token
-       FROM documents d
-       WHERE d.owner_id = $1
-         AND d.status IN ('PENDIENTE_VISADO', 'PENDIENTE_FIRMA')
-         AND d.created_at < NOW() - INTERVAL '7 days'
-         AND (
-           d.last_reminder_sent_at IS NULL
-           OR d.last_reminder_sent_at < NOW() - INTERVAL '7 days'
-         )`,
+      `
+      SELECT
+        d.id,
+        d.title,
+        d.status,
+        d.requires_visado,
+        d.visador_email,
+        d.signature_token
+      FROM documents d
+      WHERE d.owner_id = $1
+        AND d.status IN ('PENDIENTE_VISADO', 'PENDIENTE_FIRMA')
+        AND d.created_at < NOW() - INTERVAL '7 days'
+        AND (
+          d.last_reminder_sent_at IS NULL
+          OR d.last_reminder_sent_at < NOW() - INTERVAL '7 days'
+        )
+      `,
       [userId]
     );
 
@@ -259,9 +270,11 @@ async function sendAutomaticReminders(req, res) {
           remindersCount++;
 
           await db.query(
-            `UPDATE documents
-             SET last_reminder_sent_at = NOW()
-             WHERE id = $1`,
+            `
+            UPDATE documents
+            SET last_reminder_sent_at = NOW()
+            WHERE id = $1
+            `,
             [doc.id]
           );
         }
@@ -269,10 +282,12 @@ async function sendAutomaticReminders(req, res) {
         // Firma automática por sign_token de cada firmante pendiente
         if (doc.status === "PENDIENTE_FIRMA") {
           const signersRes = await db.query(
-            `SELECT *
-             FROM document_signers
-             WHERE document_id = $1
-               AND status NOT IN ('FIRMADO', 'RECHAZADO')`,
+            `
+            SELECT *
+            FROM document_signers
+            WHERE document_id = $1
+              AND status NOT IN ('FIRMADO', 'RECHAZADO')
+            `,
             [doc.id]
           );
 
@@ -304,9 +319,11 @@ async function sendAutomaticReminders(req, res) {
           }
 
           await db.query(
-            `UPDATE documents
-             SET last_reminder_sent_at = NOW()
-             WHERE id = $1`,
+            `
+            UPDATE documents
+            SET last_reminder_sent_at = NOW()
+            WHERE id = $1
+            `,
             [doc.id]
           );
         }
@@ -320,14 +337,20 @@ async function sendAutomaticReminders(req, res) {
 
     if (docs.length > 0) {
       await db.query(
-        `INSERT INTO document_events (
-           document_id, actor, action, details, from_status, to_status
-         )
-         SELECT 
-           id, 'Sistema', 'RECORDATORIOS_AUTOMATICOS',
-           $1, status, status
-         FROM documents
-         WHERE id = ANY($2::int[])`,
+        `
+        INSERT INTO document_events (
+          document_id, actor, action, details, from_status, to_status
+        )
+        SELECT
+          id,
+          'Sistema',
+          'RECORDATORIOS_AUTOMATICOS',
+          $1,
+          status,
+          status
+        FROM documents
+        WHERE id = ANY($2::int[])
+        `,
         [
           `${remindersCount} recordatorio(s) enviado(s)`,
           docs.map((d) => d.id),

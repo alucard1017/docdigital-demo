@@ -1,3 +1,4 @@
+// backend/controllers/documents/documentNotifications.js (o donde lo tengas)
 const {
   sendSigningInvitation,
   sendVisadoInvitation,
@@ -16,11 +17,17 @@ async function sendInvitationsInBackground({
   const SIGNING_PORTAL_URL =
     process.env.SIGNING_PORTAL_URL || "https://firmar.verifirma.cl";
 
-  const documentPublicUrl = `${SIGNING_PORTAL_URL}/document/${signatureToken}`;
+  // URL pública del documento (signature_token)
+  const documentPublicUrl = `${SIGNING_PORTAL_URL}/document/${encodeURIComponent(
+    signatureToken
+  )}`;
 
   const jobs = signers.map(async (signer) => {
     try {
-      const signerPublicUrl = `${SIGNING_PORTAL_URL}/?token=${signer.sign_token}`;
+      // URL pública del firmante (sign_token)
+      const signerPublicUrl = `${SIGNING_PORTAL_URL}/?token=${encodeURIComponent(
+        signer.sign_token
+      )}`;
 
       const payload = {
         companyId,
