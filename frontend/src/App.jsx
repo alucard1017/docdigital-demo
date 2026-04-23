@@ -105,6 +105,10 @@ function SessionLoadingFallback() {
   return <div className="session-loading">Cargando sesión...</div>;
 }
 
+function safeNumber(value, fallback = 0) {
+  return Number.isFinite(value) ? value : fallback;
+}
+
 /* ============================
    App
    ============================ */
@@ -254,13 +258,12 @@ function App() {
     [docsPaginados]
   );
 
-  const safePendientes = Number.isFinite(pendientes) ? pendientes : 0;
-  const safeVisadosFiltered = Number.isFinite(visados) ? visados : 0;
-  const safeFirmados = Number.isFinite(firmados) ? firmados : 0;
-  const safeRechazados = Number.isFinite(rechazados) ? rechazados : 0;
-  const safeTotalFiltrado = Number.isFinite(totalFiltrado)
-    ? totalFiltrado
-    : 0;
+  // Conteos para la lista actual
+  const safePendientes = safeNumber(pendientes);
+  const safeVisadosFiltrados = safeNumber(visados);
+  const safeFirmados = safeNumber(firmados);
+  const safeRechazados = safeNumber(rechazados);
+  const safeTotalFiltrado = safeNumber(totalFiltrado);
   const safeTotalPaginas =
     Number.isFinite(totalPaginas) && totalPaginas > 0 ? totalPaginas : 1;
   const safeCurrentPage =
@@ -268,19 +271,15 @@ function App() {
       ? pagination.page
       : 1;
 
-  const safeTotalDocsGlobal = Number.isFinite(totalGlobal)
-    ? totalGlobal
-    : safeDocs.length;
-  const safeTotalPendientesGlobal = Number.isFinite(pendientesGlobal)
-    ? pendientesGlobal
-    : safePendientes;
-  const safeVisadosGlobal = Number.isFinite(visadosGlobal) ? visadosGlobal : 0;
-  const safeFirmadosGlobal = Number.isFinite(firmadosGlobal)
-    ? firmadosGlobal
-    : 0;
-  const safeRechazadosGlobal = Number.isFinite(rechazadosGlobal)
-    ? rechazadosGlobal
-    : 0;
+  // Conteos globales para el sidebar
+  const safeTotalDocsGlobal = safeNumber(totalGlobal, safeDocs.length);
+  const safeTotalPendientesGlobal = safeNumber(
+    pendientesGlobal,
+    safePendientes
+  );
+  const safeVisadosGlobal = safeNumber(visadosGlobal);
+  const safeFirmadosGlobal = safeNumber(firmadosGlobal);
+  const safeRechazadosGlobal = safeNumber(rechazadosGlobal);
 
   const anyAdmin = isAnyAdmin(user);
   const isGlobalAdmin = isEffectiveGlobalAdmin(user);
@@ -469,7 +468,6 @@ function App() {
 
     const expectedView = getProtectedViewFromPath(path);
 
-    // Si la vista no es válida o el usuario no tiene permiso → ir a list
     if (!VALID_PROTECTED_VIEWS.has(expectedView)) {
       setSelectedDoc(null);
       setView("list");
@@ -694,7 +692,7 @@ function App() {
             }}
             totalFiltrado={safeTotalFiltrado}
             pendientes={safePendientes}
-            visados={safeVisadosFiltered}
+            visados={safeVisadosFiltrados}
             firmados={safeFirmados}
             rechazados={safeRechazados}
             onSync={() => refreshDocs()}
@@ -802,7 +800,7 @@ function App() {
     setSearch,
     safeTotalFiltrado,
     safePendientes,
-    safeVisadosFiltered,
+    safeVisadosFiltrados,
     safeFirmados,
     safeRechazados,
     refreshDocs,

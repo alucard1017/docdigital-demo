@@ -45,6 +45,10 @@ const SECTION_CARD_STYLE = {
   boxShadow: "0 14px 34px rgba(2,6,23,0.28)",
 };
 
+function safeCount(value) {
+  return Number.isFinite(value) ? value : 0;
+}
+
 export function ListHeader({
   sort,
   setSort,
@@ -60,14 +64,16 @@ export function ListHeader({
   onSync,
   token,
 }) {
-  const total = useMemo(
-    () =>
-      (Number.isFinite(pendientes) ? pendientes : 0) +
-      (Number.isFinite(visados) ? visados : 0) +
-      (Number.isFinite(firmados) ? firmados : 0) +
-      (Number.isFinite(rechazados) ? rechazados : 0),
-    [pendientes, visados, firmados, rechazados]
-  );
+  const _pendientes = safeCount(pendientes);
+  const _visados = safeCount(visados);
+  const _firmados = safeCount(firmados);
+  const _rechazados = safeCount(rechazados);
+
+  // Si viene totalFiltrado desde fuera, úsalo como fuente de verdad.
+  const total = useMemo(() => {
+    if (Number.isFinite(totalFiltrado)) return totalFiltrado;
+    return _pendientes + _visados + _firmados + _rechazados;
+  }, [_pendientes, _visados, _firmados, _rechazados, totalFiltrado]);
 
   const handleDownloadReport = useCallback(async () => {
     if (!token) {
@@ -99,7 +105,9 @@ export function ListHeader({
       const a = document.createElement("a");
 
       a.href = url;
-      a.download = `documentos-${new Date().toISOString().slice(0, 10)}.xlsx`;
+      a.download = `documentos-${new Date()
+        .toISOString()
+        .slice(0, 10)}.xlsx`;
       document.body.appendChild(a);
       a.click();
       a.remove();
@@ -252,7 +260,7 @@ export function ListHeader({
             borderColor: "rgba(129,140,248,0.7)",
           }}
         >
-          Pendientes <strong>{pendientes}</strong>
+          Pendientes <strong>{_pendientes}</strong>
         </button>
 
         <button
@@ -268,7 +276,7 @@ export function ListHeader({
             borderColor: "rgba(45,212,191,0.7)",
           }}
         >
-          Visados <strong>{visados}</strong>
+          Visados <strong>{_visados}</strong>
         </button>
 
         <button
@@ -284,7 +292,7 @@ export function ListHeader({
             borderColor: "rgba(34,197,94,0.7)",
           }}
         >
-          Firmados <strong>{firmados}</strong>
+          Firmados <strong>{_firmados}</strong>
         </button>
 
         <button
@@ -300,7 +308,7 @@ export function ListHeader({
             borderColor: "rgba(248,113,113,0.7)",
           }}
         >
-          Rechazados <strong>{rechazados}</strong>
+          Rechazados <strong>{_rechazados}</strong>
         </button>
       </div>
 
