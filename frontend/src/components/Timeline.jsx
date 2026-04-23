@@ -11,6 +11,8 @@ import {
   isObject,
   normalizeTimeline,
   shortenUserAgent,
+  normalizeStatus,
+  clampProgress,
 } from "../utils/documentEvents";
 
 function getActorPrefix(actorType) {
@@ -21,22 +23,12 @@ function hasStatusTransition(event) {
   return Boolean(event?.fromStatus || event?.toStatus);
 }
 
-function normalizeStatus(value) {
-  return String(value || "").trim().toUpperCase();
-}
-
 function isSignedStatus(value) {
-  return normalizeStatus(value) === "FIRMADO";
+  return normalizeStatus(value) === "SIGNED";
 }
 
 function isRejectedStatus(value) {
-  return normalizeStatus(value) === "RECHAZADO";
-}
-
-function clampProgress(value) {
-  const parsed = Number(value);
-  if (!Number.isFinite(parsed)) return 0;
-  return Math.max(0, Math.min(100, parsed));
+  return normalizeStatus(value) === "REJECTED";
 }
 
 function getTimelineHint(currentStep, nextStep) {
@@ -295,6 +287,9 @@ export function Timeline({ timeline }) {
         currentStep={currentStep}
         nextStep={nextStep}
       />
+
+      {/* Si luego quieres la leyenda, aquí es donde va */}
+      {/* <div className="timeline-legend">...</div> */}
 
       <div className="timeline-events">
         <TimelineBody events={events} hasEvents={hasEvents} />

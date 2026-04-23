@@ -10,6 +10,7 @@ const {
   validateVisar,
   validateReject,
 } = require("./signingValidations");
+const { DOCUMENT_EVENT_TYPES } = require("./documentEventTypes");
 
 const parseId = (raw) => {
   const id = Number(raw);
@@ -191,8 +192,8 @@ async function signDocument(req, res) {
       doc,
       fromStatus,
       toStatus,
-      eventType: "SIGNED_OWNER",
-      action: "DOCUMENT_SIGNED_OWNER",
+      eventType: DOCUMENT_EVENT_TYPES.DOCUMENT_SIGNED_OWNER,
+      action: DOCUMENT_EVENT_TYPES.DOCUMENT_SIGNED_OWNER,
       details:
         "Firmado por propietario (aceptó aviso legal de uso de firma electrónica simple, con equivalencia a firma manuscrita conforme a la Ley N° 19.799).",
       extraMetadata: {
@@ -222,7 +223,7 @@ async function signDocument(req, res) {
 
     await logAudit({
       user: req.user,
-      action: "DOCUMENT_SIGNED_OWNER",
+      action: DOCUMENT_EVENT_TYPES.DOCUMENT_SIGNED_OWNER,
       entityType: "document",
       entityId: doc.id,
       metadata: {
@@ -365,8 +366,8 @@ async function viserDocumentInternalUpdate(id, userId, req = null) {
     doc,
     fromStatus,
     toStatus,
-    eventType: "VISADO_OWNER",
-    action: "DOCUMENT_VISADO_OWNER",
+    eventType: DOCUMENT_EVENT_TYPES.DOCUMENT_VISADO_OWNER,
+    action: DOCUMENT_EVENT_TYPES.DOCUMENT_VISADO_OWNER,
     details: "Documento visado por el propietario",
     extraMetadata: {
       actor_type: "OWNER",
@@ -410,7 +411,7 @@ async function visarDocument(req, res) {
 
     await logAudit({
       user: req.user,
-      action: "DOCUMENT_VISADO_OWNER",
+      action: DOCUMENT_EVENT_TYPES.DOCUMENT_VISADO_OWNER,
       entityType: "document",
       entityId: doc.id,
       metadata: {
@@ -507,8 +508,8 @@ async function rejectDocument(req, res) {
       doc,
       fromStatus,
       toStatus,
-      eventType: "REJECTED_OWNER",
-      action: "DOCUMENT_REJECTED_OWNER",
+      eventType: DOCUMENT_EVENT_TYPES.DOCUMENT_REJECTED_OWNER,
+      action: DOCUMENT_EVENT_TYPES.DOCUMENT_REJECTED_OWNER,
       details: "Documento rechazado por el propietario",
       extraMetadata: {
         actor_type: "OWNER",
@@ -536,7 +537,7 @@ async function rejectDocument(req, res) {
 
     await logAudit({
       user: req.user,
-      action: "DOCUMENT_REJECTED_OWNER",
+      action: DOCUMENT_EVENT_TYPES.DOCUMENT_REJECTED_OWNER,
       entityType: "document",
       entityId: doc.id,
       metadata: {

@@ -1,4 +1,6 @@
 // frontend/src/utils/documentEvents.js
+// Depende de frontend/src/utils/documentEventTypes.js en la MISMA carpeta.
+import { DOCUMENT_EVENT_TYPES } from "./documentEventTypes";
 
 /* ============================
    Helpers básicos
@@ -205,8 +207,8 @@ export function isSystemEvent(raw) {
   }
 
   if (
-    eventType === "DOCUMENT_CREATED" ||
-    eventType === "DOCUMENT_SENT" ||
+    eventType === DOCUMENT_EVENT_TYPES.DOCUMENT_CREATED ||
+    eventType === DOCUMENT_EVENT_TYPES.DOCUMENT_SENT ||
     eventType === "DOCUMENT_COMPLETED"
   ) {
     return true;
@@ -224,31 +226,33 @@ export function getActorType(raw) {
 export function getEventKind(raw) {
   const eventType = getRawEventType(raw);
 
-  if (eventType === "DOCUMENT_CREATED") return "created";
-  if (eventType === "DOCUMENT_SENT") return "sent";
+  if (eventType === DOCUMENT_EVENT_TYPES.DOCUMENT_CREATED) return "created";
+  if (eventType === DOCUMENT_EVENT_TYPES.DOCUMENT_SENT) return "sent";
 
   if (
-    eventType === "PUBLIC_LINK_OPENED_SIGNER" ||
-    eventType === "INVITATION_OPENED" ||
-    eventType === "PUBLIC_LINK_OPENED" ||
-    eventType === "PUBLIC_LINK_OPENED_VISADOR"
+    eventType === DOCUMENT_EVENT_TYPES.PUBLIC_LINK_OPENED_SIGNER ||
+    eventType === DOCUMENT_EVENT_TYPES.PUBLIC_LINK_OPENED_VISADOR ||
+    eventType === DOCUMENT_EVENT_TYPES.INVITATION_OPENED ||
+    eventType === "PUBLIC_LINK_OPENED"
   ) {
     return "opened";
   }
 
   if (
     eventType === "SIGNED_OWNER" ||
-    eventType === "SIGNED_PUBLIC" ||
+    eventType === DOCUMENT_EVENT_TYPES.SIGNED_PUBLIC ||
     eventType === "DOCUMENT_SIGNED" ||
-    eventType === "SIGNED_INTERNAL"
+    eventType === "SIGNED_INTERNAL" ||
+    eventType === DOCUMENT_EVENT_TYPES.DOCUMENT_SIGNED_OWNER
   ) {
     return "signed";
   }
 
   if (
     eventType === "VISADO_OWNER" ||
-    eventType === "VISADO_PUBLIC" ||
+    eventType === DOCUMENT_EVENT_TYPES.VISADO_PUBLIC ||
     eventType === "VISADO_INTERNAL" ||
+    eventType === DOCUMENT_EVENT_TYPES.DOCUMENT_VISADO_OWNER ||
     eventType.includes("REVIEWED")
   ) {
     return "approved";
@@ -256,7 +260,8 @@ export function getEventKind(raw) {
 
   if (
     eventType === "REJECTED_OWNER" ||
-    eventType === "REJECTED_PUBLIC" ||
+    eventType === DOCUMENT_EVENT_TYPES.REJECTED_PUBLIC ||
+    eventType === DOCUMENT_EVENT_TYPES.DOCUMENT_REJECTED_OWNER ||
     eventType.includes("REJECTED")
   ) {
     return "rejected";
@@ -264,7 +269,11 @@ export function getEventKind(raw) {
 
   if (eventType === "DOCUMENT_COMPLETED") return "completed";
 
-  if (eventType.includes("VERIFY") || eventType.includes("VERIFIED")) {
+  if (
+    eventType.includes("VERIFY") ||
+    eventType.includes("VERIFIED") ||
+    eventType === DOCUMENT_EVENT_TYPES.VERIFY_PUBLIC_CODE
+  ) {
     return "verified";
   }
 
@@ -309,7 +318,7 @@ export function getEventTitle(raw, kind = getEventKind(raw)) {
       return "Documento enviado";
     case "opened": {
       const linkType = normalizeText(raw?.metadata?.link_type);
-      if (linkType === "signer_token") return "Enlace de firma abierto";
+      if (linkType === "sign_token") return "Enlace de firma abierto";
       if (linkType === "document_token") return "Documento público abierto";
       return "Acceso al documento";
     }
@@ -409,7 +418,7 @@ export function getHumanDetails(raw, kind = getEventKind(raw)) {
     const actorType = normalizeUpper(raw?.metadata?.actor_type);
     const actor = normalizeText(raw?.actor);
 
-    if (linkType === "signer_token") {
+    if (linkType === "sign_token") {
       return actor
         ? `${actor} abrió el enlace de firma.`
         : "Se abrió el enlace de firma.";
