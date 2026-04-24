@@ -99,6 +99,7 @@ async function sendEmail({
   html,
   documentoId = null,
   firmanteId = null,
+  attachments = [],
 }) {
   const trackingId = crypto.randomUUID();
   const cleanTo = String(to || "").trim();
@@ -133,6 +134,7 @@ async function sendEmail({
           trackingId,
         }),
       },
+      attachments,
     });
 
     if (!result || result.ok !== true) {
@@ -971,7 +973,7 @@ module.exports = {
   sendReminder,
   sendNotification,
   sendDestinationNotification,
-  // Exponemos estos para reutilizarlos en otros servicios
+  // Reutilizables en otros servicios
   PUBLIC_VERIFY_BASE_URL,
   DASHBOARD_BASE_URL,
   baseStyles,

@@ -32,7 +32,10 @@ async function buildFinalPdfUrl(docRow) {
 }
 
 /**
- * Envía correo de "Documento firmado" al owner y a los participantes.
+ * Envía correo de "Documento firmado" al owner, firmantes y visadores.
+ *
+ * - Owner + firmantes (y PARTICIPANT genérico): reciben PDF firmado adjunto.
+ * - Visadores: reciben solo notificación (sin adjunto).
  *
  * @param {object} params
  * @param {number} params.documentId
@@ -120,24 +123,46 @@ async function sendFinalDocumentEmails({ documentId, force = false }) {
 
     const recipientsMap = new Map();
 
+    // Owner siempre recibe notificación + adjunto (si hay PDF)
     if (doc.owner_email) {
-      recipientsMap.set(doc.owner_email.toLowerCase(), {
-        email: doc.owner_email,
-        name: doc.owner_name || "",
-        kind: "OWNER",
-      });
+      const ownerEmail = String(doc.owner_email || "").trim();
+      if (ownerEmail) {
+        recipientsMap.set(ownerEmail.toLowerCase(), {
+          email: ownerEmail,
+          name: doc.owner_name || "",
+          kind: "OWNER",
+        });
+      }
     }
 
+    // Clasificar participantes según rol
     for (const p of participants) {
       const email = String(p.email || "").trim();
       if (!email) continue;
+
+      const roleRaw = String(p.role_in_doc || "").toUpperCase();
+
+      const isSigner =
+        roleRaw.includes("SIGNER") ||
+        roleRaw.includes("FIRMANTE");
+
+      const isReviewer =
+        roleRaw.includes("VISADOR") ||
+        roleRaw.includes("REVIEWER");
+
+      // Si no es ni firmante ni visador, se trata como PARTICIPANT genérico
+      const kind = isSigner
+        ? "SIGNER"
+        : isReviewer
+        ? "REVIEWER"
+        : "PARTICIPANT";
 
       const key = email.toLowerCase();
       if (!recipientsMap.has(key)) {
         recipientsMap.set(key, {
           email,
           name: p.name || "",
-          kind: p.role_in_doc || "PARTICIPANT",
+          kind,
         });
       }
     }
@@ -265,12 +290,27 @@ async function sendFinalDocumentEmails({ documentId, force = false }) {
         </html>
       `;
 
+      // Adjuntar PDF solo a owner + firmantes (no a visadores)
+      const isSignerOrOwner =
+        r.kind === "OWNER" || r.kind === "SIGNER" || r.kind === "PARTICIPANT";
+
+      const attachments =
+        isSignerOrOwner && pdfUrl
+          ? [
+              {
+                url: pdfUrl,
+                name: `${doc.title || "documento-firmado"}.pdf`,
+              },
+            ]
+          : [];
+
       const ok = await sendEmail({
         to: r.email,
         subject,
         html,
         documentoId: documentId,
         firmanteId: null,
+        attachments,
       });
 
       resultados.push({
