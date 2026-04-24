@@ -65,7 +65,7 @@ async function sendFinalDocumentEmails({ documentId, force = false }) {
         d.final_email_sent_at,
         d.final_email_recipients,
         u.email AS owner_email,
-        COALESCE(u.full_name, u.name, '') AS owner_name
+        u.name AS owner_name
       FROM documents d
       LEFT JOIN users u ON u.id = d.owner_id
       WHERE d.id = $1
