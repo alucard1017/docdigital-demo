@@ -1,3 +1,4 @@
+// backend/controllers/documents/index.js
 const create = require("./create");
 const timeline = require("./timeline");
 const signing = require("./signing");
@@ -6,6 +7,7 @@ const report = require("./report");
 const stats = require("./stats");
 const flow = require("./flow");
 const publicDocuments = require("./publicDocuments");
+const notifications = require("./notifications");
 
 module.exports = {
   ...create,
@@ -16,4 +18,5 @@ module.exports = {
   ...stats,
   ...flow,
   ...publicDocuments,
+  ...notifications,
 };

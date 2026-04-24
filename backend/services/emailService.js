@@ -13,9 +13,8 @@ console.log("📬 [EMAIL] Cargando emailService.js (Brevo API HTTP)");
 function normalizeUrl(value, fallback = "") {
   const raw = String(value || fallback || "").trim();
   if (!raw) return "";
-  // Forzamos https si el valor no incluye protocolo
   if (!/^https?:\/\//i.test(raw)) {
-    return `https://${raw.replace(/^\/+/, "")}`;
+    return `https://${raw.replace(/^\//, "")}`;
   }
   return raw;
 }
@@ -74,12 +73,26 @@ function safeName(name, fallback = "") {
   return text || fallback;
 }
 
+function buildCustomMessageBlock(customMessage) {
+  const raw = typeof customMessage === "string" ? customMessage.trim() : "";
+  if (!raw) return "";
+
+  const escaped = raw.replace(/</g, "&lt;");
+
+  return `
+    <div class="info-box" style="border-color:#bfdbfe;background:#eff6ff;">
+      <h4 style="color:#1d4ed8;">💬 Mensaje del remitente</h4>
+      <p style="white-space:pre-line;color:#111827;margin:0;">
+        ${escaped}
+      </p>
+    </div>
+  `;
+}
+
 /* ===================================
    Wrapper genérico de envío
    =================================== */
 
-// Wrapper genérico para enviar HTML usando Brevo HTTP
-// con logging detallado y tracking en BD
 async function sendEmail({
   to,
   subject,
@@ -428,9 +441,14 @@ async function sendSigningInvitation(
     qrTargetUrl = "",
     documentoId = null,
     firmanteId = null,
+    reminder = false,
+    customMessage = null,
   } = options;
 
-  const subject = safeSubject("Invitación a firmar", docTitle);
+  const subject = safeSubject(
+    reminder ? "Recordatorio de firma" : "Invitación a firmar",
+    docTitle
+  );
 
   const verificationUrl = verificationCode
     ? `${PUBLIC_VERIFY_BASE_URL}?code=${encodeURIComponent(verificationCode)}`
@@ -438,8 +456,21 @@ async function sendSigningInvitation(
 
   const qrUrlTarget = qrTargetUrl || signUrl || verificationUrl;
   const qrImageUrl = await generateQrImageUrl(qrUrlTarget);
-
   const safeSignerName = safeName(signerName, "");
+
+  const introTitle = reminder
+    ? "Recordatorio para Firmar Documento"
+    : "Invitación a Firmar Documento";
+
+  const introSubtitle = reminder
+    ? "Tienes una firma pendiente"
+    : "Firma electrónica segura";
+
+  const introParagraph = reminder
+    ? "Este es un recordatorio para que revises y completes la firma electrónica del siguiente documento:"
+    : "Has recibido una invitación para firmar electrónicamente el siguiente documento:";
+
+  const customMessageBlock = buildCustomMessageBlock(customMessage);
 
   const html = `
     <!DOCTYPE html>
@@ -452,73 +483,64 @@ async function sendSigningInvitation(
       <body>
         <div class="container">
           <div class="header">
-            <div class="badge">VeriFirma</div>
-            <h2 class="title">Invitación a Firmar Documento</h2>
-            <p class="subtitle">Firma electrónica segura</p>
+            <div class="badge">${reminder ? "Recordatorio" : "VeriFirma"}</div>
+            <h2 class="title">${introTitle}</h2>
+            <p class="subtitle">${introSubtitle}</p>
           </div>
 
           <div class="content">
             <p>Hola ${
               safeSignerName ? `<strong>${safeSignerName}</strong>` : ""
             },</p>
-            <p>
-              Has recibido una invitación para <strong>firmar electrónicamente</strong> 
-              el siguiente documento:
-            </p>
+            <p>${introParagraph}</p>
+
+            ${customMessageBlock}
 
             <div class="doc-title">${docTitle}</div>
 
             <div style="text-align: center;">
-              <a href="${signUrl}" class="button">Ir a Firmar Documento</a>
+              <a href="${signUrl}" class="button">
+                ${reminder ? "Revisar y Firmar" : "Ir a Firmar Documento"}
+              </a>
               <p class="meta">Este enlace es válido por 30 días.</p>
             </div>
-          </div>
-
-          <div class="info-box warning">
-            <h4>💡 ¿Tienes dudas sobre el documento?</h4>
-            <p>
-              Si no estás de acuerdo con el contenido del documento, 
-              <strong>puedes rechazarlo indicando el motivo</strong> 
-              directamente en el enlace de firma. Esta acción alertará 
-              al emisor y quedará registrada en el historial del documento.
-            </p>
           </div>
 
           ${
             verificationCode
               ? `
-            <div class="info-box">
-              <h4>🔐 Verificación independiente</h4>
-              <p>
-                Puedes comprobar la validez de este documento en cualquier 
-                momento con el siguiente código:
-              </p>
-              <div style="text-align: center; margin: 12px 0;">
-                <span class="verify-code">${verificationCode}</span>
-              </div>
-              <p>
-                Ingresa este código en
-                <a href="${verificationUrl}" target="_blank" rel="noopener noreferrer">
-                  ${PUBLIC_VERIFY_BASE_URL}
-                </a>
-              </p>
-              <p style="font-size: 12px; margin: 8px 0 0; font-style: italic;">
-                Te recomendamos guardar este código junto con el PDF firmado.
-              </p>
+          <div class="info-box">
+            <h4>🔐 Verificación independiente</h4>
+            <p>
+              Puedes comprobar la validez de este documento en cualquier 
+              momento con el siguiente código:
+            </p>
+            <div style="text-align: center; margin: 12px 0;">
+              <span class="verify-code">${verificationCode}</span>
             </div>
-            ${
-              qrImageUrl
-                ? `
-              <div class="qr-wrapper">
-                <div class="qr-label">O escanea este código QR:</div>
-                <div class="qr-img">
-                  <img src="${qrImageUrl}" alt="QR de verificación" />
-                </div>
-              </div>
-            `
-                : ""
-            }
+            <p>
+              Ingresa este código en
+              <a href="${verificationUrl}" target="_blank" rel="noopener noreferrer">
+                ${PUBLIC_VERIFY_BASE_URL}
+              </a>
+            </p>
+            <p style="font-size: 12px; margin: 8px 0 0; font-style: italic;">
+              Te recomendamos guardar este código junto con el PDF firmado.
+            </p>
+          </div>
+          ${
+            qrImageUrl
+              ? `
+          <div class="qr-wrapper">
+            <div class="qr-label">O escanea este código QR:</div>
+            <div class="qr-img">
+              <img src="${qrImageUrl}" alt="QR de verificación" />
+            </div>
+          </div>
           `
+              : ""
+          }
+        `
               : ""
           }
 
@@ -559,9 +581,32 @@ async function sendVisadoInvitation(
   visadorName = "",
   options = {}
 ) {
-  const { documentoId = null } = options;
-  const subject = safeSubject("Invitación a visar", docTitle);
+  const {
+    documentoId = null,
+    reminder = false,
+    customMessage = null,
+  } = options;
+
+  const subject = safeSubject(
+    reminder ? "Recordatorio de visación" : "Invitación a visar",
+    docTitle
+  );
+
   const safeVisadorName = safeName(visadorName, "");
+
+  const introTitle = reminder
+    ? "Recordatorio para Visar Documento"
+    : "Invitación a Visar Documento";
+
+  const introSubtitle = reminder
+    ? "Visación pendiente"
+    : "Validación administrativa";
+
+  const introParagraph = reminder
+    ? "Este es un recordatorio para que revises y completes la visación del siguiente documento:"
+    : "Has recibido una solicitud para visar el siguiente documento:";
+
+  const customMessageBlock = buildCustomMessageBlock(customMessage);
 
   const html = `
     <!DOCTYPE html>
@@ -574,18 +619,20 @@ async function sendVisadoInvitation(
       <body>
         <div class="container">
           <div class="header">
-            <div class="badge warning">VeriFirma</div>
-            <h2 class="title">Invitación a Visar Documento</h2>
-            <p class="subtitle">Validación administrativa</p>
+            <div class="badge warning">${
+              reminder ? "Recordatorio" : "VeriFirma"
+            }</div>
+            <h2 class="title">${introTitle}</h2>
+            <p class="subtitle">${introSubtitle}</p>
           </div>
 
           <div class="content">
             <p>Hola ${
               safeVisadorName ? `<strong>${safeVisadorName}</strong>` : ""
             },</p>
-            <p>
-              Has recibido una solicitud para <strong>visar</strong> el siguiente documento:
-            </p>
+            <p>${introParagraph}</p>
+
+            ${customMessageBlock}
 
             <div class="doc-title">${docTitle}</div>
 
@@ -595,7 +642,9 @@ async function sendVisadoInvitation(
             </p>
 
             <div style="text-align: center;">
-              <a href="${signUrl}" class="button warning">Ir a Visar Documento</a>
+              <a href="${signUrl}" class="button warning">
+                ${reminder ? "Revisar y Visar" : "Ir a Visar Documento"}
+              </a>
               <p class="meta">Este enlace es válido por 30 días.</p>
             </div>
           </div>
@@ -646,7 +695,8 @@ async function sendRejectionNotification(
 
   const safeEmisorName = safeName(emisorName, "");
   const safeFirmanteName = safeName(firmanteNombre, "Firmante");
-  const safeFirmanteEmail = String(firmanteEmail || "").trim() || "Correo no disponible";
+  const safeFirmanteEmail =
+    String(firmanteEmail || "").trim() || "Correo no disponible";
   const safeMotivo = String(motivo || "").trim() || "No especificado";
 
   const html = `
@@ -861,27 +911,27 @@ async function sendDestinationNotification(
           ${
             verificationCode
               ? `
-            <div class="info-box">
-              <h4>🔐 Verificación del documento</h4>
+          <div class="info-box">
+            <h4>🔐 Verificación del documento</h4>
 
-              <p>
-                Puedes verificar el estado y autenticidad de este documento en cualquier 
-                momento usando el siguiente código:
-              </p>
-              <div style="text-align: center; margin: 12px 0;">
-                <span class="verify-code">${verificationCode}</span>
-              </div>
-              <p>
-                Ingresa este código en
-                <a href="${verificationUrl}" target="_blank" rel="noopener noreferrer">
-                  ${PUBLIC_VERIFY_BASE_URL}
-                </a>
-              </p>
-              <p style="font-size: 12px; margin: 8px 0 0; font-style: italic;">
-                Recibirás una copia del documento firmado una vez completado el proceso.
-              </p>
+            <p>
+              Puedes verificar el estado y autenticidad de este documento en cualquier 
+              momento usando el siguiente código:
+            </p>
+            <div style="text-align: center; margin: 12px 0;">
+              <span class="verify-code">${verificationCode}</span>
             </div>
-          `
+            <p>
+              Ingresa este código en
+              <a href="${verificationUrl}" target="_blank" rel="noopener noreferrer">
+                ${PUBLIC_VERIFY_BASE_URL}
+              </a>
+            </p>
+            <p style="font-size: 12px; margin: 8px 0 0; font-style: italic;">
+              Recibirás una copia del documento firmado una vez completado el proceso.
+            </p>
+          </div>
+        `
               : ""
           }
 
@@ -921,4 +971,8 @@ module.exports = {
   sendReminder,
   sendNotification,
   sendDestinationNotification,
+  // Exponemos estos para reutilizarlos en otros servicios
+  PUBLIC_VERIFY_BASE_URL,
+  DASHBOARD_BASE_URL,
+  baseStyles,
 };

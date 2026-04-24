@@ -20,7 +20,7 @@ const TERMINAL_VIEW_STATES = new Set([
   "blocked_by_review",
 ]);
 
-function getMessageVariant(kind, preferred = "info") {
+function getMessageVariant(kind, preferred) {
   if (preferred) return preferred;
 
   const normalized = String(kind || "").toLowerCase();
@@ -29,7 +29,7 @@ function getMessageVariant(kind, preferred = "info") {
     return "error";
   }
 
-  if (normalized === "completed" || normalized === "used") {
+  if (normalized === "completed" || normalized === "used" || normalized === "rejected") {
     return "success";
   }
 
@@ -39,7 +39,7 @@ function getMessageVariant(kind, preferred = "info") {
 function PublicStatusMessageCard({
   viewState,
   onRetry,
-  variant = "info",
+  variant,
   showSpinner = false,
 }) {
   const resolvedVariant = getMessageVariant(viewState?.kind, variant);
@@ -54,21 +54,21 @@ function PublicStatusMessageCard({
 
   return (
     <div className={className} role="status" aria-live="polite">
-      {showSpinner ? <div className="spinner public-sign-spinner" /> : null}
+      {showSpinner && <div className="spinner public-sign-spinner" />}
 
-      {viewState?.title ? (
+      {viewState?.title && (
         <div className="public-sign-message-card__title">
           {viewState.title}
         </div>
-      ) : null}
+      )}
 
-      {viewState?.message ? (
+      {viewState?.message && (
         <div className="public-sign-message-card__text">
           {viewState.message}
         </div>
-      ) : null}
+      )}
 
-      {viewState?.canRetry ? (
+      {viewState?.canRetry && typeof onRetry === "function" && (
         <button
           type="button"
           className="public-sign-button public-sign-button--secondary public-sign-button--auto"
@@ -76,7 +76,7 @@ function PublicStatusMessageCard({
         >
           Reintentar carga
         </button>
-      ) : null}
+      )}
     </div>
   );
 }
@@ -175,7 +175,7 @@ function PublicDocumentSummary({
         </div>
       </div>
 
-      {pdfUrl ? (
+      {pdfUrl && (
         <a
           href={pdfUrl}
           target="_blank"
@@ -184,15 +184,15 @@ function PublicDocumentSummary({
         >
           Abrir documento completo
         </a>
-      ) : null}
+      )}
 
-      {canShowInlineStatus ? (
+      {canShowInlineStatus && (
         <PublicStatusMessageCard
           viewState={viewState}
           onRetry={onRetry}
           variant={getMessageVariant(viewState.kind)}
         />
-      ) : null}
+      )}
 
       <div className="public-sign-desktop-actions">{actionBlock}</div>
     </aside>
@@ -349,28 +349,35 @@ export function PublicSignView(props) {
   ]);
 
   const actionMessageClassName = useMemo(() => {
+    const variant = getMessageVariant(actionMessageType);
     return `public-sign-message-card ${
-      actionMessageType === "error"
+      variant === "error"
         ? "public-sign-message-card--error"
-        : actionMessageType === "success"
+        : variant === "success"
         ? "public-sign-message-card--success"
         : "public-sign-message-card--info"
     }`;
   }, [actionMessageType]);
 
-  const introClassName = useMemo(() => {
-    return `public-sign-intro ${
-      isVisado ? "public-sign-intro--warning" : "public-sign-intro--info"
-    }`;
-  }, [isVisado]);
+  const introClassName = useMemo(
+    () =>
+      `public-sign-intro ${
+        isVisado
+          ? "public-sign-intro--warning"
+          : "public-sign-intro--info"
+      }`,
+    [isVisado]
+  );
 
-  const introTitleClassName = useMemo(() => {
-    return `public-sign-intro__title ${
-      isVisado
-        ? "public-sign-intro__title--warning"
-        : "public-sign-intro__title--info"
-    }`;
-  }, [isVisado]);
+  const introTitleClassName = useMemo(
+    () =>
+      `public-sign-intro__title ${
+        isVisado
+          ? "public-sign-intro__title--warning"
+          : "public-sign-intro__title--info"
+      }`,
+    [isVisado]
+  );
 
   return (
     <div className="public-sign-page">
@@ -395,7 +402,7 @@ export function PublicSignView(props) {
           <div className="public-sign-intro__text">{introText}</div>
         </section>
 
-        {actionMessage ? (
+        {actionMessage && (
           <div
             className={actionMessageClassName}
             role="status"
@@ -405,26 +412,26 @@ export function PublicSignView(props) {
               {actionMessage}
             </div>
           </div>
-        ) : null}
+        )}
 
-        {isLoading ? (
+        {isLoading && (
           <PublicStatusMessageCard
             viewState={viewState}
             onRetry={handleRetryLoad}
             variant="info"
             showSpinner
           />
-        ) : null}
+        )}
 
-        {isTerminalWithoutDocument && !isLoading ? (
+        {isTerminalWithoutDocument && !isLoading && (
           <PublicStatusMessageCard
             viewState={viewState}
             onRetry={handleRetryLoad}
             variant={getMessageVariant(viewState.kind)}
           />
-        ) : null}
+        )}
 
-        {canRenderDocument ? (
+        {canRenderDocument && (
           <div className="public-sign-layout">
             <PublicDocumentSummary
               documentTitle={documentTitle}
@@ -446,7 +453,7 @@ export function PublicSignView(props) {
               actionBlock={actionBlock}
             />
           </div>
-        ) : null}
+        )}
 
         <div className="public-sign-footer-wrap">
           <PublicFooter />

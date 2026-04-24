@@ -5,6 +5,7 @@ const { sellarPdfConQr } = require("../../services/pdfSeal");
 const { logAudit } = require("../../utils/auditLog");
 const { formatDateSafe } = require("./documentEventUtils");
 const { DOCUMENT_EVENT_TYPES } = require("./documentEventTypes");
+const { sendFinalDocumentEmails } = require("../../services/sendFinalDocumentEmails");
 
 const {
   insertPublicEvent,
@@ -62,8 +63,6 @@ const {
 const NOT_FOUND_MESSAGE = "Enlace inválido o documento no encontrado";
 const EXPIRED_LINK_MESSAGE =
   "El enlace público ha expirado. Solicita uno nuevo al emisor.";
-
-/* Utils resolveVerificationData se queda igual... */
 
 /* ================================
    GET: Firma por sign_token
@@ -387,6 +386,15 @@ async function publicSignDocument(req, res) {
       } catch (sealError) {
         console.error("⚠️ Error sellando PDF con QR:", sealError);
       }
+
+      try {
+        await sendFinalDocumentEmails({ documentId: doc.id });
+      } catch (mailErr) {
+        console.error(
+          "⚠️ Error enviando correos de documento firmado (publicSignDocument):",
+          mailErr
+        );
+      }
     }
 
     const fileUrl = await buildSignedPdfUrlOrFail(doc, res, {
@@ -675,7 +683,9 @@ async function publicVisarDocument(req, res) {
   }
 }
 
-/* verifyByCode: solo cambiamos VERIFY_PUBLIC_CODE */
+/* ================================
+   GET: Verificación por código
+   ================================ */
 
 async function verifyByCode(req, res) {
   const { codigo } = req.params;

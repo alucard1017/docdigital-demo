@@ -80,6 +80,7 @@ async function registrarEventoRecordatorio({
   details,
   fromStatus,
   toStatus,
+  metadata = null,
 }) {
   await db.query(
     `
@@ -89,22 +90,42 @@ async function registrarEventoRecordatorio({
       action,
       details,
       from_status,
-      to_status
+      to_status,
+      metadata
     )
-    VALUES ($1, $2, $3, $4, $5, $6)
+    VALUES ($1, $2, $3, $4, $5, $6, $7)
     `,
-    [documentoId, "Sistema", action, details, fromStatus, toStatus]
+    [
+      documentoId,
+      "Sistema",
+      action,
+      details,
+      fromStatus,
+      toStatus,
+      metadata ? JSON.stringify(metadata) : null,
+    ]
   );
 }
 
 /* ================================
-   RECORDATORIO MANUAL
+   RECORDATORIO MANUAL (mensaje opcional)
    ================================ */
 
-async function enviarRecordatorioManual(documentoId) {
+/**
+ * enviarRecordatorioManual
+ * @param {number} documentoId
+ * @param {string|null} customMessage - mensaje opcional para el email
+ */
+async function enviarRecordatorioManual(documentoId, customMessage = null) {
   try {
     const doc = await getDocumentById(documentoId);
     const reminders = [];
+
+    const hasCustomMessage =
+      typeof customMessage === "string" && customMessage.trim().length > 0;
+    const trimmedMessage = hasCustomMessage
+      ? customMessage.trim()
+      : null;
 
     // Visado manual por signature_token
     if (
@@ -119,7 +140,11 @@ async function enviarRecordatorioManual(documentoId) {
         doc.visador_email,
         doc.title,
         urlVisado,
-        doc.visador_nombre || "Visador"
+        doc.visador_nombre || "Visador",
+        {
+          reminder: true,
+          customMessage: trimmedMessage,
+        }
       );
 
       reminders.push({
@@ -153,7 +178,11 @@ async function enviarRecordatorioManual(documentoId) {
           signer.email,
           doc.title,
           urlFirma,
-          signer.name || "Firmante"
+          signer.name || "Firmante",
+          {
+            reminder: true,
+            customMessage: trimmedMessage,
+          }
         );
 
         reminders.push({
@@ -174,6 +203,12 @@ async function enviarRecordatorioManual(documentoId) {
       details: `Recordatorio manual enviado a ${reminders.length} destinatario(s)`,
       fromStatus: doc.status,
       toStatus: doc.status,
+      metadata: trimmedMessage
+        ? {
+            motivo: "recordatorio_manual",
+            custom_message: trimmedMessage,
+          }
+        : { motivo: "recordatorio_manual" },
     });
 
     return {
@@ -207,7 +242,11 @@ async function enviarRecordatorioAutomaticoDocumento(doc, step) {
       doc.visador_email,
       doc.title,
       urlVisado,
-      doc.visador_nombre || "Visador"
+      doc.visador_nombre || "Visador",
+      {
+        reminder: true,
+        step,
+      }
     );
 
     reminders.push({
@@ -241,7 +280,11 @@ async function enviarRecordatorioAutomaticoDocumento(doc, step) {
         signer.email,
         doc.title,
         urlFirma,
-        signer.name || "Firmante"
+        signer.name || "Firmante",
+        {
+          reminder: true,
+          step,
+        }
       );
 
       reminders.push({
@@ -262,6 +305,10 @@ async function enviarRecordatorioAutomaticoDocumento(doc, step) {
     details: `Recordatorio automático #${step} enviado a ${reminders.length} destinatario(s)`,
     fromStatus: doc.status,
     toStatus: doc.status,
+    metadata: {
+      motivo: "recordatorio_automatico",
+      step,
+    },
   });
 
   return reminders;
@@ -328,7 +375,10 @@ async function enviarRecordatoriosAutomaticos() {
           continue;
         }
 
-        const reminders = await enviarRecordatorioAutomaticoDocumento(doc, step);
+        const reminders = await enviarRecordatorioAutomaticoDocumento(
+          doc,
+          step
+        );
 
         procesados++;
         enviados += reminders.length;

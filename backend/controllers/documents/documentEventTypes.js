@@ -26,6 +26,9 @@ const DOCUMENT_EVENT_TYPES = {
 
   // Verificación
   VERIFY_PUBLIC_CODE: "VERIFY_PUBLIC_CODE",
+
+  // Correos de documento final firmado
+  FINAL_EMAIL_SENT: "FINAL_EMAIL_SENT",
 };
 
 module.exports = {

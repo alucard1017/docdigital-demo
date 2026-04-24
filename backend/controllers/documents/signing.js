@@ -11,6 +11,7 @@ const {
   validateReject,
 } = require("./signingValidations");
 const { DOCUMENT_EVENT_TYPES } = require("./documentEventTypes");
+const { sendFinalDocumentEmails } = require("../../services/sendFinalDocumentEmails");
 
 const parseId = (raw) => {
   const id = Number(raw);
@@ -287,6 +288,16 @@ async function signDocument(req, res) {
       }
     } catch (sealError) {
       console.error("⚠️ Error sellando PDF con QR (signDocument):", sealError);
+    }
+
+    // Enviar correos de documento firmado al completar firma del propietario
+    try {
+      await sendFinalDocumentEmails({ documentId: doc.id });
+    } catch (mailErr) {
+      console.error(
+        "⚠️ Error enviando correos de documento firmado (signDocument):",
+        mailErr
+      );
     }
 
     const fileUrl = buildPreferredFileUrl(doc);

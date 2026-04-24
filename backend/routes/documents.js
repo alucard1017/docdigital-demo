@@ -33,6 +33,7 @@ const {
   getReminderSchedulerStatus,
   ejecutarRecordatorios,
 } = require("../jobs/reminderScheduler");
+const { sendFinalDocumentEmails } = require("../services/sendFinalDocumentEmails");
 
 const router = express.Router();
 
@@ -140,7 +141,10 @@ async function checkLegacyDocumentCompanyScope(req, res, next) {
     req.documentLegacy = doc;
     return next();
   } catch (err) {
-    console.error("❌ Error verificando permisos de documento legacy:", err);
+    console.error(
+      "❌ Error verificando permisos de documento legacy:",
+      err
+    );
     return res
       .status(500)
       .json({ message: "Error interno del servidor" });
@@ -240,14 +244,14 @@ function withDocumentAudit(action) {
 function buildPublicSigningUrl(token) {
   const base = (process.env.APP_PUBLIC_URL || "").trim().replace(/\/+$/, "");
   if (!base) {
-    // fallback conservador si la env var no está, evita romper envío
+    // fallback conservador si la env var no está
     return `/public/docs/${token}`;
   }
   return `${base}/public/docs/${token}`;
 }
 
 /* ================================
-   Rutas GET - stats / analytics
+   Rutas GET - stats / analytics / notifications
    ================================ */
 
 if (typeof documentsController.getDocumentStats === "function") {
@@ -255,6 +259,30 @@ if (typeof documentsController.getDocumentStats === "function") {
 } else {
   console.warn(
     "[routes/documents] getDocumentStats no es función; ruta /stats deshabilitada"
+  );
+}
+
+if (typeof documentsController.getDocumentStatsOverview === "function") {
+  router.get(
+    "/stats/overview",
+    requireAuth,
+    documentsController.getDocumentStatsOverview
+  );
+} else {
+  console.warn(
+    "[routes/documents] getDocumentStatsOverview no es función; ruta /stats/overview deshabilitada"
+  );
+}
+
+if (typeof documentsController.getDocumentNotifications === "function") {
+  router.get(
+    "/notifications",
+    requireAuth,
+    documentsController.getDocumentNotifications
+  );
+} else {
+  console.warn(
+    "[routes/documents] getDocumentNotifications no es función; ruta /notifications deshabilitada"
   );
 }
 
@@ -612,7 +640,6 @@ if (typeof documentsController.getDocumentPdf === "function") {
 }
 
 if (typeof previewDocument === "function") {
-  // Esta vista interna debe respetar la lógica de preview (marca de agua)
   router.get("/:id/preview", previewDocument);
 } else {
   console.warn(
@@ -715,7 +742,10 @@ router.post(
       const { enviarRecordatorioManual } =
         require("../services/reminderService");
 
-      const result = await enviarRecordatorioManual(id);
+      const rawMessage =
+        typeof req.body?.message === "string" ? req.body.message : null;
+
+      const result = await enviarRecordatorioManual(id, rawMessage);
 
       const metadata = buildDocumentAuditMetadata({
         documentId: id,
@@ -725,6 +755,7 @@ router.post(
         extra: {
           path: req.originalUrl,
           method: req.method,
+          custom_message: rawMessage || null,
         },
       });
 
@@ -742,6 +773,63 @@ router.post(
       console.error("❌ Error enviando recordatorio:", err);
       return res.status(500).json({
         message: err.message || "Error enviando recordatorio",
+      });
+    }
+  }
+);
+
+/* ================================
+   Nueva ruta: reenviar correo de documento firmado
+   ================================ */
+
+router.post(
+  "/:id/reenviar-final",
+  requireAuth,
+  checkDocumentCompanyScope,
+  async (req, res) => {
+    try {
+      const id = parseIdParam(req.params.id);
+      if (id === null) {
+        return res.status(400).json({ message: "ID de documento inválido" });
+      }
+
+      const ok = await sendFinalDocumentEmails({
+        documentId: id,
+        force: true,
+      });
+
+      const metadata = buildDocumentAuditMetadata({
+        documentId: id,
+        title: req.document?.title,
+        status: req.document?.status,
+        companyId: req.document?.company_id || req.user?.company_id || null,
+        extra: {
+          path: req.originalUrl,
+          method: req.method,
+          final_email_force: true,
+          final_email_sent_ok: ok,
+        },
+      });
+
+      logAudit({
+        user: req.user,
+        action: "DOCUMENT_FINAL_EMAIL_RESEND",
+        entityType: "document",
+        entityId: id,
+        metadata,
+        req,
+      });
+
+      return res.json({
+        ok,
+        message: ok
+          ? "Correos de documento firmado reenviados correctamente"
+          : "No se pudieron reenviar los correos de documento firmado",
+      });
+    } catch (err) {
+      console.error("❌ Error reenviando correo final firmado:", err);
+      return res.status(500).json({
+        message: "Error reenviando correo final firmado",
       });
     }
   }
@@ -894,7 +982,7 @@ router.post(
         )
         RETURNING id, token, expires_at, sent_at;
         `,
-        [signer.id, expiresAt.toISOString(), token]
+        [signer.id, token, expiresAt.toISOString()]
       );
 
       const invitation = inviteRes.rows[0];

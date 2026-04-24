@@ -131,10 +131,16 @@ function normalizeDocumentEvent(evt) {
   const action = baseAction || "UNKNOWN";
 
   const fromStatusRaw =
-    evt.from_status || metadata.from_status || metadata.legacy_status || null;
+    evt.from_status ||
+    metadata.from_status ||
+    metadata.legacy_status ||
+    null;
 
   const toStatusRaw =
-    evt.to_status || metadata.to_status || metadata.documents_status || null;
+    evt.to_status ||
+    metadata.to_status ||
+    metadata.documents_status ||
+    null;
 
   const actor =
     evt.actor ||
@@ -314,7 +320,7 @@ async function getDocumentPdf(req, res) {
       });
     }
 
-    // Si es PDF final y tenemos hash, hacemos verificación de integridad
+    // Si es PDF final y tenemos hash, verificamos integridad
     if (isFinalPdf && pdf_hash_final) {
       try {
         const signedUrl = await getSignedUrl(storageKey, 600);
@@ -734,4 +740,7 @@ module.exports = {
   getTimeline,
   getLegalTimeline,
   getSigners,
+  // Estas dos funciones se reutilizarán en el centro de notificaciones
+  normalizeDocumentEvent,
+  normalizeAuditEvent,
 };

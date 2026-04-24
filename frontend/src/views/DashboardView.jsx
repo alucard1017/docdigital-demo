@@ -1,3 +1,4 @@
+// src/views/DashboardView.jsx
 import React, { useEffect, useMemo, useState, useCallback } from "react";
 import { Bar, Line, Doughnut } from "react-chartjs-2";
 import {
@@ -13,6 +14,7 @@ import {
   Filler,
 } from "chart.js";
 import api from "../api/client";
+import { NotificationsPanel } from "../components/NotificationsPanel";
 
 ChartJS.register(
   BarElement,
@@ -26,7 +28,14 @@ ChartJS.register(
   Filler
 );
 
-const COLORS = ["#0f766e", "#2563eb", "#d97706", "#dc2626", "#7c3aed", "#0891b2"];
+const COLORS = [
+  "#0f766e",
+  "#2563eb",
+  "#d97706",
+  "#dc2626",
+  "#7c3aed",
+  "#0891b2",
+];
 const SAFE_COLORS = COLORS.length ? COLORS : ["#475569"];
 
 function formatNumber(value) {
@@ -55,6 +64,25 @@ function sanitizeKpis(raw) {
     pendientes: Number(source.pendientes ?? 0),
     firmados: Number(source.firmados ?? 0),
     rechazados: Number(source.rechazados ?? 0),
+  };
+}
+
+function sanitizeOverviewTotals(raw) {
+  const source = raw || {};
+  return {
+    all: Number(source.all ?? 0),
+    pending_signature: Number(source.pending_signature ?? 0),
+    pending_review: Number(source.pending_review ?? 0),
+    signed: Number(source.signed ?? 0),
+    rejected: Number(source.rejected ?? 0),
+  };
+}
+
+function sanitizeOverviewToday(raw) {
+  const source = raw || {};
+  return {
+    signed: Number(source.signed ?? 0),
+    rejected: Number(source.rejected ?? 0),
   };
 }
 
@@ -142,7 +170,7 @@ function SkeletonCard() {
   );
 }
 
-function KpiCard({ label, value, tone = "slate", helper }) {
+function KpiCard({ label, value, tone = "slate", helper, badge }) {
   const toneMap = {
     slate: "bg-white border-slate-200 text-slate-900",
     amber: "bg-amber-50 border-amber-200 text-amber-900",
@@ -156,7 +184,14 @@ function KpiCard({ label, value, tone = "slate", helper }) {
         toneMap[tone] || toneMap.slate
       }`}
     >
-      <div className="mb-2 text-sm font-medium text-slate-500">{label}</div>
+      <div className="mb-2 flex items-center justify-between gap-2">
+        <div className="text-sm font-medium text-slate-500">{label}</div>
+        {badge ? (
+          <span className="rounded-full bg-white/60 px-2 py-0.5 text-[11px] font-medium text-slate-500">
+            {badge}
+          </span>
+        ) : null}
+      </div>
       <div className="text-3xl font-semibold tracking-tight">
         {formatNumber(value)}
       </div>
@@ -167,13 +202,7 @@ function KpiCard({ label, value, tone = "slate", helper }) {
   );
 }
 
-function ChartCard({
-  title,
-  description,
-  summary,
-  children,
-  actions = null,
-}) {
+function ChartCard({ title, description, summary, children, actions = null }) {
   return (
     <section className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
       <div className="mb-4 flex items-start justify-between gap-4">
@@ -207,6 +236,8 @@ export function DashboardView({ user }) {
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
   const [error, setError] = useState("");
+
+  // Stats “completas” (para gráficos)
   const [kpis, setKpis] = useState({
     total: 0,
     pendientes: 0,
@@ -217,44 +248,84 @@ export function DashboardView({ user }) {
   const [perDayData, setPerDayData] = useState([]);
   const [tipoTramiteData, setTipoTramiteData] = useState([]);
 
+  // Overview (para cards rápidas)
+  const [overviewTotals, setOverviewTotals] = useState({
+    all: 0,
+    pending_signature: 0,
+    pending_review: 0,
+    signed: 0,
+    rejected: 0,
+  });
+  const [overviewToday, setOverviewToday] = useState({
+    signed: 0,
+    rejected: 0,
+  });
+
   const displayName = user?.name || user?.fullName || "Usuario";
 
-  const loadStats = useCallback(async (signal, { silent = false } = {}) => {
-    try {
-      if (silent) {
-        setRefreshing(true);
-      } else {
-        setLoading(true);
+  const loadStats = useCallback(
+    async (signal, { silent = false } = {}) => {
+      try {
+        if (silent) {
+          setRefreshing(true);
+        } else {
+          setLoading(true);
+        }
+
+        setError("");
+
+        const statsPromise = api.get(
+          "/docs/stats",
+          signal ? { signal } : undefined
+        );
+
+        const overviewPromise = api.get(
+          "/docs/stats/overview",
+          signal ? { signal } : undefined
+        );
+
+        const [statsRes, overviewRes] = await Promise.all([
+          statsPromise,
+          overviewPromise,
+        ]);
+
+        const statsData = statsRes?.data || {};
+        const overviewData = overviewRes?.data || {};
+
+        const nextKpis = sanitizeKpis(statsData?.kpis);
+        const nextStatus = buildStatusData(nextKpis);
+        const nextPerDay = sanitizePerDayData(statsData?.perDay);
+        const nextTipoTramite = sanitizeTipoTramiteData(
+          statsData?.porTipoTramite
+        );
+
+        setKpis(nextKpis);
+        setStatusData(nextStatus);
+        setPerDayData(nextPerDay);
+        setTipoTramiteData(nextTipoTramite);
+
+        setOverviewTotals(
+          sanitizeOverviewTotals(overviewData?.totals || {})
+        );
+        setOverviewToday(
+          sanitizeOverviewToday(overviewData?.today || {})
+        );
+      } catch (err) {
+        if (isAbortLikeError(err)) return;
+
+        console.error("Error cargando stats:", err);
+        const msg =
+          err?.response?.data?.message ||
+          err?.message ||
+          "Error al cargar estadísticas";
+        setError(msg);
+      } finally {
+        setLoading(false);
+        setRefreshing(false);
       }
-
-      setError("");
-
-      const res = await api.get("/docs/stats", signal ? { signal } : undefined);
-      const data = res?.data || {};
-
-      const nextKpis = sanitizeKpis(data?.kpis);
-      const nextStatus = buildStatusData(nextKpis);
-      const nextPerDay = sanitizePerDayData(data?.perDay);
-      const nextTipoTramite = sanitizeTipoTramiteData(data?.porTipoTramite);
-
-      setKpis(nextKpis);
-      setStatusData(nextStatus);
-      setPerDayData(nextPerDay);
-      setTipoTramiteData(nextTipoTramite);
-    } catch (err) {
-      if (isAbortLikeError(err)) return;
-
-      console.error("Error cargando stats:", err);
-      const msg =
-        err?.response?.data?.message ||
-        err?.message ||
-        "Error al cargar estadísticas";
-      setError(msg);
-    } finally {
-      setLoading(false);
-      setRefreshing(false);
-    }
-  }, []);
+    },
+    []
+  );
 
   useEffect(() => {
     const controller = new AbortController();
@@ -441,14 +512,18 @@ export function DashboardView({ user }) {
 
   const perDaySummary = useMemo(() => {
     if (!perDayData.length) return "No hay serie diaria disponible.";
-    const totalMov = perDayData.reduce((acc, item) => acc + Number(item.count || 0), 0);
+    const totalMov = perDayData.reduce(
+      (acc, item) => acc + Number(item.count || 0),
+      0
+    );
     return `${formatNumber(totalMov)} documentos registrados en ${formatNumber(
       perDayData.length
     )} días visibles.`;
   }, [perDayData]);
 
   const tipoSummary = useMemo(() => {
-    if (!tipoTramiteData.length) return "Sin composición por tipo de trámite.";
+    if (!tipoTramiteData.length)
+      return "Sin composición por tipo de trámite.";
     return tipoTramiteData
       .map((item) => `${item.name}: ${formatNumber(item.value)}`)
       .join(" · ");
@@ -528,27 +603,37 @@ export function DashboardView({ user }) {
             <section className="grid grid-cols-1 gap-4 md:grid-cols-2 xl:grid-cols-4">
               <KpiCard
                 label="Total documentos"
-                value={kpis.total}
+                value={overviewTotals.all}
                 tone="slate"
-                helper="Volumen total registrado en el periodo disponible."
+                helper="Volumen total registrado para este ámbito."
               />
               <KpiCard
-                label="Pendientes"
-                value={kpis.pendientes}
+                label="Pendientes de firma"
+                value={overviewTotals.pending_signature}
                 tone="amber"
-                helper="Documentos que aún requieren acción para avanzar."
+                helper="Documentos que aún requieren acción de firma."
               />
               <KpiCard
                 label="Firmados"
-                value={kpis.firmados}
+                value={overviewTotals.signed}
                 tone="green"
                 helper="Trámites completados con firma exitosa."
+                badge={
+                  overviewToday.signed > 0
+                    ? `Hoy: ${formatNumber(overviewToday.signed)}`
+                    : undefined
+                }
               />
               <KpiCard
                 label="Rechazados"
-                value={kpis.rechazados}
+                value={overviewTotals.rejected}
                 tone="red"
-                helper="Casos que requieren revisión de flujo o contenido."
+                helper="Casos cerrados por rechazo del flujo."
+                badge={
+                  overviewToday.rejected > 0
+                    ? `Hoy: ${formatNumber(overviewToday.rejected)}`
+                    : undefined
+                }
               />
             </section>
 
@@ -621,27 +706,7 @@ export function DashboardView({ user }) {
                 )}
               </ChartCard>
 
-              <section className="rounded-2xl border border-slate-200 bg-slate-950 p-5 shadow-sm">
-                <div className="mb-2 inline-flex rounded-full border border-slate-700 px-3 py-1 text-[11px] font-medium uppercase tracking-wide text-slate-300">
-                  Recomendación
-                </div>
-
-                <h2 className="text-base font-semibold text-white">
-                  Siguiente foco operativo
-                </h2>
-
-                <p className="mt-3 text-sm leading-7 text-slate-300">
-                  Si los pendientes crecen más rápido que los firmados, conviene
-                  revisar recordatorios, tiempos entre pasos y fricción en el
-                  enlace público.
-                </p>
-
-                <p className="mt-3 text-sm leading-7 text-slate-400">
-                  Si la creación diaria cae, prueba el flujo completo como
-                  usuario real para validar envío, apertura, firma y verificación
-                  de punta a punta.
-                </p>
-              </section>
+              <NotificationsPanel maxItems={10} />
             </div>
           </>
         )}

@@ -547,11 +547,21 @@ app.post(
       const { sendReminderEmail } = require("./services/sendReminderEmails");
 
       const docResult = await db.query(
-        `SELECT id, firmante_email, firmante_nombre, title, signature_token_expires_at
-         FROM documents 
-         WHERE signature_status = 'PENDIENTE' 
-           AND created_at > NOW() - INTERVAL '30 días'
-         ORDER BY created_at DESC`
+        `
+        SELECT 
+          id,
+          firmante_email,
+          firmante_nombre,
+          title,
+          signature_token,
+          codigo_verificacion,
+          signature_status,
+          created_at
+        FROM documents 
+        WHERE signature_status = 'PENDIENTE' 
+          AND created_at > NOW() - INTERVAL '30 días'
+        ORDER BY created_at DESC
+        `
       );
 
       const documentosPendientes = docResult.rows;
@@ -561,12 +571,19 @@ app.post(
       for (const doc of documentosPendientes) {
         try {
           const ok = await sendReminderEmail({
+            id: doc.id,
             signer_email: doc.firmante_email,
             signer_name: doc.firmante_nombre,
-            nombre: doc.title,
-            estado: "PENDIENTE",
+            title: doc.title,
+            sign_token: doc.signature_token,
+            verification_code: doc.codigo_verificacion,
+            estado: doc.signature_status,
+            customMessage: null, // aquí podrías inyectar un mensaje fijo si quieres
           });
-          if (ok) enviados++;
+
+          if (ok) {
+            enviados++;
+          }
         } catch (emailError) {
           console.error(
             `⚠️ Error enviando recordatorio para doc ${doc.id}:`,

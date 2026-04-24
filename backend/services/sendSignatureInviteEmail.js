@@ -11,8 +11,8 @@ const {
   SMTP_PASS,
   SMTP_FROM_EMAIL,
   SMTP_FROM_NAME,
-  FRONTEND_URL,          // ej: https://docdigital.vercel.app
-  PUBLIC_VERIFY_BASE_URL // ej: https://docdigital.vercel.app/verificar
+  FRONTEND_URL,
+  PUBLIC_VERIFY_BASE_URL,
 } = process.env;
 
 /* =========================
@@ -43,7 +43,7 @@ if (!FRONTEND_URL || !PUBLIC_VERIFY_BASE_URL) {
 const transporter = nodemailer.createTransport({
   host: SMTP_HOST,
   port: Number(SMTP_PORT) || 587,
-  secure: false, // con 587 se usa STARTTLS
+  secure: false, // 587 -> STARTTLS
   auth: {
     user: SMTP_USER,
     pass: SMTP_PASS,
@@ -79,18 +79,18 @@ async function generateQrDataUrl(url) {
    ========================= */
 
 /**
- * Enviar invitación de firma por SMTP (Nodemailer)
- * Incluye:
- * - Enlace directo de firma pública (/public/sign?token=sign_token)
- * - Enlace de verificación por código (/verificar?code=...)
- * - QR apuntando al mejor enlace disponible (prioriza firma)
+ * Enviar invitación / recordatorio de firma por SMTP (Nodemailer)
+ *
+ * - Si options.reminder === true, el asunto y el cuerpo hablan de "recordatorio".
+ * - options.customMessage (string) se inserta como párrafo destacado si viene.
  */
 async function sendSignatureInviteEmail({
   signer_email,
   signer_name,
   document_title,
-  signature_token,   // token para firma pública (sign_token)
+  signature_token, // token para firma pública (sign_token)
   verification_code, // ej: VF-2026-000008
+  options = {},
 }) {
   const fromEmail = SMTP_FROM_EMAIL;
   const fromName = SMTP_FROM_NAME || "VeriFirma";
@@ -100,11 +100,16 @@ async function sendSignatureInviteEmail({
     return false;
   }
 
+  const { reminder = false, customMessage } = options || {};
+  const hasCustomMessage =
+    typeof customMessage === "string" && customMessage.trim().length > 0;
+  const trimmedCustomMessage = hasCustomMessage
+    ? customMessage.trim()
+    : null;
+
   const frontendBase = normalizeBaseUrl(FRONTEND_URL);
   const verifyBase = normalizeBaseUrl(PUBLIC_VERIFY_BASE_URL || "");
 
-  // URL pública de firma: usa el portal principal + /public/sign
-  // ej: https://docdigital.vercel.app/public/sign?token=...
   const signUrl =
     frontendBase && signature_token
       ? `${frontendBase}/public/sign?token=${encodeURIComponent(
@@ -112,8 +117,6 @@ async function sendSignatureInviteEmail({
         )}`
       : "";
 
-  // URL pública de verificación por código
-  // ej: https://docdigital.vercel.app/verificar?code=VF-2026-000008
   const publicVerifyUrl =
     verifyBase && verification_code
       ? `${verifyBase}?code=${encodeURIComponent(verification_code)}`
@@ -122,18 +125,41 @@ async function sendSignatureInviteEmail({
   const safeSignerName = signer_name || "";
   const safeDocumentTitle = document_title || "Documento";
 
-  const subject = `Invitación a firmar: ${safeDocumentTitle}`;
+  const subject = reminder
+    ? `Recordatorio de firma: ${safeDocumentTitle}`
+    : `Invitación a firmar: ${safeDocumentTitle}`;
 
-  // QR apuntando preferentemente a la URL de firma
   const qrTargetUrl = signUrl || publicVerifyUrl;
   const qrDataUrl = await generateQrDataUrl(qrTargetUrl);
+
+  const introParagraph = reminder
+    ? `Este es un recordatorio para revisar y firmar electrónicamente el siguiente documento en <strong>VeriFirma</strong>:`
+    : `Has sido invitado a revisar y firmar electrónicamente el siguiente documento en <strong>VeriFirma</strong>:`;
+
+
+  const customMessageBlock = trimmedCustomMessage
+    ? `
+      <table role="presentation" cellpadding="0" cellspacing="0" style="width:100%;margin:0 0 16px;font-size:13px;border-radius:12px;background-color:#eff6ff;border:1px solid #bfdbfe;">
+        <tr>
+          <td style="padding:10px 14px;color:#1d4ed8;font-weight:600;">
+            Mensaje del remitente
+          </td>
+        </tr>
+        <tr>
+          <td style="padding:10px 14px;color:#1f2937;white-space:pre-line;">
+            ${trimmedCustomMessage.replace(/</g, "&lt;")}
+          </td>
+        </tr>
+      </table>
+    `
+    : "";
 
   const html = `
 <!DOCTYPE html>
 <html lang="es">
 <head>
   <meta charset="UTF-8" />
-  <title>Invitación a firmar documento</title>
+  <title>${subject}</title>
 </head>
 <body style="margin:0;padding:0;background-color:#0f172a0d;font-family:system-ui,-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;color:#0f172a;">
   <table role="presentation" cellpadding="0" cellspacing="0" width="100%" style="padding:24px 0;">
@@ -160,7 +186,7 @@ async function sendSignatureInviteEmail({
           <tr>
             <td style="padding:24px;">
               <h1 style="margin:0 0 12px;font-size:20px;line-height:1.3;color:#0f172a;">
-                Invitación a firmar documento
+                ${reminder ? "Recordatorio de firma de documento" : "Invitación a firmar documento"}
               </h1>
 
               <p style="margin:0 0 12px;font-size:14px;line-height:1.5;color:#4b5563;">
@@ -168,8 +194,10 @@ async function sendSignatureInviteEmail({
               </p>
 
               <p style="margin:0 0 16px;font-size:14px;line-height:1.5;color:#4b5563;">
-                Has sido invitado a revisar y firmar electrónicamente el siguiente documento en <strong>VeriFirma</strong>:
+                ${introParagraph}
               </p>
+
+              ${customMessageBlock}
 
               <table role="presentation" cellpadding="0" cellspacing="0" style="width:100%;margin-bottom:16px;font-size:13px;border-radius:12px;background-color:#f9fafb;border:1px solid #e5e7eb;">
                 <tr>
@@ -261,11 +289,12 @@ async function sendSignatureInviteEmail({
   `;
 
   try {
-    console.log("📧 [EMAIL] Enviando invitación", {
+    console.log("📧 [EMAIL] Enviando invitación/recordatorio", {
       to: signer_email,
       subject,
       signUrl,
       publicVerifyUrl,
+      reminder,
     });
 
     const info = await transporter.sendMail({

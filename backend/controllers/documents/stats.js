@@ -51,7 +51,9 @@ function buildScope(user, queryCompanyId) {
   };
 }
 
-function buildWhereClause(targetCompanyId) {
+function buildWhereClause(targetCompanyId, tableAlias = "") {
+  const prefix = tableAlias ? `${tableAlias}.` : "";
+
   if (!targetCompanyId) {
     return {
       whereSql: "",
@@ -60,7 +62,7 @@ function buildWhereClause(targetCompanyId) {
   }
 
   return {
-    whereSql: "WHERE company_id = $1",
+    whereSql: `WHERE ${prefix}company_id = $1`,
     params: [targetCompanyId],
   };
 }
@@ -160,4 +162,105 @@ async function getDocumentStats(req, res) {
   }
 }
 
-module.exports = { getDocumentStats };
+/**
+ * GET /api/docs/stats/overview
+ *
+ * Pensado para las cards del Dashboard:
+ * - Totales por estado normalizado
+ * - Firmados / rechazados hoy
+ * - Firmados / rechazados últimos 7 días (serie simple)
+ */
+async function getDocumentStatsOverview(req, res) {
+  try {
+    const user = req.user;
+    const { company_id: queryCompanyId } = req.query;
+
+    const scope = buildScope(user, queryCompanyId);
+
+    if (scope?.error) {
+      return res.status(400).json({ message: scope.error });
+    }
+
+    const { targetCompanyId, scopeLabel } = scope;
+    const { whereSql, params } = buildWhereClause(targetCompanyId, "d");
+
+    // Totales por estado
+    const totalsSql = `
+      SELECT
+        COUNT(*) AS total,
+        COUNT(*) FILTER (
+          WHERE d.status IN ('PENDIENTE', 'PENDIENTE_VISADO', 'PENDIENTE_FIRMA')
+        ) AS pending_signature,
+        COUNT(*) FILTER (WHERE d.status = 'PENDIENTE_VISADO') AS pending_review,
+        COUNT(*) FILTER (WHERE d.status = 'FIRMADO') AS signed,
+        COUNT(*) FILTER (WHERE d.status = 'RECHAZADO') AS rejected
+      FROM documents d
+      ${whereSql}
+    `;
+
+    // Firmados / rechazados hoy
+    const todaySql = `
+      SELECT
+        COUNT(*) FILTER (WHERE d.status = 'FIRMADO') AS signed_today,
+        COUNT(*) FILTER (WHERE d.status = 'RECHAZADO') AS rejected_today
+      FROM documents d
+      ${whereSql ? `${whereSql} AND d.updated_at::date = CURRENT_DATE` : "WHERE d.updated_at::date = CURRENT_DATE"}
+    `;
+
+    // Firmados / rechazados últimos 7 días (por fecha de updated_at)
+    const last7Sql = `
+      SELECT
+        to_char(d.updated_at::date, 'YYYY-MM-DD') AS date,
+        COUNT(*) FILTER (WHERE d.status = 'FIRMADO') AS signed,
+        COUNT(*) FILTER (WHERE d.status = 'RECHAZADO') AS rejected
+      FROM documents d
+      ${
+        whereSql
+          ? `${whereSql} AND d.updated_at >= CURRENT_DATE - INTERVAL '6 days'`
+          : "WHERE d.updated_at >= CURRENT_DATE - INTERVAL '6 days'"
+      }
+      GROUP BY d.updated_at::date
+      ORDER BY date ASC
+    `;
+
+    const [totalsRes, todayRes, last7Res] = await Promise.all([
+      db.query(totalsSql, params),
+      db.query(todaySql, params),
+      db.query(last7Sql, params),
+    ]);
+
+    const totalsRow = totalsRes.rows[0] || {};
+    const todayRow = todayRes.rows[0] || {};
+
+    return res.json({
+      scope: scopeLabel,
+      company_id: targetCompanyId,
+      totals: {
+        all: toSafeNumber(totalsRow.total),
+        pending_signature: toSafeNumber(totalsRow.pending_signature),
+        pending_review: toSafeNumber(totalsRow.pending_review),
+        signed: toSafeNumber(totalsRow.signed),
+        rejected: toSafeNumber(totalsRow.rejected),
+      },
+      today: {
+        signed: toSafeNumber(todayRow.signed_today),
+        rejected: toSafeNumber(todayRow.rejected_today),
+      },
+      last7: last7Res.rows.map((row) => ({
+        date: row.date,
+        signed: toSafeNumber(row.signed),
+        rejected: toSafeNumber(row.rejected),
+      })),
+    });
+  } catch (err) {
+    console.error("❌ Error obteniendo stats overview de documentos:", err);
+    return res
+      .status(500)
+      .json({ message: "Error obteniendo estadísticas de overview" });
+  }
+}
+
+module.exports = {
+  getDocumentStats,
+  getDocumentStatsOverview,
+};
