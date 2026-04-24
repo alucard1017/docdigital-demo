@@ -93,9 +93,8 @@ function PublicDocumentSummary({
   viewState,
   actionBlock,
   onRetry,
+  showInlineStatus,
 }) {
-  const canShowInlineStatus = viewState.kind !== "ready";
-
   return (
     <aside className="public-sign-sidebar">
       <div className="public-sign-summary">
@@ -186,7 +185,7 @@ function PublicDocumentSummary({
         </a>
       )}
 
-      {canShowInlineStatus && (
+      {showInlineStatus && (
         <PublicStatusMessageCard
           viewState={viewState}
           onRetry={onRetry}
@@ -302,7 +301,7 @@ export function PublicSignView(props) {
   }, [viewState.kind, viewState.message, isVisado]);
 
   const actionBlock = useMemo(() => {
-    if (!canRenderActions) return null;
+    if (!canRenderActions || isTerminal) return null;
 
     return (
       <PublicSignActions
@@ -335,6 +334,7 @@ export function PublicSignView(props) {
     handleConfirm,
     handleReject,
     handleToggleReject,
+    isTerminal,
     isVisado,
     legalError,
     rejectError,
@@ -378,6 +378,12 @@ export function PublicSignView(props) {
       }`,
     [isVisado]
   );
+
+  const showInlineStatusInSummary = useMemo(() => {
+    // Solo mostrar card de estado embebida cuando NO estamos en terminal
+    // (en terminal usamos el mensaje global arriba).
+    return !isTerminal && viewState.kind !== "ready";
+  }, [isTerminal, viewState.kind]);
 
   return (
     <div className="public-sign-page">
@@ -431,7 +437,41 @@ export function PublicSignView(props) {
           />
         )}
 
-        {canRenderDocument && (
+        {/* Caso terminal con documento: mostrar solo mensaje global y PDF, sin botones */}
+        {isTerminal && canRenderDocument && !isLoading && (
+          <>
+            <PublicStatusMessageCard
+              viewState={viewState}
+              onRetry={handleRetryLoad}
+              variant={getMessageVariant(viewState.kind)}
+            />
+            <div className="public-sign-layout">
+              <PublicDocumentSummary
+                documentTitle={documentTitle}
+                companyName={companyName}
+                companyRut={companyRut}
+                contractNumber={contractNumber}
+                procedureFieldLabel={procedureFieldLabel}
+                procedureLabel={procedureLabel}
+                participantInfo={participantInfo}
+                pdfUrl={pdfUrl}
+                viewState={viewState}
+                actionBlock={null}
+                onRetry={handleRetryLoad}
+                showInlineStatus={false}
+              />
+
+              <PublicDocumentPanel
+                pdfUrl={pdfUrl}
+                documentTitle={documentTitle}
+                actionBlock={null}
+              />
+            </div>
+          </>
+        )}
+
+        {/* Caso normal (no terminal): mostrar layout completo con acciones */}
+        {!isTerminal && canRenderDocument && (
           <div className="public-sign-layout">
             <PublicDocumentSummary
               documentTitle={documentTitle}
@@ -445,6 +485,7 @@ export function PublicSignView(props) {
               viewState={viewState}
               actionBlock={actionBlock}
               onRetry={handleRetryLoad}
+              showInlineStatus={showInlineStatusInSummary}
             />
 
             <PublicDocumentPanel

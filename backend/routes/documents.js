@@ -33,7 +33,9 @@ const {
   getReminderSchedulerStatus,
   ejecutarRecordatorios,
 } = require("../jobs/reminderScheduler");
-const { sendFinalDocumentEmails } = require("../services/sendFinalDocumentEmails");
+const {
+  sendFinalDocumentEmails,
+} = require("../services/sendFinalDocumentEmails");
 
 const router = express.Router();
 
