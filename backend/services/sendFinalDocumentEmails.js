@@ -23,8 +23,10 @@ async function buildFinalPdfUrl(docRow) {
   if (!basePath) return null;
 
   try {
-    // 30 días de validez (en segundos)
-    return await getSignedUrl(basePath, 30 * 24 * 3600);
+    // Máximo permitido por S3/R2 (Signature V4): < 7 días (604800 segundos)
+    const ONE_WEEK_SECONDS = 7 * 24 * 3600;
+
+    return await getSignedUrl(basePath, ONE_WEEK_SECONDS);
   } catch (err) {
     console.error("❌ [FINAL_EMAIL] Error generando signed URL PDF final:", err);
     return null;
