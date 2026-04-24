@@ -275,6 +275,12 @@ export function PublicSignView(props) {
   );
 
   const introTitle = useMemo(() => {
+    if (isTerminal) {
+      return viewState.title || (isVisado
+        ? "Documento visado correctamente"
+        : "Acción registrada correctamente");
+    }
+
     if (viewState.kind !== "ready") return viewState.title;
 
     if (isVisado) {
@@ -286,9 +292,15 @@ export function PublicSignView(props) {
     }
 
     return "Revisa este documento para registrar tu firma";
-  }, [viewState.kind, viewState.title, isVisado, signerRoleLabel]);
+  }, [isTerminal, viewState.title, viewState.kind, isVisado, signerRoleLabel]);
 
   const introText = useMemo(() => {
+    if (isTerminal) {
+      return viewState.message || (isVisado
+        ? "El documento fue visado correctamente desde este enlace público y quedó habilitado para continuar con la firma."
+        : "La acción se registró correctamente.");
+    }
+
     if (viewState.kind !== "ready") {
       return viewState.message;
     }
@@ -298,7 +310,7 @@ export function PublicSignView(props) {
     }
 
     return "Lee el documento completo, valida la información y luego confirma la acción correspondiente.";
-  }, [viewState.kind, viewState.message, isVisado]);
+  }, [isTerminal, viewState.message, viewState.kind, isVisado]);
 
   const actionBlock = useMemo(() => {
     if (!canRenderActions || isTerminal) return null;
@@ -437,7 +449,7 @@ export function PublicSignView(props) {
           />
         )}
 
-        {/* Caso terminal con documento: mostrar solo mensaje global y PDF, sin botones */}
+        {/* Caso terminal con documento: mensaje global + PDF, sin acciones */}
         {isTerminal && canRenderDocument && !isLoading && (
           <>
             <PublicStatusMessageCard
@@ -470,7 +482,7 @@ export function PublicSignView(props) {
           </>
         )}
 
-        {/* Caso normal (no terminal): mostrar layout completo con acciones */}
+        {/* Caso normal (no terminal): layout completo con acciones */}
         {!isTerminal && canRenderDocument && (
           <div className="public-sign-layout">
             <PublicDocumentSummary

@@ -48,6 +48,9 @@ export function usePublicSignLogic({
   const [actionMessage, setActionMessage] = useState("");
   const [actionMessageType, setActionMessageType] = useState("info"); // "info" | "success" | "error"
 
+  // Estado terminal manual para evitar volver a "ready" tras la acción
+  const [terminalViewState, setTerminalViewState] = useState(null);
+
   const document = useMemo(
     () =>
       publicSignDoc
@@ -154,6 +157,7 @@ export function usePublicSignLogic({
     setShowReject(false);
     setRejectReason("");
     setRejectError("");
+    setTerminalViewState(null);
   }, [publicSignToken, resolvedMode, effectiveTokenKind]);
 
   const pdfUrl = useMemo(
@@ -320,7 +324,7 @@ export function usePublicSignLogic({
     [signer, isVisado, document]
   );
 
-  const viewState = useMemo(
+  const baseViewState = useMemo(
     () =>
       resolveViewState({
         hasToken,
@@ -342,6 +346,12 @@ export function usePublicSignLogic({
       isVisado,
       requiresVisado,
     ]
+  );
+
+  // Si hay estado terminal manual, tiene prioridad
+  const viewState = useMemo(
+    () => terminalViewState || baseViewState,
+    [terminalViewState, baseViewState]
   );
 
   const statusBadge = useMemo(
@@ -442,10 +452,21 @@ export function usePublicSignLogic({
 
       await reloadPublicState();
 
-      setActionMessage(
-        buildActionSuccessMessage(isVisado, data?.message)
-      );
+      const successMsg = buildActionSuccessMessage(isVisado, data?.message);
+      setActionMessage(successMsg);
       setActionMessageType("success");
+
+      // Si fue visado, pasamos a estado terminal "completed"
+      if (isVisado) {
+        setTerminalViewState({
+          kind: "completed",
+          title: "Documento visado correctamente",
+          message:
+            successMsg ||
+            "El documento fue visado correctamente desde este enlace público y quedó habilitado para continuar con la firma.",
+        });
+      }
+
       window.scrollTo({ top: 0, behavior: "smooth" });
     } catch (err) {
       const message =
@@ -500,16 +521,24 @@ export function usePublicSignLogic({
 
       await reloadPublicState();
 
-      setActionMessage(
-        sanitizePublicMessage(
-          data?.message,
-          "Documento rechazado correctamente."
-        )
+      const msg = sanitizePublicMessage(
+        data?.message,
+        "Documento rechazado correctamente."
       );
+
+      setActionMessage(msg);
       setActionMessageType("success");
       setShowReject(false);
       setRejectReason("");
       setRejectError("");
+
+      // Para rechazo público también podemos marcar terminal
+      setTerminalViewState({
+        kind: "completed",
+        title: "Documento rechazado correctamente",
+        message: msg,
+      });
+
       window.scrollTo({ top: 0, behavior: "smooth" });
     } catch (err) {
       const message =
