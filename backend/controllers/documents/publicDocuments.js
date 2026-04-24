@@ -600,6 +600,10 @@ async function publicVisarDocument(req, res) {
 
     const validationError = validatePublicVisar(docActual);
     if (validationError) {
+      console.warn(
+        "[PUBLIC] publicVisarDocument → validationError",
+        validationError
+      );
       return res.status(validationError.status).json(validationError.body);
     }
 

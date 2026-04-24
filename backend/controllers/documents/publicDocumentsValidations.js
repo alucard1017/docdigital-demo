@@ -19,7 +19,6 @@ function validatePublicToken(token) {
   if (!token || typeof token !== "string" || !token.trim()) {
     return buildValidationError(400, "Token inválido", "INVALID_TOKEN");
   }
-
   return null;
 }
 
@@ -31,7 +30,6 @@ function validatePublicRejectReason(motivo) {
       "INVALID_REJECT_REASON"
     );
   }
-
   return null;
 }
 
@@ -56,7 +54,6 @@ function isTruthyVisado(value) {
   if (value === false || value === 0) return false;
 
   const normalized = String(value ?? "").trim().toLowerCase();
-
   return ["true", "t", "1", "yes", "si", "sí"].includes(normalized);
 }
 
@@ -75,9 +72,7 @@ function getReviewState(row) {
 
 function getSignerState(row) {
   return normalizeState(
-    row?.signer_status ??
-      row?.participant_status ??
-      row?.estado_firmante
+    row?.signer_status ?? row?.participant_status ?? row?.estado_firmante
   );
 }
 

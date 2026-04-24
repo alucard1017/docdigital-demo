@@ -57,7 +57,7 @@ async function sendFinalDocumentEmails({ documentId, force = false }) {
         d.pdf_final_url,
         d.pdf_original_url,
         d.file_path,
-        d.codigo_verificacion,
+        d.verification_code AS codigo_verificacion,
         d.owner_id,
         d.company_id,
         d.created_at,
@@ -116,7 +116,6 @@ async function sendFinalDocumentEmails({ documentId, force = false }) {
     );
 
     const participants = participantsResult.rows || [];
-
     const pdfUrl = await buildFinalPdfUrl(doc);
 
     const recipientsMap = new Map();

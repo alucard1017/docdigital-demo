@@ -12,8 +12,6 @@ const {
 
 /**
  * Inserta un evento genérico en document_events.
- * - Siempre guarda JSON válido en metadata.
- * - Refuerza un contrato mínimo: ids, estados, tipo de evento, contexto técnico.
  */
 async function insertDocumentEvent({
   documentId,
@@ -34,7 +32,6 @@ async function insertDocumentEvent({
   const baseEventType = eventType || metadata.event_type || action || null;
 
   const safeMetadata = {
-    // Contrato mínimo transversal (útil para auditoría y sellado)
     source: metadata.source || "document_events",
     company_id: companyId ?? metadata.company_id ?? null,
     user_id: userId ?? metadata.user_id ?? null,
@@ -44,11 +41,9 @@ async function insertDocumentEvent({
     to_status: toStatus ?? metadata.to_status ?? null,
     event_type: baseEventType,
     action: action || metadata.action || null,
-    // Contexto de dispositivo / red (alineado con buenas prácticas de audit trail)
     ip_address: ipAddress ?? metadata.ip_address ?? null,
     user_agent: userAgent ?? metadata.user_agent ?? null,
     hash_document: hashDocument ?? metadata.hash_document ?? null,
-    // Resto de metadata extendida, sin perder nada de lo que mandes
     ...metadata,
   };
 
@@ -96,7 +91,6 @@ async function insertDocumentEvent({
 
 /**
  * Evento para acciones del propietario (panel interno).
- * Mantiene metadatos ricos e incorpora el contrato mínimo estándar.
  */
 async function insertOwnerEvent({
   req,

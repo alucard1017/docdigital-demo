@@ -3,7 +3,7 @@ const { db, sellarPdfConQr, DOCUMENT_STATES } = require("./common");
 const { logAudit } = require("../../utils/auditLog");
 const {
   insertOwnerEvent,
-  insertOwnerStatusChangedEvent,
+  insertDocumentEvent,
 } = require("./documentEventInserts");
 const {
   validateSign,
@@ -20,7 +20,6 @@ const parseId = (raw) => {
 
 /**
  * URL preferida para ENTREGAR / VISUALIZAR el PDF al cliente.
- * Prioriza siempre el PDF final sellado.
  */
 function buildPreferredFileUrl(doc) {
   if (!doc) return null;
@@ -37,8 +36,7 @@ function buildPreferredFileUrl(doc) {
 }
 
 /**
- * Clave de S3 preferida para SELLAR el documento.
- * Importante: debe salir del original limpio.
+ * Clave de S3 preferida para SELLAR el documento (desde original limpio).
  */
 function buildSealSourceKey(doc) {
   if (!doc) return null;
@@ -55,6 +53,7 @@ function buildSealSourceKey(doc) {
 
 /**
  * Resuelve datos de verificación desde legacy + metadata.
+ * (Idealmente mover a un util compartido y reutilizar también en publicDocuments).
  */
 async function resolveVerificationData(doc) {
   let codigoVerificacion = null;
@@ -134,6 +133,45 @@ async function refreshFinalPdfFields(docId, targetDoc) {
   return targetDoc;
 }
 
+/**
+ * Helper local para registrar STATUS_CHANGED desde contexto propietario.
+ */
+async function insertOwnerStatusChangedEvent({
+  req,
+  doc,
+  fromStatus,
+  toStatus,
+  details,
+  extraMetadata = {},
+}) {
+  try {
+    await insertDocumentEvent({
+      documentId: doc.id,
+      participantId: null,
+      actor: req?.user?.name || `user:${req?.user?.id || "owner"}`,
+      action: "STATUS_CHANGED",
+      details,
+      fromStatus,
+      toStatus,
+      eventType: "STATUS_CHANGED",
+      ipAddress: req.ip || null,
+      userAgent: req.headers["user-agent"] || null,
+      hashDocument: null, // si quieres, puedes reutilizar getDocumentHash aquí
+      companyId: doc.company_id || null,
+      userId: req?.user?.id || null,
+      metadata: {
+        ...extraMetadata,
+        source: extraMetadata.source || "owner_status_change",
+      },
+    });
+  } catch (err) {
+    console.error(
+      "⚠️ Error en insertOwnerStatusChangedEvent helper:",
+      err.message || err
+    );
+  }
+}
+
 /* ================================
    POST: Firmar documento (propietario)
    ================================ */
@@ -203,23 +241,16 @@ async function signDocument(req, res) {
     });
 
     if (fromStatus !== toStatus) {
-      try {
-        await insertOwnerStatusChangedEvent({
-          req,
-          doc,
-          fromStatus,
-          toStatus,
-          details: "Cambio de estado por firma de propietario",
-          extraMetadata: {
-            reason: "owner_signed",
-          },
-        });
-      } catch (eventErr) {
-        console.error(
-          "⚠️ Error registrando STATUS_CHANGED (signDocument):",
-          eventErr
-        );
-      }
+      await insertOwnerStatusChangedEvent({
+        req,
+        doc,
+        fromStatus,
+        toStatus,
+        details: "Cambio de estado por firma de propietario",
+        extraMetadata: {
+          reason: "owner_signed",
+        },
+      });
     }
 
     await logAudit({
@@ -386,23 +417,16 @@ async function viserDocumentInternalUpdate(id, userId, req = null) {
   });
 
   if (fromStatus !== toStatus) {
-    try {
-      await insertOwnerStatusChangedEvent({
-        req,
-        doc,
-        fromStatus,
-        toStatus,
-        details: "Cambio de estado por visado de propietario",
-        extraMetadata: {
-          reason: "owner_visado",
-        },
-      });
-    } catch (eventErr) {
-      console.error(
-        "⚠️ Error registrando STATUS_CHANGED (viserDocumentInternalUpdate):",
-        eventErr
-      );
-    }
+    await insertOwnerStatusChangedEvent({
+      req,
+      doc,
+      fromStatus,
+      toStatus,
+      details: "Cambio de estado por visado de propietario",
+      extraMetadata: {
+        reason: "owner_visado",
+      },
+    });
   }
 
   return { doc, docActual };
@@ -528,23 +552,16 @@ async function rejectDocument(req, res) {
       },
     });
 
-    try {
-      await insertOwnerStatusChangedEvent({
-        req,
-        doc,
-        fromStatus,
-        toStatus,
-        details: "Cambio de estado por rechazo de propietario",
-        extraMetadata: {
-          reason: "owner_rejected",
-        },
-      });
-    } catch (eventErr) {
-      console.error(
-        "⚠️ Error registrando STATUS_CHANGED (rejectDocument):",
-        eventErr
-      );
-    }
+    await insertOwnerStatusChangedEvent({
+      req,
+      doc,
+      fromStatus,
+      toStatus,
+      details: "Cambio de estado por rechazo de propietario",
+      extraMetadata: {
+        reason: "owner_rejected",
+      },
+    });
 
     await logAudit({
       user: req.user,
