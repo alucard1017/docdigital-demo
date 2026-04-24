@@ -6,6 +6,7 @@ const { logAudit } = require("../../utils/auditLog");
 const { formatDateSafe } = require("./documentEventUtils");
 const { DOCUMENT_EVENT_TYPES } = require("./documentEventTypes");
 const { sendFinalDocumentEmails } = require("../../services/sendFinalDocumentEmails");
+const { resolveVerificationData } = require("./verificationUtils");
 
 const {
   insertPublicEvent,

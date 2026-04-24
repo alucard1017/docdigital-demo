@@ -12,6 +12,7 @@ const {
 } = require("./signingValidations");
 const { DOCUMENT_EVENT_TYPES } = require("./documentEventTypes");
 const { sendFinalDocumentEmails } = require("../../services/sendFinalDocumentEmails");
+const { resolveVerificationData } = require("./verificationUtils");
 
 const parseId = (raw) => {
   const id = Number(raw);
@@ -49,46 +50,6 @@ function buildSealSourceKey(doc) {
     doc.pdf_original_url ||
     null
   );
-}
-
-/**
- * Resuelve datos de verificación desde legacy + metadata.
- * (Idealmente mover a un util compartido y reutilizar también en publicDocuments).
- */
-async function resolveVerificationData(doc) {
-  let codigoVerificacion = null;
-  let categoriaFirma = "SIMPLE";
-
-  if (doc.nuevo_documento_id) {
-    const docNuevoRes = await db.query(
-      `
-      SELECT id, codigo_verificacion, categoria_firma
-      FROM documentos
-      WHERE id = $1
-      `,
-      [doc.nuevo_documento_id]
-    );
-
-    if (docNuevoRes.rowCount > 0) {
-      const docNuevo = docNuevoRes.rows[0];
-      codigoVerificacion = docNuevo.codigo_verificacion || null;
-      categoriaFirma = docNuevo.categoria_firma || "SIMPLE";
-    }
-  }
-
-  if (!codigoVerificacion) {
-    const meta = doc.metadata || {};
-    codigoVerificacion =
-      meta.codigo_verificacion ||
-      meta.verification_code ||
-      doc.signature_token ||
-      `DOC-${doc.id}`;
-  }
-
-  return {
-    codigoVerificacion,
-    categoriaFirma,
-  };
 }
 
 /**
@@ -156,7 +117,7 @@ async function insertOwnerStatusChangedEvent({
       eventType: "STATUS_CHANGED",
       ipAddress: req.ip || null,
       userAgent: req.headers["user-agent"] || null,
-      hashDocument: null, // si quieres, puedes reutilizar getDocumentHash aquí
+      hashDocument: null,
       companyId: doc.company_id || null,
       userId: req?.user?.id || null,
       metadata: {
