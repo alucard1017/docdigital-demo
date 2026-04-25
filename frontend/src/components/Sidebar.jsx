@@ -23,12 +23,17 @@ function SidebarSectionLabel({ children }) {
   return <h3 className="sidebar-section-label">{children}</h3>;
 }
 
-function getSocketUi(socketStatus) {
-  const isConnected = socketStatus === "connected";
-  const isReconnecting = socketStatus === "reconnecting";
-  const isConnecting = socketStatus === "connecting";
-  const isError =
-    socketStatus === "error" || socketStatus === "disconnected";
+/**
+ * Traduce el estado del socket a algo amigable para la UI.
+ */
+function getSocketUi(socketStatus, socketLastError) {
+  const normalized = String(socketStatus || "").toLowerCase();
+
+  const isConnected = normalized === "connected";
+  const isReconnecting = normalized === "reconnecting";
+  const isConnecting = normalized === "connecting";
+  const isErrorLike =
+    normalized === "error" || normalized === "disconnected";
 
   const label = isConnected
     ? "En línea"
@@ -36,7 +41,7 @@ function getSocketUi(socketStatus) {
     ? "Reconectando…"
     : isConnecting
     ? "Conectando…"
-    : "Sin conexión";
+    : "Modo degradado";
 
   const toneClass = isConnected
     ? "is-connected"
@@ -45,19 +50,24 @@ function getSocketUi(socketStatus) {
     : "is-error";
 
   const title = isConnected
-    ? "Conectado al servidor en tiempo real"
+    ? "Conectado al servidor en tiempo real."
     : isReconnecting || isConnecting
-    ? "Intentando reconectar al servidor en tiempo real"
-    : "Conexión en tiempo real perdida";
+    ? "Intentando reconectar al servidor en tiempo real."
+    : "No pudimos mantener la conexión en tiempo real. La app sigue funcionando, pero algunas actualizaciones pueden tardar unos segundos.";
+
+  // Mensaje corto para el resumen; el detalle se muestra abajo si hace falta
+  const inlineMessage =
+    isConnected || !socketLastError ? null : socketLastError;
 
   return {
     isConnected,
     isReconnecting,
     isConnecting,
-    isError,
+    isError: isErrorLike,
     label,
     toneClass,
     title,
+    inlineMessage,
   };
 }
 
@@ -79,9 +89,10 @@ export function Sidebar({
 }) {
   // Por compatibilidad: si te pasan isAnyAdmin como prop, úsalo como fallback
   const anyAdmin = useMemo(
-    () => (typeof isAnyAdminProp === "boolean"
-      ? isAnyAdminProp
-      : isAnyAdmin(user)),
+    () =>
+      typeof isAnyAdminProp === "boolean"
+        ? isAnyAdminProp
+        : isAnyAdmin(user),
     [isAnyAdminProp, user]
   );
 
@@ -107,7 +118,11 @@ export function Sidebar({
     : 0;
 
   const displayRole = user?.role || "USER";
-  const socketUi = getSocketUi(socketStatus);
+
+  const socketUi = useMemo(
+    () => getSocketUi(socketStatus, socketLastError),
+    [socketStatus, socketLastError]
+  );
 
   const handleKeyActivate = useCallback((e, onClick) => {
     if (e.key === "Enter" || e.key === " ") {
@@ -194,10 +209,10 @@ export function Sidebar({
             )}
           </div>
 
-          {socketUi.isError && socketLastError && (
+          {socketUi.isError && socketUi.inlineMessage && (
             <div className="sidebar-socket-error">
               <span className="sidebar-socket-error-text">
-                {socketLastError}
+                {socketUi.inlineMessage}
               </span>
 
               {socketCanRetry && typeof onRetrySocket === "function" && (

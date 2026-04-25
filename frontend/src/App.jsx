@@ -3,6 +3,7 @@ import {
   useCallback,
   useEffect,
   useMemo,
+  useRef,
   useState,
   lazy,
   Suspense,
@@ -13,6 +14,7 @@ import { Sidebar } from "./components/Sidebar";
 import { DetailView } from "./components/DetailView";
 import { ListHeader } from "./components/ListHeader";
 import { DocumentRow } from "./components/DocumentRow";
+import { ConnectionBanner } from "./components/ConnectionBanner";
 
 import { DOC_STATUS, API_BASE_URL } from "./constants";
 
@@ -498,27 +500,43 @@ function App() {
     }
 
     const handleSent = (data) => {
+      if (import.meta.env.DEV) {
+        console.log("[WS] document:sent recibido:", data);
+      }
+
+      const title = data?.title || data?.titulo || null;
+
       addToast({
         type: "success",
         title: "Documento enviado",
-        message: data?.titulo
-          ? `"${data.titulo}" se envió correctamente.`
+        message: title
+          ? `"${title}" se envió correctamente.`
           : "El documento se envió correctamente.",
       });
 
-      refreshDocs({ page: 1 });
+      if (socketStatus === "connected") {
+        refreshDocs({ page: 1 });
+      }
     };
 
     const handleSigned = (data) => {
+      if (import.meta.env.DEV) {
+        console.log("[WS] document:signed recibido:", data);
+      }
+
+      const title = data?.title || data?.titulo || null;
+
       addToast({
         type: "success",
         title: "Documento firmado",
-        message: data?.titulo
-          ? `"${data.titulo}" se firmó correctamente.`
+        message: title
+          ? `"${title}" se firmó correctamente.`
           : "El documento se firmó correctamente.",
       });
 
-      refreshDocs({ page: 1 });
+      if (socketStatus === "connected") {
+        refreshDocs({ page: 1 });
+      }
     };
 
     socketOn("document:sent", handleSent);
@@ -528,18 +546,79 @@ function App() {
       socketOff("document:sent", handleSent);
       socketOff("document:signed", handleSigned);
     };
-  }, [token, socketOn, socketOff, addToast, refreshDocs]);
+  }, [token, socketOn, socketOff, addToast, refreshDocs, socketStatus]);
+
+  /* ============================
+     Fallback: polling cuando WS no está conectado
+     ============================ */
 
   useEffect(() => {
-    if (!socketLastError) return;
+    if (!token) return;
 
-    if (socketStatus === "error" || socketStatus === "disconnected") {
-      addToast({
-        type: "error",
-        title: "Problema con la conexión en tiempo real",
-        message: socketLastError,
-      });
+    const isConnected = socketStatus === "connected";
+    if (isConnected) return;
+
+    const POLL_INTERVAL_MS = 90_000;
+
+    const intervalId = window.setInterval(() => {
+      refreshDocs();
+    }, POLL_INTERVAL_MS);
+
+    return () => {
+      window.clearInterval(intervalId);
+    };
+  }, [token, socketStatus, refreshDocs]);
+
+  /* ============================
+     Toasts de conexión en tiempo real (sin spam, textos amigables)
+     ============================ */
+
+  const hasShownSocketToastRef = useRef(false);
+
+  useEffect(() => {
+    if (!socketStatus) return;
+
+    // Reset cuando volvemos a conectado
+    if (socketStatus === "connected") {
+      hasShownSocketToastRef.current = false;
+      return;
     }
+
+    // Evitar spam
+    if (hasShownSocketToastRef.current) return;
+    hasShownSocketToastRef.current = true;
+
+    if (import.meta.env.DEV && socketLastError) {
+      console.warn(
+        "[WS] Problema de conexión en tiempo real:",
+        socketLastError
+      );
+    }
+
+    let title = "Conexión en tiempo real limitada";
+    let message =
+      "No pudimos mantener la conexión en tiempo real. Tu bandeja seguirá actualizándose cada cierto tiempo.";
+
+    const isErrorLike =
+      socketStatus === "error" || socketStatus === "disconnected";
+
+    if (socketStatus === "connecting") {
+      title = "Conectando en tiempo real…";
+      message =
+        "Estamos intentando establecer la conexión en tiempo real. Puedes seguir usando la aplicación normalmente.";
+    }
+
+    if (socketStatus === "reconnecting") {
+      title = "Reconectando en tiempo real…";
+      message =
+        "Perdimos la conexión en tiempo real, estamos intentando restablecerla. La bandeja se seguirá actualizando de forma periódica.";
+    }
+
+    addToast({
+      type: isErrorLike ? "error" : "warning",
+      title,
+      message,
+    });
   }, [socketStatus, socketLastError, addToast]);
 
   /* ============================
@@ -948,6 +1027,13 @@ function App() {
 
   return (
     <div className="dashboard-root">
+      <ConnectionBanner
+        status={socketStatus}
+        lastError={socketLastError}
+        canRetry={socketCanRetry}
+        onRetry={retrySocket}
+      />
+
       <Suspense
         fallback={
           showOnboarding ? (

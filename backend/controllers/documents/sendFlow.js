@@ -355,6 +355,15 @@ async function sendFlow(req, res) {
 
     // 14) Webhooks / sockets
     if (documento.company_id) {
+      const wsPayload = {
+        id: documento.id,
+        title: documento.titulo,
+        status: legacyStatus,
+        companyId: documento.company_id,
+        hasReviewer: tieneVisador,
+        signersCount: totalFirmantes,
+      };
+
       triggerWebhook(documento.company_id, "document.sent", {
         documentoId: documento.id,
         titulo: documento.titulo,
@@ -365,12 +374,7 @@ async function sendFlow(req, res) {
         console.error("Error en webhook document.sent:", err)
       );
 
-      emitToCompany(documento.company_id, "document:sent", {
-        documentoId: documento.id,
-        titulo: documento.titulo,
-        estado: legacyStatus,
-        firmantes: totalFirmantes,
-      });
+      emitToCompany(documento.company_id, "document:sent", wsPayload);
     }
 
     // 15) Audit log

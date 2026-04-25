@@ -1,3 +1,4 @@
+// src/hooks/useDocuments.js
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import api, { getDocuments, getDocumentPreview } from "../api/client";
 import { DOC_STATUS } from "../constants";
@@ -137,6 +138,11 @@ export function useDocuments(token) {
     setRechazadosGlobal(0);
   }, [cleanupPdfUrl]);
 
+  /**
+   * Carga documentos desde API.
+   * - Se salta si la query es igual a la anterior, salvo que force = true.
+   * - Sirve tanto para la carga inicial como para refrescos manuales / WS.
+   */
   const cargarDocs = useCallback(
     async ({
       page: pageArg = 1,
@@ -298,6 +304,7 @@ export function useDocuments(token) {
     [cleanupPdfUrl]
   );
 
+  // Carga inicial / reactiva según filtros/página/búsqueda
   useEffect(() => {
     if (!token) {
       resetState();
@@ -312,6 +319,7 @@ export function useDocuments(token) {
     });
   }, [token, page, sort, statusFilter, debouncedSearch, cargarDocs, resetState]);
 
+  // Carga de preview PDF del documento seleccionado
   useEffect(() => {
     if (!selectedDoc?.id) {
       cleanupPdfUrl();
@@ -427,6 +435,7 @@ export function useDocuments(token) {
           });
         }
 
+        // Refresco forzado tras acción (independiente de WS)
         await cargarDocs({
           page,
           sort,

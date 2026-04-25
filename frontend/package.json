@@ -8,7 +8,9 @@
     "build": "vite build",
     "analyze": "vite build --mode analyze",
     "preview": "vite preview",
-    "lint": "eslint ."
+    "lint": "eslint .",
+    "test": "vitest",
+    "test:ui": "vitest --runTestsByPath src/views"
   },
   "dependencies": {
     "@sentry/react": "^10.39.0",

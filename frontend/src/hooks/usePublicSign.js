@@ -345,6 +345,139 @@ function normalizePublicDocumentResponse(data, mode = null) {
   };
 }
 
+/**
+ * Traducir un error HTTP/mensaje a un estado y microcopy más humano.
+ */
+function normalizePublicError(err) {
+  const status = err?.status;
+  const rawMessage = String(
+    err?.payload?.message || err?.message || ""
+  ).trim();
+
+  const lower = rawMessage.toLowerCase();
+
+  if (!status && !rawMessage) {
+    return {
+      code: "unknown",
+      message: "No se pudo cargar el documento. Intenta nuevamente en unos segundos.",
+    };
+  }
+
+  if (status === 404 || lower.includes("no se encontró") || lower.includes("not found")) {
+    return {
+      code: "invalid",
+      message:
+        "Este enlace no es válido o el documento ya no está disponible. Verifica que el link esté completo o pide uno nuevo.",
+    };
+  }
+
+  if (
+    status === 410 ||
+    lower.includes("expirado") ||
+    lower.includes("vencido") ||
+    lower.includes("expired")
+  ) {
+    return {
+      code: "expired",
+      message:
+        "Este enlace de firma expiró. Pide al remitente que te envíe un nuevo enlace.",
+    };
+  }
+
+  if (status === 400 && lower.includes("token")) {
+    return {
+      code: "invalid",
+      message:
+        "No pudimos reconocer este enlace. Asegúrate de que el link no esté cortado o modificado.",
+    };
+  }
+
+  if (status === 403 || lower.includes("rejected") || lower.includes("rechazado")) {
+    return {
+      code: "rejected",
+      message:
+        "Este documento fue rechazado y el flujo de firma quedó cerrado.",
+    };
+  }
+
+  return {
+    code: "generic",
+    message:
+      rawMessage ||
+      "No se pudo cargar el documento. Intenta nuevamente o contacta al remitente.",
+  };
+}
+
+/**
+ * Derivar viewState básico a partir de doc + error.
+ */
+function deriveViewState({ doc, errorCode, loading }) {
+  if (loading) {
+    return {
+      kind: "loading",
+      title: "Cargando documento",
+      message: "Estamos preparando el documento para su visualización.",
+      tone: "info",
+    };
+  }
+
+  if (errorCode === "expired") {
+    return {
+      kind: "expired",
+      title: "Enlace expirado",
+      message:
+        "Este enlace de firma expiró. Pide al remitente que te envíe un nuevo enlace.",
+      tone: "danger",
+    };
+  }
+
+  if (errorCode === "invalid") {
+    return {
+      kind: "invalid",
+      title: "Enlace no válido",
+      message:
+        "Este enlace no es válido o podría estar incompleto. Verifica el link o pide uno nuevo.",
+      tone: "danger",
+    };
+  }
+
+  if (errorCode === "rejected") {
+    return {
+      kind: "rejected",
+      title: "Documento rechazado",
+      message:
+        "Este documento fue rechazado por el propietario y el flujo quedó cerrado.",
+      tone: "danger",
+    };
+  }
+
+  if (errorCode && !doc) {
+    return {
+      kind: "error",
+      title: "No se pudo cargar el documento",
+      message:
+        "Ocurrió un problema al acceder al documento. Intenta nuevamente o contacta al remitente.",
+      tone: "danger",
+    };
+  }
+
+  if (doc) {
+    return {
+      kind: "ready",
+      title: "Firma electrónica",
+      message: "",
+      tone: "info",
+    };
+  }
+
+  return {
+    kind: "idle",
+    title: "Portal de firma",
+    message: "",
+    tone: "info",
+  };
+}
+
 export function usePublicSign({
   apiRoot,
   isSigningPortal,
@@ -352,6 +485,7 @@ export function usePublicSign({
 }) {
   const [publicSignDoc, setPublicSignDoc] = useState(null);
   const [publicSignError, setPublicSignError] = useState("");
+  const [publicSignErrorCode, setPublicSignErrorCode] = useState(null);
   const [publicSignLoading, setPublicSignLoading] = useState(false);
   const [publicSignToken, setPublicSignToken] = useState("");
   const [publicSignPdfUrl, setPublicSignPdfUrl] = useState("");
@@ -365,6 +499,7 @@ export function usePublicSign({
   const clearPublicState = useCallback(() => {
     setPublicSignDoc(null);
     setPublicSignError("");
+    setPublicSignErrorCode(null);
     setPublicSignLoading(false);
     setPublicSignToken("");
     setPublicSignPdfUrl("");
@@ -384,6 +519,7 @@ export function usePublicSign({
 
       if (!token) {
         setPublicSignError("No se recibió el token del documento.");
+        setPublicSignErrorCode("invalid");
         setPublicSignDoc(null);
         setPublicSignPdfUrl("");
         return null;
@@ -391,6 +527,7 @@ export function usePublicSign({
 
       if (!apiBase) {
         setPublicSignError("La URL del servicio público no está configurada.");
+        setPublicSignErrorCode("generic");
         setPublicSignDoc(null);
         setPublicSignPdfUrl("");
         return null;
@@ -444,6 +581,7 @@ export function usePublicSign({
       try {
         setPublicSignLoading(true);
         setPublicSignError("");
+        setPublicSignErrorCode(null);
 
         const firstKind =
           requestedTokenKind ||
@@ -477,6 +615,7 @@ export function usePublicSign({
           } else if (shouldRetryAsSigner) {
             result = await doFetch("signer");
           } else {
+            // Error real, lo dejamos salir para normalizarlo abajo
             throw err;
           }
         }
@@ -530,7 +669,9 @@ export function usePublicSign({
           return null;
         }
 
-        setPublicSignError(err?.message || "No se pudo cargar el documento");
+        const normalizedError = normalizePublicError(err);
+        setPublicSignError(normalizedError.message);
+        setPublicSignErrorCode(normalizedError.code);
         setPublicSignDoc(null);
         setPublicSignPdfUrl("");
         return null;
@@ -552,7 +693,7 @@ export function usePublicSign({
       });
 
       if (import.meta.env.DEV) {
-        console.log("[PublicAccessSnapshot]", snapshot);
+        console.log("[PublicAccessLocationSnapshot]", snapshot);
       }
 
       setPublicView(snapshot.publicView);
@@ -574,6 +715,7 @@ export function usePublicSign({
           setPublicSignDoc(null);
           setPublicSignPdfUrl("");
           setPublicSignError("");
+          setPublicSignErrorCode(null);
           setPublicSignLoading(false);
           return;
         }
@@ -611,15 +753,37 @@ export function usePublicSign({
     clearPublicState,
   ]);
 
+  const viewState = deriveViewState({
+    doc: publicSignDoc,
+    errorCode: publicSignErrorCode,
+    loading: publicSignLoading,
+  });
+
+  const statusFlags = {
+    isReady: viewState.kind === "ready",
+    isLoading: viewState.kind === "loading",
+    isError:
+      viewState.kind === "error" ||
+      viewState.kind === "invalid" ||
+      viewState.kind === "expired" ||
+      viewState.kind === "rejected",
+    isExpired: viewState.kind === "expired",
+    isInvalid: viewState.kind === "invalid",
+    isRejected: viewState.kind === "rejected",
+  };
+
   return {
     publicSignDoc,
     publicSignError,
+    publicSignErrorCode,
     publicSignLoading,
     publicSignToken,
     publicSignPdfUrl,
     publicSignMode,
     publicView,
     publicTokenKind,
+    viewState,
+    statusFlags,
     cargarFirmaPublica,
   };
 }

@@ -456,7 +456,7 @@ export function usePublicSignLogic({
       setActionMessage(successMsg);
       setActionMessageType("success");
 
-      // Si fue visado, pasamos a estado terminal "completed"
+      // Para visado o firma usamos estados terminales claros
       if (isVisado) {
         setTerminalViewState({
           kind: "completed",
@@ -464,6 +464,14 @@ export function usePublicSignLogic({
           message:
             successMsg ||
             "El documento fue visado correctamente desde este enlace público y quedó habilitado para continuar con la firma.",
+        });
+      } else {
+        setTerminalViewState({
+          kind: "completed",
+          title: "Firma registrada correctamente",
+          message:
+            successMsg ||
+            "Tu firma quedó registrada correctamente sobre este documento.",
         });
       }
 
@@ -532,9 +540,9 @@ export function usePublicSignLogic({
       setRejectReason("");
       setRejectError("");
 
-      // Para rechazo público también podemos marcar terminal
+      // Rechazo público: estado terminal coherente
       setTerminalViewState({
-        kind: "completed",
+        kind: "rejected",
         title: "Documento rechazado correctamente",
         message: msg,
       });

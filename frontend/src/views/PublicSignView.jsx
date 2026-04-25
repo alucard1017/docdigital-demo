@@ -10,6 +10,7 @@ import {
   buildMetaTitle,
 } from "./publicSign/usePublicSignLogic";
 
+// Estados terminales: no hay más acciones posibles, solo lectura / mensajes
 const TERMINAL_VIEW_STATES = new Set([
   "invalid",
   "expired",
@@ -25,11 +26,19 @@ function getMessageVariant(kind, preferred) {
 
   const normalized = String(kind || "").toLowerCase();
 
-  if (normalized === "error" || normalized === "invalid" || normalized === "expired") {
+  if (
+    normalized === "error" ||
+    normalized === "invalid" ||
+    normalized === "expired"
+  ) {
     return "error";
   }
 
-  if (normalized === "completed" || normalized === "used" || normalized === "rejected") {
+  if (
+    normalized === "completed" ||
+    normalized === "used" ||
+    normalized === "rejected"
+  ) {
     return "success";
   }
 
@@ -276,12 +285,32 @@ export function PublicSignView(props) {
 
   const introTitle = useMemo(() => {
     if (isTerminal) {
-      return viewState.title || (isVisado
-        ? "Documento visado correctamente"
-        : "Acción registrada correctamente");
+      if (viewState.title) return viewState.title;
+
+      if (viewState.kind === "expired") {
+        return "Enlace expirado";
+      }
+
+      if (viewState.kind === "invalid") {
+        return "Enlace no válido";
+      }
+
+      if (viewState.kind === "rejected") {
+        return "Documento rechazado";
+      }
+
+      if (viewState.kind === "completed" || viewState.kind === "used") {
+        return isVisado
+          ? "Documento visado correctamente"
+          : "Acción registrada correctamente";
+      }
+
+      return "Portal de firma";
     }
 
-    if (viewState.kind !== "ready") return viewState.title;
+    if (viewState.kind !== "ready" && viewState.title) {
+      return viewState.title;
+    }
 
     if (isVisado) {
       return "Revisa este documento para registrar tu visado";
@@ -296,12 +325,38 @@ export function PublicSignView(props) {
 
   const introText = useMemo(() => {
     if (isTerminal) {
-      return viewState.message || (isVisado
-        ? "El documento fue visado correctamente desde este enlace público y quedó habilitado para continuar con la firma."
-        : "La acción se registró correctamente.");
+      if (viewState.message) return viewState.message;
+
+      if (viewState.kind === "expired") {
+        return "Este enlace de firma expiró. Pide al remitente que te envíe un nuevo enlace.";
+      }
+
+      if (viewState.kind === "invalid") {
+        return "Este enlace no es válido o podría estar incompleto. Verifica el link o pide uno nuevo.";
+      }
+
+      if (viewState.kind === "rejected") {
+        return "Este documento fue rechazado y el flujo de firma quedó cerrado.";
+      }
+
+      if (viewState.kind === "completed" || viewState.kind === "used") {
+        return isVisado
+          ? "El documento fue visado correctamente desde este enlace público y quedó habilitado para continuar con la firma."
+          : "La acción se registró correctamente sobre este documento.";
+      }
+
+      if (viewState.kind === "error") {
+        return "Ocurrió un problema al cargar el documento. Intenta nuevamente o contacta al remitente.";
+      }
+
+      if (viewState.kind === "blocked_by_review") {
+        return "El documento está en revisión por parte del emisor. Por ahora no se pueden registrar nuevas acciones desde este enlace.";
+      }
+
+      return "No hay más acciones disponibles para este enlace público.";
     }
 
-    if (viewState.kind !== "ready") {
+    if (viewState.kind !== "ready" && viewState.message) {
       return viewState.message;
     }
 
@@ -374,9 +429,7 @@ export function PublicSignView(props) {
   const introClassName = useMemo(
     () =>
       `public-sign-intro ${
-        isVisado
-          ? "public-sign-intro--warning"
-          : "public-sign-intro--info"
+        isVisado ? "public-sign-intro--warning" : "public-sign-intro--info"
       }`,
     [isVisado]
   );
@@ -391,11 +444,10 @@ export function PublicSignView(props) {
     [isVisado]
   );
 
-  const showInlineStatusInSummary = useMemo(() => {
-    // Solo mostrar card de estado embebida cuando NO estamos en terminal
-    // (en terminal usamos el mensaje global arriba).
-    return !isTerminal && viewState.kind !== "ready";
-  }, [isTerminal, viewState.kind]);
+  const showInlineStatusInSummary = useMemo(
+    () => !isTerminal && viewState.kind !== "ready",
+    [isTerminal, viewState.kind]
+  );
 
   return (
     <div className="public-sign-page">
@@ -449,7 +501,6 @@ export function PublicSignView(props) {
           />
         )}
 
-        {/* Caso terminal con documento: mensaje global + PDF, sin acciones */}
         {isTerminal && canRenderDocument && !isLoading && (
           <>
             <PublicStatusMessageCard
@@ -472,7 +523,6 @@ export function PublicSignView(props) {
                 onRetry={handleRetryLoad}
                 showInlineStatus={false}
               />
-
               <PublicDocumentPanel
                 pdfUrl={pdfUrl}
                 documentTitle={documentTitle}
@@ -482,7 +532,6 @@ export function PublicSignView(props) {
           </>
         )}
 
-        {/* Caso normal (no terminal): layout completo con acciones */}
         {!isTerminal && canRenderDocument && (
           <div className="public-sign-layout">
             <PublicDocumentSummary
@@ -499,7 +548,6 @@ export function PublicSignView(props) {
               onRetry={handleRetryLoad}
               showInlineStatus={showInlineStatusInSummary}
             />
-
             <PublicDocumentPanel
               pdfUrl={pdfUrl}
               documentTitle={documentTitle}

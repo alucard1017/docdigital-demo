@@ -5,7 +5,10 @@ import { render, screen } from "@testing-library/react";
 import "@testing-library/jest-dom/vitest";
 
 import { Timeline } from "./Timeline";
-import { buildSampleTimeline, buildBaseTimeline } from "../test/fixtures/documentTimelineFixtures";
+import {
+  buildSampleTimeline,
+  buildBaseTimeline,
+} from "../test/fixtures/documentTimelineFixtures";
 
 describe("Timeline component", () => {
   it("muestra el resumen de progreso y pasos", () => {
@@ -16,8 +19,12 @@ describe("Timeline component", () => {
       screen.getByRole("heading", { name: /progreso del documento/i })
     ).toBeInTheDocument();
 
-    expect(screen.getByText(/Estado actual/i)).toBeInTheDocument();
-    expect(screen.getByText("PENDIENTE_FIRMA")).toBeInTheDocument();
+    // Estado actual: usamos el card para evitar múltiples coincidencias
+    const estadoCard = screen
+      .getByText(/Estado actual/i)
+      .closest(".timeline-current-state-card");
+    expect(estadoCard).toBeInTheDocument();
+    expect(estadoCard).toHaveTextContent("PENDIENTE_FIRMA");
 
     expect(screen.getByText(/Próximo paso/i)).toBeInTheDocument();
     expect(screen.getByText("Firma del participante")).toBeInTheDocument();
@@ -30,22 +37,28 @@ describe("Timeline component", () => {
     render(<Timeline timeline={timeline} />);
 
     expect(screen.getByText("Documento creado")).toBeInTheDocument();
-    expect(screen.getByText("Enlace de firma abierto")).toBeInTheDocument();
+    // El evento opened ahora se llama "Acceso al documento"
+    expect(screen.getByText("Acceso al documento")).toBeInTheDocument();
     expect(screen.getByText("Documento rechazado")).toBeInTheDocument();
 
     const sistemaMatches = screen.getAllByText(/Sistema/i);
     expect(sistemaMatches.length).toBeGreaterThanOrEqual(1);
 
+    // El detalle ahora es "Se registró una apertura del enlace/documento."
     expect(
-      screen.getByText(/juan nieto abrió el enlace de firma\./i)
+      screen.getByText(/Se registró una apertura del enlace\/documento\./i)
     ).toBeInTheDocument();
 
     expect(
-      screen.getByText((content) => content.replace(/\s+/g, " ").includes("Por: juan nieto"))
+      screen.getByText((content) =>
+        content.replace(/\s+/g, " ").includes("Por: juan nieto")
+      )
     ).toBeInTheDocument();
 
     expect(
-      screen.getByText((content) => content.replace(/\s+/g, " ").includes("Por: ALUCARD"))
+      screen.getByText((content) =>
+        content.replace(/\s+/g, " ").includes("Por: ALUCARD")
+      )
     ).toBeInTheDocument();
   });
 
@@ -62,7 +75,12 @@ describe("Timeline component", () => {
   });
 
   it("muestra empty state cuando no hay eventos", () => {
-    const timeline = buildBaseTimeline({ events: [], progress: 0, currentStep: null, nextStep: null });
+    const timeline = buildBaseTimeline({
+      events: [],
+      progress: 0,
+      currentStep: null,
+      nextStep: null,
+    });
     render(<Timeline timeline={timeline} />);
 
     expect(

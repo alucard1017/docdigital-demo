@@ -51,7 +51,6 @@ function buildProgressLabel(firmados, total) {
 async function signFlow(req, res) {
   const { firmanteId } = req.params;
 
-  // Guard 401 consistente
   if (!req.user) {
     return res.status(401).json({
       code: "UNAUTHORIZED",
@@ -171,7 +170,6 @@ async function signFlow(req, res) {
     const ipAddress = getClientIp(req);
     const userAgent = getUserAgent(req);
     const geoData = await getGeoFromIP(ipAddress);
-    // IP + UA + geoloc en el log de firmas es estándar en plataformas e‑signature.[web:36][web:41][web:44]
 
     // 6) Actualizar firmante legacy
     await client.query(
@@ -323,8 +321,6 @@ async function signFlow(req, res) {
           }),
         ]
       );
-
-      // Aquí se engancha el sellado/QR y el PDF final limpio en tabla documents.[web:37][web:38][web:39]
     } else {
       const { legacyStatus, documentsStatus } = mapFlowStateWhileSigning();
 
@@ -353,7 +349,6 @@ async function signFlow(req, res) {
         );
       }
 
-      // Si actúa un visador, opcionalmente cancelas recordatorios (ya lo haces)
       if (actorIsReviewer) {
         await cancelPendingReminders(client, firmante.documento_id);
       }
@@ -372,7 +367,6 @@ async function signFlow(req, res) {
         firmante.documento_estado
       );
 
-      // Evento de acción del actor (firma/visado)
       await insertFlowActorEvent({
         req,
         doc: flowDoc,
@@ -405,7 +399,6 @@ async function signFlow(req, res) {
         },
       });
 
-      // Evento de cambio de estado del flujo
       await insertFlowStatusChangedEvent({
         req,
         doc: flowDoc,
@@ -425,7 +418,6 @@ async function signFlow(req, res) {
         },
       });
 
-      // Evento explícito de documento completado
       if (allSigned) {
         await insertFlowActorEvent({
           req,
@@ -451,6 +443,15 @@ async function signFlow(req, res) {
 
     // 12) Webhooks / sockets cuando el documento queda completamente firmado
     if (allSigned && firmante.company_id) {
+      const wsPayload = {
+        id: firmante.documento_id,
+        title: firmante.titulo,
+        status: nuevoEstadoDocumento,
+        companyId: firmante.company_id,
+        totalSigners: totalNum,
+        progress: progressLabel,
+      };
+
       triggerWebhook(firmante.company_id, "document.signed", {
         documentoId: firmante.documento_id,
         titulo: firmante.titulo,
@@ -459,10 +460,7 @@ async function signFlow(req, res) {
         console.error("Error en webhook document.signed:", err)
       );
 
-      emitToCompany(firmante.company_id, "document:signed", {
-        documentoId: firmante.documento_id,
-        titulo: firmante.titulo,
-      });
+      emitToCompany(firmante.company_id, "document:signed", wsPayload);
     }
 
     // 13) Audit log estructurado

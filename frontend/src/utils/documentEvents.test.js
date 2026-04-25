@@ -144,10 +144,14 @@ describe("documentEvents utils", () => {
       const mapped = mapDocumentEvent(rawOpenedSigner);
 
       expect(mapped.kind).toBe("opened");
-      expect(mapped.title).toBe("Enlace de firma abierto");
+      // Nuevo copy alineado con Timeline: "Acceso al documento"
+      expect(mapped.title).toBe("Acceso al documento");
       expect(mapped.actorType).toBe("user");
       expect(mapped.actor).toBe("juan nieto");
-      expect(mapped.details).toContain("abrió el enlace de firma");
+      // El detalle ahora habla de apertura del enlace/documento
+      expect(mapped.details).toContain(
+        "Se registró una apertura del enlace/documento"
+      );
       expect(mapped.ip).toBe("10.199.50.3");
       expect(mapped.userAgent).toContain("Chrome");
       expect(mapped.showTechMeta).toBe(true);

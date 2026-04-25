@@ -157,16 +157,19 @@ export function useSocket(accessToken, options = {}) {
   }, [hardDisconnect, resetUiState]);
 
   useEffect(() => {
+    // Cada vez que cambia el token, reseteamos auth y errores
     authExpiredHandledRef.current = false;
     resetUiState();
 
     if (!isBrowser()) return;
 
+    // Si no hay token, no intentamos conectar
     if (!normalizedToken) {
       disconnect();
       return;
     }
 
+    // Si ya había socket, lo cerramos limpio antes de crear uno nuevo
     if (socketRef.current) {
       disconnect();
     }
@@ -244,6 +247,7 @@ export function useSocket(accessToken, options = {}) {
         return;
       }
 
+      // Desconexión inesperada: dejamos opción de reintento manual
       setStatus(SOCKET_STATUS.DISCONNECTED);
       setLastError("Conexión perdida con el servidor.");
       setErrorReason(reason || "server_disconnect");
@@ -289,13 +293,16 @@ export function useSocket(accessToken, options = {}) {
 
     const handleConnectError = (err) => {
       const rawMessage =
-        err?.message || err?.data?.message || "Error de conexión con el servidor.";
+        err?.message ||
+        err?.data?.message ||
+        "Error de conexión con el servidor.";
 
       if (import.meta.env.DEV) {
         console.error("[WS] connect_error:", rawMessage, err);
       }
 
       if (isAuthLikeErrorMessage(rawMessage)) {
+        // Error de autenticación: desconectamos y avisamos a la app
         setStatus(SOCKET_STATUS.ERROR);
         setLastError("Tu sesión expiró. Debes iniciar sesión nuevamente.");
         setErrorReason("auth_error");

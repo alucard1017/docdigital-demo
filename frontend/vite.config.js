@@ -102,6 +102,7 @@ export default defineConfig(({ mode }) => {
         : []),
     ],
 
+    // Config de Vitest
     test: {
       environment: "jsdom",
       globals: true,

@@ -193,7 +193,7 @@ export function DetailActions({
         Descargar PDF
       </button>
 
-      {canShowReject ? (
+      {canShowReject && (
         <button
           type="button"
           className="btn-main detail-actions-btn detail-actions-btn--reject"
@@ -201,9 +201,9 @@ export function DetailActions({
         >
           Rechazar
         </button>
-      ) : null}
+      )}
 
-      {canShowVisar ? (
+      {canShowVisar && (
         <button
           type="button"
           className="btn-main detail-actions-btn detail-actions-btn--visar"
@@ -211,9 +211,9 @@ export function DetailActions({
         >
           Visar documento
         </button>
-      ) : null}
+      )}
 
-      {canShowFirmar ? (
+      {canShowFirmar && (
         <button
           type="button"
           className="btn-main detail-actions-btn detail-actions-btn--primary"
@@ -221,9 +221,9 @@ export function DetailActions({
         >
           Firmar documento
         </button>
-      ) : null}
+      )}
 
-      {canShowAdminCancel ? (
+      {canShowAdminCancel && (
         <button
           type="button"
           className="btn-main detail-actions-btn detail-actions-btn--admin-cancel"
@@ -231,7 +231,7 @@ export function DetailActions({
         >
           Cancelar trámite
         </button>
-      ) : null}
+      )}
     </div>
   );
 }
