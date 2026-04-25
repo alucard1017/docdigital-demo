@@ -25,7 +25,6 @@ async function buildFinalPdfUrl(docRow) {
   try {
     // Máximo permitido por S3/R2 (Signature V4): < 7 días (604800 segundos)
     const ONE_WEEK_SECONDS = 7 * 24 * 3600;
-
     return await getSignedUrl(basePath, ONE_WEEK_SECONDS);
   } catch (err) {
     console.error("❌ [FINAL_EMAIL] Error generando signed URL PDF final:", err);
@@ -36,13 +35,8 @@ async function buildFinalPdfUrl(docRow) {
 /**
  * Envía correo de "Documento firmado" al owner, firmantes y visadores.
  *
- * - Owner + firmantes (y PARTICIPANT genérico): reciben PDF firmado adjunto.
- * - Visadores: reciben solo notificación (sin adjunto).
- *
- * @param {object} params
- * @param {number} params.documentId
- * @param {boolean} [params.force=false]
- * @returns {Promise<boolean>}
+ * - Owner + firmantes: reciben PDF firmado adjunto.
+ * - Cualquier otro rol (incluido visadores / PARTICIPANT): solo notificación sin adjunto.
  */
 async function sendFinalDocumentEmails({ documentId, force = false }) {
   if (!documentId) {
@@ -292,9 +286,9 @@ async function sendFinalDocumentEmails({ documentId, force = false }) {
         </html>
       `;
 
-      // Adjuntar PDF solo a owner + firmantes (no a visadores)
+      // Adjuntar PDF solo a owner + firmantes (no a visadores ni PARTICIPANT)
       const isSignerOrOwner =
-        r.kind === "OWNER" || r.kind === "SIGNER" || r.kind === "PARTICIPANT";
+        r.kind === "OWNER" || r.kind === "SIGNER";
 
       const attachments =
         isSignerOrOwner && pdfUrl
