@@ -92,6 +92,10 @@ function isSignerRejected(row) {
   return getSignerState(row) === "RECHAZADO";
 }
 
+/**
+ * Validación para firma pública (sign_token).
+ * Usa códigos específicos para permitir mensajes claros en la vista pública.
+ */
 function validatePublicSign(row) {
   const accessError = validatePublicAccess(
     row,
@@ -147,6 +151,9 @@ function validatePublicSign(row) {
   return null;
 }
 
+/**
+ * Validación para rechazo público (sign_token).
+ */
 function validatePublicReject(row) {
   const accessError = validatePublicAccess(
     row,
@@ -189,6 +196,9 @@ function validatePublicReject(row) {
   return null;
 }
 
+/**
+ * Validación para visado público (signature_token).
+ */
 function validatePublicVisar(row) {
   const accessError = validatePublicAccess(
     row,
@@ -228,9 +238,10 @@ function validatePublicVisar(row) {
     documentState === "PENDIENTE_VISADO";
 
   if (!isPendingVisado) {
+    // Ejemplo: ya visado, o en otro estado no válido.
     return buildValidationError(
       400,
-      "Solo se pueden visar documentos en estado PENDIENTE_VISADO.",
+      "El documento no está en estado válido para visado.",
       "INVALID_VISADO_STATE"
     );
   }

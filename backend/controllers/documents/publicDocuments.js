@@ -61,9 +61,16 @@ const {
   refreshPdfFields,
 } = require("./publicDocumentQueries");
 
-const NOT_FOUND_MESSAGE = "Enlace inválido o documento no encontrado";
-const EXPIRED_LINK_MESSAGE =
-  "El enlace público ha expirado. Solicita uno nuevo al emisor.";
+const {
+  NOT_FOUND_MESSAGE,
+  EXPIRED_LINK_MESSAGE,
+  buildInvalidTokenViewState,
+  buildReadyViewState,
+  buildCompletedViewState,
+  buildRejectedViewState,
+  buildBlockedByReviewViewState,
+  buildErrorViewState,
+} = require("./publicSignViewState");
 
 /* ================================
    GET: Firma por sign_token
@@ -77,7 +84,15 @@ async function getPublicDocBySignerToken(req, res) {
 
     const tokenError = validatePublicToken(token);
     if (tokenError) {
-      return res.status(tokenError.status).json(tokenError.body);
+      const reason =
+        tokenError.body && tokenError.body.code === "TOKEN_EXPIRED"
+          ? "expired"
+          : "invalid";
+
+      return res.status(tokenError.status).json({
+        ...tokenError.body,
+        viewState: buildInvalidTokenViewState(reason),
+      });
     }
 
     const row = await getPublicSignerDocumentByToken(token);
@@ -85,12 +100,21 @@ async function getPublicDocBySignerToken(req, res) {
       return res.status(404).json({
         code: "NOT_FOUND",
         message: NOT_FOUND_MESSAGE,
+        viewState: buildInvalidTokenViewState("not_found"),
       });
     }
 
     const accessError = validatePublicAccess(row, EXPIRED_LINK_MESSAGE);
     if (accessError) {
-      return res.status(accessError.status).json(accessError.body);
+      const reason =
+        accessError.body && accessError.body.code === "LINK_EXPIRED"
+          ? "expired"
+          : "invalid";
+
+      return res.status(accessError.status).json({
+        ...accessError.body,
+        viewState: buildInvalidTokenViewState(reason),
+      });
     }
 
     const pdfUrl = await buildSignedPdfUrlOrFail(row, res, {
@@ -133,6 +157,11 @@ async function getPublicDocBySignerToken(req, res) {
       );
     }
 
+    const viewState = buildReadyViewState({
+      isVisado: false,
+      signerRoleLabel: row.signer_role_label || null,
+    });
+
     return res.json({
       document: buildPublicDocumentPayload(row, { pdfUrl }),
       currentSigner: buildCurrentSignerPayload(row),
@@ -140,12 +169,14 @@ async function getPublicDocBySignerToken(req, res) {
       file_url: pdfUrl,
       public_mode: "firma",
       public_token_kind: "sign_token",
+      viewState,
     });
   } catch (err) {
     console.error("❌ Error cargando documento público (firmante):", err);
     return res.status(500).json({
       code: "INTERNAL_ERROR",
       message: "Error interno del servidor",
+      viewState: buildErrorViewState(),
     });
   }
 }
@@ -165,7 +196,15 @@ async function getPublicDocByDocumentToken(req, res) {
 
     const tokenError = validatePublicToken(token);
     if (tokenError) {
-      return res.status(tokenError.status).json(tokenError.body);
+      const reason =
+        tokenError.body && tokenError.body.code === "TOKEN_EXPIRED"
+          ? "expired"
+          : "invalid";
+
+      return res.status(tokenError.status).json({
+        ...tokenError.body,
+        viewState: buildInvalidTokenViewState(reason),
+      });
     }
 
     const doc = await getPublicDocumentBySignatureToken(token);
@@ -173,12 +212,21 @@ async function getPublicDocByDocumentToken(req, res) {
       return res.status(404).json({
         code: "NOT_FOUND",
         message: NOT_FOUND_MESSAGE,
+        viewState: buildInvalidTokenViewState("not_found"),
       });
     }
 
     const accessError = validatePublicAccess(doc, EXPIRED_LINK_MESSAGE);
     if (accessError) {
-      return res.status(accessError.status).json(accessError.body);
+      const reason =
+        accessError.body && accessError.body.code === "LINK_EXPIRED"
+          ? "expired"
+          : "invalid";
+
+      return res.status(accessError.status).json({
+        ...accessError.body,
+        viewState: buildInvalidTokenViewState(reason),
+      });
     }
 
     const pdfUrl = await buildSignedPdfUrlOrFail(doc, res, {
@@ -209,6 +257,9 @@ async function getPublicDocByDocumentToken(req, res) {
     }
 
     const requiresVisadoBool = isTruthyVisado(doc.requires_visado);
+    const viewState = buildReadyViewState({
+      isVisado: requiresVisadoBool,
+    });
 
     return res.json({
       document: buildPublicDocumentPayload(doc, { pdfUrl }),
@@ -216,12 +267,14 @@ async function getPublicDocByDocumentToken(req, res) {
       file_url: pdfUrl,
       public_mode: requiresVisadoBool ? "visado" : "firma",
       public_token_kind: "signature_token",
+      viewState,
     });
   } catch (err) {
     console.error("❌ Error cargando documento público (document):", err);
     return res.status(500).json({
       code: "INTERNAL_ERROR",
       message: "Error interno del servidor",
+      viewState: buildErrorViewState(),
     });
   }
 }
@@ -238,7 +291,15 @@ async function publicSignDocument(req, res) {
 
     const tokenError = validatePublicToken(token);
     if (tokenError) {
-      return res.status(tokenError.status).json(tokenError.body);
+      const reason =
+        tokenError.body && tokenError.body.code === "TOKEN_EXPIRED"
+          ? "expired"
+          : "invalid";
+
+      return res.status(tokenError.status).json({
+        ...tokenError.body,
+        viewState: buildInvalidTokenViewState(reason),
+      });
     }
 
     const row = await getPublicSignContextByToken(token);
@@ -246,18 +307,33 @@ async function publicSignDocument(req, res) {
       return res.status(404).json({
         code: "NOT_FOUND",
         message: NOT_FOUND_MESSAGE,
+        viewState: buildInvalidTokenViewState("not_found"),
       });
     }
 
     const validationError = validatePublicSign(row);
     if (validationError) {
-      return res.status(validationError.status).json(validationError.body);
+      // Casos especiales: ya firmado, link no usable
+      if (validationError.body?.code === "ALREADY_SIGNED") {
+        return res.status(validationError.status).json({
+          ...validationError.body,
+          viewState: buildCompletedViewState({ isVisado: false }),
+        });
+      }
+
+      return res.status(validationError.status).json({
+        ...validationError.body,
+        viewState: buildErrorViewState(validationError.body?.message),
+      });
     }
 
     if (row.signer_role && row.signer_role.toUpperCase() === "VISADOR") {
       return res.status(400).json({
         code: "WRONG_MODE",
         message: "Este enlace corresponde a visado, no a firma.",
+        viewState: buildErrorViewState(
+          "Este enlace fue creado para visado, no para firma."
+        ),
       });
     }
 
@@ -404,6 +480,8 @@ async function publicSignDocument(req, res) {
     });
     if (!fileUrl) return;
 
+    const successViewState = buildCompletedViewState({ isVisado: false });
+
     return res.json({
       ...doc,
       numero_contrato_interno: doc.numero_contrato_interno,
@@ -416,12 +494,14 @@ async function publicSignDocument(req, res) {
       message: allSigned
         ? "Documento firmado correctamente por todos los firmantes"
         : "Firma registrada. Aún faltan firmantes por completar la firma",
+      viewState: successViewState,
     });
   } catch (err) {
     console.error("❌ Error firmando documento público:", err);
     return res.status(500).json({
       code: "INTERNAL_ERROR",
       message: "Error interno del servidor",
+      viewState: buildErrorViewState(),
     });
   }
 }
@@ -442,12 +522,23 @@ async function publicRejectDocument(req, res) {
 
     const tokenError = validatePublicToken(token);
     if (tokenError) {
-      return res.status(tokenError.status).json(tokenError.body);
+      const reason =
+        tokenError.body && tokenError.body.code === "TOKEN_EXPIRED"
+          ? "expired"
+          : "invalid";
+
+      return res.status(tokenError.status).json({
+        ...tokenError.body,
+        viewState: buildInvalidTokenViewState(reason),
+      });
     }
 
     const reasonError = validatePublicRejectReason(motivo);
     if (reasonError) {
-      return res.status(reasonError.status).json(reasonError.body);
+      return res.status(reasonError.status).json({
+        ...reasonError.body,
+        viewState: buildErrorViewState(reasonError.body?.message),
+      });
     }
 
     const row = await getPublicRejectContextByToken(token);
@@ -455,12 +546,16 @@ async function publicRejectDocument(req, res) {
       return res.status(404).json({
         code: "NOT_FOUND",
         message: NOT_FOUND_MESSAGE,
+        viewState: buildInvalidTokenViewState("not_found"),
       });
     }
 
     const validationError = validatePublicReject(row);
     if (validationError) {
-      return res.status(validationError.status).json(validationError.body);
+      return res.status(validationError.status).json({
+        ...validationError.body,
+        viewState: buildErrorViewState(validationError.body?.message),
+      });
     }
 
     await markSignerAsRejected(row.signer_id, motivo);
@@ -557,12 +652,14 @@ async function publicRejectDocument(req, res) {
       public_mode: "firma",
       public_token_kind: "sign_token",
       message: "Documento rechazado correctamente",
+      viewState: buildRejectedViewState(),
     });
   } catch (err) {
     console.error("❌ Error rechazando documento público:", err);
     return res.status(500).json({
       code: "INTERNAL_ERROR",
       message: "Error interno del servidor",
+      viewState: buildErrorViewState(),
     });
   }
 }
@@ -581,7 +678,15 @@ async function publicVisarDocument(req, res) {
 
     const tokenError = validatePublicToken(token);
     if (tokenError) {
-      return res.status(tokenError.status).json(tokenError.body);
+      const reason =
+        tokenError.body && tokenError.body.code === "TOKEN_EXPIRED"
+          ? "expired"
+          : "invalid";
+
+      return res.status(tokenError.status).json({
+        ...tokenError.body,
+        viewState: buildInvalidTokenViewState(reason),
+      });
     }
 
     const docActual = await getPublicVisadoContextByToken(token);
@@ -589,6 +694,7 @@ async function publicVisarDocument(req, res) {
       return res.status(404).json({
         code: "NOT_FOUND",
         message: NOT_FOUND_MESSAGE,
+        viewState: buildInvalidTokenViewState("not_found"),
       });
     }
 
@@ -601,11 +707,24 @@ async function publicVisarDocument(req, res) {
 
     const validationError = validatePublicVisar(docActual);
     if (validationError) {
-      console.warn(
-        "[PUBLIC] publicVisarDocument → validationError",
-        validationError
-      );
-      return res.status(validationError.status).json(validationError.body);
+      if (validationError.body?.code === "DOC_BLOCKED_REVIEW") {
+        return res.status(validationError.status).json({
+          ...validationError.body,
+          viewState: buildBlockedByReviewViewState(),
+        });
+      }
+
+      if (validationError.body?.code === "ALREADY_VISADO") {
+        return res.status(validationError.status).json({
+          ...validationError.body,
+          viewState: buildCompletedViewState({ isVisado: true }),
+        });
+      }
+
+      return res.status(validationError.status).json({
+        ...validationError.body,
+        viewState: buildErrorViewState(validationError.body?.message),
+      });
     }
 
     const doc = await updateDocumentToPendingFirma(docActual.id);
@@ -670,6 +789,8 @@ async function publicVisarDocument(req, res) {
     });
     if (!fileUrl) return;
 
+    const viewState = buildCompletedViewState({ isVisado: true });
+
     return res.json({
       ...doc,
       file_url: fileUrl,
@@ -678,12 +799,14 @@ async function publicVisarDocument(req, res) {
       public_mode: "visado",
       public_token_kind: "signature_token",
       message: "Documento visado correctamente desde enlace público",
+      viewState,
     });
   } catch (err) {
     console.error("❌ Error visando documento público:", err);
     return res.status(500).json({
       code: "INTERNAL_ERROR",
       message: "Error interno del servidor",
+      viewState: buildErrorViewState(),
     });
   }
 }

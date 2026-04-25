@@ -41,10 +41,11 @@ export function PublicSignActions({
   const actionHelpId = "public-sign-action-help";
   const actionErrorId = "public-sign-action-error";
 
-  const actionAriaDescribedBy =
-    !canSubmitAction || legalError
-      ? `${actionHelpId} ${actionErrorId}`
-      : actionHelpId;
+  const actionAriaDescribedBy = useMemo(() => {
+    const ids = [actionHelpId];
+    if (!canSubmitAction || legalError) ids.push(actionErrorId);
+    return ids.join(" ");
+  }, [canSubmitAction, legalError]);
 
   return (
     <div className="public-sign-action-block">
@@ -82,6 +83,7 @@ export function PublicSignActions({
             onClick={onConfirm}
             disabled={submitBlocked}
             aria-describedby={actionAriaDescribedBy}
+            aria-busy={signing ? "true" : "false"}
           >
             {actionLabel}
           </button>
@@ -93,7 +95,7 @@ export function PublicSignActions({
               onClick={onToggleReject}
               disabled={signing || rejecting}
             >
-              Rechazar documento
+              {rejecting ? "Abriendo rechazo..." : "Rechazar documento"}
             </button>
           )}
         </div>
@@ -147,6 +149,7 @@ export function PublicSignActions({
               className="public-sign-button public-sign-button--danger-solid"
               onClick={onReject}
               disabled={rejecting || signing}
+              aria-busy={rejecting ? "true" : "false"}
             >
               {rejecting ? "Enviando..." : "Confirmar rechazo"}
             </button>

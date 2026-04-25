@@ -10,7 +10,7 @@ import {
   buildMetaTitle,
 } from "./publicSign/usePublicSignLogic";
 
-// Estados terminales: no hay más acciones posibles, solo lectura / mensajes
+// Estados terminales: solo lectura / mensajes, sin acciones nuevas
 const TERMINAL_VIEW_STATES = new Set([
   "invalid",
   "expired",
@@ -21,24 +21,17 @@ const TERMINAL_VIEW_STATES = new Set([
   "blocked_by_review",
 ]);
 
+// Mapea un "kind" de estado a una variante visual simple
 function getMessageVariant(kind, preferred) {
   if (preferred) return preferred;
 
   const normalized = String(kind || "").toLowerCase();
 
-  if (
-    normalized === "error" ||
-    normalized === "invalid" ||
-    normalized === "expired"
-  ) {
+  if (["error", "invalid", "expired"].includes(normalized)) {
     return "error";
   }
 
-  if (
-    normalized === "completed" ||
-    normalized === "used" ||
-    normalized === "rejected"
-  ) {
+  if (["completed", "used", "rejected"].includes(normalized)) {
     return "success";
   }
 
@@ -51,7 +44,8 @@ function PublicStatusMessageCard({
   variant,
   showSpinner = false,
 }) {
-  const resolvedVariant = getMessageVariant(viewState?.kind, variant);
+  const safeViewState = viewState || {};
+  const resolvedVariant = getMessageVariant(safeViewState.kind, variant);
 
   const className = `public-sign-message-card ${
     resolvedVariant === "error"
@@ -61,23 +55,27 @@ function PublicStatusMessageCard({
       : "public-sign-message-card--info"
   }`;
 
+  const canShowRetry = Boolean(
+    safeViewState.canRetry && typeof onRetry === "function"
+  );
+
   return (
     <div className={className} role="status" aria-live="polite">
       {showSpinner && <div className="spinner public-sign-spinner" />}
 
-      {viewState?.title && (
+      {safeViewState.title && (
         <div className="public-sign-message-card__title">
-          {viewState.title}
+          {safeViewState.title}
         </div>
       )}
 
-      {viewState?.message && (
+      {safeViewState.message && (
         <div className="public-sign-message-card__text">
-          {viewState.message}
+          {safeViewState.message}
         </div>
       )}
 
-      {viewState?.canRetry && typeof onRetry === "function" && (
+      {canShowRetry && (
         <button
           type="button"
           className="public-sign-button public-sign-button--secondary public-sign-button--auto"
@@ -104,6 +102,10 @@ function PublicDocumentSummary({
   onRetry,
   showInlineStatus,
 }) {
+  const hasCompany = Boolean(companyName || companyRut);
+  const hasProcedure = Boolean(procedureFieldLabel && procedureLabel);
+  const hasParticipant = Boolean(participantInfo?.title);
+
   return (
     <aside className="public-sign-sidebar">
       <div className="public-sign-summary">
@@ -114,73 +116,88 @@ function PublicDocumentSummary({
         </div>
 
         <div className="public-sign-summary__text">
-          Revisa la información principal antes de confirmar la acción sobre el
-          documento.
+          Revisa estos datos antes de confirmar tu acción sobre el documento.
         </div>
       </div>
 
       <div className="public-sign-meta-grid">
-        <div className="public-sign-meta-card">
-          <div className="public-sign-meta-card__label">Empresa</div>
-          <div
-            className="public-sign-meta-card__value"
-            title={buildMetaTitle("Empresa", companyName, `RUT: ${companyRut}`)}
-          >
-            {companyName}
-          </div>
-          <div
-            className="public-sign-meta-card__subvalue"
-            title={`RUT: ${companyRut}`}
-          >
-            RUT: {companyRut}
-          </div>
-        </div>
-
-        <div className="public-sign-meta-card">
-          <div className="public-sign-meta-card__label">
-            Número de contrato
-          </div>
-          <div
-            className="public-sign-meta-card__value public-sign-meta-card__value--contract"
-            title={contractNumber}
-          >
-            {contractNumber}
-          </div>
-        </div>
-
-        <div className="public-sign-meta-card">
-          <div className="public-sign-meta-card__label">
-            {procedureFieldLabel}
-          </div>
-          <div
-            className="public-sign-meta-card__value"
-            title={procedureLabel}
-          >
-            {procedureLabel}
-          </div>
-        </div>
-
-        <div className="public-sign-meta-card">
-          <div className="public-sign-meta-card__label">
-            {participantInfo.title}
-          </div>
-          <div
-            className="public-sign-meta-card__value"
-            title={buildMetaTitle(
-              participantInfo.title,
-              participantInfo.primary,
-              participantInfo.secondary
+        {hasCompany && (
+          <div className="public-sign-meta-card">
+            <div className="public-sign-meta-card__label">Empresa emisora</div>
+            <div
+              className="public-sign-meta-card__value"
+              title={buildMetaTitle(
+                "Empresa",
+                companyName,
+                companyRut ? `RUT: ${companyRut}` : ""
+              )}
+            >
+              {companyName}
+            </div>
+            {companyRut && (
+              <div
+                className="public-sign-meta-card__subvalue"
+                title={`RUT: ${companyRut}`}
+              >
+                RUT: {companyRut}
+              </div>
             )}
-          >
-            {participantInfo.primary}
           </div>
-          <div
-            className="public-sign-meta-card__subvalue"
-            title={participantInfo.secondary}
-          >
-            {participantInfo.secondary}
+        )}
+
+        {contractNumber && (
+          <div className="public-sign-meta-card">
+            <div className="public-sign-meta-card__label">
+              Número de contrato
+            </div>
+            <div
+              className="public-sign-meta-card__value public-sign-meta-card__value--contract"
+              title={contractNumber}
+            >
+              {contractNumber}
+            </div>
           </div>
-        </div>
+        )}
+
+        {hasProcedure && (
+          <div className="public-sign-meta-card">
+            <div className="public-sign-meta-card__label">
+              {procedureFieldLabel}
+            </div>
+            <div
+              className="public-sign-meta-card__value"
+              title={procedureLabel}
+            >
+              {procedureLabel}
+            </div>
+          </div>
+        )}
+
+        {hasParticipant && (
+          <div className="public-sign-meta-card">
+            <div className="public-sign-meta-card__label">
+              {participantInfo.title}
+            </div>
+            <div
+              className="public-sign-meta-card__value"
+              title={buildMetaTitle(
+                participantInfo.title,
+                participantInfo.primary,
+                participantInfo.secondary
+              )}
+            >
+              {participantInfo.primary}
+            </div>
+            {participantInfo.secondary && (
+              <div
+                className="public-sign-meta-card__subvalue"
+                title={participantInfo.secondary}
+              >
+                {participantInfo.secondary}
+              </div>
+            )}
+          </div>
+        )}
       </div>
 
       {pdfUrl && (
@@ -190,7 +207,7 @@ function PublicDocumentSummary({
           rel="noopener noreferrer"
           className="public-sign-open-pdf public-sign-open-pdf--fullwidth"
         >
-          Abrir documento completo
+          Abrir documento completo en otra pestaña
         </a>
       )}
 
@@ -198,7 +215,7 @@ function PublicDocumentSummary({
         <PublicStatusMessageCard
           viewState={viewState}
           onRetry={onRetry}
-          variant={getMessageVariant(viewState.kind)}
+          variant={getMessageVariant(viewState?.kind)}
         />
       )}
 
@@ -224,8 +241,8 @@ function PublicDocumentPanel({ pdfUrl, documentTitle, actionBlock }) {
           <PublicPdfViewer fileUrl={pdfUrl} />
         ) : (
           <div className="public-sign-pdf-empty">
-            No hay una vista previa disponible en este momento. Si el enlace lo
-            permite, puedes abrir el documento completo en una nueva pestaña.
+            No pudimos mostrar la vista previa en este momento. Si el enlace lo
+            permite, abre el documento completo en una nueva pestaña.
           </div>
         )}
       </div>
@@ -247,7 +264,7 @@ export function PublicSignView(props) {
     procedureLabel,
     signerRoleLabel,
     participantInfo,
-    viewState,
+    viewState: rawViewState,
     statusBadge,
     canRenderDocument,
     canRenderActions,
@@ -271,6 +288,7 @@ export function PublicSignView(props) {
     setLegalError,
   } = usePublicSignLogic(props);
 
+  const viewState = rawViewState || { kind: "loading" };
   const isLoading = viewState.kind === "loading";
 
   const isTerminal = useMemo(
@@ -283,29 +301,34 @@ export function PublicSignView(props) {
     [isTerminal, canRenderDocument]
   );
 
+  // Título principal de la intro, orientado al estado del enlace
   const introTitle = useMemo(() => {
     if (isTerminal) {
       if (viewState.title) return viewState.title;
 
       if (viewState.kind === "expired") {
-        return "Enlace expirado";
+        return "Este enlace ya expiró";
       }
 
       if (viewState.kind === "invalid") {
-        return "Enlace no válido";
+        return "Este enlace no es válido";
       }
 
       if (viewState.kind === "rejected") {
-        return "Documento rechazado";
+        return "El documento fue rechazado";
       }
 
       if (viewState.kind === "completed" || viewState.kind === "used") {
         return isVisado
-          ? "Documento visado correctamente"
+          ? "Visado registrado correctamente"
           : "Acción registrada correctamente";
       }
 
-      return "Portal de firma";
+      if (viewState.kind === "blocked_by_review") {
+        return "El documento está en revisión";
+      }
+
+      return "Portal de firma pública";
     }
 
     if (viewState.kind !== "ready" && viewState.title) {
@@ -313,44 +336,45 @@ export function PublicSignView(props) {
     }
 
     if (isVisado) {
-      return "Revisa este documento para registrar tu visado";
+      return "Revisa el documento antes de registrar tu visado";
     }
 
     if (signerRoleLabel === "Firmante final") {
-      return "Revisa este documento para registrar tu firma final";
+      return "Revisa el documento antes de firmar";
     }
 
-    return "Revisa este documento para registrar tu firma";
+    return "Revisa el documento antes de continuar";
   }, [isTerminal, viewState.title, viewState.kind, isVisado, signerRoleLabel]);
 
+  // Texto descriptivo de la intro, evitando tecnicismos
   const introText = useMemo(() => {
     if (isTerminal) {
       if (viewState.message) return viewState.message;
 
       if (viewState.kind === "expired") {
-        return "Este enlace de firma expiró. Pide al remitente que te envíe un nuevo enlace.";
+        return "Este enlace de firma ya no está disponible. Pide al remitente que te envíe un nuevo enlace para continuar.";
       }
 
       if (viewState.kind === "invalid") {
-        return "Este enlace no es válido o podría estar incompleto. Verifica el link o pide uno nuevo.";
+        return "El enlace que abriste no es válido o está incompleto. Verifica que lo hayas copiado completo o solicita uno nuevo.";
       }
 
       if (viewState.kind === "rejected") {
-        return "Este documento fue rechazado y el flujo de firma quedó cerrado.";
+        return "Este documento fue rechazado por uno de los participantes. El flujo de firma quedó cerrado desde este enlace.";
       }
 
       if (viewState.kind === "completed" || viewState.kind === "used") {
         return isVisado
-          ? "El documento fue visado correctamente desde este enlace público y quedó habilitado para continuar con la firma."
-          : "La acción se registró correctamente sobre este documento.";
+          ? "Tu visado ya fue registrado correctamente. No es necesario que realices más acciones desde este enlace."
+          : "Tu acción ya fue registrada sobre este documento. No necesitas completar nada más desde este enlace.";
       }
 
       if (viewState.kind === "error") {
-        return "Ocurrió un problema al cargar el documento. Intenta nuevamente o contacta al remitente.";
+        return "Tuvimos un problema al cargar el documento. Intenta nuevamente más tarde o contacta al remitente si el problema continúa.";
       }
 
       if (viewState.kind === "blocked_by_review") {
-        return "El documento está en revisión por parte del emisor. Por ahora no se pueden registrar nuevas acciones desde este enlace.";
+        return "El emisor está revisando el documento. Por ahora no se pueden registrar nuevas acciones desde este enlace.";
       }
 
       return "No hay más acciones disponibles para este enlace público.";
@@ -361,12 +385,13 @@ export function PublicSignView(props) {
     }
 
     if (isVisado) {
-      return "Cuando confirmes el visado, el documento quedará habilitado para continuar con la firma.";
+      return "Lee el documento, confirma que la información es correcta y luego registra tu visado para permitir que el flujo continúe.";
     }
 
-    return "Lee el documento completo, valida la información y luego confirma la acción correspondiente.";
+    return "Lee el documento con calma, verifica los datos y luego confirma la acción que te corresponde.";
   }, [isTerminal, viewState.message, viewState.kind, isVisado]);
 
+  // Bloque de acciones principal (firma / visado / rechazo)
   const actionBlock = useMemo(() => {
     if (!canRenderActions || isTerminal) return null;
 

@@ -1,3 +1,4 @@
+// src/views/publicSign/usePublicSignLogic.js
 import { useCallback, useEffect, useMemo, useState } from "react";
 import {
   normalizePublicApiBase,
@@ -21,6 +22,17 @@ import {
   getProcedureFieldLabel,
   getProcedureLabel,
 } from "../../utils/documentLabels";
+
+// Estados terminales según contrato público
+const TERMINAL_VIEW_STATES = new Set([
+  "invalid",
+  "expired",
+  "used",
+  "rejected",
+  "completed",
+  "error",
+  "blocked_by_review",
+]);
 
 export function usePublicSignLogic({
   publicSignLoading,
@@ -48,7 +60,7 @@ export function usePublicSignLogic({
   const [actionMessage, setActionMessage] = useState("");
   const [actionMessageType, setActionMessageType] = useState("info"); // "info" | "success" | "error"
 
-  // Estado terminal manual para evitar volver a "ready" tras la acción
+  // Estado terminal manual solo como override de lo que diga el backend
   const [terminalViewState, setTerminalViewState] = useState(null);
 
   const document = useMemo(
@@ -324,8 +336,19 @@ export function usePublicSignLogic({
     [signer, isVisado, document]
   );
 
+  // viewState que viene del backend (contrato nuevo)
+  const apiViewState = useMemo(
+    () =>
+      publicSignDoc?.viewState ??
+      publicSignDoc?.view_state ??
+      null,
+    [publicSignDoc]
+  );
+
+  // Fallback a la lógica antigua solo si el backend aún no trae viewState
   const baseViewState = useMemo(
     () =>
+      apiViewState ||
       resolveViewState({
         hasToken,
         publicSignLoading,
@@ -337,6 +360,7 @@ export function usePublicSignLogic({
         requiresVisado,
       }),
     [
+      apiViewState,
       hasToken,
       publicSignLoading,
       publicSignError,
@@ -348,9 +372,9 @@ export function usePublicSignLogic({
     ]
   );
 
-  // Si hay estado terminal manual, tiene prioridad
+  // Si hay estado terminal manual, tiene prioridad sobre el que venga del backend
   const viewState = useMemo(
-    () => terminalViewState || baseViewState,
+    () => terminalViewState || baseViewState || { kind: "loading" },
     [terminalViewState, baseViewState]
   );
 
@@ -360,7 +384,8 @@ export function usePublicSignLogic({
   );
 
   const canRenderDocument = !!document;
-  const canRenderActions = viewState.kind === "ready";
+  const isTerminal = TERMINAL_VIEW_STATES.has(viewState.kind);
+  const canRenderActions = viewState.kind === "ready" && canRenderDocument;
 
   const canSubmitVisado =
     canRenderActions &&
@@ -450,29 +475,36 @@ export function usePublicSignLogic({
         body: JSON.stringify(payload),
       });
 
+      // Si el backend ya devuelve viewState terminal, úsalo directamente
+      if (data?.viewState || data?.view_state) {
+        setTerminalViewState(data.viewState || data.view_state);
+      }
+
       await reloadPublicState();
 
       const successMsg = buildActionSuccessMessage(isVisado, data?.message);
       setActionMessage(successMsg);
       setActionMessageType("success");
 
-      // Para visado o firma usamos estados terminales claros
-      if (isVisado) {
-        setTerminalViewState({
-          kind: "completed",
-          title: "Documento visado correctamente",
-          message:
-            successMsg ||
-            "El documento fue visado correctamente desde este enlace público y quedó habilitado para continuar con la firma.",
-        });
-      } else {
-        setTerminalViewState({
-          kind: "completed",
-          title: "Firma registrada correctamente",
-          message:
-            successMsg ||
-            "Tu firma quedó registrada correctamente sobre este documento.",
-        });
+      // Fallback: si la API aún no manda viewState terminal, lo aplicamos aquí
+      if (!data?.viewState && !data?.view_state) {
+        if (isVisado) {
+          setTerminalViewState({
+            kind: "completed",
+            title: "Documento visado correctamente",
+            message:
+              successMsg ||
+              "El documento fue visado correctamente desde este enlace público y quedó habilitado para continuar con la firma.",
+          });
+        } else {
+          setTerminalViewState({
+            kind: "completed",
+            title: "Firma registrada correctamente",
+            message:
+              successMsg ||
+              "Tu firma quedó registrada correctamente sobre este documento.",
+          });
+        }
       }
 
       window.scrollTo({ top: 0, behavior: "smooth" });
@@ -527,6 +559,11 @@ export function usePublicSignLogic({
         body: JSON.stringify({ motivo }),
       });
 
+      // Si backend trae viewState de rechazo terminal, úsalo
+      if (data?.viewState || data?.view_state) {
+        setTerminalViewState(data.viewState || data.view_state);
+      }
+
       await reloadPublicState();
 
       const msg = sanitizePublicMessage(
@@ -540,12 +577,14 @@ export function usePublicSignLogic({
       setRejectReason("");
       setRejectError("");
 
-      // Rechazo público: estado terminal coherente
-      setTerminalViewState({
-        kind: "rejected",
-        title: "Documento rechazado correctamente",
-        message: msg,
-      });
+      // Fallback terminal si API aún no lo manda
+      if (!data?.viewState && !data?.view_state) {
+        setTerminalViewState({
+          kind: "rejected",
+          title: "Documento rechazado correctamente",
+          message: msg,
+        });
+      }
 
       window.scrollTo({ top: 0, behavior: "smooth" });
     } catch (err) {
@@ -576,7 +615,7 @@ export function usePublicSignLogic({
   }, [canReject]);
 
   if (import.meta.env.DEV) {
-    console.log("[PublicSignView]", {
+    console.log("[PublicSignView/usePublicSignLogic]", {
       hasToken,
       hasDocument: !!document,
       loading: publicSignLoading,

@@ -72,6 +72,7 @@ const onboardingRoutes = require("./routes/onboarding");
 const billingRoutes = require("./routes/billing");
 const publicDocsRouter = require("./routes/publicDocs");
 const notaryRouter = require("./routes/notary");
+const metricsRoutes = require("./routes/metrics"); // ← NUEVO
 
 /* ================================
    LOG DE INICIO
@@ -148,7 +149,6 @@ const corsOptionsDelegate = (req, callback) => {
   const origin = req.header("Origin");
 
   if (!origin) {
-    // Postman, curl, healthchecks, etc.
     return callback(null, {
       ...baseCorsConfig,
       origin: true,
@@ -169,7 +169,6 @@ const corsOptionsDelegate = (req, callback) => {
   });
 };
 
-// CORS global + preflight explícito para TODAS las rutas /api
 app.use(cors(corsOptionsDelegate));
 app.options("*", cors(corsOptionsDelegate));
 console.log("✓ CORS configurado con whitelist dinámica");
@@ -335,6 +334,7 @@ app.get("/api/info", (req, res) => {
       "firma digital",
       "R2 storage",
       "swagger docs",
+      "web-vitals",
     ],
     timestamp: new Date().toISOString(),
   });
@@ -393,6 +393,10 @@ console.log("✓ Rutas /api/status registradas");
 // Logs / auditoría
 app.use("/api/logs", requireAuth, logsRoutes);
 console.log("✓ Rutas /api/logs registradas");
+
+// Métricas (Web Vitals) ← NUEVO
+app.use("/api/metrics", metricsRoutes);
+console.log("✓ Rutas /api/metrics registradas");
 
 // Documentos (alias /api/docs)
 app.use(
@@ -578,7 +582,7 @@ app.post(
             sign_token: doc.signature_token,
             verification_code: doc.codigo_verificacion,
             estado: doc.signature_status,
-            customMessage: null, // aquí podrías inyectar un mensaje fijo si quieres
+            customMessage: null,
           });
 
           if (ok) {
@@ -709,6 +713,7 @@ server.listen(PORT, HOST, () => {
   console.log("   GET  /api/info");
   console.log("   GET  /api/sentry-test");
   console.log("   GET  /api/stats");
+  console.log("   POST /api/metrics/web-vitals");
   console.log("   /api/status ...");
   console.log("   /api/logs ...");
   console.log("   /api/auth ...");
@@ -726,7 +731,6 @@ server.listen(PORT, HOST, () => {
 });
 
 try {
-  // Pasa allowedOrigins para configurar CORS también en Socket.IO
   initializeSocketIO(server, { allowedOrigins: [...allowedOriginSet] });
   console.log("✓ Socket.IO inicializado sobre servidor HTTP");
 } catch (err) {

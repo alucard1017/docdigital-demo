@@ -1,3 +1,5 @@
+// src/views/publicSign/publicSignState.js
+
 // Normalización de URLs y API base
 
 export function stripTrailingSlashes(value = "") {
@@ -79,7 +81,7 @@ export async function fetchJsonSafe(url, options = {}) {
   return data;
 }
 
-// Clasificación de errores de carga inicial del enlace público
+// Clasificación de errores de carga inicial del enlace público (fallback)
 
 export function classifyPublicError(error) {
   const text = String(error ?? "").toLowerCase().trim();
@@ -132,7 +134,8 @@ export function classifyPublicError(error) {
     text.includes("inválido") ||
     text.includes("invalido") ||
     text.includes("invalid") ||
-    text.includes("no encontrado")
+    text.includes("no encontrado") ||
+    text.includes("not found")
   ) {
     return {
       kind: "invalid",
@@ -281,7 +284,7 @@ export function buildRejectErrorMessage(responseMessage) {
   );
 }
 
-// Resolución de viewState de la vista pública
+// Resolución de viewState de la vista pública (fallback cuando no hay viewState desde backend)
 
 export function resolveViewState({
   hasToken,

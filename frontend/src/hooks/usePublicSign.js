@@ -2,7 +2,9 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 
 function stripTrailingSlashes(value = "") {
-  return String(value || "").trim().replace(/\/+$/, "");
+  return String(value ?? "")
+    .trim()
+    .replace(/\/+$/, "");
 }
 
 function ensureApiBase(value = "") {
@@ -21,7 +23,7 @@ function firstNonEmpty(...values) {
 }
 
 function normalizePathname(pathname = "/") {
-  const clean = String(pathname || "").trim();
+  const clean = String(pathname ?? "").trim();
   if (!clean) return "/";
   const normalized = clean.replace(/\/+$/, "");
   return normalized || "/";
@@ -30,17 +32,16 @@ function normalizePathname(pathname = "/") {
 function extractTokenFromPath(pathname = "/") {
   const normalizedPath = normalizePathname(pathname);
   const segments = normalizedPath.split("/").filter(Boolean);
-
   if (!segments.length) return "";
 
   const documentIndex = segments.findIndex((segment) => segment === "document");
   if (documentIndex >= 0 && segments[documentIndex + 1]) {
-    return String(segments[documentIndex + 1] || "").trim();
+    return String(segments[documentIndex + 1] ?? "").trim();
   }
 
   const signIndex = segments.findIndex((segment) => segment === "sign");
   if (signIndex >= 0 && segments[signIndex + 1]) {
-    return String(segments[signIndex + 1] || "").trim();
+    return String(segments[signIndex + 1] ?? "").trim();
   }
 
   const publicIndex = segments.findIndex((segment) => segment === "public");
@@ -49,7 +50,7 @@ function extractTokenFromPath(pathname = "/") {
     segments[publicIndex + 1] === "sign" &&
     segments[publicIndex + 2]
   ) {
-    return String(segments[publicIndex + 2] || "").trim();
+    return String(segments[publicIndex + 2] ?? "").trim();
   }
 
   return "";
@@ -144,7 +145,7 @@ function resolveTokenKind({
   isConsultaPublica,
   isDocumentPath,
 }) {
-  const normalizedMode = String(mode || "").trim().toLowerCase();
+  const normalizedMode = String(mode ?? "").trim().toLowerCase();
   const normalizedPath = normalizePathname(pathname);
 
   if (normalizedMode === "visado") return "document";
@@ -171,11 +172,9 @@ function resolveTokenKind({
  */
 function buildPublicLoadPath(token, tokenKind) {
   const encoded = encodeURIComponent(token);
-
   if (tokenKind === "document") {
     return `/public/docs/document/${encoded}`;
   }
-
   return `/public/docs/${encoded}`;
 }
 
@@ -346,7 +345,8 @@ function normalizePublicDocumentResponse(data, mode = null) {
 }
 
 /**
- * Traducir un error HTTP/mensaje a un estado y microcopy más humano.
+ * Traducir un error HTTP/mensaje a un mensaje más humano.
+ * (El kind final lo deriva usePublicSignLogic / classifyPublicError).
  */
 function normalizePublicError(err) {
   const status = err?.status;
@@ -359,11 +359,16 @@ function normalizePublicError(err) {
   if (!status && !rawMessage) {
     return {
       code: "unknown",
-      message: "No se pudo cargar el documento. Intenta nuevamente en unos segundos.",
+      message:
+        "No se pudo cargar el documento. Intenta nuevamente en unos segundos.",
     };
   }
 
-  if (status === 404 || lower.includes("no se encontró") || lower.includes("not found")) {
+  if (
+    status === 404 ||
+    lower.includes("no se encontró") ||
+    lower.includes("not found")
+  ) {
     return {
       code: "invalid",
       message:
@@ -392,7 +397,11 @@ function normalizePublicError(err) {
     };
   }
 
-  if (status === 403 || lower.includes("rejected") || lower.includes("rechazado")) {
+  if (
+    status === 403 ||
+    lower.includes("rejected") ||
+    lower.includes("rechazado")
+  ) {
     return {
       code: "rejected",
       message:
@@ -405,76 +414,6 @@ function normalizePublicError(err) {
     message:
       rawMessage ||
       "No se pudo cargar el documento. Intenta nuevamente o contacta al remitente.",
-  };
-}
-
-/**
- * Derivar viewState básico a partir de doc + error.
- */
-function deriveViewState({ doc, errorCode, loading }) {
-  if (loading) {
-    return {
-      kind: "loading",
-      title: "Cargando documento",
-      message: "Estamos preparando el documento para su visualización.",
-      tone: "info",
-    };
-  }
-
-  if (errorCode === "expired") {
-    return {
-      kind: "expired",
-      title: "Enlace expirado",
-      message:
-        "Este enlace de firma expiró. Pide al remitente que te envíe un nuevo enlace.",
-      tone: "danger",
-    };
-  }
-
-  if (errorCode === "invalid") {
-    return {
-      kind: "invalid",
-      title: "Enlace no válido",
-      message:
-        "Este enlace no es válido o podría estar incompleto. Verifica el link o pide uno nuevo.",
-      tone: "danger",
-    };
-  }
-
-  if (errorCode === "rejected") {
-    return {
-      kind: "rejected",
-      title: "Documento rechazado",
-      message:
-        "Este documento fue rechazado por el propietario y el flujo quedó cerrado.",
-      tone: "danger",
-    };
-  }
-
-  if (errorCode && !doc) {
-    return {
-      kind: "error",
-      title: "No se pudo cargar el documento",
-      message:
-        "Ocurrió un problema al acceder al documento. Intenta nuevamente o contacta al remitente.",
-      tone: "danger",
-    };
-  }
-
-  if (doc) {
-    return {
-      kind: "ready",
-      title: "Firma electrónica",
-      message: "",
-      tone: "info",
-    };
-  }
-
-  return {
-    kind: "idle",
-    title: "Portal de firma",
-    message: "",
-    tone: "info",
   };
 }
 
@@ -615,7 +554,6 @@ export function usePublicSign({
           } else if (shouldRetryAsSigner) {
             result = await doFetch("signer");
           } else {
-            // Error real, lo dejamos salir para normalizarlo abajo
             throw err;
           }
         }
@@ -660,6 +598,8 @@ export function usePublicSign({
             hasDocument: !!normalized.document,
             hasSigner: !!normalized.signer,
             pdfUrl: normalized.pdfUrl || "",
+            viewStateFromApi:
+              normalized.raw?.viewState || normalized.raw?.view_state || null,
           });
         }
 
@@ -753,25 +693,6 @@ export function usePublicSign({
     clearPublicState,
   ]);
 
-  const viewState = deriveViewState({
-    doc: publicSignDoc,
-    errorCode: publicSignErrorCode,
-    loading: publicSignLoading,
-  });
-
-  const statusFlags = {
-    isReady: viewState.kind === "ready",
-    isLoading: viewState.kind === "loading",
-    isError:
-      viewState.kind === "error" ||
-      viewState.kind === "invalid" ||
-      viewState.kind === "expired" ||
-      viewState.kind === "rejected",
-    isExpired: viewState.kind === "expired",
-    isInvalid: viewState.kind === "invalid",
-    isRejected: viewState.kind === "rejected",
-  };
-
   return {
     publicSignDoc,
     publicSignError,
@@ -782,8 +703,6 @@ export function usePublicSign({
     publicSignMode,
     publicView,
     publicTokenKind,
-    viewState,
-    statusFlags,
     cargarFirmaPublica,
   };
 }
