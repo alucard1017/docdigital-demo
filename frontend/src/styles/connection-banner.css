@@ -1,0 +1,63 @@
+/* src/styles/connection-banner.css */
+
+.connection-banner {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.75rem;
+  padding: 0.5rem 0.75rem;
+  border-radius: 6px;
+  font-size: 0.875rem;
+  line-height: 1.3;
+  margin-bottom: 0.75rem;
+}
+
+.connection-banner.banner-warning {
+  background-color: #fff7e6;
+  border: 1px solid #ffe0a3;
+  color: #8a5a00;
+}
+
+.connection-banner.banner-danger {
+  background-color: #fff1f0;
+  border: 1px solid #ffccc7;
+  color: #a8071a;
+}
+
+.connection-banner-left {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  min-width: 0;
+}
+
+.connection-banner-dot {
+  width: 10px;
+  height: 10px;
+  border-radius: 999px;
+  background-color: currentColor;
+  flex-shrink: 0;
+}
+
+.connection-banner-text {
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.connection-banner-retry {
+  border: none;
+  background: transparent;
+  color: inherit;
+  font-size: 0.875rem;
+  font-weight: 500;
+  cursor: pointer;
+  padding: 0.25rem 0.5rem;
+  border-radius: 4px;
+  transition: background-color 0.15s ease, opacity 0.15s ease;
+}
+
+.connection-banner-retry:hover {
+  background-color: rgba(0, 0, 0, 0.04);
+  opacity: 0.9;
+}
