@@ -174,16 +174,19 @@ async function testConnection() {
       console.error(
         "🧭 Diagnóstico rápido: verifica que PostgreSQL esté encendido, escuchando en el puerto configurado y que DATABASE_URL tenga usuario/clave/DB correctos."
       );
-      // EN DEV: no tiramos process.exit; dejamos que el pool reintente luego
+      // EN DEV: no matamos el proceso
     } else {
-      // EN PROD puedes decidir si quieres matar el proceso o no
       console.error("⛔ En producción, fallo crítico de conexión a DB");
     }
   }
 }
 
-// Lanzamos el test de forma no bloqueante
-void testConnection();
+// Lanzamos el test SOLO fuera de desarrollo
+if (NODE_ENV === "development") {
+  console.log("ℹ️ Saltando testConnection de PostgreSQL en desarrollo");
+} else {
+  void testConnection();
+}
 
 async function query(text, params) {
   const startedAt = Date.now();
