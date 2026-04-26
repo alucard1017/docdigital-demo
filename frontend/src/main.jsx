@@ -63,7 +63,7 @@ ReactDOM.createRoot(rootElement).render(appTree);
 /* ================================
    WEB VITALS - MÉTRICAS DE RENDIMIENTO
    ================================ */
-import { onCLS, onFID, onLCP, onFCP, onTTFB } from "web-vitals";
+import { onCLS, onINP, onLCP, onFCP, onTTFB } from "web-vitals";
 
 function sendMetric(metric) {
   const body = JSON.stringify({
@@ -89,7 +89,7 @@ function sendMetric(metric) {
 
 // Registrar métricas
 onCLS(sendMetric);
-onFID(sendMetric);
+onINP(sendMetric);
 onLCP(sendMetric);
 onFCP(sendMetric);
 onTTFB(sendMetric);

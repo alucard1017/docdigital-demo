@@ -260,7 +260,7 @@ const styles = {
   },
   section: {
     padding: "20px",
-    borderBottom: "1px solid "#e5e7eb",
+    borderBottom: "1px solid #e5e7eb",
   },
   sectionTitle: {
     margin: "0 0 12px",
