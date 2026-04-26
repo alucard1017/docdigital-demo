@@ -1,6 +1,11 @@
 // frontend/src/views/ProfileView.jsx
 import { useEffect, useMemo, useState } from "react";
+import { useTranslation } from "react-i18next";
 import api from "../api/client";
+import {
+  getMyPreferences,
+  updateMyPreferences,
+} from "../services/userPreferencesService";
 
 const initialProfileState = {
   id: null,
@@ -25,21 +30,34 @@ const initialPasswordForm = {
   confirmPassword: "",
 };
 
+const initialPreferencesForm = {
+  language: "es",
+  theme_mode: "system",
+};
+
 export default function ProfileView() {
+  const { i18n } = useTranslation();
+
   const [profile, setProfile] = useState(initialProfileState);
   const [companyName, setCompanyName] = useState("");
   const [profileForm, setProfileForm] = useState(initialProfileForm);
   const [passwordForm, setPasswordForm] = useState(initialPasswordForm);
+  const [preferencesForm, setPreferencesForm] = useState(initialPreferencesForm);
 
   const [loadingProfile, setLoadingProfile] = useState(true);
   const [loadingCompany, setLoadingCompany] = useState(false);
+  const [loadingPreferences, setLoadingPreferences] = useState(true);
+
   const [savingProfile, setSavingProfile] = useState(false);
   const [changingPassword, setChangingPassword] = useState(false);
+  const [savingPreferences, setSavingPreferences] = useState(false);
 
   const [profileError, setProfileError] = useState("");
   const [profileSuccess, setProfileSuccess] = useState("");
   const [passwordError, setPasswordError] = useState("");
   const [passwordSuccess, setPasswordSuccess] = useState("");
+  const [preferencesError, setPreferencesError] = useState("");
+  const [preferencesSuccess, setPreferencesSuccess] = useState("");
 
   const [profileFieldErrors, setProfileFieldErrors] = useState({});
   const [passwordFieldErrors, setPasswordFieldErrors] = useState({});
@@ -99,6 +117,41 @@ export default function ProfileView() {
   }, []);
 
   useEffect(() => {
+    const controller = new AbortController();
+
+    async function loadPreferences() {
+      try {
+        setLoadingPreferences(true);
+        setPreferencesError("");
+        setPreferencesSuccess("");
+
+        const data = await getMyPreferences({
+          signal: controller.signal,
+        });
+
+        setPreferencesForm({
+          language: data?.language || "es",
+          theme_mode: data?.theme_mode || "system",
+        });
+      } catch (err) {
+        if (err?.name === "CanceledError" || err?.code === "ERR_CANCELED") return;
+
+        const msg =
+          err?.response?.data?.message ||
+          err?.message ||
+          "No se pudieron cargar tus preferencias.";
+        setPreferencesError(msg);
+      } finally {
+        setLoadingPreferences(false);
+      }
+    }
+
+    loadPreferences();
+
+    return () => controller.abort();
+  }, []);
+
+  useEffect(() => {
     if (!profile.company_id) {
       setCompanyName("");
       setLoadingCompany(false);
@@ -131,22 +184,40 @@ export default function ProfileView() {
 
   const emailStatus = useMemo(() => {
     return profile.email_verified
-      ? { label: "Correo verificado", color: "#15803d", bg: "#f0fdf4", border: "#bbf7d0" }
-      : { label: "Correo no verificado", color: "#b91c1c", bg: "#fef2f2", border: "#fecaca" };
+      ? {
+          label: "Correo verificado",
+          color: "#15803d",
+          bg: "#f0fdf4",
+          border: "#bbf7d0",
+        }
+      : {
+          label: "Correo no verificado",
+          color: "#b91c1c",
+          bg: "#fef2f2",
+          border: "#fecaca",
+        };
   }, [profile.email_verified]);
 
   const passwordStrength = useMemo(() => {
     const value = passwordForm.newPassword || "";
     let score = 0;
+
     if (value.length >= 6) score += 1;
     if (value.length >= 8) score += 1;
     if (/[A-Z]/.test(value) && /[a-z]/.test(value)) score += 1;
     if (/\d/.test(value)) score += 1;
     if (/[^A-Za-z0-9]/.test(value)) score += 1;
 
-    if (!value) return { label: "Sin definir", color: "#94a3b8", width: "0%" };
-    if (score <= 1) return { label: "Débil", color: "#dc2626", width: "25%" };
-    if (score <= 3) return { label: "Media", color: "#d97706", width: "60%" };
+    if (!value) {
+      return { label: "Sin definir", color: "#94a3b8", width: "0%" };
+    }
+    if (score <= 1) {
+      return { label: "Débil", color: "#dc2626", width: "25%" };
+    }
+    if (score <= 3) {
+      return { label: "Media", color: "#d97706", width: "60%" };
+    }
+
     return { label: "Fuerte", color: "#16a34a", width: "100%" };
   }, [passwordForm.newPassword]);
 
@@ -170,10 +241,15 @@ export default function ProfileView() {
     const errors = {};
     const { currentPassword, newPassword, confirmPassword } = passwordForm;
 
-    if (!currentPassword) errors.currentPassword = "Ingresa tu contraseña actual.";
-    if (!newPassword) errors.newPassword = "Ingresa una nueva contraseña.";
-    else if (newPassword.length < 6) {
-      errors.newPassword = "La nueva contraseña debe tener al menos 6 caracteres.";
+    if (!currentPassword) {
+      errors.currentPassword = "Ingresa tu contraseña actual.";
+    }
+
+    if (!newPassword) {
+      errors.newPassword = "Ingresa una nueva contraseña.";
+    } else if (newPassword.length < 6) {
+      errors.newPassword =
+        "La nueva contraseña debe tener al menos 6 caracteres.";
     }
 
     if (!confirmPassword) {
@@ -197,6 +273,11 @@ export default function ProfileView() {
   function resetPasswordMessages() {
     setPasswordError("");
     setPasswordSuccess("");
+  }
+
+  function resetPreferencesMessages() {
+    setPreferencesError("");
+    setPreferencesSuccess("");
   }
 
   function handleProfileFieldChange(field, value) {
@@ -225,6 +306,15 @@ export default function ProfileView() {
     }));
 
     resetPasswordMessages();
+  }
+
+  function handlePreferencesFieldChange(field, value) {
+    setPreferencesForm((prev) => ({
+      ...prev,
+      [field]: value,
+    }));
+
+    resetPreferencesMessages();
   }
 
   async function handleSaveProfile(e) {
@@ -263,7 +353,9 @@ export default function ProfileView() {
         email: updated.email ?? payload.email,
       });
 
-      setProfileSuccess(res?.data?.message || "Perfil actualizado correctamente.");
+      setProfileSuccess(
+        res?.data?.message || "Perfil actualizado correctamente."
+      );
     } catch (err) {
       const msg =
         err?.response?.data?.message ||
@@ -310,6 +402,39 @@ export default function ProfileView() {
     }
   }
 
+  async function handleSavePreferences(e) {
+    e.preventDefault();
+
+    try {
+      setSavingPreferences(true);
+      resetPreferencesMessages();
+
+      const updated = await updateMyPreferences({
+        language: preferencesForm.language,
+        theme_mode: preferencesForm.theme_mode,
+      });
+
+      setPreferencesForm({
+        language: updated?.language || preferencesForm.language,
+        theme_mode: updated?.theme_mode || preferencesForm.theme_mode,
+      });
+
+      if (updated?.language) {
+        await i18n.changeLanguage(updated.language);
+      }
+
+      setPreferencesSuccess("Preferencias actualizadas correctamente.");
+    } catch (err) {
+      const msg =
+        err?.response?.data?.message ||
+        err?.message ||
+        "No se pudieron actualizar tus preferencias.";
+      setPreferencesError(msg);
+    } finally {
+      setSavingPreferences(false);
+    }
+  }
+
   function handleResetProfile() {
     setProfileForm({
       name: profile.name || "",
@@ -317,6 +442,14 @@ export default function ProfileView() {
     });
     setProfileFieldErrors({});
     resetProfileMessages();
+  }
+
+  function handleResetPreferences() {
+    setPreferencesForm((prev) => ({
+      language: prev.language || "es",
+      theme_mode: prev.theme_mode || "system",
+    }));
+    resetPreferencesMessages();
   }
 
   if (loadingProfile) {
@@ -343,7 +476,8 @@ export default function ProfileView() {
         <div>
           <h1>Mi perfil</h1>
           <p>
-            Administra tus datos de acceso, el correo de la cuenta y la seguridad de tu usuario.
+            Administra tus datos de acceso, el correo de la cuenta, las
+            preferencias y la seguridad de tu usuario.
           </p>
         </div>
       </div>
@@ -358,15 +492,18 @@ export default function ProfileView() {
               </p>
             </div>
 
-            <div style={pillStyle(emailStatus.bg, emailStatus.border, emailStatus.color)}>
+            <div
+              style={pillStyle(
+                emailStatus.bg,
+                emailStatus.border,
+                emailStatus.color
+              )}
+            >
               {emailStatus.label}
             </div>
           </div>
 
-          {profileError ? (
-            <AlertBox type="error">{profileError}</AlertBox>
-          ) : null}
-
+          {profileError ? <AlertBox type="error">{profileError}</AlertBox> : null}
           {profileSuccess ? (
             <AlertBox type="success">{profileSuccess}</AlertBox>
           ) : null}
@@ -400,7 +537,9 @@ export default function ProfileView() {
                 id="profile-email"
                 type="email"
                 value={profileForm.email}
-                onChange={(e) => handleProfileFieldChange("email", e.target.value)}
+                onChange={(e) =>
+                  handleProfileFieldChange("email", e.target.value)
+                }
                 style={inputStyle({ hasError: !!profileFieldErrors.email })}
                 aria-invalid={!!profileFieldErrors.email}
               />
@@ -416,7 +555,9 @@ export default function ProfileView() {
                 id="profile-name"
                 type="text"
                 value={profileForm.name}
-                onChange={(e) => handleProfileFieldChange("name", e.target.value)}
+                onChange={(e) =>
+                  handleProfileFieldChange("name", e.target.value)
+                }
                 style={inputStyle({ hasError: !!profileFieldErrors.name })}
                 aria-invalid={!!profileFieldErrors.name}
               />
@@ -468,8 +609,84 @@ export default function ProfileView() {
             />
 
             <p style={mutedParagraphStyle}>
-              Los cambios de rol, empresa y asignaciones se gestionan desde el panel de administración.
+              Los cambios de rol, empresa y asignaciones se gestionan desde el
+              panel de administración.
             </p>
+          </div>
+
+          <div style={sideCardStyle}>
+            <h3 style={sideTitleStyle}>Preferencias</h3>
+
+            {preferencesError ? (
+              <AlertBox type="error">{preferencesError}</AlertBox>
+            ) : null}
+            {preferencesSuccess ? (
+              <AlertBox type="success">{preferencesSuccess}</AlertBox>
+            ) : null}
+
+            {loadingPreferences ? (
+              <p style={mutedParagraphStyle}>Cargando preferencias…</p>
+            ) : (
+              <form onSubmit={handleSavePreferences}>
+                <Field
+                  id="preferences-language"
+                  label="Idioma"
+                  helpText="Este idioma se usará en la interfaz y en el módulo de ayuda."
+                >
+                  <select
+                    id="preferences-language"
+                    value={preferencesForm.language}
+                    onChange={(e) =>
+                      handlePreferencesFieldChange("language", e.target.value)
+                    }
+                    style={inputStyle()}
+                  >
+                    <option value="es">Español</option>
+                    <option value="en">English</option>
+                  </select>
+                </Field>
+
+                <Field
+                  id="preferences-theme"
+                  label="Tema"
+                  helpText="Puedes usar el modo del sistema o forzar claro/oscuro."
+                >
+                  <select
+                    id="preferences-theme"
+                    value={preferencesForm.theme_mode}
+                    onChange={(e) =>
+                      handlePreferencesFieldChange("theme_mode", e.target.value)
+                    }
+                    style={inputStyle()}
+                  >
+                    <option value="system">Sistema</option>
+                    <option value="light">Claro</option>
+                    <option value="dark">Oscuro</option>
+                  </select>
+                </Field>
+
+                <div style={buttonRowStyle}>
+                  <button
+                    type="submit"
+                    disabled={savingPreferences}
+                    className="btn-main btn-primary"
+                  >
+                    {savingPreferences
+                      ? "Guardando..."
+                      : "Guardar preferencias"}
+                  </button>
+
+                  <button
+                    type="button"
+                    disabled={savingPreferences}
+                    className="btn-main btn-ghost"
+                    onClick={handleResetPreferences}
+                  >
+                    Restablecer
+                  </button>
+                </div>
+              </form>
+            )}
           </div>
 
           <div style={sideCardStyle}>
@@ -490,17 +707,25 @@ export default function ProfileView() {
 
             {showPasswordForm ? (
               <form onSubmit={handleChangePassword}>
-                {passwordError ? <AlertBox type="error">{passwordError}</AlertBox> : null}
-                {passwordSuccess ? <AlertBox type="success">{passwordSuccess}</AlertBox> : null}
+                {passwordError ? (
+                  <AlertBox type="error">{passwordError}</AlertBox>
+                ) : null}
+                {passwordSuccess ? (
+                  <AlertBox type="success">{passwordSuccess}</AlertBox>
+                ) : null}
 
                 <PasswordField
                   id="current-password"
                   label="Contraseña actual"
                   value={passwordForm.currentPassword}
-                  onChange={(value) => handlePasswordFieldChange("currentPassword", value)}
+                  onChange={(value) =>
+                    handlePasswordFieldChange("currentPassword", value)
+                  }
                   error={passwordFieldErrors.currentPassword}
                   visible={showCurrentPassword}
-                  onToggleVisibility={() => setShowCurrentPassword((v) => !v)}
+                  onToggleVisibility={() =>
+                    setShowCurrentPassword((v) => !v)
+                  }
                   autoComplete="current-password"
                 />
 
@@ -508,7 +733,9 @@ export default function ProfileView() {
                   id="new-password"
                   label="Nueva contraseña"
                   value={passwordForm.newPassword}
-                  onChange={(value) => handlePasswordFieldChange("newPassword", value)}
+                  onChange={(value) =>
+                    handlePasswordFieldChange("newPassword", value)
+                  }
                   error={passwordFieldErrors.newPassword}
                   visible={showNewPassword}
                   onToggleVisibility={() => setShowNewPassword((v) => !v)}
@@ -550,10 +777,14 @@ export default function ProfileView() {
                   id="confirm-password"
                   label="Confirmar nueva contraseña"
                   value={passwordForm.confirmPassword}
-                  onChange={(value) => handlePasswordFieldChange("confirmPassword", value)}
+                  onChange={(value) =>
+                    handlePasswordFieldChange("confirmPassword", value)
+                  }
                   error={passwordFieldErrors.confirmPassword}
                   visible={showConfirmPassword}
-                  onToggleVisibility={() => setShowConfirmPassword((v) => !v)}
+                  onToggleVisibility={() =>
+                    setShowConfirmPassword((v) => !v)
+                  }
                   autoComplete="new-password"
                 />
 
@@ -562,12 +793,15 @@ export default function ProfileView() {
                   disabled={changingPassword}
                   className="btn-main btn-primary"
                 >
-                  {changingPassword ? "Actualizando..." : "Actualizar contraseña"}
+                  {changingPassword
+                    ? "Actualizando..."
+                    : "Actualizar contraseña"}
                 </button>
               </form>
             ) : (
               <p style={mutedParagraphStyle}>
-                Te recomendamos actualizar tu contraseña periódicamente y no reutilizarla en otros servicios.
+                Te recomendamos actualizar tu contraseña periódicamente y no
+                reutilizarla en otros servicios.
               </p>
             )}
           </div>

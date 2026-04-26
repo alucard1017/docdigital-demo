@@ -209,14 +209,14 @@ export const isAuthFailure = (status, message, code, path = "") => {
     if (isIgnoredAuth401(path)) return false;
     if (AUTH_FAILURE_CODES.has(normalizedCode)) return true;
     if (AUTH_FAILURE_MESSAGES.has(normalizedMessage)) return true;
-    // cualquier 401 no público se trata como fallo de auth
+    // Cualquier 401 no público se trata como fallo de auth
     return true;
   }
 
   if (status === 403) {
     if (AUTH_FAILURE_CODES.has(normalizedCode)) return true;
     if (AUTH_FAILURE_MESSAGES.has(normalizedMessage)) return true;
-    if (FORBIDDEN_MESSAGES.has(normalizedMessage)) return false;
+    // 403 suele ser permisos insuficientes; lo dejamos a nivel de UI
     return false;
   }
 
@@ -381,7 +381,6 @@ api.interceptors.response.use(
    Helpers REST específicos
    ============================ */
 
-// /docs → { data, pagination, stats }
 export async function getDocuments(params = {}, config = {}) {
   const res = await api.get("/docs", { ...config, params });
   return res.data;
@@ -405,14 +404,6 @@ export async function getDocumentPdfUrl(id, config = {}) {
   return res.data;
 }
 
-/**
- * Timeline “pro”: debe devolver:
- * {
- *   document: {...},
- *   participants: [...],
- *   events: [...],
- * }
- */
 export async function getDocumentTimeline(id, config = {}) {
   const res = await api.get(`/documents/${id}/timeline`, config);
   return res.data;
@@ -430,7 +421,6 @@ export async function getPublicVerificationByCode(code, config = {}) {
   return res.data;
 }
 
-// Token de firmante (sign_token / invitación)
 export async function getPublicDocumentBySignerToken(token, config = {}) {
   const res = await api.get(
     `/public/docs/${encodeURIComponent(token)}`,
@@ -439,7 +429,6 @@ export async function getPublicDocumentBySignerToken(token, config = {}) {
   return res.data;
 }
 
-// Token de documento (signature_token)
 export async function getPublicDocumentByDocumentToken(token, config = {}) {
   const res = await api.get(
     `/public/docs/document/${encodeURIComponent(token)}`,
@@ -448,7 +437,6 @@ export async function getPublicDocumentByDocumentToken(token, config = {}) {
   return res.data;
 }
 
-// Alias conservador: por defecto usamos token de documento
 export async function getPublicDocumentByToken(token, config = {}) {
   return getPublicDocumentByDocumentToken(token, config);
 }

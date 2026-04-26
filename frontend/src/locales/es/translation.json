@@ -1,0 +1,19 @@
+{
+  "help": {
+    "title": "Ayuda",
+    "subtitle": "Preguntas frecuentes y soporte",
+    "close": "Cerrar ayuda",
+    "faqsTitle": "FAQs",
+    "contactTitle": "Contactar soporte",
+    "loadingFaqs": "Cargando preguntas frecuentes...",
+    "emptyFaqs": "No hay preguntas frecuentes disponibles.",
+    "loadFaqsError": "No se pudieron cargar las preguntas frecuentes.",
+    "subjectPlaceholder": "Asunto",
+    "messagePlaceholder": "Escribe tu consulta",
+    "send": "Enviar consulta",
+    "sending": "Enviando...",
+    "submitSuccess": "Consulta enviada correctamente.",
+    "submitError": "No se pudo enviar la consulta.",
+    "missingSubjectAndMessage": "Debes escribir asunto y mensaje."
+  }
+}

@@ -1,5 +1,3 @@
-// backend/server.js
-
 /* ================================
    CARGA DE VARIABLES DE ENTORNO
    ================================ */
@@ -73,6 +71,10 @@ const billingRoutes = require("./routes/billing");
 const publicDocsRouter = require("./routes/publicDocs");
 const notaryRouter = require("./routes/notary");
 const metricsRoutes = require("./routes/metrics"); // ← NUEVO
+
+// NUEVAS RUTAS
+const helpRoutes = require("./routes/help.routes");
+const userPreferencesRoutes = require("./routes/userPreferences.routes");
 
 /* ================================
    LOG DE INICIO
@@ -260,7 +262,9 @@ app.use(generalLimiter);
 app.use((req, res, next) => {
   if (req.path.startsWith("/api")) {
     console.log(
-      `[REQ] ${req.method} ${req.originalUrl} origin=${req.headers.origin || "none"}`
+      `[REQ] ${req.method} ${req.originalUrl} origin=${
+        req.headers.origin || "none"
+      }`
     );
   }
   next();
@@ -394,7 +398,7 @@ console.log("✓ Rutas /api/status registradas");
 app.use("/api/logs", requireAuth, logsRoutes);
 console.log("✓ Rutas /api/logs registradas");
 
-// Métricas (Web Vitals) ← NUEVO
+// Métricas (Web Vitals)
 app.use("/api/metrics", metricsRoutes);
 console.log("✓ Rutas /api/metrics registradas");
 
@@ -427,7 +431,7 @@ console.log("✓ Rutas /api/docs y /api/documents registradas");
    RUTAS PÚBLICAS (sin auth)
    ================================ */
 
-// Público principal (links de firma / visado / etc.)
+// Público principal
 app.use(
   "/api/public",
   publicLimiter,
@@ -480,6 +484,13 @@ console.log("✓ Rutas /api/billing registradas");
 
 app.use("/api/notary", notaryRouter);
 console.log("✓ Rutas /api/notary registradas");
+
+// NUEVAS RUTAS: preferencias y help widget
+app.use("/api", requireAuth, userPreferencesRoutes);
+console.log("✓ Rutas /api/me/preferences registradas");
+
+app.use("/api", requireAuth, helpRoutes);
+console.log("✓ Rutas /api/help registradas");
 
 /* ================================
    RUTA STORAGE / URLs FIRMADAS

@@ -68,6 +68,9 @@ import { useDocuments } from "./hooks/useDocuments";
 import { useToast } from "./hooks/useToast";
 import { useAuth } from "./hooks/useAuth";
 
+// Botón flotante de ayuda
+import FloatingHelpButton from "./components/help/FloatingHelpButton";
+
 /* ============================
    Lazy views / modules
    ============================ */
@@ -128,7 +131,6 @@ function App() {
   const [password, setPassword] = useState("");
   const [isEmailMode, setIsEmailMode] = useState(false);
   const [showPassword, setShowPassword] = useState(false);
-  const [showHelp, setShowHelp] = useState(false);
   const [message, setMessage] = useState("");
   const [isLoggingIn, setIsLoggingIn] = useState(false);
   const [rememberMe, setRememberMe] = useState(false);
@@ -570,7 +572,7 @@ function App() {
   }, [token, socketStatus, refreshDocs]);
 
   /* ============================
-     Toasts de conexión en tiempo real (sin spam, textos amigables)
+     Toasts de conexión en tiempo real
      ============================ */
 
   const hasShownSocketToastRef = useRef(false);
@@ -578,13 +580,11 @@ function App() {
   useEffect(() => {
     if (!socketStatus) return;
 
-    // Reset cuando volvemos a conectado
     if (socketStatus === "connected") {
       hasShownSocketToastRef.current = false;
       return;
     }
 
-    // Evitar spam
     if (hasShownSocketToastRef.current) return;
     hasShownSocketToastRef.current = true;
 
@@ -596,7 +596,7 @@ function App() {
     }
 
     let title = "Conexión en tiempo real limitada";
-    let message =
+    let msg =
       "No pudimos mantener la conexión en tiempo real. Tu bandeja seguirá actualizándose cada cierto tiempo.";
 
     const isErrorLike =
@@ -604,20 +604,20 @@ function App() {
 
     if (socketStatus === "connecting") {
       title = "Conectando en tiempo real…";
-      message =
+      msg =
         "Estamos intentando establecer la conexión en tiempo real. Puedes seguir usando la aplicación normalmente.";
     }
 
     if (socketStatus === "reconnecting") {
       title = "Reconectando en tiempo real…";
-      message =
+      msg =
         "Perdimos la conexión en tiempo real, estamos intentando restablecerla. La bandeja se seguirá actualizando de forma periódica.";
     }
 
     addToast({
       type: isErrorLike ? "error" : "warning",
       title,
-      message,
+      message: msg,
     });
   }, [socketStatus, socketLastError, addToast]);
 
@@ -982,8 +982,8 @@ function App() {
         setPassword={setPassword}
         showPassword={showPassword}
         setShowPassword={setShowPassword}
-        showHelp={showHelp}
-        setShowHelp={setShowHelp}
+        showHelp={false}
+        setShowHelp={() => {}}
         message={message}
         isLoggingIn={isLoggingIn}
         handleLogin={handleLogin}
@@ -1100,6 +1100,8 @@ function App() {
               Probar error Sentry
             </button>
           )}
+
+          <FloatingHelpButton />
         </div>
       </div>
     </div>

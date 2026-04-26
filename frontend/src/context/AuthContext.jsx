@@ -19,7 +19,7 @@ import { navigateTo, replaceTo } from "../utils/router";
 export const AuthContext = createContext(null);
 
 function normalizeToken(value) {
-  if (!value || typeof value !== "string") return "";
+  if (typeof value !== "string") return "";
   const trimmed = value.trim();
   return trimmed || "";
 }
@@ -40,7 +40,9 @@ function getCurrentPath() {
 
 export function AuthProvider({ children }) {
   const [user, setUserState] = useState(() => normalizeUser(getStoredUser()));
-  const [token, setTokenState] = useState(() => normalizeToken(getStoredToken()));
+  const [token, setTokenState] = useState(() =>
+    normalizeToken(getStoredToken())
+  );
   const [authLoading, setAuthLoading] = useState(true);
 
   const authEventHandledRef = useRef(false);
@@ -72,15 +74,34 @@ export function AuthProvider({ children }) {
     };
   }, []);
 
-  const isAuthenticated = !!token && !!user;
+  const isAuthenticated = Boolean(token && user);
 
   const login = useCallback(
     async ({ identifier, password, rememberMe = false }) => {
-      const res = await api.post(
-        "/auth/login",
-        { identifier, password, rememberMe },
-        { withCredentials: true }
-      );
+      const payload = {
+        identifier: typeof identifier === "string" ? identifier.trim() : "",
+        password: typeof password === "string" ? password : "",
+        rememberMe: Boolean(rememberMe),
+      };
+
+      if (!payload.identifier || !payload.password) {
+        throw new Error("Debes ingresar identificador y contraseña");
+      }
+
+      let res;
+      try {
+        res = await api.post(
+          "/auth/login",
+          payload,
+          { withCredentials: true }
+        );
+      } catch (error) {
+        const message =
+          error?.response?.data?.message ||
+          error?.message ||
+          "No se pudo conectar con el servidor de autenticación.";
+        throw new Error(message);
+      }
 
       const data = res?.data;
 
@@ -99,7 +120,6 @@ export function AuthProvider({ children }) {
       setUserState(nextUser);
       setTokenState(nextToken);
 
-      // Reset flags de eventos de expiración
       authEventHandledRef.current = false;
       logoutInProgressRef.current = false;
       resetAuthExpiredDispatch();

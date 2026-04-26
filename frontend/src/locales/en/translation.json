@@ -1,0 +1,19 @@
+{
+  "help": {
+    "title": "Help",
+    "subtitle": "FAQs and support",
+    "close": "Close help",
+    "faqsTitle": "FAQs",
+    "contactTitle": "Contact support",
+    "loadingFaqs": "Loading frequently asked questions...",
+    "emptyFaqs": "There are no FAQs available.",
+    "loadFaqsError": "Could not load the FAQs.",
+    "subjectPlaceholder": "Subject",
+    "messagePlaceholder": "Write your question",
+    "send": "Send request",
+    "sending": "Sending...",
+    "submitSuccess": "Request sent successfully.",
+    "submitError": "Could not send your request.",
+    "missingSubjectAndMessage": "You must enter a subject and a message."
+  }
+}

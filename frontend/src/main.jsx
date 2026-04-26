@@ -4,6 +4,8 @@ import React from "react";
 import ReactDOM from "react-dom/client";
 import App from "./App.jsx";
 
+import "./i18n";
+
 import "./styles/base.css";
 import "./styles/appShell.css";
 import "./styles/layout.css";
@@ -61,7 +63,7 @@ ReactDOM.createRoot(rootElement).render(appTree);
 /* ================================
    WEB VITALS - MÉTRICAS DE RENDIMIENTO
    ================================ */
-import { onCLS, onFID, onLCP, onFCP, onTTFB } from 'web-vitals';
+import { onCLS, onFID, onLCP, onFCP, onTTFB } from "web-vitals";
 
 function sendMetric(metric) {
   const body = JSON.stringify({
@@ -74,14 +76,14 @@ function sendMetric(metric) {
 
   // Beacon API (no bloquea la salida de página)
   if (navigator.sendBeacon) {
-    navigator.sendBeacon('/api/metrics/web-vitals', body);
+    navigator.sendBeacon("/api/metrics/web-vitals", body);
   } else {
-    fetch('/api/metrics/web-vitals', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
+    fetch("/api/metrics/web-vitals", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
       body,
       keepalive: true,
-    }).catch(() => {}); // Silenciar errores de métricas
+    }).catch(() => {});
   }
 }
 
@@ -92,4 +94,4 @@ onLCP(sendMetric);
 onFCP(sendMetric);
 onTTFB(sendMetric);
 
-console.log('✓ Web Vitals inicializadas');
+console.log("✓ Web Vitals inicializadas");
