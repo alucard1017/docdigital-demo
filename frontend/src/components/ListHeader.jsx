@@ -1,49 +1,16 @@
+// src/components/ListHeader.jsx
 import React, { useCallback, useMemo } from "react";
+import { Download, RefreshCw, Search, X, ArrowUpDown, Filter } from "lucide-react";
 import { API_BASE_URL } from "../constants";
+import { useToast } from "../hooks/useToast";
 import "../styles/decorativeTabs.css";
+import "../styles/listHeader.css";
 
 const API_URL = API_BASE_URL;
 
 function apiUrl(path) {
   return `${API_URL.replace(/\/+$/, "")}/api${path}`;
 }
-
-const CHIP_BASE_STYLE = {
-  padding: "7px 12px",
-  borderRadius: 999,
-  fontSize: "0.8rem",
-  fontWeight: 700,
-  border: "1px solid transparent",
-  cursor: "pointer",
-  display: "inline-flex",
-  alignItems: "center",
-  gap: 6,
-  whiteSpace: "nowrap",
-  minHeight: 36,
-  transition: "all 0.2s ease",
-};
-
-const CONTROL_BASE_STYLE = {
-  height: 38,
-  padding: "0 12px",
-  borderRadius: 12,
-  border: "1px solid #334155",
-  fontSize: "0.85rem",
-  background: "#0f172a",
-  color: "#e5e7eb",
-  outline: "none",
-  minWidth: 0,
-  boxShadow: "inset 0 1px 0 rgba(255,255,255,0.03)",
-};
-
-const SECTION_CARD_STYLE = {
-  background: "linear-gradient(180deg, rgba(15,23,42,0.92), rgba(2,6,23,0.96))",
-  border: "1px solid rgba(51,65,85,0.7)",
-  borderRadius: 18,
-  padding: 18,
-  marginBottom: 18,
-  boxShadow: "0 14px 34px rgba(2,6,23,0.28)",
-};
 
 function safeCount(value) {
   return Number.isFinite(value) ? value : 0;
@@ -64,6 +31,8 @@ export function ListHeader({
   onSync,
   token,
 }) {
+  const { addToast } = useToast();
+
   const _pendientes = safeCount(pendientes);
   const _visados = safeCount(visados);
   const _firmados = safeCount(firmados);
@@ -77,7 +46,11 @@ export function ListHeader({
 
   const handleDownloadReport = useCallback(async () => {
     if (!token) {
-      alert("No hay sesión activa para descargar el reporte.");
+      addToast({
+        type: "warning",
+        title: "Sesión no disponible",
+        message: "No hay sesión activa para descargar el reporte.",
+      });
       return;
     }
 
@@ -90,13 +63,19 @@ export function ListHeader({
 
       if (!res.ok) {
         let msg = "Error descargando reporte";
+
         try {
           const data = await res.json();
           msg = data?.message || msg;
         } catch {
           // ignore
         }
-        alert(`❌ ${msg}`);
+
+        addToast({
+          type: "error",
+          title: "No se pudo descargar",
+          message: msg,
+        });
         return;
       }
 
@@ -105,243 +84,140 @@ export function ListHeader({
       const a = document.createElement("a");
 
       a.href = url;
-      a.download = `documentos-${new Date()
-        .toISOString()
-        .slice(0, 10)}.xlsx`;
+      a.download = `documentos-${new Date().toISOString().slice(0, 10)}.xlsx`;
       document.body.appendChild(a);
       a.click();
       a.remove();
       window.URL.revokeObjectURL(url);
+
+      addToast({
+        type: "success",
+        title: "Reporte generado",
+        message: "La descarga del reporte comenzó correctamente.",
+      });
     } catch (err) {
       console.error("Error descargando reporte:", err);
-      alert("Error de conexión al descargar reporte");
+
+      addToast({
+        type: "error",
+        title: "Error de conexión",
+        message: "No se pudo descargar el reporte en este momento.",
+      });
     }
-  }, [token]);
+  }, [token, addToast]);
 
   const handleClearSearch = useCallback(() => {
     setSearch("");
   }, [setSearch]);
 
   return (
-    <div style={SECTION_CARD_STYLE}>
+    <section className="list-header-card">
       {/* Línea superior */}
-      <div
-        style={{
-          display: "flex",
-          flexWrap: "wrap",
-          justifyContent: "space-between",
-          alignItems: "flex-start",
-          gap: 16,
-          marginBottom: 16,
-        }}
-      >
-        <div style={{ flex: "1 1 320px", minWidth: 240 }}>
-          <h1
-            style={{
-              margin: 0,
-              fontSize: "1.6rem",
-              fontWeight: 800,
-              color: "#f8fafc",
-              lineHeight: 1.1,
-              letterSpacing: "-0.02em",
-            }}
-          >
-            Bandeja de entrada
-          </h1>
+      <div className="list-header-top">
+        <div className="list-header-copy">
+          <h1 className="list-header-title">Bandeja de entrada</h1>
 
-          <p
-            style={{
-              margin: "6px 0 0 0",
-              fontSize: "0.9rem",
-              color: "#94a3b8",
-            }}
-          >
+          <p className="list-header-subtitle">
             Gestiona documentos, revisa estados y accede rápido a las acciones
             principales.
           </p>
 
-          <p
-            style={{
-              margin: "8px 0 0 0",
-              fontSize: "0.82rem",
-              color: "#cbd5e1",
-            }}
-          >
+          <p className="list-header-results">
             {totalFiltrado} documentos encontrados con los filtros actuales
           </p>
         </div>
 
-        <div
-          style={{
-            display: "flex",
-            flexWrap: "wrap",
-            gap: 10,
-            alignItems: "center",
-            justifyContent: "flex-end",
-            flex: "0 1 auto",
-          }}
-        >
+        <div className="list-header-actions">
           <button
             type="button"
             onClick={handleDownloadReport}
-            className="btn-main"
-            style={{
-              background: "linear-gradient(135deg, #10b981, #059669)",
-              color: "#ffffff",
-              fontSize: "0.84rem",
-              padding: "0 16px",
-              borderRadius: 12,
-              fontWeight: 700,
-              border: "none",
-              height: 38,
-              whiteSpace: "nowrap",
-              boxShadow: "0 10px 24px rgba(5,150,105,0.28)",
-            }}
+            className="btn-main list-header-btn-success"
           >
-            Descargar reporte
+            <Download size={16} />
+            <span>Descargar reporte</span>
           </button>
 
           <button
-            className="btn-main"
+            className="btn-main list-header-btn-sync"
             onClick={onSync}
             type="button"
-            style={{
-              background: "#1e293b",
-              color: "#e2e8f0",
-              fontSize: "0.84rem",
-              padding: "0 16px",
-              borderRadius: 12,
-              fontWeight: 700,
-              border: "1px solid #334155",
-              height: 38,
-              whiteSpace: "nowrap",
-            }}
           >
-            Sincronizar bandeja
+            <RefreshCw size={16} />
+            <span>Sincronizar bandeja</span>
           </button>
         </div>
       </div>
 
       {/* Chips de estado */}
-      <div
-        style={{
-          display: "flex",
-          flexWrap: "wrap",
-          gap: 10,
-          marginBottom: 16,
-        }}
-      >
+      <div className="list-header-chips">
         <button
           type="button"
           onClick={() => setStatusFilter("TODOS")}
-          style={{
-            ...CHIP_BASE_STYLE,
-            background:
-              statusFilter === "TODOS"
-                ? "linear-gradient(135deg, #1e293b, #334155)"
-                : "rgba(15,23,42,0.9)",
-            color: "#e5e7eb",
-            borderColor: statusFilter === "TODOS" ? "#64748b" : "#1f2937",
-          }}
+          className={`status-chip status-chip--neutral ${
+            statusFilter === "TODOS" ? "is-active" : ""
+          }`}
         >
-          Todos <strong>{total}</strong>
+          <span>Todos</span>
+          <strong>{total}</strong>
         </button>
 
         <button
           type="button"
           onClick={() => setStatusFilter("PENDIENTES")}
-          style={{
-            ...CHIP_BASE_STYLE,
-            background:
-              statusFilter === "PENDIENTES"
-                ? "linear-gradient(135deg, #3730a3, #4f46e5)"
-                : "rgba(55,48,163,0.18)",
-            color: "#e5e7eb",
-            borderColor: "rgba(129,140,248,0.7)",
-          }}
+          className={`status-chip status-chip--pending ${
+            statusFilter === "PENDIENTES" ? "is-active" : ""
+          }`}
         >
-          Pendientes <strong>{_pendientes}</strong>
+          <span>Pendientes</span>
+          <strong>{_pendientes}</strong>
         </button>
 
         <button
           type="button"
           onClick={() => setStatusFilter("VISADOS")}
-          style={{
-            ...CHIP_BASE_STYLE,
-            background:
-              statusFilter === "VISADOS"
-                ? "linear-gradient(135deg, #0f766e, #14b8a6)"
-                : "rgba(15,118,110,0.18)",
-            color: "#ecfeff",
-            borderColor: "rgba(45,212,191,0.7)",
-          }}
+          className={`status-chip status-chip--teal ${
+            statusFilter === "VISADOS" ? "is-active" : ""
+          }`}
         >
-          Visados <strong>{_visados}</strong>
+          <span>Visados</span>
+          <strong>{_visados}</strong>
         </button>
 
         <button
           type="button"
           onClick={() => setStatusFilter("FIRMADOS")}
-          style={{
-            ...CHIP_BASE_STYLE,
-            background:
-              statusFilter === "FIRMADOS"
-                ? "linear-gradient(135deg, #166534, #22c55e)"
-                : "rgba(22,101,52,0.18)",
-            color: "#dcfce7",
-            borderColor: "rgba(34,197,94,0.7)",
-          }}
+          className={`status-chip status-chip--success ${
+            statusFilter === "FIRMADOS" ? "is-active" : ""
+          }`}
         >
-          Firmados <strong>{_firmados}</strong>
+          <span>Firmados</span>
+          <strong>{_firmados}</strong>
         </button>
 
         <button
           type="button"
           onClick={() => setStatusFilter("RECHAZADOS")}
-          style={{
-            ...CHIP_BASE_STYLE,
-            background:
-              statusFilter === "RECHAZADOS"
-                ? "linear-gradient(135deg, #b91c1c, #ef4444)"
-                : "rgba(185,28,28,0.18)",
-            color: "#fee2e2",
-            borderColor: "rgba(248,113,113,0.7)",
-          }}
+          className={`status-chip status-chip--danger ${
+            statusFilter === "RECHAZADOS" ? "is-active" : ""
+          }`}
         >
-          Rechazados <strong>{_rechazados}</strong>
+          <span>Rechazados</span>
+          <strong>{_rechazados}</strong>
         </button>
       </div>
 
       {/* Filtros */}
-      <div
-        style={{
-          display: "flex",
-          flexWrap: "wrap",
-          gap: 10,
-          alignItems: "center",
-        }}
-      >
-        <div
-          style={{
-            display: "flex",
-            alignItems: "center",
-            gap: 8,
-            flex: "0 1 auto",
-          }}
-        >
-          <span
-            style={{
-              fontSize: "0.8rem",
-              color: "#94a3b8",
-              minWidth: 64,
-            }}
-          >
-            Ordenar
+      <div className="list-header-filters">
+        <div className="list-filter-group">
+          <span className="list-filter-label">
+            <ArrowUpDown size={14} />
+            <span>Ordenar</span>
           </span>
+
           <select
             value={sort}
             onChange={(e) => setSort(e.target.value)}
-            style={{ ...CONTROL_BASE_STYLE, minWidth: 190 }}
+            className="list-filter-control"
           >
             <option value="title_asc">Título (A → Z)</option>
             <option value="title_desc">Título (Z → A)</option>
@@ -352,27 +228,16 @@ export function ListHeader({
           </select>
         </div>
 
-        <div
-          style={{
-            display: "flex",
-            alignItems: "center",
-            gap: 8,
-            flex: "0 1 auto",
-          }}
-        >
-          <span
-            style={{
-              fontSize: "0.8rem",
-              color: "#94a3b8",
-              minWidth: 52,
-            }}
-          >
-            Estado
+        <div className="list-filter-group">
+          <span className="list-filter-label">
+            <Filter size={14} />
+            <span>Estado</span>
           </span>
+
           <select
             value={statusFilter}
             onChange={(e) => setStatusFilter(e.target.value)}
-            style={{ ...CONTROL_BASE_STYLE, minWidth: 160 }}
+            className="list-filter-control"
           >
             <option value="TODOS">Todos</option>
             <option value="PENDIENTES">Pendientes</option>
@@ -382,71 +247,34 @@ export function ListHeader({
           </select>
         </div>
 
-        <div
-          style={{
-            display: "flex",
-            alignItems: "center",
-            gap: 8,
-            flex: "1 1 260px",
-            minWidth: 220,
-          }}
-        >
-          <span
-            style={{
-              fontSize: "0.8rem",
-              color: "#94a3b8",
-              minWidth: 52,
-            }}
-          >
-            Buscar
+        <div className="list-filter-group list-filter-group--search">
+          <span className="list-filter-label">
+            <Search size={14} />
+            <span>Buscar</span>
           </span>
-          <div
-            style={{
-              position: "relative",
-              flex: 1,
-              minWidth: 0,
-              display: "flex",
-              alignItems: "center",
-            }}
-          >
+
+          <div className="list-search-wrap">
             <input
               type="text"
               value={search}
               onChange={(e) => setSearch(e.target.value)}
               placeholder="Título, participante o empresa..."
-              style={{
-                ...CONTROL_BASE_STYLE,
-                width: "100%",
-                paddingRight: search ? 32 : 12,
-              }}
+              className="list-filter-control list-filter-control--input"
             />
-            {search && (
+
+            {search ? (
               <button
                 type="button"
                 onClick={handleClearSearch}
                 aria-label="Limpiar búsqueda"
-                style={{
-                  position: "absolute",
-                  right: 8,
-                  width: 20,
-                  height: 20,
-                  borderRadius: 999,
-                  border: "none",
-                  background: "transparent",
-                  color: "#64748b",
-                  display: "flex",
-                  alignItems: "center",
-                  justifyContent: "center",
-                  fontSize: 14,
-                  cursor: "pointer",
-                }}
+                className="list-search-clear"
               >
-                ×
+                <X size={14} />
               </button>
-            )}
+            ) : null}
           </div>
         </div>
       </div>
-    </div>
+    </section>
   );
 }

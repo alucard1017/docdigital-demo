@@ -1,9 +1,14 @@
-/* Tabla usuarios / empresas – contenedor y acciones */
+/* src/styles/actionsTable.css */
+
+/* =========================
+   Scroll container
+   ========================= */
 
 .table-scroll-container {
   max-height: 500px;
   overflow-y: auto;
   overflow-x: auto;
+  border-radius: 18px;
 }
 
 .table-scroll-container::-webkit-scrollbar {
@@ -12,18 +17,22 @@
 }
 
 .table-scroll-container::-webkit-scrollbar-track {
-  background: #1f2937;
+  background: var(--color-surface-muted);
   border-radius: 4px;
 }
 
 .table-scroll-container::-webkit-scrollbar-thumb {
-  background: #4b5563;
+  background: color-mix(in srgb, var(--color-border-strong) 84%, var(--color-surface));
   border-radius: 4px;
 }
 
 .table-scroll-container::-webkit-scrollbar-thumb:hover {
-  background: #6b7280;
+  background: color-mix(in srgb, var(--color-text-muted) 68%, var(--color-surface));
 }
+
+/* =========================
+   Inline actions
+   ========================= */
 
 .user-actions,
 .company-actions {
@@ -35,44 +44,64 @@
 }
 
 .user-actions .btn-main,
-.company-actions .btn-main {
+.company-actions .btn-main,
+.user-actions .btn-secondary,
+.company-actions .btn-secondary,
+.user-actions .btn-secondary-danger,
+.company-actions .btn-secondary-danger {
   min-width: 110px;
   min-height: 32px;
   padding: 6px 12px;
   font-size: 0.76rem;
   line-height: 1;
+  border-radius: 12px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
 }
 
 .user-actions .btn-secondary,
 .company-actions .btn-secondary {
-  background: #0f172a;
-  border-color: #334155;
-  color: #e5e7eb;
+  background: var(--color-surface);
+  border: 1px solid var(--color-border-strong);
+  color: var(--color-text);
   box-shadow: none;
 }
 
 .user-actions .btn-secondary:hover:not(:disabled),
 .company-actions .btn-secondary:hover:not(:disabled) {
-  background: #111c31;
-  border-color: #475569;
+  background: var(--color-surface-muted);
+  border-color: var(--color-primary-border);
 }
 
 .user-actions .btn-secondary-danger,
 .company-actions .btn-secondary-danger {
-  background: rgba(127, 29, 29, 0.14);
-  color: #fca5a5;
-  border-color: rgba(239, 68, 68, 0.35);
+  background: color-mix(in srgb, var(--color-danger) 12%, transparent);
+  color: color-mix(in srgb, var(--color-danger) 78%, var(--color-text));
+  border: 1px solid var(--color-danger-border);
   box-shadow: none;
 }
 
 .user-actions .btn-secondary-danger:hover:not(:disabled),
 .company-actions .btn-secondary-danger:hover:not(:disabled) {
-  background: rgba(127, 29, 29, 0.22);
-  color: #fecaca;
-  border-color: rgba(248, 113, 113, 0.45);
+  background: color-mix(in srgb, var(--color-danger) 18%, transparent);
+  border-color: color-mix(in srgb, var(--color-danger-border) 90%, #ffffff);
 }
 
-/* Tabla users – columnas */
+.user-actions .btn-main:disabled,
+.company-actions .btn-main:disabled,
+.user-actions .btn-secondary:disabled,
+.company-actions .btn-secondary:disabled,
+.user-actions .btn-secondary-danger:disabled,
+.company-actions .btn-secondary-danger:disabled {
+  opacity: 0.6;
+  cursor: not-allowed;
+}
+
+/* =========================
+   Users table widths
+   ========================= */
 
 .doc-table.doc-table-users {
   min-width: 900px;
@@ -88,128 +117,40 @@
 .col-user-status { width: 90px; text-align: center; }
 .col-user-actions { width: 220px; text-align: center; }
 
-/* Badges de rol */
+/* =========================
+   Legacy compatibility hooks
+   ========================= */
 
-.badge-role {
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  padding: 2px 8px;
-  border-radius: 9999px;
-  font-size: 0.75rem;
-  font-weight: 600;
-  text-transform: uppercase;
-  letter-spacing: 0.03em;
-}
-
-.badge-role[data-role="SUPER_ADMIN"],
-.badge-role[data-role="ADMIN_GLOBAL"] {
-  background: #7c2d12;
-  color: #fed7aa;
-}
-
-.badge-role[data-role="ADMIN"] {
-  background: #1d4ed8;
-  color: #e5e7eb;
-}
-
-.badge-role[data-role="USER"] {
-  background: #111827;
-  color: #e5e7eb;
-}
-
-/* Badges de plan (compartido users / companies) */
-
-.badge-plan {
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  min-width: 78px;
-  padding: 2px 10px;
-  border-radius: 9999px;
-  font-size: 0.75rem;
-  font-weight: 600;
-  letter-spacing: 0.02em;
-}
-
-.badge-plan-basic {
-  background: #111827;
-  color: #e5e7eb;
-}
-
-.badge-plan-pro {
-  background: #1d4ed8;
-  color: #e5e7eb;
-}
-
-.badge-plan-enterprise {
-  background: #7c2d12;
-  color: #fed7aa;
-}
-
-/* Estado activo / inactivo */
-
-.btn-pill {
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  min-width: 80px;
-  padding: 4px 10px;
-  border-radius: 9999px;
-  font-size: 0.75rem;
-  font-weight: 600;
-  border: 1px solid transparent;
-  cursor: pointer;
-  transition:
-    background-color 0.15s ease,
-    border-color 0.15s ease,
-    color 0.15s ease,
-    transform 0.1s ease;
-}
-
-.btn-pill.is-active {
-  background: #022c22;
-  color: #6ee7b7;
-  border-color: #059669;
-}
-
-.btn-pill.is-inactive {
-  background: #111827;
-  color: #9ca3af;
-  border-color: #4b5563;
-}
-
-.btn-pill:disabled {
-  opacity: 0.6;
-  cursor: not-allowed;
-}
-
-.badge-status {
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  min-width: 80px;
-  padding: 2px 8px;
-  border-radius: 9999px;
-  font-size: 0.75rem;
-  font-weight: 600;
-}
-
-.badge-status.is-active {
-  background: #022c22;
-  color: #6ee7b7;
-}
-
-.badge-status.is-inactive {
-  background: #111827;
-  color: #9ca3af;
+.badge-role,
+.badge-plan,
+.badge-status,
+.btn-pill,
+.users-company-badge {
+  vertical-align: middle;
 }
 
 .row-inactive {
   opacity: 0.6;
-  background-color: #020617;
+  background-color: color-mix(in srgb, var(--color-surface-muted) 70%, transparent);
 }
 
 .users-company-badge {
   min-width: 36px;
+}
+
+:root[data-density="compact"] .user-actions,
+:root[data-density="compact"] .company-actions {
+  gap: 6px;
+}
+
+:root[data-density="compact"] .user-actions .btn-main,
+:root[data-density="compact"] .company-actions .btn-main,
+:root[data-density="compact"] .user-actions .btn-secondary,
+:root[data-density="compact"] .company-actions .btn-secondary,
+:root[data-density="compact"] .user-actions .btn-secondary-danger,
+:root[data-density="compact"] .company-actions .btn-secondary-danger {
+  min-width: 98px;
+  min-height: 28px;
+  font-size: 0.72rem;
+  border-radius: 10px;
 }

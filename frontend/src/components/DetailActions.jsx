@@ -1,18 +1,14 @@
-import React, { useCallback, useMemo } from "react";
-import { API_BASE_URL, DOC_STATUS } from "../constants";
+// src/components/DetailActions.jsx
+import React, { useMemo, useState } from "react";
+import {
+  CheckCircle2,
+  ShieldCheck,
+  XCircle,
+  ArrowLeft,
+  Loader2,
+} from "lucide-react";
 import { useToast } from "../hooks/useToast";
-
-const API_URL = API_BASE_URL || "";
-
-function apiUrl(path) {
-  const base = API_URL.replace(/\/+$/, "");
-  const cleanPath = path.startsWith("/") ? path : `/${path}`;
-  return `${base}${cleanPath}`;
-}
-
-function normalizeStatus(value) {
-  return String(value || "").trim().toUpperCase();
-}
+import "../styles/detailActions.css";
 
 export function DetailActions({
   puedeFirmar,
@@ -22,216 +18,174 @@ export function DetailActions({
   setView,
   setSelectedDoc,
   manejarAccionDocumento,
-  canAdminDocumentActions = false,
+  canAdminDocumentActions,
 }) {
   const { addToast } = useToast();
 
-  const documentId = selectedDoc?.id ?? null;
+  const [loadingAction, setLoadingAction] = useState(null);
 
-  const currentStatus = useMemo(
-    () => normalizeStatus(selectedDoc?.status || selectedDoc?.estado),
-    [selectedDoc?.status, selectedDoc?.estado]
-  );
+  const docId = selectedDoc?.id ?? null;
 
-  const isSigned = currentStatus === DOC_STATUS.FIRMADO;
-  const isRejected = currentStatus === DOC_STATUS.RECHAZADO;
-  const isTerminalState = isSigned || isRejected;
+  const isBusy = useMemo(() => loadingAction !== null, [loadingAction]);
 
-  const canShowReject = useMemo(
-    () => !canAdminDocumentActions && puedeRechazar && !isTerminalState,
-    [canAdminDocumentActions, puedeRechazar, isTerminalState]
-  );
+  const handleBack = () => {
+    if (typeof setView === "function") setView("list");
+    if (typeof setSelectedDoc === "function") setSelectedDoc(null);
+  };
 
-  const canShowVisar = useMemo(
-    () => !canAdminDocumentActions && puedeVisar && !isTerminalState,
-    [canAdminDocumentActions, puedeVisar, isTerminalState]
-  );
+  const runAction = async (action, extraData = {}) => {
+    if (!docId || isBusy) return;
 
-  const canShowFirmar = useMemo(
-    () => !canAdminDocumentActions && puedeFirmar && !isTerminalState,
-    [canAdminDocumentActions, puedeFirmar, isTerminalState]
-  );
+    try {
+      setLoadingAction(action);
 
-  const canShowAdminCancel = useMemo(
-    () => Boolean(canAdminDocumentActions) && !isTerminalState,
-    [canAdminDocumentActions, isTerminalState]
-  );
+      const ok = await manejarAccionDocumento(docId, action, extraData);
 
-  const handleVolver = useCallback(() => {
-    if (typeof setView === "function") {
-      setView("list");
-    }
+      if (!ok) return;
 
-    if (typeof setSelectedDoc === "function") {
-      setSelectedDoc(null);
-    }
-  }, [setView, setSelectedDoc]);
+      if (action === "firmar") {
+        addToast({
+          type: "success",
+          title: "Documento firmado",
+          message: "La firma del documento se registró correctamente.",
+        });
+      }
 
-  const handleSuccessAndClose = useCallback(
-    ({ title, message }) => {
+      if (action === "visar") {
+        addToast({
+          type: "success",
+          title: "Documento visado",
+          message: "La aprobación del documento se registró correctamente.",
+        });
+      }
+
+      if (action === "rechazar") {
+        addToast({
+          type: "success",
+          title: "Documento rechazado",
+          message: "El rechazo del documento se registró correctamente.",
+        });
+      }
+    } catch (error) {
+      console.error(`Error ejecutando acción ${action}:`, error);
+
       addToast({
-        type: "success",
-        title,
-        message,
+        type: "error",
+        title: "No se pudo completar la acción",
+        message: "Intenta nuevamente en unos segundos.",
       });
-      handleVolver();
+    } finally {
+      setLoadingAction(null);
+    }
+  };
+
+  const handleReject = async () => {
+    const reason = window.prompt("Indica el motivo del rechazo:");
+
+    if (reason === null) return;
+
+    const trimmedReason = reason.trim();
+
+    if (!trimmedReason) {
+      addToast({
+        type: "warning",
+        title: "Motivo requerido",
+        message: "Debes indicar un motivo para rechazar el documento.",
+      });
+      return;
+    }
+
+    await runAction("rechazar", { motivo: trimmedReason });
+  };
+
+  const primaryActions = [
+    {
+      key: "firmar",
+      visible: puedeFirmar,
+      label: loadingAction === "firmar" ? "Firmando..." : "Firmar documento",
+      icon: loadingAction === "firmar" ? Loader2 : CheckCircle2,
+      className: "detail-actions__btn detail-actions__btn--sign",
+      onClick: () => runAction("firmar"),
+      disabled: isBusy,
     },
-    [addToast, handleVolver]
-  );
-
-  const runDocumentAction = useCallback(
-    async (action, payload, successToast) => {
-      if (!documentId || isTerminalState) return false;
-
-      const ok = await manejarAccionDocumento(documentId, action, payload);
-
-      if (ok && successToast) {
-        handleSuccessAndClose(successToast);
-      }
-
-      return ok;
+    {
+      key: "visar",
+      visible: puedeVisar,
+      label: loadingAction === "visar" ? "Visando..." : "Aprobar / visar",
+      icon: loadingAction === "visar" ? Loader2 : ShieldCheck,
+      className: "detail-actions__btn detail-actions__btn--approve",
+      onClick: () => runAction("visar"),
+      disabled: isBusy,
     },
-    [
-      documentId,
-      isTerminalState,
-      manejarAccionDocumento,
-      handleSuccessAndClose,
-    ]
-  );
-
-  const handleDownload = useCallback(() => {
-    if (!documentId) return;
-
-    const url = apiUrl(`/documents/${documentId}/download`);
-    const link = document.createElement("a");
-
-    link.href = url;
-    link.target = "_blank";
-    link.rel = "noopener noreferrer";
-
-    document.body.appendChild(link);
-    link.click();
-    document.body.removeChild(link);
-
-    addToast({
-      type: "success",
-      title: "Descarga iniciada",
-      message: "Se inició la descarga del documento.",
-    });
-  }, [documentId, addToast]);
-
-  const handleRechazar = useCallback(async () => {
-    if (!documentId || isTerminalState) return;
-
-    const motivo = window.prompt("Indica el motivo de rechazo:");
-    if (!motivo || !motivo.trim()) return;
-
-    await runDocumentAction(
-      "rechazar",
-      { motivo: motivo.trim() },
-      {
-        title: "Documento rechazado",
-        message: "El documento fue rechazado correctamente.",
-      }
-    );
-  }, [documentId, isTerminalState, runDocumentAction]);
-
-  const handleVisar = useCallback(async () => {
-    if (!documentId || isTerminalState) return;
-
-    await runDocumentAction("visar", undefined, {
-      title: "Documento visado",
-      message: "El documento fue visado correctamente.",
-    });
-  }, [documentId, isTerminalState, runDocumentAction]);
-
-  const handleFirmar = useCallback(async () => {
-    if (!documentId || isTerminalState) return;
-
-    await runDocumentAction("firmar", undefined, {
-      title: "Documento firmado",
-      message: "El documento fue firmado correctamente.",
-    });
-  }, [documentId, isTerminalState, runDocumentAction]);
-
-  const handleCancelarAdmin = useCallback(async () => {
-    if (!documentId || isTerminalState) return;
-
-    const okConfirm = window.confirm(
-      "¿Deseas cancelar este trámite? Esta acción marcará el flujo como rechazado y no se puede deshacer."
-    );
-
-    if (!okConfirm) return;
-
-    await runDocumentAction(
-      "rechazar",
-      { motivo: "Cancelado por administrador" },
-      {
-        title: "Trámite cancelado",
-        message: "El trámite fue cancelado por un administrador.",
-      }
-    );
-  }, [documentId, isTerminalState, runDocumentAction]);
-
-  if (!selectedDoc || !documentId) return null;
+    {
+      key: "rechazar",
+      visible: puedeRechazar,
+      label: loadingAction === "rechazar" ? "Rechazando..." : "Rechazar",
+      icon: loadingAction === "rechazar" ? Loader2 : XCircle,
+      className: "detail-actions__btn detail-actions__btn--reject",
+      onClick: handleReject,
+      disabled: isBusy,
+    },
+  ];
 
   return (
-    <div className="detail-actions-bar">
-      <button
-        type="button"
-        className="btn-main detail-actions-btn detail-actions-btn--secondary"
-        onClick={handleVolver}
-      >
-        Volver a la bandeja
-      </button>
+    <section className="detail-actions-card">
+      <div className="detail-actions-card__header">
+        <div>
+          <h3 className="detail-actions-card__title">Acciones del documento</h3>
+          <p className="detail-actions-card__subtitle">
+            Ejecuta la siguiente acción disponible para este flujo documental.
+          </p>
+        </div>
 
-      <button
-        type="button"
-        className="btn-main detail-actions-btn detail-actions-btn--download"
-        onClick={handleDownload}
-      >
-        Descargar PDF
-      </button>
+        {canAdminDocumentActions ? (
+          <span className="detail-actions-card__badge">Modo auditoría habilitado</span>
+        ) : null}
+      </div>
 
-      {canShowReject && (
-        <button
-          type="button"
-          className="btn-main detail-actions-btn detail-actions-btn--reject"
-          onClick={handleRechazar}
-        >
-          Rechazar
-        </button>
-      )}
+      <div className="detail-actions-card__body">
+        <div className="detail-actions-card__group">
+          {primaryActions.filter((action) => action.visible).length === 0 ? (
+            <div className="detail-actions-card__empty">
+              No hay acciones disponibles para este documento en tu rol actual.
+            </div>
+          ) : (
+            primaryActions
+              .filter((action) => action.visible)
+              .map((action) => {
+                const Icon = action.icon;
 
-      {canShowVisar && (
-        <button
-          type="button"
-          className="btn-main detail-actions-btn detail-actions-btn--visar"
-          onClick={handleVisar}
-        >
-          Visar documento
-        </button>
-      )}
+                return (
+                  <button
+                    key={action.key}
+                    type="button"
+                    className={action.className}
+                    onClick={action.onClick}
+                    disabled={action.disabled}
+                  >
+                    <Icon
+                      size={16}
+                      className={loadingAction === action.key ? "is-spinning" : ""}
+                    />
+                    <span>{action.label}</span>
+                  </button>
+                );
+              })
+          )}
+        </div>
 
-      {canShowFirmar && (
-        <button
-          type="button"
-          className="btn-main detail-actions-btn detail-actions-btn--primary"
-          onClick={handleFirmar}
-        >
-          Firmar documento
-        </button>
-      )}
-
-      {canShowAdminCancel && (
-        <button
-          type="button"
-          className="btn-main detail-actions-btn detail-actions-btn--admin-cancel"
-          onClick={handleCancelarAdmin}
-        >
-          Cancelar trámite
-        </button>
-      )}
-    </div>
+        <div className="detail-actions-card__secondary">
+          <button
+            type="button"
+            className="detail-actions__btn detail-actions__btn--ghost"
+            onClick={handleBack}
+            disabled={isBusy}
+          >
+            <ArrowLeft size={16} />
+            <span>Volver a la bandeja</span>
+          </button>
+        </div>
+      </div>
+    </section>
   );
 }

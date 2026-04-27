@@ -1,5 +1,23 @@
 // src/components/Sidebar.jsx
 import React, { useCallback, useMemo } from "react";
+import {
+  FileText,
+  Upload,
+  LayoutDashboard,
+  Mail,
+  BarChart3,
+  Users,
+  FileStack,
+  Bell,
+  Building2,
+  Activity,
+  ScrollText,
+  Shield,
+  CreditCard,
+  UserCircle2,
+  LogOut,
+  RefreshCw,
+} from "lucide-react";
 import "../styles/sidebar.css";
 import {
   isAnyAdmin,
@@ -23,9 +41,10 @@ function SidebarSectionLabel({ children }) {
   return <h3 className="sidebar-section-label">{children}</h3>;
 }
 
-/**
- * Traduce el estado del socket a algo amigable para la UI.
- */
+function safeNumber(value) {
+  return Number.isFinite(value) ? value : 0;
+}
+
 function getSocketUi(socketStatus, socketLastError) {
   const normalized = String(socketStatus || "").toLowerCase();
 
@@ -53,9 +72,8 @@ function getSocketUi(socketStatus, socketLastError) {
     ? "Conectado al servidor en tiempo real."
     : isReconnecting || isConnecting
     ? "Intentando reconectar al servidor en tiempo real."
-    : "No pudimos mantener la conexión en tiempo real. La app sigue funcionando, pero algunas actualizaciones pueden tardar unos segundos.";
+    : "No pudimos mantener la conexión en tiempo real. La aplicación sigue funcionando, pero algunas actualizaciones pueden tardar unos segundos.";
 
-  // Mensaje corto para el resumen; el detalle se muestra abajo si hace falta
   const inlineMessage =
     isConnected || !socketLastError ? null : socketLastError;
 
@@ -69,6 +87,10 @@ function getSocketUi(socketStatus, socketLastError) {
     title,
     inlineMessage,
   };
+}
+
+function useEffectiveGlobalAdmin(user) {
+  return useMemo(() => isEffectiveGlobalAdmin(user), [user]);
 }
 
 export function Sidebar({
@@ -87,14 +109,12 @@ export function Sidebar({
   socketCanRetry,
   onRetrySocket,
 }) {
-  // Por compatibilidad: si te pasan isAnyAdmin como prop, úsalo como fallback
-  const anyAdmin = useMemo(
-    () =>
-      typeof isAnyAdminProp === "boolean"
-        ? isAnyAdminProp
-        : isAnyAdmin(user),
-    [isAnyAdminProp, user]
-  );
+  const anyAdmin = useMemo(() => {
+    if (typeof isAnyAdminProp === "boolean") {
+      return isAnyAdminProp;
+    }
+    return isAnyAdmin(user);
+  }, [isAnyAdminProp, user]);
 
   const isGlobalAdmin = useEffectiveGlobalAdmin(user);
   const canSeeDashboard = canViewDashboard(user);
@@ -107,15 +127,11 @@ export function Sidebar({
   const canAdminSystemStatus = canManageSystemStatus(user);
   const canSeeAudit = canViewAuditLogs(user);
 
-  const safeTotalDocs = Number.isFinite(totalDocuments) ? totalDocuments : 0;
-  const safePendientes = Number.isFinite(totalPendientes)
-    ? totalPendientes
-    : 0;
-  const safeVisados = Number.isFinite(totalVisados) ? totalVisados : 0;
-  const safeFirmados = Number.isFinite(totalFirmados) ? totalFirmados : 0;
-  const safeRechazados = Number.isFinite(totalRechazados)
-    ? totalRechazados
-    : 0;
+  const safeTotalDocs = safeNumber(totalDocuments);
+  const safePendientes = safeNumber(totalPendientes);
+  const safeVisados = safeNumber(totalVisados);
+  const safeFirmados = safeNumber(totalFirmados);
+  const safeRechazados = safeNumber(totalRechazados);
 
   const displayRole = user?.role || "USER";
 
@@ -124,9 +140,9 @@ export function Sidebar({
     [socketStatus, socketLastError]
   );
 
-  const handleKeyActivate = useCallback((e, onClick) => {
-    if (e.key === "Enter" || e.key === " ") {
-      e.preventDefault();
+  const handleKeyActivate = useCallback((event, onClick) => {
+    if (event.key === "Enter" || event.key === " ") {
+      event.preventDefault();
       onClick();
     }
   }, []);
@@ -157,7 +173,7 @@ export function Sidebar({
         role="button"
         tabIndex={0}
         aria-current={active ? "page" : ariaCurrent}
-        onKeyDown={(e) => handleKeyActivate(e, onClick)}
+        onKeyDown={(event) => handleKeyActivate(event, onClick)}
       >
         <span className="nav-item-icon" aria-hidden="true">
           {icon}
@@ -165,9 +181,9 @@ export function Sidebar({
 
         <span className="nav-item-label">{label}</span>
 
-        {badge !== null && badge !== undefined && badge !== "" && (
+        {badge !== null && badge !== undefined && badge !== "" ? (
           <span className="nav-item-badge">{badge}</span>
-        )}
+        ) : null}
       </div>
     ),
     [handleKeyActivate]
@@ -186,7 +202,7 @@ export function Sidebar({
           <div className="sidebar-brand-subtitle">
             <span>Panel principal</span>
 
-            {socketStatus && (
+            {socketStatus ? (
               <>
                 <span className="sidebar-brand-divider">•</span>
 
@@ -197,25 +213,26 @@ export function Sidebar({
                   <span className="sidebar-socket-dot" />
                   <span className="sidebar-socket-label">
                     {socketUi.label}
-                    {socketUi.isReconnecting && (
-                      <span
-                        aria-hidden="true"
+                    {socketUi.isReconnecting ? (
+                      <RefreshCw
+                        size={12}
                         className="sidebar-socket-spinner"
+                        aria-hidden="true"
                       />
-                    )}
+                    ) : null}
                   </span>
                 </span>
               </>
-            )}
+            ) : null}
           </div>
 
-          {socketUi.isError && socketUi.inlineMessage && (
+          {socketUi.isError && socketUi.inlineMessage ? (
             <div className="sidebar-socket-error">
               <span className="sidebar-socket-error-text">
                 {socketUi.inlineMessage}
               </span>
 
-              {socketCanRetry && typeof onRetrySocket === "function" && (
+              {socketCanRetry && typeof onRetrySocket === "function" ? (
                 <button
                   type="button"
                   onClick={onRetrySocket}
@@ -223,9 +240,9 @@ export function Sidebar({
                 >
                   Reintentar
                 </button>
-              )}
+              ) : null}
             </div>
-          )}
+          ) : null}
         </div>
       </div>
 
@@ -255,7 +272,7 @@ export function Sidebar({
 
       {renderNavItem({
         active: view === "list",
-        icon: "📄",
+        icon: <FileText size={18} />,
         label: "Mis trámites",
         title: "Ver todos los trámites",
         onClick: () => handleChangeView("list"),
@@ -264,125 +281,135 @@ export function Sidebar({
 
       {renderNavItem({
         active: view === "upload",
-        icon: "📤",
+        icon: <Upload size={18} />,
         label: "Crear nuevo trámite",
         title: "Crear nuevo trámite de firma",
         onClick: () => handleChangeView("upload"),
       })}
 
-      {isGlobalAdmin && (
+      {isGlobalAdmin ? (
         <>
           <SidebarSectionLabel>Reportes</SidebarSectionLabel>
 
-          {canSeeDashboard &&
-            renderNavItem({
-              active: view === "dashboard",
-              icon: "📊",
-              label: "Dashboard",
-              title: "Dashboard administrativo global",
-              onClick: () => handleChangeView("dashboard"),
-            })}
+          {canSeeDashboard
+            ? renderNavItem({
+                active: view === "dashboard",
+                icon: <LayoutDashboard size={18} />,
+                label: "Dashboard",
+                title: "Dashboard administrativo global",
+                onClick: () => handleChangeView("dashboard"),
+              })
+            : null}
 
-          {canSeeEmailMetrics &&
-            renderNavItem({
-              active: view === "email-metrics",
-              icon: "📧",
-              label: "Métricas de email",
-              title: "Ver métricas globales de email",
-              onClick: () => handleChangeView("email-metrics"),
-            })}
+          {canSeeEmailMetrics
+            ? renderNavItem({
+                active: view === "email-metrics",
+                icon: <Mail size={18} />,
+                label: "Métricas de email",
+                title: "Ver métricas globales de email",
+                onClick: () => handleChangeView("email-metrics"),
+              })
+            : null}
 
-          {canSeeCompanyAnalytics &&
-            renderNavItem({
-              active: view === "company-analytics",
-              icon: "📈",
-              label: "Analytics empresa",
-              title: "Analytics global por empresa",
-              onClick: () => handleChangeView("company-analytics"),
-            })}
+          {canSeeCompanyAnalytics
+            ? renderNavItem({
+                active: view === "company-analytics",
+                icon: <BarChart3 size={18} />,
+                label: "Analytics empresa",
+                title: "Analytics global por empresa",
+                onClick: () => handleChangeView("company-analytics"),
+              })
+            : null}
         </>
-      )}
+      ) : null}
 
-      {anyAdmin && (
+      {anyAdmin ? (
         <>
           <SidebarSectionLabel>Administración</SidebarSectionLabel>
 
-          {canAdminUsers &&
-            renderNavItem({
-              active: view === "users",
-              icon: "👥",
-              label: "Usuarios",
-              title: "Gestionar usuarios de la empresa",
-              onClick: () => handleChangeView("users"),
-            })}
+          {canAdminUsers
+            ? renderNavItem({
+                active: view === "users",
+                icon: <Users size={18} />,
+                label: "Usuarios",
+                title: "Gestionar usuarios de la empresa",
+                onClick: () => handleChangeView("users"),
+              })
+            : null}
 
-          {canAdminTemplates &&
-            renderNavItem({
-              active: view === "templates",
-              icon: "📋",
-              label: "Plantillas",
-              title: "Gestionar plantillas de documentos",
-              onClick: () => handleChangeView("templates"),
-            })}
+          {canAdminTemplates
+            ? renderNavItem({
+                active: view === "templates",
+                icon: <FileStack size={18} />,
+                label: "Plantillas",
+                title: "Gestionar plantillas de documentos",
+                onClick: () => handleChangeView("templates"),
+              })
+            : null}
 
-          {canAdminReminders &&
-            renderNavItem({
-              active: view === "reminders-config",
-              icon: "🔔",
-              label: "Recordatorios",
-              title: "Configurar recordatorios automáticos",
-              onClick: () => handleChangeView("reminders-config"),
-            })}
+          {canAdminReminders
+            ? renderNavItem({
+                active: view === "reminders-config",
+                icon: <Bell size={18} />,
+                label: "Recordatorios",
+                title: "Configurar recordatorios automáticos",
+                onClick: () => handleChangeView("reminders-config"),
+              })
+            : null}
         </>
-      )}
+      ) : null}
 
-      {isGlobalAdmin && (
+      {isGlobalAdmin ? (
         <>
           <SidebarSectionLabel>Administración global</SidebarSectionLabel>
 
-          {canAdminCompanies &&
-            renderNavItem({
-              active: view === "companies",
-              icon: "🏢",
-              label: "Empresas",
-              title: "Gestionar empresas",
-              onClick: () => handleChangeView("companies"),
-            })}
+          {canAdminCompanies
+            ? renderNavItem({
+                active: view === "companies",
+                icon: <Building2 size={18} />,
+                label: "Empresas",
+                title: "Gestionar empresas",
+                onClick: () => handleChangeView("companies"),
+              })
+            : null}
 
-          {canAdminSystemStatus &&
-            renderNavItem({
-              active: view === "status",
-              icon: "⚙️",
-              label: "Estado sistema",
-              title: "Estado del sistema",
-              onClick: () => handleChangeView("status"),
-            })}
+          {canAdminSystemStatus
+            ? renderNavItem({
+                active: view === "status",
+                icon: <Activity size={18} />,
+                label: "Estado sistema",
+                title: "Estado del sistema",
+                onClick: () => handleChangeView("status"),
+              })
+            : null}
 
-          {canSeeAudit &&
-            renderNavItem({
-              active: view === "audit-logs",
-              icon: "📜",
-              label: "Auditoría negocio",
-              title: "Auditoría de negocio",
-              onClick: () => handleChangeView("audit-logs"),
-            })}
+          {canSeeAudit
+            ? renderNavItem({
+                active: view === "audit-logs",
+                icon: <ScrollText size={18} />,
+                label: "Auditoría negocio",
+                title: "Auditoría de negocio",
+                onClick: () => handleChangeView("audit-logs"),
+              })
+            : null}
 
-          {canSeeAudit &&
-            renderNavItem({
-              active: view === "auth-logs",
-              icon: "🔐",
-              label: "Auth logs",
-              title: "Logs de autenticación",
-              onClick: () => handleChangeView("auth-logs"),
-            })}
+          {canSeeAudit
+            ? renderNavItem({
+                active: view === "auth-logs",
+                icon: <Shield size={18} />,
+                label: "Auth logs",
+                title: "Logs de autenticación",
+                onClick: () => handleChangeView("auth-logs"),
+              })
+            : null}
         </>
-      )}
+      ) : null}
 
       <SidebarSectionLabel>Cuenta</SidebarSectionLabel>
 
       {renderNavItem({
         active: view === "pricing",
-        icon: "💳",
+        icon: <CreditCard size={18} />,
         label: "Planes y facturación",
         title: "Ver planes y facturación",
         onClick: () => handleChangeView("pricing"),
@@ -390,7 +417,7 @@ export function Sidebar({
 
       {renderNavItem({
         active: view === "profile",
-        icon: "👤",
+        icon: <UserCircle2 size={18} />,
         label: "Mi perfil",
         title: "Editar tu perfil",
         onClick: () => handleChangeView("profile"),
@@ -433,7 +460,7 @@ export function Sidebar({
 
       {renderNavItem({
         active: false,
-        icon: "🚪",
+        icon: <LogOut size={18} />,
         label: "Cerrar sesión",
         title: "Cerrar sesión",
         onClick: logout,
@@ -441,9 +468,4 @@ export function Sidebar({
       })}
     </aside>
   );
-}
-
-// Pequeño hook interno para recalcular solo una vez
-function useEffectiveGlobalAdmin(user) {
-  return useMemo(() => isEffectiveGlobalAdmin(user), [user]);
 }

@@ -68,8 +68,7 @@ import { useDocuments } from "./hooks/useDocuments";
 import { useToast } from "./hooks/useToast";
 import { useAuth } from "./hooks/useAuth";
 
-// Botón flotante de ayuda
-import FloatingHelpButton from "./components/help/FloatingHelpButton";
+import FloatingActions from "./components/shell/FloatingActions";
 
 /* ============================
    Lazy views / modules
@@ -838,7 +837,9 @@ function App() {
     if (view === "reminders-config" && canManageReminders(user)) {
       return <RemindersConfigView />;
     }
-    if (view === "templates" && canViewTemplates(user)) return <TemplatesView />;
+    if (view === "templates" && canViewTemplates(user)) {
+      return <TemplatesView />;
+    }
 
     // Admin global
     if (view === "dashboard" && canViewDashboard(user)) {
@@ -1101,7 +1102,7 @@ function App() {
             </button>
           )}
 
-          <FloatingHelpButton />
+          <FloatingActions />
         </div>
       </div>
     </div>

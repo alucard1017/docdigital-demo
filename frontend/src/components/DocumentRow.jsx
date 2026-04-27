@@ -1,5 +1,6 @@
 // src/components/DocumentRow.jsx
 import React, { useCallback, useMemo } from "react";
+import { Eye, Download, FileText, AlertTriangle } from "lucide-react";
 import { DOC_STATUS } from "../constants";
 import api from "../api/client";
 import { useToast } from "../hooks/useToast";
@@ -29,24 +30,58 @@ function getContractNumber(doc) {
   );
 }
 
-const STATUS_LABELS = {
-  PENDIENTE: "Pendiente",
-  PENDIENTE_FIRMA: "Pendiente firma",
-  PENDIENTE_VISADO: "Pendiente visado",
-  VISADO: "Visado",
-  FIRMADO: "Firmado",
-  RECHAZADO: "Rechazado",
-  BORRADOR: "Borrador",
-};
+function formatCreatedAt(createdAt) {
+  if (!createdAt) {
+    return { date: "-", time: "" };
+  }
 
-const STATUS_COLORS = {
-  PENDIENTE: "#f59e0b",
-  PENDIENTE_FIRMA: "#f59e0b",
-  PENDIENTE_VISADO: "#f59e0b",
-  VISADO: "#0f766e",
-  FIRMADO: "#16a34a",
-  RECHAZADO: "#b91c1c",
-  BORRADOR: "#6b7280",
+  const parsed = new Date(createdAt);
+  if (Number.isNaN(parsed.getTime())) {
+    return { date: "-", time: "" };
+  }
+
+  return {
+    date: parsed.toLocaleDateString("es-CO", {
+      day: "2-digit",
+      month: "2-digit",
+      year: "numeric",
+    }),
+    time: parsed.toLocaleTimeString("es-CO", {
+      hour: "2-digit",
+      minute: "2-digit",
+    }),
+  };
+}
+
+const STATUS_META = {
+  PENDIENTE: {
+    label: "Pendiente",
+    tone: "warning",
+  },
+  PENDIENTE_FIRMA: {
+    label: "Pendiente firma",
+    tone: "warning",
+  },
+  PENDIENTE_VISADO: {
+    label: "Pendiente visado",
+    tone: "warning",
+  },
+  VISADO: {
+    label: "Visado",
+    tone: "teal",
+  },
+  FIRMADO: {
+    label: "Firmado",
+    tone: "success",
+  },
+  RECHAZADO: {
+    label: "Rechazado",
+    tone: "danger",
+  },
+  BORRADOR: {
+    label: "Borrador",
+    tone: "neutral",
+  },
 };
 
 export function DocumentRow({ doc, onOpenDetail }) {
@@ -66,35 +101,15 @@ export function DocumentRow({ doc, onOpenDetail }) {
     return pickFirstNonEmpty(doc?.title, doc?.titulo, doc?.name, "Sin título");
   }, [doc]);
 
-  const { fechaLinea1, fechaLinea2 } = useMemo(() => {
-    if (!doc?.created_at) {
-      return { fechaLinea1: "-", fechaLinea2: "" };
-    }
+  const createdAt = useMemo(() => formatCreatedAt(doc?.created_at), [doc?.created_at]);
 
-    const date = new Date(doc.created_at);
-    if (Number.isNaN(date.getTime())) {
-      return { fechaLinea1: "-", fechaLinea2: "" };
-    }
-
-    return {
-      fechaLinea1: date.toLocaleDateString("es-CO", {
-        day: "2-digit",
-        month: "2-digit",
-        year: "numeric",
-      }),
-      fechaLinea2: date.toLocaleTimeString("es-CO", {
-        hour: "2-digit",
-        minute: "2-digit",
-      }),
-    };
-  }, [doc?.created_at]);
-
-  const estadoLabel = useMemo(() => {
-    return STATUS_LABELS[doc?.status] || doc?.status || "Sin estado";
-  }, [doc?.status]);
-
-  const estadoColor = useMemo(() => {
-    return STATUS_COLORS[doc?.status] || "#6b7280";
+  const statusMeta = useMemo(() => {
+    return (
+      STATUS_META[doc?.status] || {
+        label: doc?.status || "Sin estado",
+        tone: "neutral",
+      }
+    );
   }, [doc?.status]);
 
   const displayFirmante = useMemo(
@@ -121,15 +136,13 @@ export function DocumentRow({ doc, onOpenDetail }) {
     [doc]
   );
 
-  const displayParticipantePrincipal = displayFirmante || displayEmpresa;
-  const displayParticipanteSecundario =
+  const participantePrincipal = displayFirmante || displayEmpresa || "Pendiente de asignar";
+  const participanteSecundario =
     displayFirmante && displayEmpresa ? displayEmpresa : "";
 
-  const participanteFallback = "Pendiente de asignar";
-
   const handleOpenDetail = useCallback(
-    (e) => {
-      if (e) e.stopPropagation();
+    (event) => {
+      if (event) event.stopPropagation();
       if (typeof onOpenDetail === "function") {
         onOpenDetail(doc);
       }
@@ -142,8 +155,8 @@ export function DocumentRow({ doc, onOpenDetail }) {
       throw new Error("Documento inválido");
     }
 
-    const res = await api.get(`/docs/${doc.id}/pdf`);
-    const data = res.data;
+    const response = await api.get(`/docs/${doc.id}/pdf`);
+    const data = response?.data;
 
     if (!data?.url) {
       throw new Error("No se pudo obtener la URL del PDF");
@@ -153,19 +166,19 @@ export function DocumentRow({ doc, onOpenDetail }) {
   }, [doc?.id]);
 
   const handleVerPdf = useCallback(
-    async (e) => {
-      e.stopPropagation();
+    async (event) => {
+      event.stopPropagation();
 
       try {
         const url = await fetchPdfUrl();
         window.open(url, "_blank", "noopener,noreferrer");
-      } catch (err) {
-        console.error("Error abriendo PDF:", err);
+      } catch (error) {
+        console.error("Error abriendo PDF:", error);
 
         addToast({
           type: "error",
           title: "No se pudo abrir el PDF",
-          message: getErrorMessage(err, "No se pudo abrir el PDF"),
+          message: getErrorMessage(error, "No se pudo abrir el PDF"),
         });
       }
     },
@@ -173,8 +186,8 @@ export function DocumentRow({ doc, onOpenDetail }) {
   );
 
   const handleDescargarPdf = useCallback(
-    async (e) => {
-      e.stopPropagation();
+    async (event) => {
+      event.stopPropagation();
 
       try {
         const url = await fetchPdfUrl();
@@ -193,13 +206,13 @@ export function DocumentRow({ doc, onOpenDetail }) {
           title: "Descarga iniciada",
           message: `Se inició la descarga de "${titleDocumento}".`,
         });
-      } catch (err) {
-        console.error("Error descargando PDF:", err);
+      } catch (error) {
+        console.error("Error descargando PDF:", error);
 
         addToast({
           type: "error",
           title: "No se pudo descargar el PDF",
-          message: getErrorMessage(err, "No se pudo descargar el PDF"),
+          message: getErrorMessage(error, "No se pudo descargar el PDF"),
         });
       }
     },
@@ -207,8 +220,8 @@ export function DocumentRow({ doc, onOpenDetail }) {
   );
 
   const handleVerRechazo = useCallback(
-    (e) => {
-      e.stopPropagation();
+    (event) => {
+      event.stopPropagation();
 
       if (!doc?.reject_reason) {
         addToast({
@@ -221,16 +234,19 @@ export function DocumentRow({ doc, onOpenDetail }) {
 
       addToast({
         type: "warning",
-          title: "Motivo de rechazo",
-          message: doc.reject_reason,
+        title: "Motivo de rechazo",
+        message: doc.reject_reason,
       });
     },
     [doc?.reject_reason, addToast]
   );
 
   return (
-    <tr className="doc-row" onClick={handleOpenDetail}>
-      {/* Columna título + contrato + fecha */}
+    <tr
+      className="doc-row"
+      onClick={handleOpenDetail}
+      aria-label={`Abrir detalle de ${titleDocumento}`}
+    >
       <td className="doc-cell-title doc-cell-title-unified">
         <div className="doc-title-stack">
           <div className="doc-title-contract-row">
@@ -249,48 +265,42 @@ export function DocumentRow({ doc, onOpenDetail }) {
           </div>
 
           <div className="doc-title-meta">
-            <span className="doc-date-primary">{fechaLinea1}</span>
+            <span className="doc-date-primary">{createdAt.date}</span>
             <span className="doc-date-separator">•</span>
-            <span className="doc-date-secondary">{fechaLinea2}</span>
+            <span className="doc-date-secondary">{createdAt.time}</span>
           </div>
 
           <div className="doc-title-sub-hint">Fecha creación</div>
         </div>
       </td>
 
-      {/* Columna tipo / clasificación */}
       <td className="doc-cell-type">
         <span className="doc-chip-tipo" title={tipoLabel}>
-          {tipoLabel}
+          <FileText size={14} aria-hidden="true" />
+          <span>{tipoLabel}</span>
         </span>
       </td>
 
-      {/* Columna estado */}
       <td className="doc-cell-status">
         <div className="doc-status-wrap">
           <span
-            className="doc-status-pill"
-            style={{ backgroundColor: estadoColor }}
-            onClick={(e) => e.stopPropagation()}
-            title={estadoLabel}
+            className={`doc-status-pill doc-status-pill--${statusMeta.tone}`}
+            title={statusMeta.label}
+            onClick={(event) => event.stopPropagation()}
           >
-            {estadoLabel}
+            {statusMeta.label}
           </span>
         </div>
       </td>
 
-      {/* Columna participante principal */}
       <td className="doc-cell-signer">
-        <div className="doc-signer-main">
-          {displayParticipantePrincipal || participanteFallback}
-        </div>
-        {displayParticipanteSecundario ? (
-          <div className="doc-signer-sub">{displayParticipanteSecundario}</div>
+        <div className="doc-signer-main">{participantePrincipal}</div>
+        {participanteSecundario ? (
+          <div className="doc-signer-sub">{participanteSecundario}</div>
         ) : null}
       </td>
 
-      {/* Columna acciones */}
-      <td className="doc-cell-actions" onClick={(e) => e.stopPropagation()}>
+      <td className="doc-cell-actions" onClick={(event) => event.stopPropagation()}>
         <div className="doc-actions">
           <button
             type="button"
@@ -299,7 +309,8 @@ export function DocumentRow({ doc, onOpenDetail }) {
             title="Ver PDF"
             aria-label={`Ver PDF de ${titleDocumento}`}
           >
-            PDF
+            <Eye size={14} />
+            <span>PDF</span>
           </button>
 
           <button
@@ -319,10 +330,11 @@ export function DocumentRow({ doc, onOpenDetail }) {
             title="Descargar PDF"
             aria-label={`Descargar PDF de ${titleDocumento}`}
           >
-            Descarga
+            <Download size={14} />
+            <span>Descarga</span>
           </button>
 
-          {doc?.status === DOC_STATUS.RECHAZADO && doc?.reject_reason && (
+          {doc?.status === DOC_STATUS.RECHAZADO && doc?.reject_reason ? (
             <button
               type="button"
               className="btn-main btn-secondary-danger btn-xs"
@@ -330,9 +342,10 @@ export function DocumentRow({ doc, onOpenDetail }) {
               title="Ver motivo de rechazo"
               aria-label={`Ver motivo de rechazo de ${titleDocumento}`}
             >
-              Rechazo
+              <AlertTriangle size={14} />
+              <span>Rechazo</span>
             </button>
-          )}
+          ) : null}
         </div>
       </td>
     </tr>

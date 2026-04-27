@@ -2,15 +2,18 @@
 
 import React from "react";
 import ReactDOM from "react-dom/client";
-import App from "./App.jsx";
+import { onCLS, onINP, onLCP, onFCP, onTTFB } from "web-vitals";
 
+import App from "./App.jsx";
 import "./i18n";
 
+import "./styles/theme.css";
 import "./styles/base.css";
 import "./styles/appShell.css";
 import "./styles/layout.css";
 import "./styles/formsAndCards.css";
 import "./styles/detailView.css";
+import "./styles/detailActions.css";
 import "./styles/documentsTable.css";
 import "./styles/sidebar.css";
 import "./styles/listStates.css";
@@ -23,6 +26,10 @@ import "./styles/authLegacy.css";
 import "./styles/companiesAdmin.css";
 import "./styles/usersAdmin.css";
 import "./styles/decorativeTabs.css";
+import "./styles/listHeader.css";
+import "./styles/settingsPanel.css";
+import "./styles/floatingActions.css";
+import "./styles/helpPanel.css";
 
 import { AuthProvider } from "./context/AuthContext.jsx";
 import { ToastProvider } from "./components/feedback/ToastProvider.jsx";
@@ -46,25 +53,8 @@ if (!rootElement) {
 }
 
 /* ================================
-   ÁRBOL DE REACT
-   ================================ */
-const appTree = (
-  <React.StrictMode>
-    <ToastProvider>
-      <AuthProvider>
-        <App />
-      </AuthProvider>
-    </ToastProvider>
-  </React.StrictMode>
-);
-
-ReactDOM.createRoot(rootElement).render(appTree);
-
-/* ================================
    WEB VITALS - MÉTRICAS DE RENDIMIENTO
    ================================ */
-import { onCLS, onINP, onLCP, onFCP, onTTFB } from "web-vitals";
-
 function sendMetric(metric) {
   const body = JSON.stringify({
     name: metric.name,
@@ -74,24 +64,36 @@ function sendMetric(metric) {
     timestamp: new Date().toISOString(),
   });
 
-  // Beacon API (no bloquea la salida de página)
   if (navigator.sendBeacon) {
     navigator.sendBeacon("/api/metrics/web-vitals", body);
-  } else {
-    fetch("/api/metrics/web-vitals", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body,
-      keepalive: true,
-    }).catch(() => {});
+    return;
   }
+
+  fetch("/api/metrics/web-vitals", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body,
+    keepalive: true,
+  }).catch(() => {});
 }
 
-// Registrar métricas
 onCLS(sendMetric);
 onINP(sendMetric);
 onLCP(sendMetric);
 onFCP(sendMetric);
 onTTFB(sendMetric);
+
+/* ================================
+   ÁRBOL DE REACT
+   ================================ */
+ReactDOM.createRoot(rootElement).render(
+  <React.StrictMode>
+    <ToastProvider>
+      <AuthProvider>
+        <App />
+      </AuthProvider>
+    </ToastProvider>
+  </React.StrictMode>
+);
 
 console.log("✓ Web Vitals inicializadas");

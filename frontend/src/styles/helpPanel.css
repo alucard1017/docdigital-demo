@@ -1,0 +1,209 @@
+/* src/styles/helpPanel.css */
+
+.floating-help-backdrop {
+  position: fixed;
+  inset: 0;
+  background: color-mix(in srgb, var(--color-bg) 58%, transparent);
+  backdrop-filter: blur(2px);
+  z-index: 1140;
+}
+
+.floating-help-panel {
+  position: fixed;
+  right: 22px;
+  bottom: 96px;
+  width: min(380px, calc(100vw - 24px));
+  max-height: min(72vh, 620px);
+  display: flex;
+  flex-direction: column;
+  border-radius: 20px;
+  border: 1px solid var(--color-border);
+  background: var(--color-surface-elevated);
+  box-shadow: var(--shadow-lg);
+  overflow: hidden;
+  z-index: 1150;
+}
+
+.floating-help-panel__header {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 14px;
+  padding: 18px 18px 14px;
+  border-bottom: 1px solid var(--color-border);
+}
+
+.floating-help-panel__title {
+  margin: 0;
+  color: var(--color-text-strong);
+  font-size: 1.08rem;
+  font-weight: 800;
+}
+
+.floating-help-panel__subtitle {
+  margin: 8px 0 0 0;
+  color: var(--color-text-muted);
+  font-size: 0.84rem;
+  line-height: 1.45;
+}
+
+.floating-help-panel__close {
+  width: 36px;
+  height: 36px;
+  flex: 0 0 auto;
+  border-radius: 12px;
+  border: 1px solid var(--color-border-strong);
+  background: var(--color-surface-muted);
+  color: var(--color-text);
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+}
+
+.floating-help-panel__close:focus-visible,
+.floating-help-shortcut:focus-visible {
+  outline: 2px solid var(--color-focus);
+  outline-offset: 2px;
+}
+
+.floating-help-panel__body {
+  padding: 16px 18px 18px;
+  overflow-y: auto;
+}
+
+.floating-help-section + .floating-help-section {
+  margin-top: 18px;
+}
+
+.floating-help-section h3 {
+  margin: 0 0 10px 0;
+  color: var(--color-text-strong);
+  font-size: 0.92rem;
+  font-weight: 800;
+}
+
+.floating-help-shortcut {
+  width: 100%;
+  padding: 12px 14px;
+  border-radius: 16px;
+  border: 1px solid var(--color-border);
+  background: var(--color-surface);
+  color: var(--color-text);
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  text-align: left;
+  cursor: pointer;
+  transition: all 0.18s ease;
+}
+
+.floating-help-shortcut:hover {
+  background: var(--color-surface-muted);
+  border-color: var(--color-primary-border);
+}
+
+.floating-help-shortcut__icon {
+  width: 32px;
+  height: 32px;
+  border-radius: 12px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  background: var(--color-accent-soft);
+  color: var(--color-accent-strong);
+  flex: 0 0 auto;
+}
+
+.floating-help-shortcut__content {
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  flex: 1;
+}
+
+.floating-help-shortcut__title {
+  color: var(--color-text-strong);
+  font-size: 0.88rem;
+  font-weight: 800;
+}
+
+.floating-help-shortcut__text {
+  color: var(--color-text-muted);
+  font-size: 0.8rem;
+  line-height: 1.35;
+}
+
+.floating-help-item {
+  display: flex;
+  align-items: flex-start;
+  gap: 12px;
+  padding: 12px 0;
+  border-top: 1px solid var(--color-border);
+}
+
+.floating-help-item:first-of-type {
+  border-top: none;
+  padding-top: 0;
+}
+
+.floating-help-item__icon {
+  width: 30px;
+  height: 30px;
+  border-radius: 10px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  background: var(--color-surface-muted);
+  color: var(--color-text-soft);
+  flex: 0 0 auto;
+}
+
+.floating-help-item__content strong {
+  display: block;
+  color: var(--color-text-strong);
+  font-size: 0.84rem;
+  font-weight: 800;
+  margin-bottom: 5px;
+}
+
+.floating-help-item__content p {
+  margin: 0;
+  color: var(--color-text-muted);
+  font-size: 0.8rem;
+  line-height: 1.45;
+}
+
+:root[data-density="compact"] .floating-help-panel {
+  right: 18px;
+  bottom: 84px;
+}
+
+:root[data-density="compact"] .floating-help-panel__header {
+  padding: 14px 14px 12px;
+}
+
+:root[data-density="compact"] .floating-help-panel__body {
+  padding: 12px 14px 14px;
+}
+
+:root[data-density="compact"] .floating-help-shortcut {
+  padding: 10px 12px;
+  border-radius: 14px;
+}
+
+:root[data-density="compact"] .floating-help-item {
+  gap: 10px;
+  padding: 10px 0;
+}
+
+@media (max-width: 640px) {
+  .floating-help-panel {
+    right: 12px;
+    left: 12px;
+    width: auto;
+    bottom: 88px;
+    max-height: 68vh;
+  }
+}

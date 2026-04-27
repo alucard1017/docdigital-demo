@@ -1,55 +1,183 @@
-.state-card {
-  padding: 40px;
+/* src/styles/states.css */
+
+/* =========================
+   Generic state cards
+   ========================= */
+
+.state-card,
+.list-state {
+  padding: 40px 24px;
   text-align: center;
   border-radius: 18px;
+  border: 1px solid var(--color-border);
+  background: var(--color-surface-elevated);
+  box-shadow: var(--shadow-md);
 }
 
-.state-card-title {
-  margin-bottom: 8px;
+.state-card-title,
+.list-state-title {
+  margin: 0 0 8px 0;
+  color: var(--color-text-strong);
   font-size: 1rem;
-  font-weight: 700;
+  font-weight: 800;
+  line-height: 1.25;
 }
 
 .state-card-text,
-.state-card-subtext {
+.state-card-subtext,
+.list-state-text,
+.list-state-text--strong {
+  margin: 0;
   font-size: 0.92rem;
   line-height: 1.5;
+}
+
+.state-card-text,
+.list-state-text--strong {
+  color: var(--color-text);
+}
+
+.state-card-subtext,
+.list-state-text {
+  color: var(--color-text-muted);
 }
 
 .state-card-subtext {
   margin-top: 4px;
 }
 
-.state-card--loading {
-  color: #64748b;
+.list-state-text {
+  margin-bottom: 4px;
 }
 
-.state-card--loading .state-card-subtext {
-  color: #94a3b8;
+.list-state-text--strong {
+  margin-bottom: 16px;
+  font-weight: 700;
 }
 
-.state-card--error {
-  color: #b91c1c;
+/* =========================
+   Semantic variants
+   ========================= */
+
+.state-card--loading,
+.list-state--loading {
+  color: var(--color-text-soft);
 }
 
-.state-card--error .state-card-text {
-  color: #b91c1c;
+.state-card--loading .state-card-text,
+.state-card--loading .state-card-subtext,
+.list-state--loading .list-state-text {
+  color: var(--color-text-muted);
 }
 
-.state-card--empty {
-  color: #64748b;
+.state-card--error,
+.list-state--error {
+  border-color: var(--color-danger-border);
+  background: color-mix(in srgb, var(--color-danger) 8%, var(--color-surface-elevated));
+}
+
+.state-card--error .state-card-title,
+.state-card--error .state-card-text,
+.list-state--error .list-state-title,
+.list-state--error .list-state-text,
+.list-state--error .list-state-text--strong {
+  color: color-mix(in srgb, var(--color-danger) 76%, var(--color-text));
+}
+
+.state-card--empty,
+.list-state--empty {
+  color: var(--color-text-soft);
 }
 
 .state-card--empty .state-card-text,
-.state-card--empty .state-card-subtext {
-  color: #94a3b8;
+.state-card--empty .state-card-subtext,
+.list-state--empty .list-state-text {
+  color: var(--color-text-muted);
 }
+
+/* =========================
+   Utilities
+   ========================= */
 
 .text-center {
   text-align: center;
 }
 
 .list-empty-cta {
-  background: #e2e8f0;
-  color: #1e293b;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-height: 38px;
+  padding: 0 14px;
+  border-radius: 12px;
+  border: 1px solid var(--color-border-strong);
+  background: var(--color-surface);
+  color: var(--color-text);
+  font-size: 0.88rem;
+  font-weight: 700;
+  transition:
+    background 0.18s ease,
+    border-color 0.18s ease,
+    color 0.18s ease,
+    transform 0.18s ease;
+}
+
+.list-empty-cta:hover:not(:disabled) {
+  background: var(--color-surface-muted);
+  border-color: var(--color-primary-border);
+  transform: translateY(-1px);
+}
+
+.list-empty-cta:focus-visible {
+  outline: 2px solid var(--color-focus);
+  outline-offset: 2px;
+}
+
+/* =========================
+   Shared pagination fallback
+   ========================= */
+
+.list-pagination {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-top: 16px;
+  gap: 12px;
+  flex-wrap: wrap;
+  font-size: 0.85rem;
+  color: var(--color-text-soft);
+}
+
+.list-pagination-controls {
+  display: flex;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+
+/* =========================
+   Compact
+   ========================= */
+
+:root[data-density="compact"] .state-card,
+:root[data-density="compact"] .list-state {
+  padding: 28px 18px;
+  border-radius: 16px;
+}
+
+:root[data-density="compact"] .state-card-title,
+:root[data-density="compact"] .list-state-title {
+  font-size: 0.92rem;
+}
+
+:root[data-density="compact"] .state-card-text,
+:root[data-density="compact"] .state-card-subtext,
+:root[data-density="compact"] .list-state-text,
+:root[data-density="compact"] .list-state-text--strong {
+  font-size: 0.84rem;
+}
+
+:root[data-density="compact"] .list-empty-cta {
+  min-height: 34px;
+  font-size: 0.8rem;
+  border-radius: 10px;
 }

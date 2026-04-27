@@ -6,6 +6,7 @@ import React, {
   useRef,
   useState,
 } from "react";
+import { ArrowLeft, Download, ExternalLink, LogOut, Mail, RefreshCw } from "lucide-react";
 import { Timeline } from "./Timeline";
 import { EventList } from "./EventList";
 import { DetailActions } from "./DetailActions";
@@ -44,22 +45,20 @@ import {
 } from "../utils/permissions";
 import { DOC_STATUS } from "../constants";
 
-function getButtonStateStyle(isLoading) {
-  return {
-    cursor: isLoading ? "not-allowed" : "pointer",
-    opacity: isLoading ? 0.6 : 1,
-  };
-}
-
-function DetailSection({ title, subtitle, children }) {
+function DetailSection({ title, subtitle, children, actions = null }) {
   return (
     <section className="detail-section">
       <div className="detail-section__header">
-        <h3 className="detail-section__title">{title}</h3>
-        {subtitle ? (
-          <p className="detail-section__subtitle">{subtitle}</p>
-        ) : null}
+        <div>
+          <h3 className="detail-section__title">{title}</h3>
+          {subtitle ? (
+            <p className="detail-section__subtitle">{subtitle}</p>
+          ) : null}
+        </div>
+
+        {actions ? <div className="detail-section__actions">{actions}</div> : null}
       </div>
+
       {children}
     </section>
   );
@@ -82,12 +81,7 @@ function PdfViewerPanel({
     <DetailSection
       title="Documento y acciones"
       subtitle="Visualiza el PDF final, descarga el archivo o reenvía recordatorios según el estado actual."
-    >
-      <div className="detail-toolbar">
-        <span className="detail-toolbar-label">
-          Visualización del documento final
-        </span>
-
+      actions={
         <div className="detail-toolbar-actions">
           {mostrarBotonRecordatorio ? (
             <button
@@ -95,11 +89,13 @@ function PdfViewerPanel({
               className="btn-main detail-btn-reminder-all"
               onClick={onEnviarRecordatorioATodos}
               disabled={recordatorioLoading}
-              style={getButtonStateStyle(recordatorioLoading)}
             >
-              {recordatorioLoading
-                ? "Enviando recordatorio..."
-                : "🔔 Recordatorio a todos"}
+              <Mail size={16} />
+              <span>
+                {recordatorioLoading
+                  ? "Enviando recordatorio..."
+                  : "Recordatorio a todos"}
+              </span>
             </button>
           ) : null}
 
@@ -109,11 +105,13 @@ function PdfViewerPanel({
               className="btn-main detail-btn-reminder-visado"
               onClick={onReenviarVisado}
               disabled={reenviarLoadingVisado}
-              style={getButtonStateStyle(reenviarLoadingVisado)}
             >
-              {reenviarLoadingVisado
-                ? "Reenviando visado..."
-                : "Reenviar visado"}
+              <RefreshCw size={16} />
+              <span>
+                {reenviarLoadingVisado
+                  ? "Reenviando visado..."
+                  : "Reenviar visado"}
+              </span>
             </button>
           ) : null}
 
@@ -124,7 +122,8 @@ function PdfViewerPanel({
               target="_blank"
               rel="noopener noreferrer"
             >
-              📥 Descargar PDF
+              <Download size={16} />
+              <span>Descargar PDF</span>
             </a>
           ) : null}
 
@@ -135,10 +134,20 @@ function PdfViewerPanel({
               rel="noopener noreferrer"
               className="btn-main detail-btn-view"
             >
-              👁️ Abrir PDF en otra pestaña
+              <ExternalLink size={16} />
+              <span>Abrir en otra pestaña</span>
             </a>
           ) : null}
         </div>
+      }
+    >
+      <div className="detail-pdf-toolbar">
+        <span className="detail-toolbar-label">
+          Visualización del documento final
+        </span>
+        {currentDocId ? (
+          <span className="detail-toolbar-docid">Documento #{currentDocId}</span>
+        ) : null}
       </div>
 
       <div className="detail-pdf-wrapper">
@@ -187,7 +196,7 @@ function LegalValidationSection({
       subtitle="Antes de firmar o visar, deja constancia de aceptación del aviso legal correspondiente."
     >
       {puedeFirmar ? (
-        <>
+        <div className="detail-legal-block">
           <ElectronicSignatureNotice
             mode="firma"
             checked={acceptedLegalSign}
@@ -196,16 +205,17 @@ function LegalValidationSection({
               if (value) setSignError("");
             }}
           />
+
           {signError ? (
             <p className="detail-inline-error" role="alert">
               {signError}
             </p>
           ) : null}
-        </>
+        </div>
       ) : null}
 
       {puedeVisar ? (
-        <>
+        <div className="detail-legal-block">
           <ElectronicSignatureNotice
             mode="visado"
             checked={acceptedLegalVisado}
@@ -214,12 +224,13 @@ function LegalValidationSection({
               if (value) setVisadoError("");
             }}
           />
+
           {visadoError ? (
             <p className="detail-inline-error" role="alert">
               {visadoError}
             </p>
           ) : null}
-        </>
+        </div>
       ) : null}
     </DetailSection>
   );
@@ -674,7 +685,8 @@ export function DetailView({
         <h2 className="detail-sidebar-header">VeriFirma</h2>
 
         <button type="button" className="nav-item" onClick={handleBackToList}>
-          <span>⬅️</span> Volver a la bandeja
+          <ArrowLeft size={16} />
+          <span>Volver a la bandeja</span>
         </button>
 
         <button
@@ -682,7 +694,8 @@ export function DetailView({
           className="nav-item detail-sidebar-footer"
           onClick={logout}
         >
-          <span>🚪</span> Cerrar sesión
+          <LogOut size={16} />
+          <span>Cerrar sesión</span>
         </button>
       </aside>
 
@@ -738,10 +751,7 @@ export function DetailView({
 
                   <p>
                     <span className="detail-meta-label">Tipo de documento:</span>{" "}
-                    <span
-                      className="detail-meta-value"
-                      title={documentoLabel}
-                    >
+                    <span className="detail-meta-value" title={documentoLabel}>
                       {documentoLabel}
                     </span>
                   </p>
@@ -821,12 +831,13 @@ export function DetailView({
                     <div className="detail-flow-summary__label">
                       {flujoFinalizado ? "Estado del flujo" : "Próximo paso"}
                     </div>
+
                     <div className="detail-flow-summary__value">
                       {flujoFinalizado ? (
                         isSigned ? (
-                          "✅ Flujo completado"
+                          "Flujo completado"
                         ) : (
-                          "❌ Flujo cerrado por rechazo"
+                          "Flujo cerrado por rechazo"
                         )
                       ) : nextPendingParticipant ? (
                         `#${nextPendingParticipant.order} · ${nextPendingParticipant.roleLabel} · ${nextPendingParticipant.name}`
@@ -843,9 +854,7 @@ export function DetailView({
                       ).toLowerCase();
 
                       const signerMatch = signers.find((signer) => {
-                        const signerEmail = String(
-                          signer?.email || ""
-                        ).toLowerCase();
+                        const signerEmail = String(signer?.email || "").toLowerCase();
 
                         return (
                           String(signer?.id) === String(participant.id) ||
@@ -864,6 +873,8 @@ export function DetailView({
                         Boolean(signerId) &&
                         !flujoFinalizado;
 
+                      const isSendingReminder = reenviarSignerId === signerId;
+
                       return (
                         <li key={participant.id} className="detail-flow-item">
                           <div className="detail-flow-item__order">
@@ -877,8 +888,7 @@ export function DetailView({
                                   {participant.name}
                                 </div>
                                 <div className="detail-flow-item__email">
-                                  {participant.email ||
-                                    "Sin correo registrado"}
+                                  {participant.email || "Sin correo registrado"}
                                 </div>
                               </div>
 
@@ -895,8 +905,7 @@ export function DetailView({
                             <div className="detail-flow-item__meta">
                               {participant.signedAt ? (
                                 <span>
-                                  Registrado el{" "}
-                                  {formatDateTime(participant.signedAt)}
+                                  Registrado el {formatDateTime(participant.signedAt)}
                                 </span>
                               ) : (
                                 <span>Aún no registra acción</span>
@@ -909,14 +918,12 @@ export function DetailView({
                               type="button"
                               className="btn-main detail-btn-inline-reminder"
                               onClick={() => handleReenviarFirma(signerId)}
-                              disabled={reenviarSignerId === signerId}
-                              style={getButtonStateStyle(
-                                reenviarSignerId === signerId
-                              )}
+                              disabled={isSendingReminder}
                             >
-                              {reenviarSignerId === signerId
-                                ? "⏳ Enviando..."
-                                : "📧 Recordar"}
+                              <Mail size={14} />
+                              <span>
+                                {isSendingReminder ? "Enviando..." : "Recordar"}
+                              </span>
                             </button>
                           ) : null}
                         </li>

@@ -1,49 +1,63 @@
-/* Estados de la bandeja (loading / error / empty) y paginación */
+/* src/styles/listStates.css */
+
+/* Ajustes específicos para estados dentro de la bandeja */
 
 .list-state {
-  padding: 40px;
-  text-align: center;
+  width: 100%;
 }
 
-.list-state--loading {
-  color: #64748b;
+.list-state--embedded {
+  border-style: dashed;
+  background: var(--color-surface-muted);
+  box-shadow: none;
 }
 
-.list-state--error {
-  color: #b91c1c;
-}
-
-.list-state--empty {
-  color: #64748b;
-}
-
-.list-state-title {
-  margin-bottom: 8px;
-  font-weight: 700;
-}
-
-.list-state-text {
-  margin-bottom: 4px;
-  font-size: 0.9rem;
-  color: #94a3b8;
-}
-
-.list-state-text--strong {
-  margin-bottom: 16px;
-  font-size: 0.9rem;
-}
-
-/* Paginación inferior de la bandeja */
-
-.list-pagination {
-  display: flex;
-  justify-content: space-between;
+.list-state__icon-wrap {
+  display: inline-flex;
   align-items: center;
-  margin-top: 16px;
-  font-size: 0.85rem;
+  justify-content: center;
+  width: 44px;
+  height: 44px;
+  margin: 0 auto 12px;
+  border-radius: 14px;
+  background: var(--color-surface-muted);
+  color: var(--color-text-muted);
 }
 
-.list-pagination-controls {
+.list-state--error .list-state__icon-wrap {
+  background: color-mix(in srgb, var(--color-danger) 10%, transparent);
+  color: color-mix(in srgb, var(--color-danger) 78%, var(--color-text));
+}
+
+.list-state--loading .list-state__icon-wrap {
+  background: color-mix(in srgb, var(--color-primary) 10%, transparent);
+  color: color-mix(in srgb, var(--color-primary) 78%, var(--color-text));
+}
+
+.list-state__actions {
+  margin-top: 16px;
   display: flex;
+  justify-content: center;
+  gap: 10px;
+  flex-wrap: wrap;
+}
+
+.list-state__actions .btn-main {
+  min-height: 38px;
+}
+
+:root[data-density="compact"] .list-state__icon-wrap {
+  width: 38px;
+  height: 38px;
+  border-radius: 12px;
+  margin-bottom: 10px;
+}
+
+:root[data-density="compact"] .list-state__actions {
+  margin-top: 12px;
   gap: 8px;
+}
+
+:root[data-density="compact"] .list-state__actions .btn-main {
+  min-height: 34px;
 }
