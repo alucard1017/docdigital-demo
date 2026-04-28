@@ -1,6 +1,3 @@
-/* ================================
-   RUTAS DE MÉTRICAS
-   ================================ */
 const express = require("express");
 const router = express.Router();
 
@@ -12,10 +9,10 @@ function safeString(value, fallback = "unknown") {
   return typeof value === "string" && value.trim() ? value.trim() : fallback;
 }
 
-/**
- * POST /api/metrics/web-vitals
- * Recibe métricas de rendimiento del frontend (Web Vitals)
- */
+router.options("/web-vitals", (req, res) => {
+  return res.status(204).end();
+});
+
 router.post("/web-vitals", async (req, res) => {
   try {
     const body = req.body || {};
@@ -35,13 +32,6 @@ router.post("/web-vitals", async (req, res) => {
     console.log(
       `[WEB_VITALS] ${name}: ${printableValue}ms (${rating}) - ${path} at ${timestamp} | delta=${printableDelta} | nav=${navigationType} | id=${id}`
     );
-
-    // TODO: Opcional - guardar en DB si quieres histórico
-    // await db.query(
-    //   `INSERT INTO metrics (name, value, rating, path, timestamp, delta, metric_id, navigation_type)
-    //    VALUES ($1, $2, $3, $4, $5, $6, $7, $8)`,
-    //   [name, value, rating, path, timestamp, delta, id, navigationType]
-    // );
 
     return res.status(204).end();
   } catch (error) {

@@ -37,6 +37,7 @@ import "./styles/helpPanel.css";
 import { AuthProvider } from "./context/AuthContext.jsx";
 import { PreferencesProvider } from "./context/PreferencesContext.jsx";
 import { ToastProvider } from "./components/feedback/ToastProvider.jsx";
+import { API_BASE_URL } from "./constants";
 
 const rootElement = document.getElementById("root");
 
@@ -60,6 +61,14 @@ window.addEventListener("vite:preloadError", (event) => {
   window.location.reload();
 });
 
+function joinUrl(base, path) {
+  const normalizedBase = String(base || "").replace(/\/+$/, "");
+  const normalizedPath = String(path || "").replace(/^\/+/, "");
+  return `${normalizedBase}/${normalizedPath}`;
+}
+
+const WEB_VITALS_ENDPOINT = joinUrl(API_BASE_URL, "/metrics/web-vitals");
+
 function sendMetric(metric) {
   const body = JSON.stringify({
     name: metric.name,
@@ -67,21 +76,26 @@ function sendMetric(metric) {
     rating: metric.rating,
     delta: metric.delta,
     id: metric.id,
-    path: window.location.pathname,
+    navigationType: metric.navigationType || "unknown",
+    path:
+      window.location.pathname +
+      window.location.search +
+      window.location.hash,
     timestamp: new Date().toISOString(),
   });
 
   if (navigator.sendBeacon) {
     const blob = new Blob([body], { type: "application/json" });
-    navigator.sendBeacon("/api/metrics/web-vitals", blob);
+    navigator.sendBeacon(WEB_VITALS_ENDPOINT, blob);
     return;
   }
 
-  fetch("/api/metrics/web-vitals", {
+  fetch(WEB_VITALS_ENDPOINT, {
     method: "POST",
     headers: { "Content-Type": "application/json" },
     body,
     keepalive: true,
+    credentials: "include",
   }).catch(() => {});
 }
 
@@ -105,4 +119,5 @@ ReactDOM.createRoot(rootElement).render(
 
 if (import.meta.env?.DEV) {
   console.log("✓ Web Vitals inicializadas");
+  console.log("✓ Web Vitals endpoint:", WEB_VITALS_ENDPOINT);
 }

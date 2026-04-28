@@ -3,7 +3,7 @@
 .sidebar {
   position: sticky;
   top: 0;
-  flex: 0 0 var(--sidebar-width, 248px);
+  flex: 0 0 auto; /* por si alguna vez se ve en un flex */
   width: var(--sidebar-width, 248px);
   min-width: var(--sidebar-width, 248px);
   max-width: var(--sidebar-width, 248px);
@@ -20,6 +20,24 @@
   backdrop-filter: blur(8px);
   color: var(--color-text);
   box-sizing: border-box;
+}
+
+/* ... resto igual ... */
+
+@media (max-width: 1080px) {
+  .sidebar {
+    position: static;
+    width: 100%;
+    min-width: 0;
+    max-width: none;
+    height: auto;
+    border-right: none;
+    border-bottom: 1px solid var(--color-border);
+  }
+
+  .sidebar-footer {
+    margin-bottom: 4px;
+  }
 }
 
 /* Tarjeta superior marca + usuario */
