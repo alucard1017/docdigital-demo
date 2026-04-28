@@ -3,13 +3,15 @@
 .sidebar {
   position: sticky;
   top: 0;
-  flex: 0 0 auto; /* por si alguna vez se ve en un flex */
+  flex: 0 0 var(--sidebar-width, 248px); /* si el parent es flex */
   width: var(--sidebar-width, 248px);
   min-width: var(--sidebar-width, 248px);
   max-width: var(--sidebar-width, 248px);
   height: 100vh;
+
   display: flex;
   flex-direction: column;
+
   padding: 16px 12px;
   border-right: 1px solid var(--color-border);
   background: linear-gradient(
@@ -20,24 +22,6 @@
   backdrop-filter: blur(8px);
   color: var(--color-text);
   box-sizing: border-box;
-}
-
-/* ... resto igual ... */
-
-@media (max-width: 1080px) {
-  .sidebar {
-    position: static;
-    width: 100%;
-    min-width: 0;
-    max-width: none;
-    height: auto;
-    border-right: none;
-    border-bottom: 1px solid var(--color-border);
-  }
-
-  .sidebar-footer {
-    margin-bottom: 4px;
-  }
 }
 
 /* Tarjeta superior marca + usuario */
@@ -153,11 +137,19 @@
   gap: 6px;
   padding: 4px 10px;
   border-radius: 999px;
-  border: 1px solid color-mix(in srgb, var(--color-primary) 26%, var(--color-border));
+  border: 1px solid color-mix(
+    in srgb,
+    var(--color-primary) 26%,
+    var(--color-border)
+  );
   background: color-mix(in srgb, var(--color-primary) 10%, var(--color-surface));
   font-size: 0.75rem;
   font-weight: 700;
-  color: color-mix(in srgb, var(--color-primary) 80%, var(--color-text-strong));
+  color: color-mix(
+    in srgb,
+    var(--color-primary) 80%,
+    var(--color-text-strong)
+  );
 }
 
 .sidebar-role-dot {
@@ -194,7 +186,11 @@
 .sidebar-socket-status.is-connected {
   background: color-mix(in srgb, var(--color-success) 12%, transparent);
   border-color: color-mix(in srgb, var(--color-success) 40%, transparent);
-  color: color-mix(in srgb, var(--color-success) 80%, var(--color-text));
+  color: color-mix(
+    in srgb,
+    var(--color-success) 80%,
+    var(--color-text)
+  );
 }
 
 .sidebar-socket-status.is-connected .sidebar-socket-dot {
@@ -214,7 +210,11 @@
 .sidebar-socket-status.is-error {
   background: color-mix(in srgb, var(--color-danger) 10%, transparent);
   border-color: color-mix(in srgb, var(--color-danger) 40%, transparent);
-  color: color-mix(in srgb, var(--color-danger) 80%, var(--color-text));
+  color: color-mix(
+    in srgb,
+    var(--color-danger) 80%,
+    var(--color-text)
+  );
 }
 
 .sidebar-socket-status.is-error .sidebar-socket-dot {
@@ -231,7 +231,11 @@
   margin-top: 8px;
   padding: 6px 8px;
   border-radius: 10px;
-  background: color-mix(in srgb, var(--color-danger) 8%, var(--color-surface));
+  background: color-mix(
+    in srgb,
+    var(--color-danger) 8%,
+    var(--color-surface)
+  );
   color: var(--color-text);
   font-size: 0.74rem;
   display: flex;
@@ -303,7 +307,11 @@
   background: linear-gradient(
     180deg,
     var(--color-accent-soft),
-    color-mix(in srgb, var(--color-surface-muted) 82%, var(--color-accent-soft))
+    color-mix(
+      in srgb,
+      var(--color-surface-muted) 82%,
+      var(--color-accent-soft)
+    )
   );
   border-color: var(--color-accent-border);
   color: var(--color-text-strong);
@@ -347,7 +355,11 @@
 .nav-item.active .nav-item-badge {
   background: color-mix(in srgb, var(--color-primary) 14%, transparent);
   border-color: var(--color-primary-border);
-  color: color-mix(in srgb, var(--color-primary) 76%, var(--color-text));
+  color: color-mix(
+    in srgb,
+    var(--color-primary) 76%,
+    var(--color-text)
+  );
 }
 
 .nav-item:focus-visible {
@@ -453,6 +465,8 @@
   padding: 10px;
   border-radius: 14px;
 }
+
+/* Responsive: sidebar arriba en mobile */
 
 @media (max-width: 1080px) {
   .sidebar {

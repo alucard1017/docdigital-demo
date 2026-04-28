@@ -1,67 +1,39 @@
 /* src/styles/layout.css */
 
-/* Layout general dashboard */
 .dashboard-layout {
-  display: flex;
-  align-items: stretch;
+  display: grid;
+  grid-template-columns: 280px minmax(0, 1fr);
   min-height: 100vh;
   width: 100%;
-  max-width: 100%;
-  overflow-x: clip;
   background: var(--color-bg);
+  overflow-x: hidden;
 }
 
-/* Área principal de contenido */
 .main-area {
-  flex: 1 1 auto;
   min-width: 0;
   width: 100%;
   display: flex;
   flex-direction: column;
 }
 
-/* Contenido principal */
 .content-body {
-  flex: 1 1 auto;
   min-width: 0;
   width: 100%;
-  max-width: 1280px;
-  margin: 0 auto;
-  padding: 14px 16px 22px 12px;
+  padding: 16px 20px 24px;
   box-sizing: border-box;
 }
 
-/* Evitar desbordes internos */
 .content-body > * {
+  min-width: 0;
   max-width: 100%;
 }
 
-/* Topbar genérico */
-.topbar {
-  width: 100%;
-  height: 70px;
-  padding: 0 20px;
-  box-sizing: border-box;
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  background:
-    radial-gradient(circle at top left, color-mix(in srgb, var(--color-primary) 14%, transparent) 0, transparent 55%),
-    var(--color-surface);
-  border-bottom: 1px solid var(--color-border);
-  box-shadow: var(--shadow-md);
-}
-
-:root[data-theme="light"] .topbar {
-  background:
-    radial-gradient(circle at top left, rgba(15, 118, 110, 0.08) 0, transparent 55%),
-    #ffffff;
-}
-
 @media (max-width: 1080px) {
+  .dashboard-layout {
+    grid-template-columns: 1fr;
+  }
+
   .content-body {
-    max-width: 100%;
-    margin: 0;
     padding: 14px 12px 20px;
   }
 }
