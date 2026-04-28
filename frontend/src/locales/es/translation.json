@@ -1,9 +1,175 @@
 {
+  "sidebar": {
+    "brand": "VeriFirma",
+    "mainPanel": "Panel principal",
+    "activeSession": "Sesión activa",
+    "defaultUser": "Usuario",
+    "retry": "Reintentar",
+    "logout": "Cerrar sesión",
+    "sections": {
+      "inbox": "Bandeja",
+      "reports": "Reportes",
+      "admin": "Administración",
+      "globalAdmin": "Administración global",
+      "account": "Cuenta"
+    },
+    "items": {
+      "myDocuments": "Mis trámites",
+      "myDocumentsTitle": "Ver todos los trámites",
+      "newProcedure": "Crear nuevo trámite",
+      "newProcedureTitle": "Crear nuevo trámite de firma",
+      "dashboard": "Dashboard",
+      "dashboardTitle": "Dashboard administrativo global",
+      "emailMetrics": "Métricas de email",
+      "emailMetricsTitle": "Ver métricas globales de email",
+      "companyAnalytics": "Analytics empresa",
+      "companyAnalyticsTitle": "Analytics global por empresa",
+      "users": "Usuarios",
+      "usersTitle": "Gestionar usuarios de la empresa",
+      "templates": "Plantillas",
+      "templatesTitle": "Gestionar plantillas de documentos",
+      "reminders": "Recordatorios",
+      "remindersTitle": "Configurar recordatorios automáticos",
+      "companies": "Empresas",
+      "companiesTitle": "Gestionar empresas",
+      "systemStatus": "Estado del sistema",
+      "systemStatusTitle": "Estado del sistema",
+      "businessAudit": "Auditoría negocio",
+      "businessAuditTitle": "Auditoría de negocio",
+      "authLogs": "Auth logs",
+      "authLogsTitle": "Logs de autenticación",
+      "billing": "Planes y facturación",
+      "billingTitle": "Ver planes y facturación",
+      "profile": "Mi perfil",
+      "profileTitle": "Editar tu perfil"
+    },
+    "metrics": {
+      "total": "Trámites totales",
+      "pendingToday": "Pendientes hoy",
+      "visas": "Visados",
+      "signed": "Firmados",
+      "rejected": "Rechazados",
+      "caption": "Gestiona envíos, seguimiento y firma desde una sola bandeja."
+    },
+    "socket": {
+      "online": "En línea",
+      "reconnecting": "Reconectando…",
+      "connecting": "Conectando…",
+      "degraded": "Modo degradado",
+      "connectedTitle": "Conectado al servidor en tiempo real.",
+      "reconnectingTitle": "Intentando reconectar al servidor en tiempo real.",
+      "errorTitle": "No pudimos mantener la conexión en tiempo real. La aplicación sigue funcionando, pero algunas actualizaciones pueden tardar unos segundos."
+    }
+  },
+  "listHeader": {
+    "title": "Bandeja de entrada",
+    "subtitle": "Gestiona documentos, revisa estados y accede rápido a las acciones principales.",
+    "results": "{{count}} documentos encontrados con los filtros actuales",
+    "actions": {
+      "downloadReport": "Descargar reporte",
+      "syncInbox": "Sincronizar bandeja"
+    },
+    "chips": {
+      "all": "Todos",
+      "pending": "Pendientes",
+      "visa": "Visados",
+      "signed": "Firmados",
+      "rejected": "Rechazados"
+    },
+    "filters": {
+      "sort": {
+        "label": "Ordenar",
+        "titleAsc": "Título (A → Z)",
+        "titleDesc": "Título (Z → A)",
+        "dateDesc": "Fecha (más reciente)",
+        "dateAsc": "Fecha (más antigua)",
+        "numberAsc": "N.° interno (ascendente)",
+        "numberDesc": "N.° interno (descendente)"
+      },
+      "status": {
+        "label": "Estado",
+        "all": "Todos",
+        "pending": "Pendientes",
+        "visa": "Visados",
+        "signed": "Firmados",
+        "rejected": "Rechazados"
+      },
+      "search": {
+        "label": "Buscar",
+        "placeholder": "Título, participante o empresa...",
+        "clear": "Limpiar búsqueda"
+      }
+    },
+    "toasts": {
+      "noSessionTitle": "Sesión no disponible",
+      "noSessionMessage": "No hay sesión activa para descargar el reporte.",
+      "downloadErrorFallback": "Error descargando reporte",
+      "downloadErrorTitle": "No se pudo descargar",
+      "downloadSuccessTitle": "Reporte generado",
+      "downloadSuccessMessage": "La descarga del reporte comenzó correctamente.",
+      "connectionErrorTitle": "Error de conexión",
+      "connectionErrorMessage": "No se pudo descargar el reporte en este momento."
+    }
+  },
+  "documents": {
+    "type": {
+      "default": "Documento"
+    },
+    "contractNumberFallback": "Sin número",
+    "status": {
+      "pending": "Pendiente",
+      "pendingSignature": "Pendiente firma",
+      "pendingVisa": "Pendiente visado",
+      "visa": "Visado",
+      "signed": "Firmado",
+      "rejected": "Rechazado",
+      "draft": "Borrador",
+      "noStatus": "Sin estado"
+    },
+    "untitled": "Sin título",
+    "pendingAssignment": "Pendiente de asignar",
+    "createdAt": "Fecha de creación",
+    "errors": {
+      "invalidDocument": "Documento inválido",
+      "pdfUrl": "No se pudo obtener la URL del PDF"
+    },
+    "actions": {
+      "open": "Abrir",
+      "openDetail": "Abrir detalle",
+      "openDetailOf": "Abrir detalle de \"{{title}}\"",
+      "viewPdf": "Ver PDF",
+      "viewPdfOf": "Ver PDF de \"{{title}}\"",
+      "viewPdfShort": "PDF",
+      "download": "Descargar",
+      "downloadPdf": "Descargar PDF",
+      "downloadPdfOf": "Descargar PDF de \"{{title}}\"",
+      "downloadShort": "Descargar",
+      "rejectReason": "Ver motivo de rechazo",
+      "rejectReasonOf": "Ver motivo de rechazo de \"{{title}}\"",
+      "rejection": "Rechazo",
+      "rejectionShort": "Rechazo"
+    },
+    "toasts": {
+      "openPdfErrorTitle": "No se pudo abrir el PDF",
+      "openPdfErrorMessage": "No se pudo abrir el PDF.",
+      "downloadStartedTitle": "Descarga iniciada",
+      "downloadStartedMessage": "Se inició la descarga de \"{{title}}\".",
+      "downloadErrorTitle": "No se pudo descargar el PDF",
+      "downloadErrorMessage": "No se pudo descargar el PDF.",
+      "noRejectReasonTitle": "Sin motivo registrado",
+      "noRejectReasonMessage": "Este documento no tiene motivo de rechazo.",
+      "rejectReasonTitle": "Motivo de rechazo"
+    }
+  },
   "help": {
     "title": "Ayuda",
     "subtitle": "Preguntas frecuentes y soporte",
     "close": "Cerrar ayuda",
-    "faqsTitle": "FAQs",
+    "panelTitle": "Ayuda y ajustes",
+    "panelSubtitle": "Accede rápido a soporte, preguntas frecuentes y preferencias.",
+    "quickActionsTitle": "Acciones rápidas",
+    "quickQuestionsTitle": "Preguntas rápidas",
+    "faqsTitle": "Preguntas frecuentes",
     "contactTitle": "Contactar soporte",
     "loadingFaqs": "Cargando preguntas frecuentes...",
     "emptyFaqs": "No hay preguntas frecuentes disponibles.",
@@ -14,6 +180,223 @@
     "sending": "Enviando...",
     "submitSuccess": "Consulta enviada correctamente.",
     "submitError": "No se pudo enviar la consulta.",
-    "missingSubjectAndMessage": "Debes escribir asunto y mensaje."
+    "missingSubjectAndMessage": "Debes escribir asunto y mensaje.",
+    "shortcuts": {
+      "settingsTitle": "Abrir ajustes",
+      "settingsText": "Cambia tema, idioma y densidad de la interfaz."
+    },
+    "quickQuestions": {
+      "languageTitle": "¿Cómo cambio el idioma?",
+      "languageText": "Desde Ajustes puedes seleccionar Español o English.",
+      "themeTitle": "¿Cómo activo modo claro u oscuro?",
+      "themeText": "Puedes elegir modo claro, oscuro o seguir el sistema.",
+      "densityTitle": "¿Qué hace la densidad compacta?",
+      "densityText": "Reduce espacios en tablas y listas para ver más contenido."
+    },
+    "tips": {
+      "firstTitle": "Consejo rápido",
+      "firstText": "Puedes abrir un documento desde la tabla y descargar su PDF desde las acciones laterales."
+    }
+  },
+  "settings": {
+    "title": "Ajustes",
+    "subtitle": "Personaliza idioma, apariencia y densidad de la interfaz.",
+    "close": "Cerrar ajustes",
+    "loading": "Cargando preferencias…",
+    "messages": {
+      "loadFallback": "Se usarán valores por defecto en esta sesión."
+    },
+    "theme": {
+      "title": "Apariencia",
+      "description": "Elige cómo se verá la aplicación.",
+      "options": {
+        "system": "Usar sistema",
+        "light": "Modo claro",
+        "dark": "Modo oscuro"
+      }
+    },
+    "language": {
+      "title": "Idioma",
+      "description": "Selecciona el idioma principal de la interfaz.",
+      "fieldLabel": "Idioma de la aplicación",
+      "options": {
+        "es": "Español",
+        "en": "English"
+      }
+    },
+    "density": {
+      "title": "Densidad",
+      "description": "Reduce o amplía espacios en tablas, listas y controles.",
+      "options": {
+        "comfortable": "Cómoda",
+        "compact": "Compacta"
+      }
+    },
+    "actions": {
+      "cancel": "Cancelar",
+      "save": "Guardar cambios",
+      "saving": "Guardando..."
+    },
+    "toasts": {
+      "loadErrorTitle": "No se pudieron cargar los ajustes",
+      "saveSuccessTitle": "Preferencias guardadas",
+      "saveSuccessMessage": "Tus ajustes se guardaron correctamente.",
+      "saveErrorTitle": "No se pudieron guardar los ajustes",
+      "saveErrorMessage": "Intenta nuevamente en unos segundos."
+    }
+  },
+  "app": {
+    "protectedFallback": "Cargando módulo…",
+    "sessionLoading": "Cargando sesión...",
+    "redirectFallback": "Redirigiendo…",
+    "sentryTest": "Probar error Sentry",
+    "login": {
+      "connecting": "Conectando con el servidor seguro...",
+      "invalidRut": "❌ El RUT ingresado no es válido",
+      "accessGranted": "Acceso concedido",
+      "defaultError": "Error de conexión, intenta nuevamente.",
+      "toastTitle": "No se pudo iniciar sesión"
+    },
+    "toasts": {
+      "documentSentTitle": "Documento enviado",
+      "documentSent": "El documento se envió correctamente.",
+      "documentSentWithTitle": "\"{{title}}\" se envió correctamente.",
+      "documentSignedTitle": "Documento firmado",
+      "documentSigned": "El documento se firmó correctamente.",
+      "documentSignedWithTitle": "\"{{title}}\" se firmó correctamente."
+    },
+    "socket": {
+      "toasts": {
+        "limitedTitle": "Conexión en tiempo real limitada",
+        "limitedMessage": "No pudimos mantener la conexión en tiempo real. Tu bandeja seguirá actualizándose cada cierto tiempo.",
+        "connectingTitle": "Conectando en tiempo real…",
+        "connectingMessage": "Estamos intentando establecer la conexión en tiempo real. Puedes seguir usando la aplicación normalmente.",
+        "reconnectingTitle": "Reconectando en tiempo real…",
+        "reconnectingMessage": "Perdimos la conexión en tiempo real y estamos intentando restablecerla. La bandeja seguirá actualizándose de forma periódica."
+      }
+    },
+    "list": {
+      "loadingTitle": "Cargando tu bandeja de documentos…",
+      "loadingSubtitle": "Esto puede tardar unos segundos.",
+      "errorTitle": "Ocurrió un problema al cargar la bandeja.",
+      "errorFallback": "Por favor, revisa tu conexión e inténtalo nuevamente.",
+      "retry": "Reintentar carga",
+      "emptyTitle": "No encontramos documentos para mostrar.",
+      "emptySubtitle1": "Puede que no existan documentos con los filtros actuales.",
+      "emptySubtitle2": "Ajusta los filtros o crea un nuevo flujo de firma digital.",
+      "emptyCta": "Crear nuevo trámite"
+    },
+    "table": {
+      "columns": {
+        "contractDocument": "Contrato / Documento",
+        "type": "Tipo",
+        "status": "Estado",
+        "participant": "Participante",
+        "actions": "Acciones"
+      }
+    },
+    "pagination": {
+      "summary": "Página {{current}} de {{total}} · {{count}} documentos",
+      "prev": "Anterior",
+      "next": "Siguiente"
+    },
+    "inbox": {
+      "title": "Documentos recientes",
+      "subtitle": "Revisa estados, abre contratos y gestiona tus trámites desde esta bandeja.",
+      "newDocument": "+ Nuevo documento",
+      "refresh": "Actualizar bandeja"
+    },
+    "onboarding": {
+      "fallback": "Preparando guía interactiva…"
+    },
+    "tour": {
+      "fallback": "Cargando tour interactivo…"
+    }
+  },
+  "detail": {
+    "common": {
+      "notAvailable": "N/D",
+      "notReported": "No informado"
+    },
+    "sidebar": {
+      "back": "Volver a la bandeja"
+    },
+    "header": {
+      "reviewTitle": "Revisión de documento ({{number}}) · Estado {{status}}",
+      "documentNumberShort": "#{{id}}",
+      "greeting": "Hola,"
+    },
+    "meta": {
+      "internalNumber": "N.° interno",
+      "notaryCondition": "Condición notarial",
+      "documentType": "Tipo de documento",
+      "description": "Descripción",
+      "rejectReason": "Motivo de rechazo"
+    },
+    "pdf": {
+      "title": "Documento y acciones",
+      "subtitle": "Visualiza el PDF final, descarga el archivo o reenvía recordatorios según el estado actual.",
+      "remindAll": "Recordar a todos",
+      "remindAllSending": "Enviando recordatorio...",
+      "resendVisa": "Reenviar visado",
+      "resendVisaSending": "Reenviando visado...",
+      "download": "Descargar PDF",
+      "openNewTab": "Abrir en otra pestaña",
+      "previewLabel": "Visualización del documento final",
+      "documentId": "Documento #{{id}}",
+      "loading": "Cargando vista previa del PDF...",
+      "iframeTitle": "PDF del documento {{id}}",
+      "error": "No se pudo cargar la vista previa del PDF. Usa \"Descargar PDF\" para ver el documento."
+    },
+    "legal": {
+      "title": "Validaciones previas",
+      "subtitle": "Antes de firmar o visar, deja constancia de aceptación del aviso legal correspondiente.",
+      "signRequired": "Debes aceptar el aviso legal de firma electrónica antes de firmar.",
+      "visaRequired": "Debes aceptar el aviso legal de visado antes de aprobar el documento."
+    },
+    "flow": {
+      "title": "Flujo de participantes",
+      "subtitle": "Revisa el orden del proceso, el rol de cada participante y quién sigue en el flujo secuencial.",
+      "loading": "Cargando flujo de participantes...",
+      "empty": "No hay participantes registrados para este documento.",
+      "summaryLabelFinished": "Estado del flujo",
+      "summaryLabelNext": "Próximo paso",
+      "completed": "Flujo completado",
+      "closedRejected": "Flujo cerrado por rechazo",
+      "nextParticipant": "#{{order}} · {{role}} · {{name}}",
+      "noPending": "No hay participantes pendientes",
+      "noEmail": "Sin correo registrado",
+      "registeredAt": "Registrado el {{date}}",
+      "noActionYet": "Aún no registra acción",
+      "sending": "Enviando...",
+      "remind": "Recordar"
+    },
+    "timeline": {
+      "title": "Timeline del documento",
+      "subtitle": "Consulta el avance general y distingue eventos automáticos de acciones realizadas por usuarios.",
+      "loading": "Cargando progreso...",
+      "empty": "No hay datos de progreso disponibles."
+    },
+    "history": {
+      "title": "Historial de acciones",
+      "subtitle": "Registro detallado de eventos del documento para seguimiento y auditoría."
+    },
+    "toasts": {
+      "timelineErrorTitle": "No se pudo cargar el flujo",
+      "timelineErrorMessage": "No se pudo cargar la línea de tiempo del documento.",
+      "signersErrorTitle": "No se pudieron cargar los firmantes",
+      "signersErrorMessage": "No se pudo cargar la lista de firmantes.",
+      "visaResentTitle": "Visado reenviado",
+      "visaResentMessage": "Recordatorio de visado reenviado correctamente.",
+      "visaResendErrorTitle": "No se pudo reenviar el visado",
+      "visaResendErrorMessage": "No se pudo reenviar el correo de visado.",
+      "reminderSentTitle": "Recordatorio enviado",
+      "reminderSentMessage": "Recordatorio enviado correctamente.",
+      "signatureReminderSentMessage": "Recordatorio de firma reenviado correctamente.",
+      "signatureResendErrorTitle": "No se pudo reenviar la firma",
+      "signatureResendErrorMessage": "No se pudo reenviar el correo de firma.",
+      "reminderErrorTitle": "No se pudo enviar el recordatorio",
+      "reminderErrorMessage": "No se pudo enviar el recordatorio."
+    }
   }
 }

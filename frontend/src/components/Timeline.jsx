@@ -1,5 +1,6 @@
 // src/components/Timeline.jsx
 import React, { memo, useMemo } from "react";
+import { useTranslation } from "react-i18next";
 import "./Timeline.css";
 import {
   ellipsisMiddle,
@@ -15,8 +16,10 @@ import {
   clampProgress,
 } from "../utils/documentEvents";
 
-function getActorPrefix(actorType) {
-  return actorType === "user" ? "Por:" : "Origen:";
+function getActorPrefix(actorType, t) {
+  return actorType === "user"
+    ? t("timeline.actorPrefix.user", "Por:")
+    : t("timeline.actorPrefix.system", "Origen:");
 }
 
 function hasStatusTransition(event) {
@@ -31,36 +34,38 @@ function isRejectedStatus(value) {
   return normalizeStatus(value) === "REJECTED";
 }
 
-function getTimelineHint(currentStep, nextStep) {
+function getTimelineHint(currentStep, nextStep, t) {
   const normalizedCurrentStep = normalizeStatus(currentStep);
   const flujoFirmado = isSignedStatus(normalizedCurrentStep);
   const flujoRechazado = isRejectedStatus(normalizedCurrentStep);
 
   if (flujoFirmado) {
     return {
-      label: "Resultado del flujo",
-      value: "✅ Flujo completado",
+      label: t("timeline.hint.resultLabel", "Resultado del flujo"),
+      value: t("timeline.hint.completed", "✅ Flujo completado"),
     };
   }
 
   if (flujoRechazado) {
     return {
-      label: "Resultado del flujo",
-      value: "❌ Flujo cerrado por rechazo",
+      label: t("timeline.hint.resultLabel", "Resultado del flujo"),
+      value: t("timeline.hint.rejected", "❌ Flujo cerrado por rechazo"),
     };
   }
 
   return {
-    label: "Próximo paso",
-    value: nextStep || "Sin definir",
+    label: t("timeline.hint.nextStepLabel", "Próximo paso"),
+    value: nextStep || t("timeline.hint.undefined", "Sin definir"),
   };
 }
 
 function StatusTransition({ event }) {
+  const { t } = useTranslation();
+
   if (!hasStatusTransition(event)) return null;
 
-  const from = event.fromStatus || "Sin estado";
-  const to = event.toStatus || "Sin estado";
+  const from = event.fromStatus || t("timeline.status.noStatus", "Sin estado");
+  const to = event.toStatus || t("timeline.status.noStatus", "Sin estado");
 
   return (
     <div className="timeline-event-status-change" title={`${from} → ${to}`}>
@@ -80,27 +85,36 @@ function StatusTransition({ event }) {
 }
 
 const EventTechMeta = memo(function EventTechMeta({ event }) {
+  const { t } = useTranslation();
+
   if (!event?.showTechMeta) return null;
   if (!event.ip && !event.userAgent && !event.requestId) return null;
 
   return (
     <div
       className="timeline-audit-meta"
-      aria-label="Metadatos técnicos del evento"
+      aria-label={t(
+        "timeline.techMeta.ariaLabel",
+        "Metadatos técnicos del evento"
+      )}
     >
       {event.ip ? (
-        <div title={event.ip}>IP: {ellipsisMiddle(event.ip, 28)}</div>
+        <div title={event.ip}>
+          {t("timeline.techMeta.ip", "IP")}: {ellipsisMiddle(event.ip, 28)}
+        </div>
       ) : null}
 
       {event.userAgent ? (
         <div title={event.userAgent}>
-          Agente: {shortenUserAgent(event.userAgent, 68)}
+          {t("timeline.techMeta.userAgent", "Agente")}:{" "}
+          {shortenUserAgent(event.userAgent, 68)}
         </div>
       ) : null}
 
       {event.requestId ? (
         <div title={event.requestId}>
-          Req ID: {ellipsisMiddle(event.requestId, 32)}
+          {t("timeline.techMeta.requestId", "Req ID")}:{" "}
+          {ellipsisMiddle(event.requestId, 32)}
         </div>
       ) : null}
     </div>
@@ -112,6 +126,7 @@ const TimelineEventCard = memo(function TimelineEventCard({
   index,
   total,
 }) {
+  const { t } = useTranslation();
   const visualStatus = getEventVisualStatus(index, total);
   const isLast = index === total - 1;
 
@@ -125,7 +140,7 @@ const TimelineEventCard = memo(function TimelineEventCard({
       className={`timeline-event-wrapper timeline-event--${
         event?.kind || "default"
       }`}
-      aria-label={event?.title || "Evento del timeline"}
+      aria-label={event?.title || t("timeline.event.defaultTitle", "Evento del timeline")}
     >
       {!isLast ? (
         <div
@@ -144,12 +159,14 @@ const TimelineEventCard = memo(function TimelineEventCard({
       <div className={`timeline-content timeline-content-${visualStatus}`}>
         <div className="timeline-event-top">
           <h4 className="timeline-event-title" title={event?.title || ""}>
-            {event?.title || "Evento"}
+            {event?.title || t("timeline.event.defaultTitle", "Evento")}
           </h4>
 
           <span
             className={`timeline-event-badge ${badgeClass}`}
-            title={`Tipo de actor: ${badgeLabel}`}
+            title={t("timeline.event.actorTypeTitle", "Tipo de actor: {{type}}", {
+              type: badgeLabel,
+            })}
           >
             {badgeLabel}
           </span>
@@ -175,7 +192,7 @@ const TimelineEventCard = memo(function TimelineEventCard({
               className={`timeline-event-actor timeline-event-actor--${actorType}`}
               title={actorLabel}
             >
-              {getActorPrefix(actorType)} {actorLabel}
+              {getActorPrefix(actorType, t)} {actorLabel}
             </p>
           ) : null}
         </div>
@@ -187,12 +204,15 @@ const TimelineEventCard = memo(function TimelineEventCard({
 });
 
 function TimelineHeader({ progress, currentStep, nextStep }) {
+  const { t } = useTranslation();
   const safeProgress = clampProgress(progress);
-  const hint = getTimelineHint(currentStep, nextStep);
+  const hint = getTimelineHint(currentStep, nextStep, t);
 
   return (
     <header className="timeline-header">
-      <h3 className="timeline-heading">Progreso del documento</h3>
+      <h3 className="timeline-heading">
+        {t("timeline.header.title", "Progreso del documento")}
+      </h3>
 
       <div className="progress-bar-wrapper">
         <div
@@ -201,8 +221,12 @@ function TimelineHeader({ progress, currentStep, nextStep }) {
           aria-valuemin={0}
           aria-valuemax={100}
           aria-valuenow={safeProgress}
-          aria-valuetext={`${safeProgress}% completado`}
-          aria-label={`Progreso del documento ${safeProgress}%`}
+          aria-valuetext={t("timeline.header.progressText", "{{progress}}% completado", {
+            progress: safeProgress,
+          })}
+          aria-label={t("timeline.header.progressLabel", "Progreso del documento {{progress}}%", {
+            progress: safeProgress,
+          })}
         >
           <div
             className="progress-bar-fill"
@@ -211,15 +235,15 @@ function TimelineHeader({ progress, currentStep, nextStep }) {
         </div>
 
         <div className="timeline-progress-meta">
-          <span>Inicio</span>
+          <span>{t("timeline.header.start", "Inicio")}</span>
           <span className="timeline-progress-value">{safeProgress}%</span>
-          <span>Completado</span>
+          <span>{t("timeline.header.completed", "Completado")}</span>
         </div>
       </div>
 
       <div className="timeline-current-state-card">
         <div className="timeline-current-state-card__label">
-          Estado actual
+          {t("timeline.header.currentState", "Estado actual")}
         </div>
 
         <div
@@ -238,10 +262,15 @@ function TimelineHeader({ progress, currentStep, nextStep }) {
 }
 
 function TimelineBody({ events, hasEvents }) {
+  const { t } = useTranslation();
+
   if (!hasEvents) {
     return (
       <div className="timeline-empty-state" role="status" aria-live="polite">
-        Este documento todavía no tiene eventos para mostrar.
+        {t(
+          "timeline.empty.noEvents",
+          "Este documento todavía no tiene eventos para mostrar."
+        )}
       </div>
     );
   }
@@ -257,6 +286,7 @@ function TimelineBody({ events, hasEvents }) {
 }
 
 export function Timeline({ timeline }) {
+  const { t } = useTranslation();
   const hasTimelineObject = isObject(timeline);
 
   const normalizedTimeline = useMemo(
@@ -275,21 +305,21 @@ export function Timeline({ timeline }) {
   if (!hasTimelineObject) {
     return (
       <div className="timeline-empty-state" role="status" aria-live="polite">
-        Cargando historial del documento…
+        {t("timeline.empty.loading", "Cargando historial del documento…")}
       </div>
     );
   }
 
   return (
-    <section className="timeline-container" aria-label="Timeline del documento">
+    <section
+      className="timeline-container"
+      aria-label={t("timeline.ariaLabel", "Timeline del documento")}
+    >
       <TimelineHeader
         progress={progress}
         currentStep={currentStep}
         nextStep={nextStep}
       />
-
-      {/* Si luego quieres la leyenda, aquí es donde va */}
-      {/* <div className="timeline-legend">...</div> */}
 
       <div className="timeline-events">
         <TimelineBody events={events} hasEvents={hasEvents} />

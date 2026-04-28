@@ -2,6 +2,19 @@
 import axios from "axios";
 import { getStoredToken } from "../utils/session";
 
+// Si tienes i18n con getCurrentLanguage, se usará; si no, esto no rompe.
+let getCurrentLanguage = null;
+try {
+  // Import dinámico suave para evitar ciclos duros si hace falta.
+  // eslint-disable-next-line global-require, @typescript-eslint/no-var-requires
+  const i18nModule = require("../i18n");
+  if (typeof i18nModule.getCurrentLanguage === "function") {
+    getCurrentLanguage = i18nModule.getCurrentLanguage;
+  }
+} catch {
+  // i18n no disponible en este contexto; se ignora.
+}
+
 /* ============================
    Constantes base
    ============================ */
@@ -216,6 +229,7 @@ export const isAuthFailure = (status, message, code, path = "") => {
   if (status === 403) {
     if (AUTH_FAILURE_CODES.has(normalizedCode)) return true;
     if (AUTH_FAILURE_MESSAGES.has(normalizedMessage)) return true;
+    if (FORBIDDEN_MESSAGES.has(normalizedMessage)) return false;
     // 403 suele ser permisos insuficientes; lo dejamos a nivel de UI
     return false;
   }
@@ -273,11 +287,22 @@ api.interceptors.request.use(
     const token = getStoredToken();
 
     config.url = ensureLeadingSlash(config.url || "");
+    config.headers = config.headers || {};
 
     if (token && !isPublicRequest(config.url)) {
-      config.headers = config.headers || {};
       if (!config.headers.Authorization) {
         config.headers.Authorization = `Bearer ${token}`;
+      }
+    }
+
+    // Si está disponible getCurrentLanguage (i18n), adjuntar Accept-Language.
+    if (
+      typeof getCurrentLanguage === "function" &&
+      !config.headers["Accept-Language"]
+    ) {
+      const lang = getCurrentLanguage();
+      if (lang) {
+        config.headers["Accept-Language"] = lang;
       }
     }
 
@@ -291,6 +316,10 @@ api.interceptors.request.use(
         params: config.params ?? null,
         hasToken: !!token,
         isPublic: isPublicRequest(config.url),
+        language:
+          typeof getCurrentLanguage === "function"
+            ? getCurrentLanguage()
+            : null,
       });
     }
 

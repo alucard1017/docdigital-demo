@@ -1,4 +1,3 @@
-// src/App.jsx
 import {
   useCallback,
   useEffect,
@@ -10,11 +9,13 @@ import {
 } from "react";
 import "./App.css";
 
-import { Sidebar } from "./components/Sidebar";
-import { DetailView } from "./components/DetailView";
+import { useTranslation } from "react-i18next";
+
+import Sidebar from "./components/Sidebar";
+import DetailView from "./components/DetailView";
 import { ListHeader } from "./components/ListHeader";
-import { DocumentRow } from "./components/DocumentRow";
-import { ConnectionBanner } from "./components/ConnectionBanner";
+import DocumentRow from "./components/DocumentRow";
+import ConnectionBanner from "./components/ConnectionBanner";
 
 import { DOC_STATUS, API_BASE_URL } from "./constants";
 
@@ -67,6 +68,8 @@ import { usePublicSign } from "./hooks/usePublicSign";
 import { useDocuments } from "./hooks/useDocuments";
 import { useToast } from "./hooks/useToast";
 import { useAuth } from "./hooks/useAuth";
+// Si quieres leer preferencias en la UI principal:
+// import { usePreferences } from "./main";
 
 import FloatingActions from "./components/shell/FloatingActions";
 
@@ -102,11 +105,21 @@ const CompanyAnalyticsView = lazy(
    ============================ */
 
 function ProtectedModuleFallback() {
-  return <div className="protected-fallback">Cargando módulo…</div>;
+  const { t } = useTranslation();
+  return (
+    <div className="protected-fallback">
+      {t("app.protectedFallback", "Cargando módulo…")}
+    </div>
+  );
 }
 
 function SessionLoadingFallback() {
-  return <div className="session-loading">Cargando sesión...</div>;
+  const { t } = useTranslation();
+  return (
+    <div className="session-loading">
+      {t("app.sessionLoading", "Cargando sesión...")}
+    </div>
+  );
 }
 
 function safeNumber(value, fallback = 0) {
@@ -118,6 +131,8 @@ function safeNumber(value, fallback = 0) {
    ============================ */
 
 function App() {
+  const { t } = useTranslation();
+
   const subdomain = getSubdomain();
   const isVerificationPortal = subdomain === "verificar";
   const isSigningPortal = subdomain === "firmar";
@@ -144,6 +159,7 @@ function App() {
   const { user, token, login, logout, authLoading, isAuthenticated } =
     useAuth();
   const { addToast } = useToast();
+  // const { preferences } = usePreferences(); // si quieres usarlo aquí
 
   const locationSnapshot = useMemo(() => getLocationSnapshot(), [path]);
 
@@ -158,11 +174,8 @@ function App() {
     [locationSnapshot, isSigningPortal, isVerificationPortal]
   );
 
-  const {
-    tokenFromUrl,
-    isAnyPublicAccess,
-    isDocumentTokenPath,
-  } = publicAccess;
+  const { tokenFromUrl, isAnyPublicAccess, isDocumentTokenPath } =
+    publicAccess;
 
   const { effectivePublicModeFromUrl, effectiveTokenKindFromUrl } = useMemo(
     () =>
@@ -261,7 +274,6 @@ function App() {
     [docsPaginados]
   );
 
-  // Conteos para la lista actual
   const safePendientes = safeNumber(pendientes);
   const safeVisadosFiltrados = safeNumber(visados);
   const safeFirmados = safeNumber(firmados);
@@ -274,7 +286,6 @@ function App() {
       ? pagination.page
       : 1;
 
-  // Conteos globales para el sidebar
   const safeTotalDocsGlobal = safeNumber(totalGlobal, safeDocs.length);
   const safeTotalPendientesGlobal = safeNumber(
     pendientesGlobal,
@@ -346,10 +357,15 @@ function App() {
   }, []);
 
   const handleLogin = useCallback(
-    async (e) => {
-      e.preventDefault();
+    async (event) => {
+      event.preventDefault();
       setIsLoggingIn(true);
-      setMessage("Conectando con el servidor seguro...");
+      setMessage(
+        t(
+          "app.login.connecting",
+          "Conectando con el servidor seguro..."
+        )
+      );
 
       const inputVal = identifier.trim();
       const isEmail = inputVal.includes("@");
@@ -359,7 +375,9 @@ function App() {
         : inputVal.replace(/[^0-9kK]/g, "").toUpperCase();
 
       if (!isEmail && cleanValue.length < 2) {
-        setMessage("❌ El RUT ingresado no es válido");
+        setMessage(
+          t("app.login.invalidRut", "❌ El RUT ingresado no es válido")
+        );
         setIsLoggingIn(false);
         return;
       }
@@ -371,7 +389,7 @@ function App() {
           rememberMe,
         });
 
-        setMessage("Acceso concedido");
+        setMessage(t("app.login.accessGranted", "Acceso concedido"));
         setPassword("");
         setView("list");
         setSelectedDoc(null);
@@ -384,13 +402,19 @@ function App() {
         const msg =
           err?.response?.data?.message ||
           err?.message ||
-          "Error de conexión, intenta nuevamente.";
+          t(
+            "app.login.defaultError",
+            "Error de conexión, intenta nuevamente."
+          );
 
         setMessage(`❌ ${msg}`);
 
         addToast({
           type: "error",
-          title: "No se pudo iniciar sesión",
+          title: t(
+            "app.login.toastTitle",
+            "No se pudo iniciar sesión"
+          ),
           message: msg,
         });
       } finally {
@@ -405,6 +429,7 @@ function App() {
       checkOnboarding,
       addToast,
       setSelectedDoc,
+      t,
     ]
   );
 
@@ -464,7 +489,6 @@ function App() {
     setSelectedDoc,
   ]);
 
-  // Guard de vistas protegidas + permisos
   useEffect(() => {
     if (!isAuthenticated) return;
     if (view === "detail") return;
@@ -509,10 +533,17 @@ function App() {
 
       addToast({
         type: "success",
-        title: "Documento enviado",
+        title: t("app.toasts.documentSentTitle", "Documento enviado"),
         message: title
-          ? `"${title}" se envió correctamente.`
-          : "El documento se envió correctamente.",
+          ? t(
+              "app.toasts.documentSentWithTitle",
+              '"{{title}}" se envió correctamente.',
+              { title }
+            )
+          : t(
+              "app.toasts.documentSent",
+              "El documento se envió correctamente."
+            ),
       });
 
       if (socketStatus === "connected") {
@@ -529,10 +560,17 @@ function App() {
 
       addToast({
         type: "success",
-        title: "Documento firmado",
+        title: t("app.toasts.documentSignedTitle", "Documento firmado"),
         message: title
-          ? `"${title}" se firmó correctamente.`
-          : "El documento se firmó correctamente.",
+          ? t(
+              "app.toasts.documentSignedWithTitle",
+              '"{{title}}" se firmó correctamente.',
+              { title }
+            )
+          : t(
+              "app.toasts.documentSigned",
+              "El documento se firmó correctamente."
+            ),
       });
 
       if (socketStatus === "connected") {
@@ -547,7 +585,7 @@ function App() {
       socketOff("document:sent", handleSent);
       socketOff("document:signed", handleSigned);
     };
-  }, [token, socketOn, socketOff, addToast, refreshDocs, socketStatus]);
+  }, [token, socketOn, socketOff, addToast, refreshDocs, socketStatus, t]);
 
   /* ============================
      Fallback: polling cuando WS no está conectado
@@ -594,23 +632,38 @@ function App() {
       );
     }
 
-    let title = "Conexión en tiempo real limitada";
-    let msg =
-      "No pudimos mantener la conexión en tiempo real. Tu bandeja seguirá actualizándose cada cierto tiempo.";
+    let title = t(
+      "app.socket.toasts.limitedTitle",
+      "Conexión en tiempo real limitada"
+    );
+    let msg = t(
+      "app.socket.toasts.limitedMessage",
+      "No pudimos mantener la conexión en tiempo real. Tu bandeja seguirá actualizándose cada cierto tiempo."
+    );
 
     const isErrorLike =
       socketStatus === "error" || socketStatus === "disconnected";
 
     if (socketStatus === "connecting") {
-      title = "Conectando en tiempo real…";
-      msg =
-        "Estamos intentando establecer la conexión en tiempo real. Puedes seguir usando la aplicación normalmente.";
+      title = t(
+        "app.socket.toasts.connectingTitle",
+        "Conectando en tiempo real…"
+      );
+      msg = t(
+        "app.socket.toasts.connectingMessage",
+        "Estamos intentando establecer la conexión en tiempo real. Puedes seguir usando la aplicación normalmente."
+      );
     }
 
     if (socketStatus === "reconnecting") {
-      title = "Reconectando en tiempo real…";
-      msg =
-        "Perdimos la conexión en tiempo real, estamos intentando restablecerla. La bandeja se seguirá actualizando de forma periódica.";
+      title = t(
+        "app.socket.toasts.reconnectingTitle",
+        "Reconectando en tiempo real…"
+      );
+      msg = t(
+        "app.socket.toasts.reconnectingMessage",
+        "Perdimos la conexión en tiempo real, estamos intentando restablecerla. La bandeja se seguirá actualizando de forma periódica."
+      );
     }
 
     addToast({
@@ -618,7 +671,7 @@ function App() {
       title,
       message: msg,
     });
-  }, [socketStatus, socketLastError, addToast]);
+  }, [socketStatus, socketLastError, addToast, t]);
 
   /* ============================
      Render helpers
@@ -629,9 +682,17 @@ function App() {
       return (
         <div className="list-state list-state--loading">
           <div className="list-state-title">
-            Cargando tu bandeja de documentos…
+            {t(
+              "app.list.loadingTitle",
+              "Cargando tu bandeja de documentos…"
+            )}
           </div>
-          <p className="list-state-text">Esto puede tardar unos segundos.</p>
+          <p className="list-state-text">
+            {t(
+              "app.list.loadingSubtitle",
+              "Esto puede tardar unos segundos."
+            )}
+          </p>
           <div className="spinner" />
         </div>
       );
@@ -641,17 +702,23 @@ function App() {
       return (
         <div className="list-state list-state--error">
           <p className="list-state-title">
-            Ocurrió un problema al cargar la bandeja.
+            {t(
+              "app.list.errorTitle",
+              "Ocurrió un problema al cargar la bandeja."
+            )}
           </p>
           <p className="list-state-text list-state-text--strong">
             {errorDocs ||
-              "Por favor, revisa tu conexión e inténtalo nuevamente."}
+              t(
+                "app.list.errorFallback",
+                "Por favor, revisa tu conexión e inténtalo nuevamente."
+              )}
           </p>
           <button
             className="btn-main btn-primary"
             onClick={() => refreshDocs()}
           >
-            Reintentar carga
+            {t("app.list.retry", "Reintentar carga")}
           </button>
         </div>
       );
@@ -661,19 +728,28 @@ function App() {
       return (
         <div className="list-state list-state--empty">
           <h3 className="list-state-title">
-            No encontramos documentos para mostrar.
+            {t(
+              "app.list.emptyTitle",
+              "No encontramos documentos para mostrar."
+            )}
           </h3>
           <p className="list-state-text">
-            Puede que no existan documentos con los filtros actuales.
+            {t(
+              "app.list.emptySubtitle1",
+              "Puede que no existan documentos con los filtros actuales."
+            )}
           </p>
           <p className="list-state-text">
-            Ajusta los filtros o crea un nuevo flujo de firma digital.
+            {t(
+              "app.list.emptySubtitle2",
+              "Ajusta los filtros o crea un nuevo flujo de firma digital."
+            )}
           </p>
           <button
             className="btn-main list-empty-cta"
             onClick={() => handleNavigateProtected("upload")}
           >
-            Crear nuevo trámite
+            {t("app.list.emptyCta", "Crear nuevo trámite")}
           </button>
         </div>
       );
@@ -685,11 +761,24 @@ function App() {
           <table className="doc-table">
             <thead>
               <tr>
-                <th className="col-title">Contrato / Documento</th>
-                <th className="col-type">Tipo</th>
-                <th className="col-status text-center">Estado</th>
-                <th className="col-party">Participante</th>
-                <th className="col-actions text-center">Acciones</th>
+                <th className="col-title">
+                  {t(
+                    "app.table.columns.contractDocument",
+                    "Contrato / Documento"
+                  )}
+                </th>
+                <th className="col-type">
+                  {t("app.table.columns.type", "Tipo")}
+                </th>
+                <th className="col-status text-center">
+                  {t("app.table.columns.status", "Estado")}
+                </th>
+                <th className="col-party">
+                  {t("app.table.columns.participant", "Participante")}
+                </th>
+                <th className="col-actions text-center">
+                  {t("app.table.columns.actions", "Acciones")}
+                </th>
               </tr>
             </thead>
             <tbody>
@@ -706,8 +795,15 @@ function App() {
 
         <div className="list-pagination">
           <span>
-            Página {safeCurrentPage} de {safeTotalPaginas} ·{" "}
-            {safeTotalFiltrado} documentos
+            {t(
+              "app.pagination.summary",
+              "Página {{current}} de {{total}} · {{count}} documentos",
+              {
+                current: safeCurrentPage,
+                total: safeTotalPaginas,
+                count: safeTotalFiltrado,
+              }
+            )}
           </span>
 
           <div className="list-pagination-controls">
@@ -717,18 +813,20 @@ function App() {
               disabled={safeCurrentPage <= 1 || loadingDocs}
               onClick={() => setPage((prev) => Math.max(1, prev - 1))}
             >
-              Anterior
+              {t("app.pagination.prev", "Anterior")}
             </button>
 
             <button
               type="button"
               className="btn-main"
-              disabled={loadingDocs || safeCurrentPage >= safeTotalPaginas}
+              disabled={
+                loadingDocs || safeCurrentPage >= safeTotalPaginas
+              }
               onClick={() =>
                 setPage((prev) => Math.min(safeTotalPaginas, prev + 1))
               }
             >
-              Siguiente
+              {t("app.pagination.next", "Siguiente")}
             </button>
           </div>
         </div>
@@ -746,6 +844,7 @@ function App() {
     refreshDocs,
     handleNavigateProtected,
     setPage,
+    t,
   ]);
 
   const protectedViewElement = useMemo(() => {
@@ -779,10 +878,14 @@ function App() {
 
           <div className="inbox-header-card">
             <div className="inbox-header-main">
-              <h2 className="inbox-title">Documentos recientes</h2>
+              <h2 className="inbox-title">
+                {t("app.inbox.title", "Documentos recientes")}
+              </h2>
               <p className="inbox-subtitle">
-                Revisa estados, abre contratos y gestiona tus trámites
-                desde esta bandeja.
+                {t(
+                  "app.inbox.subtitle",
+                  "Revisa estados, abre contratos y gestiona tus trámites desde esta bandeja."
+                )}
               </p>
             </div>
 
@@ -792,7 +895,7 @@ function App() {
                 className="btn-main btn-primary"
                 onClick={() => handleNavigateProtected("upload")}
               >
-                + Nuevo documento
+                {t("app.inbox.newDocument", "+ Nuevo documento")}
               </button>
 
               <button
@@ -800,7 +903,7 @@ function App() {
                 className="btn-main btn-ghost"
                 onClick={() => refreshDocs()}
               >
-                Actualizar bandeja
+                {t("app.inbox.refresh", "Actualizar bandeja")}
               </button>
             </div>
           </div>
@@ -832,7 +935,6 @@ function App() {
       );
     }
 
-    // Admin scoped (empresa)
     if (view === "users" && canManageUsers(user)) return <UsersAdminView />;
     if (view === "reminders-config" && canManageReminders(user)) {
       return <RemindersConfigView />;
@@ -841,7 +943,6 @@ function App() {
       return <TemplatesView />;
     }
 
-    // Admin global
     if (view === "dashboard" && canViewDashboard(user)) {
       return <DashboardView user={user} />;
     }
@@ -864,11 +965,14 @@ function App() {
       return <CompanyAnalyticsView />;
     }
 
-    // Comunes
     if (view === "pricing") return <PricingView />;
     if (view === "profile") return <ProfileView />;
 
-    return <div className="redirect-fallback">Redirigiendo…</div>;
+    return (
+      <div className="redirect-fallback">
+        {t("app.redirectFallback", "Redirigiendo…")}
+      </div>
+    );
   }, [
     view,
     sort,
@@ -897,6 +1001,7 @@ function App() {
     apiRoot,
     handleNavigateProtected,
     token,
+    t,
   ]);
 
   /* ============================
@@ -994,7 +1099,6 @@ function App() {
     );
   }
 
-  // protected-app (sesión activa) + vista detail
   if (view === "detail" && selectedDoc) {
     const requiereVisado = selectedDoc.requires_visado === true;
 
@@ -1039,7 +1143,10 @@ function App() {
         fallback={
           showOnboarding ? (
             <div className="onboarding-fallback">
-              Preparando guía interactiva…
+              {t(
+                "app.onboarding.fallback",
+                "Preparando guía interactiva…"
+              )}
             </div>
           ) : null
         }
@@ -1076,7 +1183,10 @@ function App() {
             fallback={
               runProductTour ? (
                 <div className="product-tour-fallback">
-                  Cargando tour interactivo…
+                  {t(
+                    "app.tour.fallback",
+                    "Cargando tour interactivo…"
+                  )}
                 </div>
               ) : null
             }
@@ -1098,7 +1208,7 @@ function App() {
               className="sentry-test-button"
               onClick={handleTestError}
             >
-              Probar error Sentry
+              {t("app.sentryTest", "Probar error Sentry")}
             </button>
           )}
 

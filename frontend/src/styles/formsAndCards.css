@@ -1,4 +1,6 @@
-/* Otros componentes: botones especiales, cards, inputs */
+/* src/styles/formsAndCards.css, por ejemplo */
+
+/* Botón sincronizar / especial */
 
 .btn-sync {
   display: inline-flex;
@@ -6,11 +8,11 @@
   gap: 6px;
   padding: 8px 14px;
   border-radius: 12px;
-  border: 2px solid var(--primary);
+  border: 2px solid var(--color-primary);
   font-size: 0.82rem;
   font-weight: 700;
   cursor: pointer;
-  color: var(--primary);
+  color: var(--color-primary);
   background: #ffffff;
   transition:
     background-color 0.2s ease,
@@ -19,12 +21,18 @@
     transform 0.1s ease;
 }
 
+:root:not([data-theme="light"]) .btn-sync {
+  background: var(--color-surface);
+}
+
 .btn-sync:hover {
   color: #ffffff;
-  background: var(--primary);
+  background: var(--color-primary);
   box-shadow: 0 6px 18px rgba(37, 99, 235, 0.3);
   transform: translateY(-1px);
 }
+
+/* Card premium */
 
 .card-premium {
   width: 100%;
@@ -32,21 +40,23 @@
   padding: 20px;
   box-sizing: border-box;
   border-radius: 24px;
-  border: 1px solid var(--border-strong);
+  border: 1px solid var(--color-border-strong);
   background: radial-gradient(
     circle at top left,
-    rgba(15, 23, 42, 0.96) 0,
-    rgba(15, 23, 42, 0.96) 60%
+    color-mix(in srgb, var(--color-surface) 80%, var(--color-primary) 20%) 0,
+    var(--color-surface-elevated) 60%
   );
-  box-shadow: var(--shadow-card);
+  box-shadow: var(--shadow-lg);
 }
+
+/* Card mini */
 
 .card-mini {
   margin-top: 16px;
   border-radius: 16px;
   overflow: hidden;
-  background: #020617;
-  border: 1px solid var(--border);
+  background: var(--color-surface);
+  border: 1px solid var(--color-border);
 }
 
 .card-mini h4 {
@@ -56,15 +66,17 @@
   align-items: center;
   justify-content: space-between;
   font-size: 0.98rem;
-  color: var(--text-main);
-  background: #020617;
-  border-bottom: 1px solid var(--border);
+  color: var(--color-text-strong);
+  background: var(--color-surface);
+  border-bottom: 1px solid var(--color-border);
 }
 
 .card-content {
   padding: 16px;
-  color: var(--text-main);
+  color: var(--color-text);
 }
+
+/* Input especial */
 
 .input-field {
   width: 100%;
@@ -72,33 +84,35 @@
   padding: 9px 12px;
   box-sizing: border-box;
   border-radius: 12px;
-  border: 1px solid var(--border);
+  border: 1px solid var(--color-border);
   font-size: 0.95rem;
-  background: #020617;
-  color: var(--text-main);
+  background: var(--color-surface);
+  color: var(--color-text);
   transition:
     border-color 0.2s ease,
     box-shadow 0.2s ease;
 }
 
 .input-field::placeholder {
-  color: var(--text-soft);
+  color: var(--color-text-soft);
 }
 
 .input-field:focus {
   outline: none;
-  background: #020617;
-  border-color: var(--primary);
-  box-shadow: 0 0 0 1px rgba(37, 99, 235, 0.4);
+  background: var(--color-surface);
+  border-color: var(--color-primary);
+  box-shadow: 0 0 0 1px color-mix(in srgb, var(--color-primary) 40%, transparent);
 }
+
+/* Spinner */
 
 .spinner {
   width: 28px;
   height: 28px;
   margin: 0 auto;
   border-radius: 999px;
-  border: 3px solid var(--text-main);
-  border-top-color: var(--primary);
+  border: 3px solid var(--color-text-soft);
+  border-top-color: var(--color-primary);
   animation: spin 0.6s linear infinite;
 }
 

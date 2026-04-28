@@ -1,13 +1,23 @@
 // src/components/detailView.constants.js
 import { DOC_STATUS } from "../constants";
 
+/**
+ * Intervalo de polling del detalle (ms).
+ * Mantenerlo moderado para evitar saturar el backend.
+ */
 export const DETAIL_POLL_INTERVAL_MS = 5000;
 
+/**
+ * Tipos de recordatorio soportados por el backend.
+ */
 export const REMINDER_TYPES = {
   VISADO: "VISADO",
   FIRMA: "FIRMA",
 };
 
+/**
+ * Claves de roles dentro del flujo de participantes.
+ */
 export const FLOW_ROLE_KEYS = {
   FIRMANTE: "firmante",
   VISADOR: "visador",
@@ -18,11 +28,20 @@ export const FLOW_ROLE_KEYS = {
 
 export const STATUS_LABEL_FALLBACK = "Sin estado";
 
+/**
+ * Estados del documento en los que tiene sentido permitir
+ * el botón de "Recordar a todos".
+ */
 export const GLOBAL_REMINDER_ALLOWED_STATUSES = [
   DOC_STATUS.PENDIENTE_VISADO,
   DOC_STATUS.PENDIENTE_FIRMA,
 ];
 
+/**
+ * Configuración visual de badges por rol.
+ * (Los textos siguen en español aquí; si luego quieres i18n,
+ * basta con mapear label vía t() en el componente).
+ */
 export const FLOW_ROLE_BADGES = {
   visador: {
     key: FLOW_ROLE_KEYS.VISADOR,
@@ -51,6 +70,9 @@ export const FLOW_ROLE_BADGES = {
   },
 };
 
+/**
+ * Meta para mostrar el estado de cada participante dentro del flujo.
+ */
 export const FLOW_STATUS_META = {
   doneSuccess: {
     key: "done",
@@ -74,6 +96,9 @@ export const FLOW_STATUS_META = {
   },
 };
 
+/**
+ * Meta para el "estado global" del documento en el header del detalle.
+ */
 export const DOCUMENT_STATE_META = {
   firmado: {
     label: "Firmado",

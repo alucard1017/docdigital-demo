@@ -1,5 +1,6 @@
 // src/components/DocumentRow.jsx
 import React, { useCallback, useMemo } from "react";
+import { useTranslation } from "react-i18next";
 import { Eye, Download, FileText, AlertTriangle } from "lucide-react";
 import { DOC_STATUS } from "../constants";
 import api from "../api/client";
@@ -19,98 +20,123 @@ function pickFirstNonEmpty(...values) {
   return "";
 }
 
-function getContractNumber(doc) {
+function getContractNumber(doc, fallback) {
   return (
     doc?.numero_contrato_interno ||
     doc?.numero_contrato ||
     doc?.contract_number ||
     doc?.n_contrato ||
     doc?.numerocontratointerno ||
-    "Sin número"
+    fallback
   );
 }
 
-function formatCreatedAt(createdAt) {
-  if (!createdAt) {
-    return { date: "-", time: "" };
-  }
+function formatCreatedAt(createdAt, locale = "es-CO") {
+  if (!createdAt) return { date: "-", time: "" };
 
   const parsed = new Date(createdAt);
-  if (Number.isNaN(parsed.getTime())) {
-    return { date: "-", time: "" };
-  }
+  if (Number.isNaN(parsed.getTime())) return { date: "-", time: "" };
 
   return {
-    date: parsed.toLocaleDateString("es-CO", {
+    date: parsed.toLocaleDateString(locale, {
       day: "2-digit",
       month: "2-digit",
       year: "numeric",
     }),
-    time: parsed.toLocaleTimeString("es-CO", {
+    time: parsed.toLocaleTimeString(locale, {
       hour: "2-digit",
       minute: "2-digit",
     }),
   };
 }
 
-const STATUS_META = {
-  PENDIENTE: {
-    label: "Pendiente",
-    tone: "warning",
-  },
-  PENDIENTE_FIRMA: {
-    label: "Pendiente firma",
-    tone: "warning",
-  },
-  PENDIENTE_VISADO: {
-    label: "Pendiente visado",
-    tone: "warning",
-  },
-  VISADO: {
-    label: "Visado",
-    tone: "teal",
-  },
-  FIRMADO: {
-    label: "Firmado",
-    tone: "success",
-  },
-  RECHAZADO: {
-    label: "Rechazado",
-    tone: "danger",
-  },
-  BORRADOR: {
-    label: "Borrador",
-    tone: "neutral",
-  },
-};
-
-export function DocumentRow({ doc, onOpenDetail }) {
+export default function DocumentRow({ doc, onOpenDetail }) {
+  const { t, i18n } = useTranslation();
   const { addToast } = useToast();
 
-  const tipoLabel = useMemo(() => {
-    return (
+  const locale = useMemo(
+    () => (i18n.language?.startsWith("en") ? "en-US" : "es-CO"),
+    [i18n.language]
+  );
+
+  const statusMetaMap = useMemo(
+    () => ({
+      PENDIENTE: {
+        label: t("documents.status.pending", "Pendiente"),
+        tone: "warning",
+      },
+      PENDIENTE_FIRMA: {
+        label: t(
+          "documents.status.pendingSignature",
+          "Pendiente firma"
+        ),
+        tone: "warning",
+      },
+      PENDIENTE_VISADO: {
+        label: t("documents.status.pendingVisa", "Pendiente visado"),
+        tone: "warning",
+      },
+      VISADO: {
+        label: t("documents.status.visa", "Visado"),
+        tone: "teal",
+      },
+      FIRMADO: {
+        label: t("documents.status.signed", "Firmado"),
+        tone: "success",
+      },
+      RECHAZADO: {
+        label: t("documents.status.rejected", "Rechazado"),
+        tone: "danger",
+      },
+      BORRADOR: {
+        label: t("documents.status.draft", "Borrador"),
+        tone: "neutral",
+      },
+    }),
+    [t]
+  );
+
+  const tipoLabel = useMemo(
+    () =>
       getPrimaryProcedureLabel(doc) ||
       getProcedureLabel(doc) ||
-      "Documento"
-    );
-  }, [doc]);
+      t("documents.type.default", "Documento"),
+    [doc, t]
+  );
 
-  const numeroContrato = useMemo(() => getContractNumber(doc), [doc]);
+  const titleDocumento = useMemo(
+    () =>
+      pickFirstNonEmpty(
+        doc?.title,
+        doc?.titulo,
+        doc?.name,
+        t("documents.untitled", "Sin título")
+      ),
+    [doc, t]
+  );
 
-  const titleDocumento = useMemo(() => {
-    return pickFirstNonEmpty(doc?.title, doc?.titulo, doc?.name, "Sin título");
-  }, [doc]);
+  const numeroContrato = useMemo(
+    () =>
+      getContractNumber(
+        doc,
+        t("documents.contractNumberFallback", "Sin número")
+      ),
+    [doc, t]
+  );
 
-  const createdAt = useMemo(() => formatCreatedAt(doc?.created_at), [doc?.created_at]);
+  const createdAt = useMemo(
+    () => formatCreatedAt(doc?.created_at, locale),
+    [doc?.created_at, locale]
+  );
 
-  const statusMeta = useMemo(() => {
-    return (
-      STATUS_META[doc?.status] || {
-        label: doc?.status || "Sin estado",
+  const statusMeta = useMemo(
+    () =>
+      statusMetaMap[doc?.status] || {
+        label: doc?.status || t("documents.status.noStatus", "Sin estado"),
         tone: "neutral",
-      }
-    );
-  }, [doc?.status]);
+      },
+    [doc?.status, statusMetaMap, t]
+  );
 
   const displayFirmante = useMemo(
     () =>
@@ -136,36 +162,45 @@ export function DocumentRow({ doc, onOpenDetail }) {
     [doc]
   );
 
-  const participantePrincipal = displayFirmante || displayEmpresa || "Pendiente de asignar";
+  const participantePrincipal =
+    displayFirmante ||
+    displayEmpresa ||
+    t("documents.pendingAssignment", "Pendiente de asignar");
+
   const participanteSecundario =
     displayFirmante && displayEmpresa ? displayEmpresa : "";
 
-  const handleOpenDetail = useCallback(
-    (event) => {
-      if (event) event.stopPropagation();
-      if (typeof onOpenDetail === "function") {
-        onOpenDetail(doc);
-      }
-    },
-    [doc, onOpenDetail]
-  );
-
   const fetchPdfUrl = useCallback(async () => {
     if (!doc?.id) {
-      throw new Error("Documento inválido");
+      throw new Error(
+        t("documents.errors.invalidDocument", "Documento inválido")
+      );
     }
 
     const response = await api.get(`/docs/${doc.id}/pdf`);
     const data = response?.data;
 
     if (!data?.url) {
-      throw new Error("No se pudo obtener la URL del PDF");
+      throw new Error(
+        t(
+          "documents.errors.pdfUrl",
+          "No se pudo obtener la URL del PDF"
+        )
+      );
     }
 
     return data.url;
-  }, [doc?.id]);
+  }, [doc?.id, t]);
 
-  const handleVerPdf = useCallback(
+  const handleOpenDetail = useCallback(
+    (event) => {
+      event?.stopPropagation?.();
+      onOpenDetail?.(doc);
+    },
+    [doc, onOpenDetail]
+  );
+
+  const handleViewPdf = useCallback(
     async (event) => {
       event.stopPropagation();
 
@@ -173,25 +208,31 @@ export function DocumentRow({ doc, onOpenDetail }) {
         const url = await fetchPdfUrl();
         window.open(url, "_blank", "noopener,noreferrer");
       } catch (error) {
-        console.error("Error abriendo PDF:", error);
-
         addToast({
           type: "error",
-          title: "No se pudo abrir el PDF",
-          message: getErrorMessage(error, "No se pudo abrir el PDF"),
+          title: t(
+            "documents.toasts.openPdfErrorTitle",
+            "No se pudo abrir el PDF"
+          ),
+          message: getErrorMessage(
+            error,
+            t(
+              "documents.toasts.openPdfErrorMessage",
+              "No se pudo abrir el PDF"
+            )
+          ),
         });
       }
     },
-    [fetchPdfUrl, addToast]
+    [fetchPdfUrl, addToast, t]
   );
 
-  const handleDescargarPdf = useCallback(
+  const handleDownloadPdf = useCallback(
     async (event) => {
       event.stopPropagation();
 
       try {
         const url = await fetchPdfUrl();
-
         const link = document.createElement("a");
         link.href = url;
         link.download = `${titleDocumento}.pdf`;
@@ -203,56 +244,86 @@ export function DocumentRow({ doc, onOpenDetail }) {
 
         addToast({
           type: "success",
-          title: "Descarga iniciada",
-          message: `Se inició la descarga de "${titleDocumento}".`,
+          title: t(
+            "documents.toasts.downloadStartedTitle",
+            "Descarga iniciada"
+          ),
+          message: t(
+            "documents.toasts.downloadStartedMessage",
+            'Se inició la descarga de "{{title}}".',
+            { title: titleDocumento }
+          ),
         });
       } catch (error) {
-        console.error("Error descargando PDF:", error);
-
         addToast({
           type: "error",
-          title: "No se pudo descargar el PDF",
-          message: getErrorMessage(error, "No se pudo descargar el PDF"),
+          title: t(
+            "documents.toasts.downloadErrorTitle",
+            "No se pudo descargar el PDF"
+          ),
+          message: getErrorMessage(
+            error,
+            t(
+              "documents.toasts.downloadErrorMessage",
+              "No se pudo descargar el PDF"
+            )
+          ),
         });
       }
     },
-    [fetchPdfUrl, titleDocumento, addToast]
+    [fetchPdfUrl, titleDocumento, addToast, t]
   );
 
-  const handleVerRechazo = useCallback(
+  const handleViewRejectReason = useCallback(
     (event) => {
       event.stopPropagation();
 
       if (!doc?.reject_reason) {
         addToast({
           type: "info",
-          title: "Sin motivo registrado",
-          message: "Este documento no tiene motivo de rechazo.",
+          title: t(
+            "documents.toasts.noRejectReasonTitle",
+            "Sin motivo registrado"
+          ),
+          message: t(
+            "documents.toasts.noRejectReasonMessage",
+            "Este documento no tiene motivo de rechazo."
+          ),
         });
         return;
       }
 
       addToast({
         type: "warning",
-        title: "Motivo de rechazo",
+        title: t(
+          "documents.toasts.rejectReasonTitle",
+          "Motivo de rechazo"
+        ),
         message: doc.reject_reason,
       });
     },
-    [doc?.reject_reason, addToast]
+    [doc?.reject_reason, addToast, t]
   );
 
   return (
     <tr
       className="doc-row"
       onClick={handleOpenDetail}
-      aria-label={`Abrir detalle de ${titleDocumento}`}
+      aria-label={t(
+        "documents.actions.openDetailOf",
+        'Abrir detalle de "{{title}}"',
+        { title: titleDocumento }
+      )}
     >
       <td className="doc-cell-title doc-cell-title-unified">
         <div className="doc-title-stack">
           <div className="doc-title-contract-row">
             <span
               className={`doc-id-pill ${
-                numeroContrato === "Sin número" ? "is-empty" : ""
+                numeroContrato ===
+                t("documents.contractNumberFallback", "Sin número")
+                  ? "is-empty"
+                  : ""
               }`}
               title={numeroContrato}
             >
@@ -270,7 +341,9 @@ export function DocumentRow({ doc, onOpenDetail }) {
             <span className="doc-date-secondary">{createdAt.time}</span>
           </div>
 
-          <div className="doc-title-sub-hint">Fecha creación</div>
+          <div className="doc-title-sub-hint">
+            {t("documents.createdAt", "Fecha creación")}
+          </div>
         </div>
       </td>
 
@@ -300,50 +373,78 @@ export function DocumentRow({ doc, onOpenDetail }) {
         ) : null}
       </td>
 
-      <td className="doc-cell-actions" onClick={(event) => event.stopPropagation()}>
+      <td
+        className="doc-cell-actions doc-cell-actions--tight"
+        onClick={(event) => event.stopPropagation()}
+      >
         <div className="doc-actions">
           <button
             type="button"
-            className="btn-main btn-primary btn-xs"
-            onClick={handleVerPdf}
-            title="Ver PDF"
-            aria-label={`Ver PDF de ${titleDocumento}`}
-          >
-            <Eye size={14} />
-            <span>PDF</span>
-          </button>
-
-          <button
-            type="button"
-            className="btn-main btn-secondary btn-xs"
+            className="btn-main btn-secondary btn-xs doc-action-btn"
             onClick={handleOpenDetail}
-            title="Abrir detalle"
-            aria-label={`Abrir detalle de ${titleDocumento}`}
+            title={t(
+              "documents.actions.openDetail",
+              "Abrir detalle"
+            )}
+            aria-label={t(
+              "documents.actions.openDetailOf",
+              'Abrir detalle de "{{title}}"',
+              { title: titleDocumento }
+            )}
           >
-            Abrir
+            {t("documents.actions.open", "Abrir")}
           </button>
 
           <button
             type="button"
-            className="btn-main btn-ghost btn-xs"
-            onClick={handleDescargarPdf}
-            title="Descargar PDF"
-            aria-label={`Descargar PDF de ${titleDocumento}`}
+            className="btn-main btn-primary btn-xs doc-action-btn"
+            onClick={handleViewPdf}
+            title={t("documents.actions.viewPdf", "Ver PDF")}
+            aria-label={t(
+              "documents.actions.viewPdfOf",
+              'Ver PDF de "{{title}}"',
+              { title: titleDocumento }
+            )}
           >
-            <Download size={14} />
-            <span>Descarga</span>
+            <Eye size={14} aria-hidden="true" />
+            <span>{t("documents.actions.viewPdfShort", "PDF")}</span>
+          </button>
+
+          <button
+            type="button"
+            className="btn-main btn-ghost btn-xs doc-action-btn"
+            onClick={handleDownloadPdf}
+            title={t(
+              "documents.actions.downloadPdf",
+              "Descargar PDF"
+            )}
+            aria-label={t(
+              "documents.actions.downloadPdfOf",
+              'Descargar PDF de "{{title}}"',
+              { title: titleDocumento }
+            )}
+          >
+            <Download size={14} aria-hidden="true" />
+            <span>{t("documents.actions.downloadShort", "Descargar")}</span>
           </button>
 
           {doc?.status === DOC_STATUS.RECHAZADO && doc?.reject_reason ? (
             <button
               type="button"
-              className="btn-main btn-secondary-danger btn-xs"
-              onClick={handleVerRechazo}
-              title="Ver motivo de rechazo"
-              aria-label={`Ver motivo de rechazo de ${titleDocumento}`}
+              className="btn-main btn-secondary-danger btn-xs doc-action-btn"
+              onClick={handleViewRejectReason}
+              title={t(
+                "documents.actions.rejectReason",
+                "Ver motivo de rechazo"
+              )}
+              aria-label={t(
+                "documents.actions.rejectReasonOf",
+                'Ver motivo de rechazo de "{{title}}"',
+                { title: titleDocumento }
+              )}
             >
-              <AlertTriangle size={14} />
-              <span>Rechazo</span>
+              <AlertTriangle size={14} aria-hidden="true" />
+              <span>{t("documents.actions.rejectionShort", "Rechazo")}</span>
             </button>
           ) : null}
         </div>

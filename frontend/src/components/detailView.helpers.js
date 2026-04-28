@@ -8,6 +8,25 @@ import {
   STATUS_LABEL_FALLBACK,
 } from "./detailView.constants";
 
+const DEFAULT_USER_LABEL = "Usuario";
+const DEFAULT_DOCUMENT_TITLE = "Documento sin título";
+const DEFAULT_PARTICIPANT_NAME = "Participante";
+const DEFAULT_EMAIL_LABEL = "Sin correo registrado";
+const DEFAULT_DOCUMENT_STATE_HELPER = "Estado actual del documento.";
+
+function isNonEmptyString(value) {
+  return typeof value === "string" && value.trim().length > 0;
+}
+
+function pickFirstDefined(...values) {
+  for (const value of values) {
+    if (value !== undefined && value !== null && value !== "") {
+      return value;
+    }
+  }
+  return null;
+}
+
 export function normalizeText(value) {
   if (value == null) return "";
   return String(value).trim().toLowerCase();
@@ -18,7 +37,12 @@ export function normalizeUpper(value = "") {
 }
 
 export function getErrorMessage(err, fallback) {
-  return err?.response?.data?.message || err?.message || fallback;
+  return (
+    err?.response?.data?.message ||
+    err?.response?.data?.error ||
+    err?.message ||
+    fallback
+  );
 }
 
 export function isAbortLikeError(err) {
@@ -29,12 +53,13 @@ export function isAbortLikeError(err) {
   );
 }
 
-export function formatDateTime(value) {
+export function formatDateTime(value, locale = "es-CO") {
   if (!value) return "";
+
   const date = value instanceof Date ? value : new Date(value);
   if (Number.isNaN(date.getTime())) return "";
 
-  return date.toLocaleString("es-CO", {
+  return date.toLocaleString(locale, {
     day: "2-digit",
     month: "2-digit",
     year: "numeric",
@@ -45,63 +70,64 @@ export function formatDateTime(value) {
 
 export function buildUserDisplayName(currentUser) {
   return (
-    currentUser?.name ||
-    currentUser?.fullName ||
-    currentUser?.username ||
-    currentUser?.email ||
-    "Usuario"
+    pickFirstDefined(
+      currentUser?.name,
+      currentUser?.fullName,
+      currentUser?.username,
+      currentUser?.email
+    ) || DEFAULT_USER_LABEL
   );
 }
 
-/**
- * Número interno / número de contrato.
- */
 export function getDocumentNumber(selectedDoc, timeline) {
-  const fromTimeline =
-    timeline?.document?.numero_contrato_interno ??
-    timeline?.document?.numerocontratointerno ??
-    timeline?.document?.numero_contrato ??
-    null;
-
-  if (fromTimeline) return fromTimeline;
-
-  const fromSelected =
-    selectedDoc?.numero_contrato_interno ||
-    selectedDoc?.numerocontratointerno ||
-    selectedDoc?.numero_contrato ||
-    selectedDoc?.contract_number ||
-    selectedDoc?.n_contrato ||
-    null;
-
-  return fromSelected;
+  return pickFirstDefined(
+    timeline?.document?.numero_contrato_interno,
+    timeline?.document?.numerocontratointerno,
+    timeline?.document?.numero_contrato,
+    selectedDoc?.numero_contrato_interno,
+    selectedDoc?.numerocontratointerno,
+    selectedDoc?.numero_contrato,
+    selectedDoc?.contract_number,
+    selectedDoc?.n_contrato
+  );
 }
 
 export function getDocumentTitle(selectedDoc, timeline) {
   return (
-    timeline?.document?.title ||
-    selectedDoc?.title ||
-    selectedDoc?.nombre ||
-    "Documento sin título"
+    pickFirstDefined(
+      timeline?.document?.title,
+      selectedDoc?.title,
+      selectedDoc?.nombre
+    ) || DEFAULT_DOCUMENT_TITLE
   );
 }
 
 export function getTimelineEvents(timeline, fallbackEvents) {
-  const events =
-    (Array.isArray(timeline?.events) && timeline.events) ||
-    (Array.isArray(timeline?.timeline?.events) &&
-      timeline.timeline.events) ||
-    [];
+  const primaryEvents = Array.isArray(timeline?.events) ? timeline.events : [];
+  if (primaryEvents.length > 0) return primaryEvents;
 
-  if (events.length > 0) return events;
+  const nestedEvents = Array.isArray(timeline?.timeline?.events)
+    ? timeline.timeline.events
+    : [];
+  if (nestedEvents.length > 0) return nestedEvents;
 
   return Array.isArray(fallbackEvents) ? fallbackEvents : [];
 }
 
-/**
- * Normaliza el rol del participante.
- */
+function buildFinalSignerRole() {
+  return {
+    ...FLOW_ROLE_BADGES.firmante,
+    label: "Firmante final",
+    key: "firmante_final",
+  };
+}
+
 export function normalizeParticipantRole(value = "") {
-  const roleRaw = String(value || "").trim().toLowerCase();
+  const roleRaw = normalizeText(value);
+
+  if (!roleRaw) {
+    return FLOW_ROLE_BADGES.participante;
+  }
 
   if (
     roleRaw === "visador" ||
@@ -117,11 +143,7 @@ export function normalizeParticipantRole(value = "") {
     roleRaw === "final" ||
     roleRaw === "signer_final"
   ) {
-    return {
-      ...FLOW_ROLE_BADGES.firmante,
-      label: "Firmante final",
-      key: "firmante_final",
-    };
+    return buildFinalSignerRole();
   }
 
   if (roleRaw === "firmante" || roleRaw === "signer") {
@@ -141,11 +163,7 @@ export function normalizeParticipantRole(value = "") {
   }
 
   if (roleRaw.includes("final")) {
-    return {
-      ...FLOW_ROLE_BADGES.firmante,
-      label: "Firmante final",
-      key: "firmante_final",
-    };
+    return buildFinalSignerRole();
   }
 
   if (roleRaw.includes("firma") || roleRaw.includes("sign")) {
@@ -164,7 +182,7 @@ export function normalizeParticipantRole(value = "") {
 }
 
 export function normalizeFlowStatus(value = "") {
-  const status = String(value || "").trim().toUpperCase();
+  const status = normalizeUpper(value);
 
   if (status === DOC_STATUS.FIRMADO || status === "FIRMADO") {
     return FLOW_STATUS_META.doneSuccess;
@@ -196,121 +214,150 @@ export function normalizeFlowStatus(value = "") {
   };
 }
 
-/**
- * Devuelve el estado normalizado del documento (a partir de selectedDoc/timeline).
- */
 export function getNormalizedDocumentStatus(selectedDoc, timeline) {
-  const raw =
-    timeline?.document?.status ??
-    selectedDoc?.status ??
-    selectedDoc?.estado ??
-    null;
+  const raw = pickFirstDefined(
+    timeline?.document?.status,
+    selectedDoc?.status,
+    selectedDoc?.estado
+  );
 
-  return String(raw || "").trim().toUpperCase();
+  return normalizeUpper(raw);
 }
 
-/**
- * Construye el flujo de participantes.
- */
+function resolveParticipantName(participant, signer) {
+  return (
+    pickFirstDefined(
+      participant?.name,
+      participant?.full_name,
+      participant?.nombre,
+      signer?.name,
+      signer?.full_name,
+      signer?.nombre
+    ) || DEFAULT_PARTICIPANT_NAME
+  );
+}
+
+function resolveParticipantEmail(participant, signer) {
+  return (
+    pickFirstDefined(
+      participant?.email,
+      participant?.correo,
+      signer?.email,
+      signer?.correo
+    ) || DEFAULT_EMAIL_LABEL
+  );
+}
+
+function resolveParticipantSignedAt(participant, signer) {
+  return pickFirstDefined(
+    participant?.signed_at,
+    participant?.updated_at,
+    signer?.signed_at,
+    signer?.updated_at
+  );
+}
+
+function resolveParticipantOrder(participant, index) {
+  const flowOrder = Number(participant?.flow_order);
+  if (Number.isFinite(flowOrder)) return flowOrder;
+
+  const stepOrder = Number(participant?.step_order);
+  if (Number.isFinite(stepOrder)) return stepOrder;
+
+  return index + 1;
+}
+
+function sortParticipants(a, b) {
+  const aOrder = Number.isFinite(Number(a?.flow_order))
+    ? Number(a.flow_order)
+    : 9999;
+  const bOrder = Number.isFinite(Number(b?.flow_order))
+    ? Number(b.flow_order)
+    : 9999;
+
+  if (aOrder !== bOrder) return aOrder - bOrder;
+
+  const aStep = Number.isFinite(Number(a?.step_order))
+    ? Number(a.step_order)
+    : 9999;
+  const bStep = Number.isFinite(Number(b?.step_order))
+    ? Number(b.step_order)
+    : 9999;
+
+  if (aStep !== bStep) return aStep - bStep;
+
+  return Number(a?.id || 0) - Number(b?.id || 0);
+}
+
+function buildSignerMaps(signers = []) {
+  const byId = new Map();
+  const byEmail = new Map();
+
+  for (const signer of signers) {
+    if (signer?.id != null) {
+      byId.set(String(signer.id), signer);
+    }
+
+    const email = normalizeText(signer?.email || signer?.correo);
+    if (email) {
+      byEmail.set(email, signer);
+    }
+  }
+
+  return { byId, byEmail };
+}
+
 export function buildFlowParticipants(participants = [], signers = []) {
   const safeParticipants = Array.isArray(participants) ? participants : [];
   const safeSigners = Array.isArray(signers) ? signers : [];
-
-  const signerMapById = new Map(
-    safeSigners
-      .filter((signer) => signer?.id != null)
-      .map((signer) => [String(signer.id), signer])
-  );
+  const signerMaps = buildSignerMaps(safeSigners);
 
   return safeParticipants
     .slice()
-    .sort((a, b) => {
-      const aOrder = Number.isFinite(Number(a?.flow_order))
-        ? Number(a.flow_order)
-        : 9999;
-      const bOrder = Number.isFinite(Number(b?.flow_order))
-        ? Number(b.flow_order)
-        : 9999;
-
-      if (aOrder !== bOrder) return aOrder - bOrder;
-
-      const aStep = Number.isFinite(Number(a?.step_order))
-        ? Number(a.step_order)
-        : 9999;
-      const bStep = Number.isFinite(Number(b?.step_order))
-        ? Number(b.step_order)
-        : 9999;
-
-      if (aStep !== bStep) return aStep - bStep;
-
-      return Number(a?.id || 0) - Number(b?.id || 0);
-    })
+    .sort(sortParticipants)
     .map((participant, index) => {
       const roleInfo = normalizeParticipantRole(
         participant?.role_in_doc || participant?.role
       );
+
       const statusInfo = normalizeFlowStatus(participant?.status);
 
       const signerFromId =
-        signerMapById.get(
-          String(participant?.signer_id || participant?.id)
-        ) || null;
+        signerMaps.byId.get(String(participant?.signer_id || participant?.id)) ||
+        null;
 
-      const normalizedParticipantEmail = String(
-        participant?.email || ""
-      ).toLowerCase();
+      const normalizedParticipantEmail = normalizeText(
+        participant?.email || participant?.correo
+      );
 
       const signerFromEmail =
         !signerFromId && normalizedParticipantEmail
-          ? safeSigners.find(
-              (s) =>
-                String(s?.email || "").toLowerCase() ===
-                normalizedParticipantEmail
-            )
+          ? signerMaps.byEmail.get(normalizedParticipantEmail) || null
           : null;
 
       const signer = signerFromId || signerFromEmail || null;
-
-      const resolvedName =
-        participant?.name ||
-        signer?.name ||
-        signer?.full_name ||
-        "Participante";
-
-      const resolvedEmail =
-        participant?.email || signer?.email || "Sin correo registrado";
-
-      const resolvedSignedAt =
-        participant?.signed_at ||
-        participant?.updated_at ||
-        signer?.signed_at ||
-        null;
-
-      const order = Number.isFinite(Number(participant?.flow_order))
-        ? Number(participant.flow_order)
-        : index + 1;
 
       return {
         id:
           participant?.id ||
           participant?.signer_id ||
-          `${participant?.email || "participant"}-${index}`,
-        order,
-        name: resolvedName,
-        email: resolvedEmail,
+          `${participant?.email || participant?.correo || "participant"}-${index}`,
+        order: resolveParticipantOrder(participant, index),
+        name: resolveParticipantName(participant, signer),
+        email: resolveParticipantEmail(participant, signer),
         roleLabel: roleInfo.label,
         roleBadgeClass: roleInfo.badgeClass,
         roleKey: roleInfo.key,
         statusKey: statusInfo.key,
         statusLabel: statusInfo.label,
         statusClassName: statusInfo.className,
-        signedAt: resolvedSignedAt,
+        signedAt: resolveParticipantSignedAt(participant, signer),
       };
     });
 }
 
 export function buildDocumentStateMeta(status) {
-  const normalized = String(status || "").trim().toUpperCase();
+  const normalized = normalizeUpper(status);
 
   if (normalized === DOC_STATUS.FIRMADO) {
     return DOCUMENT_STATE_META.firmado;
@@ -335,7 +382,7 @@ export function buildDocumentStateMeta(status) {
   return {
     label: normalized || STATUS_LABEL_FALLBACK,
     className: "detail-doc-state detail-doc-state--neutral",
-    helper: "Estado actual del documento.",
+    helper: DEFAULT_DOCUMENT_STATE_HELPER,
   };
 }
 
@@ -343,7 +390,7 @@ export function shouldShowVisadoReminder(selectedDoc, currentStatus) {
   return (
     selectedDoc?.requires_visado === true &&
     currentStatus === DOC_STATUS.PENDIENTE_VISADO &&
-    !!selectedDoc?.visador_email
+    isNonEmptyString(selectedDoc?.visador_email)
   );
 }
 

@@ -1,12 +1,13 @@
-// src/components/DetailView.jsx
-import React, {
-  useCallback,
-  useEffect,
-  useMemo,
-  useRef,
-  useState,
-} from "react";
-import { ArrowLeft, Download, ExternalLink, LogOut, Mail, RefreshCw } from "lucide-react";
+import React, { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import {
+  ArrowLeft,
+  Download,
+  ExternalLink,
+  LogOut,
+  Mail,
+  RefreshCw,
+} from "lucide-react";
+import { useTranslation } from "react-i18next";
 import { Timeline } from "./Timeline";
 import { EventList } from "./EventList";
 import { DetailActions } from "./DetailActions";
@@ -56,7 +57,9 @@ function DetailSection({ title, subtitle, children, actions = null }) {
           ) : null}
         </div>
 
-        {actions ? <div className="detail-section__actions">{actions}</div> : null}
+        {actions ? (
+          <div className="detail-section__actions">{actions}</div>
+        ) : null}
       </div>
 
       {children}
@@ -65,6 +68,7 @@ function DetailSection({ title, subtitle, children, actions = null }) {
 }
 
 function PdfViewerPanel({
+  t,
   currentDocId,
   pdfUrl,
   loadingPdf,
@@ -79,8 +83,11 @@ function PdfViewerPanel({
 }) {
   return (
     <DetailSection
-      title="Documento y acciones"
-      subtitle="Visualiza el PDF final, descarga el archivo o reenvía recordatorios según el estado actual."
+      title={t("detail.pdf.title", "Documento y acciones")}
+      subtitle={t(
+        "detail.pdf.subtitle",
+        "Visualiza el PDF final, descarga el archivo o reenvía recordatorios según el estado actual."
+      )}
       actions={
         <div className="detail-toolbar-actions">
           {mostrarBotonRecordatorio ? (
@@ -90,11 +97,14 @@ function PdfViewerPanel({
               onClick={onEnviarRecordatorioATodos}
               disabled={recordatorioLoading}
             >
-              <Mail size={16} />
+              <Mail size={16} aria-hidden="true" />
               <span>
                 {recordatorioLoading
-                  ? "Enviando recordatorio..."
-                  : "Recordatorio a todos"}
+                  ? t(
+                      "detail.pdf.remindAllSending",
+                      "Enviando recordatorio..."
+                    )
+                  : t("detail.pdf.remindAll", "Recordar a todos")}
               </span>
             </button>
           ) : null}
@@ -106,11 +116,11 @@ function PdfViewerPanel({
               onClick={onReenviarVisado}
               disabled={reenviarLoadingVisado}
             >
-              <RefreshCw size={16} />
+              <RefreshCw size={16} aria-hidden="true" />
               <span>
                 {reenviarLoadingVisado
-                  ? "Reenviando visado..."
-                  : "Reenviar visado"}
+                  ? t("detail.pdf.resendVisaSending", "Reenviando visado...")
+                  : t("detail.pdf.resendVisa", "Reenviar visado")}
               </span>
             </button>
           ) : null}
@@ -122,8 +132,8 @@ function PdfViewerPanel({
               target="_blank"
               rel="noopener noreferrer"
             >
-              <Download size={16} />
-              <span>Descargar PDF</span>
+              <Download size={16} aria-hidden="true" />
+              <span>{t("detail.pdf.download", "Descargar PDF")}</span>
             </a>
           ) : null}
 
@@ -134,8 +144,8 @@ function PdfViewerPanel({
               rel="noopener noreferrer"
               className="btn-main detail-btn-view"
             >
-              <ExternalLink size={16} />
-              <span>Abrir en otra pestaña</span>
+              <ExternalLink size={16} aria-hidden="true" />
+              <span>{t("detail.pdf.openNewTab", "Abrir en otra pestaña")}</span>
             </a>
           ) : null}
         </div>
@@ -143,28 +153,38 @@ function PdfViewerPanel({
     >
       <div className="detail-pdf-toolbar">
         <span className="detail-toolbar-label">
-          Visualización del documento final
+          {t("detail.pdf.previewLabel", "Visualización del documento final")}
         </span>
+
         {currentDocId ? (
-          <span className="detail-toolbar-docid">Documento #{currentDocId}</span>
+          <span className="detail-toolbar-docid">
+            {t("detail.pdf.documentId", "Documento #{{id}}", {
+              id: currentDocId,
+            })}
+          </span>
         ) : null}
       </div>
 
       <div className="detail-pdf-wrapper">
         {loadingPdf ? (
           <div className="detail-pdf-empty" role="status" aria-live="polite">
-            Cargando vista previa del PDF...
+            {t("detail.pdf.loading", "Cargando vista previa del PDF...")}
           </div>
         ) : pdfUrl ? (
           <iframe
-            title={`PDF del documento ${currentDocId || ""}`}
+            title={t("detail.pdf.iframeTitle", "PDF del documento {{id}}", {
+              id: currentDocId || "",
+            })}
             src={pdfUrl}
             className="detail-pdf-iframe"
           />
         ) : (
           <div className="detail-pdf-empty" role="status" aria-live="polite">
             {pdfError ||
-              'No se pudo cargar la vista previa del PDF. Usa "Descargar PDF" para ver el documento.'}
+              t(
+                "detail.pdf.error",
+                "No se pudo cargar la vista previa del PDF. Usa \"Descargar PDF\" para ver el documento."
+              )}
           </div>
         )}
       </div>
@@ -173,6 +193,7 @@ function PdfViewerPanel({
 }
 
 function LegalValidationSection({
+  t,
   puedeFirmar,
   puedeVisar,
   isSigned,
@@ -192,8 +213,11 @@ function LegalValidationSection({
 
   return (
     <DetailSection
-      title="Validaciones previas"
-      subtitle="Antes de firmar o visar, deja constancia de aceptación del aviso legal correspondiente."
+      title={t("detail.legal.title", "Validaciones previas")}
+      subtitle={t(
+        "detail.legal.subtitle",
+        "Antes de firmar o visar, deja constancia de aceptación del aviso legal correspondiente."
+      )}
     >
       {puedeFirmar ? (
         <div className="detail-legal-block">
@@ -236,6 +260,163 @@ function LegalValidationSection({
   );
 }
 
+function ParticipantFlowSection({
+  t,
+  loadingParticipants,
+  loadingSigners,
+  flowParticipants,
+  signers,
+  flujoFinalizado,
+  isSigned,
+  canManageDocumentReminders,
+  reenviarSignerId,
+  onReenviarFirma,
+}) {
+  const nextPendingParticipant =
+    flowParticipants.find((participant) => participant.statusKey === "pending") ||
+    null;
+
+  return (
+    <DetailSection
+      title={t("detail.flow.title", "Flujo de participantes")}
+      subtitle={t(
+        "detail.flow.subtitle",
+        "Revisa el orden del proceso, el rol de cada participante y quién sigue en el flujo secuencial."
+      )}
+    >
+      {loadingParticipants || loadingSigners ? (
+        <p className="detail-signers-loading" role="status" aria-live="polite">
+          {t("detail.flow.loading", "Cargando flujo de participantes...")}
+        </p>
+      ) : flowParticipants.length === 0 ? (
+        <p className="detail-signers-empty">
+          {t(
+            "detail.flow.empty",
+            "No hay participantes registrados para este documento."
+          )}
+        </p>
+      ) : (
+        <>
+          <div className="detail-flow-summary">
+            <div className="detail-flow-summary__label">
+              {flujoFinalizado
+                ? t("detail.flow.summaryLabelFinished", "Estado del flujo")
+                : t("detail.flow.summaryLabelNext", "Próximo paso")}
+            </div>
+
+            <div className="detail-flow-summary__value">
+              {flujoFinalizado ? (
+                isSigned ? (
+                  t("detail.flow.completed", "Flujo completado")
+                ) : (
+                  t("detail.flow.closedRejected", "Flujo cerrado por rechazo")
+                )
+              ) : nextPendingParticipant ? (
+                t("detail.flow.nextParticipant", "#{{order}} · {{role}} · {{name}}", {
+                  order: nextPendingParticipant.order,
+                  role: nextPendingParticipant.roleLabel,
+                  name: nextPendingParticipant.name,
+                })
+              ) : (
+                t("detail.flow.noPending", "No hay participantes pendientes")
+              )}
+            </div>
+          </div>
+
+          <ul className="detail-flow-list">
+            {flowParticipants.map((participant) => {
+              const normalizedParticipantEmail = String(
+                participant.email || ""
+              ).toLowerCase();
+
+              const signerMatch = signers.find((signer) => {
+                const signerEmail = String(signer?.email || "").toLowerCase();
+
+                return (
+                  String(signer?.id) === String(participant.id) ||
+                  (normalizedParticipantEmail &&
+                    signerEmail &&
+                    signerEmail === normalizedParticipantEmail)
+                );
+              });
+
+              const signerId = signerMatch?.id;
+
+              const canRemind =
+                canManageDocumentReminders &&
+                participant.roleKey === FLOW_ROLE_KEYS.FIRMANTE &&
+                participant.statusKey === "pending" &&
+                Boolean(signerId) &&
+                !flujoFinalizado;
+
+              const isSendingReminder = reenviarSignerId === signerId;
+
+              return (
+                <li key={participant.id} className="detail-flow-item">
+                  <div className="detail-flow-item__order">{participant.order}</div>
+
+                  <div className="detail-flow-item__body">
+                    <div className="detail-flow-item__top">
+                      <div>
+                        <div className="detail-flow-item__name">
+                          {participant.name}
+                        </div>
+                        <div className="detail-flow-item__email">
+                          {participant.email ||
+                            t("detail.flow.noEmail", "Sin correo registrado")}
+                        </div>
+                      </div>
+
+                      <div className="detail-flow-item__badges">
+                        <span className={participant.roleBadgeClass}>
+                          {participant.roleLabel}
+                        </span>
+                        <span className={participant.statusClassName}>
+                          {participant.statusLabel}
+                        </span>
+                      </div>
+                    </div>
+
+                    <div className="detail-flow-item__meta">
+                      {participant.signedAt ? (
+                        <span>
+                          {t("detail.flow.registeredAt", "Registrado el {{date}}", {
+                            date: formatDateTime(participant.signedAt),
+                          })}
+                        </span>
+                      ) : (
+                        <span>
+                          {t("detail.flow.noActionYet", "Aún no registra acción")}
+                        </span>
+                      )}
+                    </div>
+                  </div>
+
+                  {canRemind ? (
+                    <button
+                      type="button"
+                      className="btn-main detail-btn-inline-reminder"
+                      onClick={() => onReenviarFirma(signerId)}
+                      disabled={isSendingReminder}
+                    >
+                      <Mail size={14} aria-hidden="true" />
+                      <span>
+                        {isSendingReminder
+                          ? t("detail.flow.sending", "Enviando...")
+                          : t("detail.flow.remind", "Recordar")}
+                      </span>
+                    </button>
+                  ) : null}
+                </li>
+              );
+            })}
+          </ul>
+        </>
+      )}
+    </DetailSection>
+  );
+}
+
 export function DetailView({
   selectedDoc,
   pdfUrl,
@@ -251,6 +432,7 @@ export function DetailView({
   logout,
   currentUser,
 }) {
+  const { t } = useTranslation();
   const { addToast } = useToast();
 
   const [timeline, setTimeline] = useState(null);
@@ -274,22 +456,11 @@ export function DetailView({
   const timelineToastShownRef = useRef(false);
   const signersToastShownRef = useRef(false);
 
-  const canSeeActionHistory = useMemo(
-    () => canViewAuditLogs(currentUser),
-    [currentUser]
-  );
-
-  const canManageDocumentReminders = useMemo(
-    () => canManageReminders(currentUser),
-    [currentUser]
-  );
+  const canSeeActionHistory = canViewAuditLogs(currentUser);
+  const canManageDocumentReminders = canManageReminders(currentUser);
 
   const currentTimelineDoc = timeline?.document || null;
-
-  const currentDocId = useMemo(
-    () => selectedDoc?.id ?? currentTimelineDoc?.id ?? null,
-    [selectedDoc?.id, currentTimelineDoc?.id]
-  );
+  const currentDocId = selectedDoc?.id ?? currentTimelineDoc?.id ?? null;
 
   const mergedDoc = useMemo(
     () => ({
@@ -318,10 +489,13 @@ export function DetailView({
     [mergedDoc, timeline]
   );
 
-  const numeroInternoDisplay = useMemo(
-    () => numeroInterno || (currentDocId ? `#${currentDocId}` : "N/D"),
-    [numeroInterno, currentDocId]
-  );
+  const numeroInternoDisplay = useMemo(() => {
+    if (numeroInterno) return numeroInterno;
+    if (currentDocId) {
+      return t("detail.header.documentNumberShort", "#{{id}}", { id: currentDocId });
+    }
+    return t("detail.common.notAvailable", "N/D");
+  }, [numeroInterno, currentDocId, t]);
 
   const titleDocumento = useMemo(
     () => getDocumentTitle(mergedDoc, timeline),
@@ -339,13 +513,15 @@ export function DetailView({
   );
 
   const tramiteLabel = useMemo(
-    () => getNotaryLabel(mergedDoc) || "No informado",
-    [mergedDoc]
+    () => getNotaryLabel(mergedDoc) || t("detail.common.notReported", "No informado"),
+    [mergedDoc, t]
   );
 
   const documentoLabel = useMemo(
-    () => getDocumentKindLabel(mergedDoc) || "No informado",
-    [mergedDoc]
+    () =>
+      getDocumentKindLabel(mergedDoc) ||
+      t("detail.common.notReported", "No informado"),
+    [mergedDoc, t]
   );
 
   const currentStatus = useMemo(
@@ -357,19 +533,12 @@ export function DetailView({
   const isRejected = currentStatus === DOC_STATUS.RECHAZADO;
   const flujoFinalizado = isSigned || isRejected;
 
-  const mostrarBotonReenvioVisado = useMemo(
-    () =>
-      canManageDocumentReminders &&
-      shouldShowVisadoReminder(mergedDoc, currentStatus),
-    [canManageDocumentReminders, mergedDoc, currentStatus]
-  );
+  const mostrarBotonReenvioVisado =
+    canManageDocumentReminders &&
+    shouldShowVisadoReminder(mergedDoc, currentStatus);
 
-  const mostrarBotonRecordatorio = useMemo(
-    () =>
-      canManageDocumentReminders &&
-      shouldShowGlobalReminder(currentStatus),
-    [canManageDocumentReminders, currentStatus]
-  );
+  const mostrarBotonRecordatorio =
+    canManageDocumentReminders && shouldShowGlobalReminder(currentStatus);
 
   const baseUrl = api.defaults.baseURL || "";
   const downloadUrl = currentDocId
@@ -384,11 +553,6 @@ export function DetailView({
   const flowParticipants = useMemo(
     () => buildFlowParticipants(participants, signers),
     [participants, signers]
-  );
-
-  const nextPendingParticipant = useMemo(
-    () => flowParticipants.find((p) => p.statusKey === "pending") || null,
-    [flowParticipants]
   );
 
   const handleBackToList = useCallback(() => {
@@ -407,21 +571,20 @@ export function DetailView({
 
   const refreshTimeline = useCallback(
     async (docId) => {
-      if (!docId) return;
+      if (!docId) return null;
 
       try {
         setLoadingTimeline(true);
         setLoadingParticipants(true);
 
         const data = await getDocumentTimeline(docId);
-
         setTimeline(data || null);
-        setParticipants(
-          Array.isArray(data?.participants) ? data.participants : []
-        );
+        setParticipants(Array.isArray(data?.participants) ? data.participants : []);
         timelineToastShownRef.current = false;
+
+        return data;
       } catch (err) {
-        if (isAbortLikeError(err)) return;
+        if (isAbortLikeError(err)) return null;
 
         console.error("Error fetching timeline/participants:", err);
         setTimeline(null);
@@ -429,49 +592,66 @@ export function DetailView({
 
         showErrorToastOnce(timelineToastShownRef, {
           type: "error",
-          title: "No se pudo cargar el flujo",
+          title: t("detail.toasts.timelineErrorTitle", "No se pudo cargar el flujo"),
           message: getErrorMessage(
             err,
-            "No se pudo cargar la línea de tiempo del documento."
+            t(
+              "detail.toasts.timelineErrorMessage",
+              "No se pudo cargar la línea de tiempo del documento."
+            )
           ),
         });
+
+        return null;
       } finally {
         setLoadingTimeline(false);
         setLoadingParticipants(false);
       }
     },
-    [showErrorToastOnce]
+    [showErrorToastOnce, t]
   );
 
   const refreshSigners = useCallback(
     async (docId, signal) => {
-      if (!docId) return;
+      if (!docId) return [];
 
       try {
         setLoadingSigners(true);
 
         const res = await api.get(`/documents/${docId}/signers`, { signal });
-        setSigners(Array.isArray(res.data) ? res.data : []);
+        const nextSigners = Array.isArray(res.data) ? res.data : [];
+
+        setSigners(nextSigners);
         signersToastShownRef.current = false;
+
+        return nextSigners;
       } catch (err) {
-        if (isAbortLikeError(err)) return;
+        if (isAbortLikeError(err)) return [];
 
         console.error("Error fetching signers:", err);
         setSigners([]);
 
         showErrorToastOnce(signersToastShownRef, {
           type: "error",
-          title: "No se pudieron cargar los firmantes",
+          title: t(
+            "detail.toasts.signersErrorTitle",
+            "No se pudieron cargar los firmantes"
+          ),
           message: getErrorMessage(
             err,
-            "No se pudo cargar la lista de firmantes."
+            t(
+              "detail.toasts.signersErrorMessage",
+              "No se pudo cargar la lista de firmantes."
+            )
           ),
         });
+
+        return [];
       } finally {
         setLoadingSigners(false);
       }
     },
-    [showErrorToastOnce]
+    [showErrorToastOnce, t]
   );
 
   const refreshAll = useCallback(
@@ -491,25 +671,22 @@ export function DetailView({
 
     const docId = selectedDoc.id;
     const controller = new AbortController();
-    let isMounted = true;
 
     timelineToastShownRef.current = false;
     signersToastShownRef.current = false;
 
-    const runInitialLoad = async () => {
-      if (!isMounted) return;
+    const run = async () => {
       await refreshAll(docId, controller.signal);
     };
 
-    runInitialLoad();
+    run();
 
     const intervalId = window.setInterval(() => {
-      if (!isMounted || controller.signal.aborted) return;
+      if (controller.signal.aborted) return;
       refreshAll(docId, controller.signal);
     }, DETAIL_POLL_INTERVAL_MS);
 
     return () => {
-      isMounted = false;
       controller.abort();
       window.clearInterval(intervalId);
     };
@@ -533,6 +710,8 @@ export function DetailView({
         if (currentDocId) {
           await refreshAll(currentDocId);
         }
+
+        return true;
       } catch (err) {
         console.error(errorToast.logLabel, err);
 
@@ -541,6 +720,8 @@ export function DetailView({
           title: errorToast.title,
           message: getErrorMessage(err, errorToast.message),
         });
+
+        return false;
       } finally {
         if (typeof loadingSetter === "function") {
           loadingSetter(false);
@@ -551,29 +732,38 @@ export function DetailView({
   );
 
   const handleReenviarVisado = useCallback(async () => {
-    if (!currentDocId || flujoFinalizado) return;
+    if (!currentDocId || flujoFinalizado) return false;
 
-    await runRefreshableAction({
+    return runRefreshableAction({
       loadingSetter: setReenviarLoadingVisado,
       request: () =>
         api.post(`/documents/${currentDocId}/reenviar`, {
           tipo: REMINDER_TYPES.VISADO,
         }),
       successToast: {
-        title: "Visado reenviado",
-        message: "Recordatorio de visado reenviado correctamente.",
+        title: t("detail.toasts.visaResentTitle", "Visado reenviado"),
+        message: t(
+          "detail.toasts.visaResentMessage",
+          "Recordatorio de visado reenviado correctamente."
+        ),
       },
       errorToast: {
-        title: "No se pudo reenviar el visado",
-        message: "No se pudo reenviar el correo de visado.",
+        title: t(
+          "detail.toasts.visaResendErrorTitle",
+          "No se pudo reenviar el visado"
+        ),
+        message: t(
+          "detail.toasts.visaResendErrorMessage",
+          "No se pudo reenviar el correo de visado."
+        ),
         logLabel: "Error reenviando visado:",
       },
     });
-  }, [currentDocId, flujoFinalizado, runRefreshableAction]);
+  }, [currentDocId, flujoFinalizado, runRefreshableAction, t]);
 
   const handleReenviarFirma = useCallback(
     async (signerId) => {
-      if (!currentDocId || !signerId || flujoFinalizado) return;
+      if (!currentDocId || !signerId || flujoFinalizado) return false;
 
       try {
         setReenviarSignerId(signerId);
@@ -585,87 +775,111 @@ export function DetailView({
 
         addToast({
           type: "success",
-          title: "Recordatorio enviado",
+          title: t("detail.toasts.reminderSentTitle", "Recordatorio enviado"),
           message:
-            res.data?.message ||
-            "Recordatorio de firma reenviado correctamente.",
+            res?.data?.message ||
+            t(
+              "detail.toasts.signatureReminderSentMessage",
+              "Recordatorio de firma reenviado correctamente."
+            ),
         });
 
         await refreshAll(currentDocId);
+        return true;
       } catch (err) {
         console.error("Error reenviando firma:", err);
 
         addToast({
           type: "error",
-          title: "No se pudo reenviar la firma",
+          title: t(
+            "detail.toasts.signatureResendErrorTitle",
+            "No se pudo reenviar la firma"
+          ),
           message: getErrorMessage(
             err,
-            "No se pudo reenviar el correo de firma."
+            t(
+              "detail.toasts.signatureResendErrorMessage",
+              "No se pudo reenviar el correo de firma."
+            )
           ),
         });
+
+        return false;
       } finally {
         setReenviarSignerId(null);
       }
     },
-    [currentDocId, flujoFinalizado, addToast, refreshAll]
+    [currentDocId, flujoFinalizado, addToast, refreshAll, t]
   );
 
   const handleEnviarRecordatorioATodos = useCallback(async () => {
-    if (!currentDocId || flujoFinalizado) return;
+    if (!currentDocId || flujoFinalizado) return false;
 
-    await runRefreshableAction({
+    return runRefreshableAction({
       loadingSetter: setRecordatorioLoading,
       request: () => api.post(`/documents/${currentDocId}/recordatorio`),
       successToast: {
-        title: "Recordatorio enviado",
-        message: "Recordatorio enviado correctamente.",
+        title: t("detail.toasts.reminderSentTitle", "Recordatorio enviado"),
+        message: t(
+          "detail.toasts.reminderSentMessage",
+          "Recordatorio enviado correctamente."
+        ),
       },
       errorToast: {
-        title: "No se pudo enviar el recordatorio",
-        message: "No se pudo enviar el recordatorio.",
+        title: t(
+          "detail.toasts.reminderErrorTitle",
+          "No se pudo enviar el recordatorio"
+        ),
+        message: t(
+          "detail.toasts.reminderErrorMessage",
+          "No se pudo enviar el recordatorio."
+        ),
         logLabel: "Error enviando recordatorio a todos:",
       },
     });
-  }, [currentDocId, flujoFinalizado, runRefreshableAction]);
+  }, [currentDocId, flujoFinalizado, runRefreshableAction, t]);
 
   const manejarAccionDocumentoConLegal = useCallback(
     async (id, accion, extraData = {}) => {
       if (flujoFinalizado) return false;
 
-      if (accion === "firmar") {
-        if (!acceptedLegalSign) {
-          setSignError(
+      if (accion === "firmar" && !acceptedLegalSign) {
+        setSignError(
+          t(
+            "detail.legal.signRequired",
             "Debes aceptar el aviso legal de firma electrónica antes de firmar."
-          );
-          return false;
-        }
-        setSignError("");
+          )
+        );
+        return false;
       }
 
-      if (accion === "visar") {
-        if (!acceptedLegalVisado) {
-          setVisadoError(
+      if (accion === "visar" && !acceptedLegalVisado) {
+        setVisadoError(
+          t(
+            "detail.legal.visaRequired",
             "Debes aceptar el aviso legal de visado antes de aprobar el documento."
-          );
-          return false;
-        }
-        setVisadoError("");
+          )
+        );
+        return false;
       }
+
+      setSignError("");
+      setVisadoError("");
 
       const ok = await manejarAccionDocumento(id, accion, extraData);
 
-      if (ok) {
-        setAcceptedLegalSign(false);
-        setAcceptedLegalVisado(false);
-        setSignError("");
-        setVisadoError("");
+      if (!ok) return false;
 
-        if (currentDocId) {
-          await refreshAll(currentDocId);
-        }
+      setAcceptedLegalSign(false);
+      setAcceptedLegalVisado(false);
+      setSignError("");
+      setVisadoError("");
+
+      if (currentDocId) {
+        await refreshAll(currentDocId);
       }
 
-      return ok;
+      return true;
     },
     [
       acceptedLegalSign,
@@ -674,6 +888,7 @@ export function DetailView({
       manejarAccionDocumento,
       currentDocId,
       refreshAll,
+      t,
     ]
   );
 
@@ -682,11 +897,13 @@ export function DetailView({
   return (
     <div className="detail-layout">
       <aside className="detail-sidebar">
-        <h2 className="detail-sidebar-header">VeriFirma</h2>
+        <h2 className="detail-sidebar-header">
+          {t("sidebar.brand", "VeriFirma")}
+        </h2>
 
         <button type="button" className="nav-item" onClick={handleBackToList}>
-          <ArrowLeft size={16} />
-          <span>Volver a la bandeja</span>
+          <ArrowLeft size={16} aria-hidden="true" />
+          <span>{t("detail.sidebar.back", "Volver a la bandeja")}</span>
         </button>
 
         <button
@@ -694,20 +911,26 @@ export function DetailView({
           className="nav-item detail-sidebar-footer"
           onClick={logout}
         >
-          <LogOut size={16} />
-          <span>Cerrar sesión</span>
+          <LogOut size={16} aria-hidden="true" />
+          <span>{t("sidebar.logout", "Cerrar sesión")}</span>
         </button>
       </aside>
 
       <main className="main-area">
         <header className="detail-topbar">
           <span className="detail-topbar-title">
-            Revisión de documento ({numeroInternoDisplay}) · Estado{" "}
-            {currentStatus || "Sin estado"}
+            {t(
+              "detail.header.reviewTitle",
+              "Revisión de documento ({{number}}) · Estado {{status}}",
+              {
+                number: numeroInternoDisplay,
+                status: currentStatus || t("documents.status.noStatus", "Sin estado"),
+              }
+            )}
           </span>
 
           <span className="detail-topbar-user">
-            Hola, <span>{displayName}</span>
+            {t("detail.header.greeting", "Hola,")} <span>{displayName}</span>
           </span>
         </header>
 
@@ -719,7 +942,9 @@ export function DetailView({
 
                 <div className="detail-meta">
                   <p>
-                    <span className="detail-meta-label">N° interno:</span>{" "}
+                    <span className="detail-meta-label">
+                      {t("detail.meta.internalNumber", "N.° interno")}:
+                    </span>{" "}
                     <span
                       className="detail-meta-value detail-meta-value--code"
                       title={numeroInternoDisplay}
@@ -732,17 +957,14 @@ export function DetailView({
                     <span className="detail-meta-label">
                       {clasificacionFieldLabel}:
                     </span>{" "}
-                    <span
-                      className="detail-meta-value"
-                      title={clasificacionLabel}
-                    >
+                    <span className="detail-meta-value" title={clasificacionLabel}>
                       {clasificacionLabel}
                     </span>
                   </p>
 
                   <p>
                     <span className="detail-meta-label">
-                      Condición notarial:
+                      {t("detail.meta.notaryCondition", "Condición notarial")}:
                     </span>{" "}
                     <span className="detail-meta-value" title={tramiteLabel}>
                       {tramiteLabel}
@@ -750,7 +972,9 @@ export function DetailView({
                   </p>
 
                   <p>
-                    <span className="detail-meta-label">Tipo de documento:</span>{" "}
+                    <span className="detail-meta-label">
+                      {t("detail.meta.documentType", "Tipo de documento")}:
+                    </span>{" "}
                     <span className="detail-meta-value" title={documentoLabel}>
                       {documentoLabel}
                     </span>
@@ -770,17 +994,20 @@ export function DetailView({
 
             {mergedDoc.description ? (
               <div className="detail-description">
-                <strong>Descripción:</strong> {mergedDoc.description}
+                <strong>{t("detail.meta.description", "Descripción")}:</strong>{" "}
+                {mergedDoc.description}
               </div>
             ) : null}
 
             {isRejected && mergedDoc.reject_reason ? (
               <div className="detail-reject-box">
-                <strong>Motivo de rechazo:</strong> {mergedDoc.reject_reason}
+                <strong>{t("detail.meta.rejectReason", "Motivo de rechazo")}:</strong>{" "}
+                {mergedDoc.reject_reason}
               </div>
             ) : null}
 
             <PdfViewerPanel
+              t={t}
               currentDocId={currentDocId}
               pdfUrl={pdfUrl}
               loadingPdf={loadingPdf}
@@ -795,6 +1022,7 @@ export function DetailView({
             />
 
             <LegalValidationSection
+              t={t}
               puedeFirmar={puedeFirmar}
               puedeVisar={puedeVisar}
               isSigned={isSigned}
@@ -809,134 +1037,25 @@ export function DetailView({
               setVisadoError={setVisadoError}
             />
 
+            <ParticipantFlowSection
+              t={t}
+              loadingParticipants={loadingParticipants}
+              loadingSigners={loadingSigners}
+              flowParticipants={flowParticipants}
+              signers={signers}
+              flujoFinalizado={flujoFinalizado}
+              isSigned={isSigned}
+              canManageDocumentReminders={canManageDocumentReminders}
+              reenviarSignerId={reenviarSignerId}
+              onReenviarFirma={handleReenviarFirma}
+            />
+
             <DetailSection
-              title="Flujo de participantes"
-              subtitle="Revisa el orden del proceso, el rol de cada participante y quién sigue en el flujo secuencial."
-            >
-              {loadingParticipants || loadingSigners ? (
-                <p
-                  className="detail-signers-loading"
-                  role="status"
-                  aria-live="polite"
-                >
-                  Cargando flujo de participantes...
-                </p>
-              ) : flowParticipants.length === 0 ? (
-                <p className="detail-signers-empty">
-                  No hay participantes registrados para este documento.
-                </p>
-              ) : (
-                <>
-                  <div className="detail-flow-summary">
-                    <div className="detail-flow-summary__label">
-                      {flujoFinalizado ? "Estado del flujo" : "Próximo paso"}
-                    </div>
-
-                    <div className="detail-flow-summary__value">
-                      {flujoFinalizado ? (
-                        isSigned ? (
-                          "Flujo completado"
-                        ) : (
-                          "Flujo cerrado por rechazo"
-                        )
-                      ) : nextPendingParticipant ? (
-                        `#${nextPendingParticipant.order} · ${nextPendingParticipant.roleLabel} · ${nextPendingParticipant.name}`
-                      ) : (
-                        "No hay participantes pendientes"
-                      )}
-                    </div>
-                  </div>
-
-                  <ul className="detail-flow-list">
-                    {flowParticipants.map((participant) => {
-                      const normalizedParticipantEmail = String(
-                        participant.email || ""
-                      ).toLowerCase();
-
-                      const signerMatch = signers.find((signer) => {
-                        const signerEmail = String(signer?.email || "").toLowerCase();
-
-                        return (
-                          String(signer?.id) === String(participant.id) ||
-                          (normalizedParticipantEmail &&
-                            signerEmail &&
-                            signerEmail === normalizedParticipantEmail)
-                        );
-                      });
-
-                      const signerId = signerMatch?.id;
-
-                      const canRemind =
-                        canManageDocumentReminders &&
-                        participant.roleKey === FLOW_ROLE_KEYS.FIRMANTE &&
-                        participant.statusKey === "pending" &&
-                        Boolean(signerId) &&
-                        !flujoFinalizado;
-
-                      const isSendingReminder = reenviarSignerId === signerId;
-
-                      return (
-                        <li key={participant.id} className="detail-flow-item">
-                          <div className="detail-flow-item__order">
-                            {participant.order}
-                          </div>
-
-                          <div className="detail-flow-item__body">
-                            <div className="detail-flow-item__top">
-                              <div>
-                                <div className="detail-flow-item__name">
-                                  {participant.name}
-                                </div>
-                                <div className="detail-flow-item__email">
-                                  {participant.email || "Sin correo registrado"}
-                                </div>
-                              </div>
-
-                              <div className="detail-flow-item__badges">
-                                <span className={participant.roleBadgeClass}>
-                                  {participant.roleLabel}
-                                </span>
-                                <span className={participant.statusClassName}>
-                                  {participant.statusLabel}
-                                </span>
-                              </div>
-                            </div>
-
-                            <div className="detail-flow-item__meta">
-                              {participant.signedAt ? (
-                                <span>
-                                  Registrado el {formatDateTime(participant.signedAt)}
-                                </span>
-                              ) : (
-                                <span>Aún no registra acción</span>
-                              )}
-                            </div>
-                          </div>
-
-                          {canRemind ? (
-                            <button
-                              type="button"
-                              className="btn-main detail-btn-inline-reminder"
-                              onClick={() => handleReenviarFirma(signerId)}
-                              disabled={isSendingReminder}
-                            >
-                              <Mail size={14} />
-                              <span>
-                                {isSendingReminder ? "Enviando..." : "Recordar"}
-                              </span>
-                            </button>
-                          ) : null}
-                        </li>
-                      );
-                    })}
-                  </ul>
-                </>
+              title={t("detail.timeline.title", "Timeline del documento")}
+              subtitle={t(
+                "detail.timeline.subtitle",
+                "Consulta el avance general y distingue eventos automáticos de acciones realizadas por usuarios."
               )}
-            </DetailSection>
-
-            <DetailSection
-              title="Timeline del documento"
-              subtitle="Consulta el avance general y distingue eventos automáticos de acciones realizadas por usuarios."
             >
               <div className="detail-timeline-wrapper">
                 {loadingTimeline ? (
@@ -945,13 +1064,16 @@ export function DetailView({
                     role="status"
                     aria-live="polite"
                   >
-                    Cargando progreso...
+                    {t("detail.timeline.loading", "Cargando progreso...")}
                   </div>
                 ) : timeline ? (
                   <Timeline timeline={timeline} />
                 ) : (
                   <div className="detail-timeline-empty">
-                    No hay datos de progreso disponibles.
+                    {t(
+                      "detail.timeline.empty",
+                      "No hay datos de progreso disponibles."
+                    )}
                   </div>
                 )}
               </div>
@@ -959,8 +1081,11 @@ export function DetailView({
 
             {canSeeActionHistory ? (
               <DetailSection
-                title="Historial de acciones"
-                subtitle="Registro detallado de eventos del documento para seguimiento y auditoría."
+                title={t("detail.history.title", "Historial de acciones")}
+                subtitle={t(
+                  "detail.history.subtitle",
+                  "Registro detallado de eventos del documento para seguimiento y auditoría."
+                )}
               >
                 <div className="detail-history">
                   <EventList events={safeEvents} />
@@ -984,3 +1109,5 @@ export function DetailView({
     </div>
   );
 }
+
+export default DetailView;

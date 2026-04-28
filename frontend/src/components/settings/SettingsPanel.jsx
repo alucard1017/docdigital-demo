@@ -1,5 +1,4 @@
-// src/components/settings/SettingsPanel.jsx
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState, useCallback } from "react";
 import {
   Moon,
   Sun,
@@ -12,356 +11,494 @@ import {
 } from "lucide-react";
 import { useTranslation } from "react-i18next";
 import { useToast } from "../../hooks/useToast";
-import {
-  getUserPreferences,
-  updateUserPreferences,
-} from "../../services/userPreferencesService";
+import { usePreferences } from "../../context/PreferencesContext";
+import { FALLBACK_LANGUAGE, normalizeLanguage } from "../../i18n";
 import "../../styles/settingsPanel.css";
 
-const THEME_OPTIONS = [
-  { value: "system", label: "Usar sistema", icon: MonitorCog },
-  { value: "light", label: "Modo claro", icon: Sun },
-  { value: "dark", label: "Modo oscuro", icon: Moon },
-];
+const VALID_THEME_MODES = ["system", "light", "dark"];
+const VALID_DENSITIES = ["comfortable", "compact"];
+const VALID_LANGUAGES = ["es", "en"];
 
-const DENSITY_OPTIONS = [
-  { value: "comfortable", label: "Cómoda", icon: Maximize2 },
-  { value: "compact", label: "Compacta", icon: Minimize2 },
-];
+const DEFAULT_PREFS = {
+  themeMode: "system",
+  language: FALLBACK_LANGUAGE,
+  density: "comfortable",
+};
 
-function resolveSystemTheme() {
-  return window.matchMedia?.("(prefers-color-scheme: dark)")?.matches
-    ? "dark"
-    : "light";
-}
+function normalizePreferences(data = {}, fallbackLanguage = FALLBACK_LANGUAGE) {
+  const safeFallbackLanguage = normalizeLanguage(fallbackLanguage);
 
-function applyTheme(themeMode) {
-  const root = document.documentElement;
-  const effectiveTheme =
-    themeMode === "system" ? resolveSystemTheme() : themeMode;
+  const themeMode =
+    typeof data.themeMode === "string" &&
+    VALID_THEME_MODES.includes(data.themeMode)
+      ? data.themeMode
+      : typeof data.theme_mode === "string" &&
+        VALID_THEME_MODES.includes(data.theme_mode)
+      ? data.theme_mode
+      : DEFAULT_PREFS.themeMode;
 
-  root.setAttribute("data-theme", effectiveTheme);
-}
+  const language = normalizeLanguage(data.language);
 
-function applyDensity(density) {
-  document.documentElement.setAttribute(
-    "data-density",
-    density || "comfortable"
-  );
+  const density =
+    typeof data.density === "string" &&
+    VALID_DENSITIES.includes(data.density)
+      ? data.density
+      : DEFAULT_PREFS.density;
+
+  return {
+    themeMode,
+    language: VALID_LANGUAGES.includes(language)
+      ? language
+      : VALID_LANGUAGES.includes(safeFallbackLanguage)
+      ? safeFallbackLanguage
+      : DEFAULT_PREFS.language,
+    density,
+  };
 }
 
 export default function SettingsPanel({ isOpen, onClose }) {
-  const { i18n } = useTranslation();
+  const { t, i18n } = useTranslation();
   const { addToast } = useToast();
 
-  const [loadingPrefs, setLoadingPrefs] = useState(false);
-  const [savingPrefs, setSavingPrefs] = useState(false);
+  const {
+    preferences,
+    loading,
+    saving,
+    error,
+    loadPreferences,
+    savePreferences,
+  } = usePreferences();
 
-  const [themeMode, setThemeMode] = useState("system");
-  const [language, setLanguage] = useState("es");
-  const [density, setDensity] = useState("comfortable");
+  const closeButtonRef = useRef(null);
+  const previousFocusedElementRef = useRef(null);
 
-  const [initialPrefs, setInitialPrefs] = useState({
-    themeMode: "system",
-    language: "es",
-    density: "comfortable",
-  });
+  const resolvedLanguage =
+    i18n?.resolvedLanguage ||
+    i18n?.language ||
+    preferences?.language ||
+    FALLBACK_LANGUAGE;
+
+  const syncedPrefs = useMemo(() => {
+    return normalizePreferences(
+      {
+        themeMode: preferences?.themeMode,
+        language: preferences?.language,
+        density: preferences?.density,
+      },
+      resolvedLanguage
+    );
+  }, [preferences, resolvedLanguage]);
+
+  const [draft, setDraft] = useState(syncedPrefs);
+  const [initialPrefs, setInitialPrefs] = useState(syncedPrefs);
+
+  const loadingPrefs = loading && isOpen;
+  const savingPrefs = saving;
 
   const hasChanges = useMemo(() => {
     return (
-      themeMode !== initialPrefs.themeMode ||
-      language !== initialPrefs.language ||
-      density !== initialPrefs.density
+      draft.themeMode !== initialPrefs.themeMode ||
+      draft.language !== initialPrefs.language ||
+      draft.density !== initialPrefs.density
     );
-  }, [themeMode, language, density, initialPrefs]);
+  }, [draft, initialPrefs]);
 
   useEffect(() => {
     if (!isOpen) return;
 
-    let cancelled = false;
+    previousFocusedElementRef.current =
+      typeof document !== "undefined" ? document.activeElement : null;
 
-    async function loadPreferences() {
-      try {
-        setLoadingPrefs(true);
-
-        const data = await getUserPreferences();
-        if (cancelled) return;
-
-        const nextThemeMode = data?.theme_mode || "system";
-        const nextLanguage = data?.language || "es";
-        const nextDensity = data?.density || "comfortable";
-
-        setThemeMode(nextThemeMode);
-        setLanguage(nextLanguage);
-        setDensity(nextDensity);
-
-        setInitialPrefs({
-          themeMode: nextThemeMode,
-          language: nextLanguage,
-          density: nextDensity,
-        });
-
-        applyTheme(nextThemeMode);
-        applyDensity(nextDensity);
-        i18n.changeLanguage(nextLanguage).catch(() => {});
-      } catch (error) {
-        if (cancelled) return;
-
-        addToast({
-          type: "error",
-          title: "No se pudieron cargar los ajustes",
-          message:
-            error?.response?.data?.message ||
-            error?.message ||
-            "Intenta nuevamente en unos segundos.",
-        });
-      } finally {
-        if (!cancelled) {
-          setLoadingPrefs(false);
-        }
-      }
-    }
-
-    loadPreferences();
+    const timer = window.setTimeout(() => {
+      closeButtonRef.current?.focus();
+    }, 0);
 
     return () => {
-      cancelled = true;
+      window.clearTimeout(timer);
+      previousFocusedElementRef.current?.focus?.();
     };
-  }, [isOpen, addToast, i18n]);
+  }, [isOpen]);
 
   useEffect(() => {
-    applyTheme(themeMode);
-  }, [themeMode]);
+    if (!isOpen) return;
+
+    setDraft(syncedPrefs);
+    setInitialPrefs(syncedPrefs);
+  }, [isOpen, syncedPrefs]);
 
   useEffect(() => {
-    applyDensity(density);
-  }, [density]);
+    if (!isOpen) return;
+
+    loadPreferences().catch(() => {
+      // el provider ya expone el error
+    });
+  }, [isOpen, loadPreferences]);
 
   useEffect(() => {
-    i18n.changeLanguage(language).catch(() => {});
-  }, [language, i18n]);
+    if (!isOpen) return;
 
-  useEffect(() => {
-    if (themeMode !== "system") return;
-
-    const media = window.matchMedia("(prefers-color-scheme: dark)");
-
-    const handleChange = () => {
-      applyTheme("system");
+    const handleKeyDown = (event) => {
+      if (event.key === "Escape" && !savingPrefs) {
+        onClose?.();
+      }
     };
 
-    if (typeof media.addEventListener === "function") {
-      media.addEventListener("change", handleChange);
-      return () => media.removeEventListener("change", handleChange);
-    }
+    window.addEventListener("keydown", handleKeyDown);
+    return () => window.removeEventListener("keydown", handleKeyDown);
+  }, [isOpen, onClose, savingPrefs]);
 
-    if (typeof media.addListener === "function") {
-      media.addListener(handleChange);
-      return () => media.removeListener(handleChange);
-    }
-  }, [themeMode]);
+  const updateDraft = useCallback(
+    (patch) => {
+      setDraft((current) =>
+        normalizePreferences(
+          { ...current, ...patch },
+          current.language || resolvedLanguage
+        )
+      );
+    },
+    [resolvedLanguage]
+  );
 
-  const handleSave = async () => {
+  const handleClose = useCallback(() => {
+    if (savingPrefs) return;
+
+    setDraft(initialPrefs);
+    onClose?.();
+  }, [initialPrefs, onClose, savingPrefs]);
+
+  const handleSave = useCallback(async () => {
+    if (savingPrefs || !hasChanges) return;
+
     try {
-      setSavingPrefs(true);
+      const payload = {
+        themeMode: draft.themeMode,
+        language: normalizeLanguage(draft.language),
+        density: draft.density,
+      };
 
-      const saved = await updateUserPreferences({
-        theme_mode: themeMode,
-        language,
-        density,
-      });
+      const saved = await savePreferences(payload);
+      const next = normalizePreferences(saved, payload.language);
 
-      const nextThemeMode = saved?.theme_mode || "system";
-      const nextLanguage = saved?.language || "es";
-      const nextDensity = saved?.density || "comfortable";
-
-      setThemeMode(nextThemeMode);
-      setLanguage(nextLanguage);
-      setDensity(nextDensity);
-
-      setInitialPrefs({
-        themeMode: nextThemeMode,
-        language: nextLanguage,
-        density: nextDensity,
-      });
-
-      applyTheme(nextThemeMode);
-      applyDensity(nextDensity);
-      i18n.changeLanguage(nextLanguage).catch(() => {});
+      setDraft(next);
+      setInitialPrefs(next);
 
       addToast({
         type: "success",
-        title: "Preferencias guardadas",
-        message: "Tus ajustes se guardaron correctamente.",
+        title: t("settings.toasts.saveSuccessTitle", "Preferencias guardadas"),
+        message: t(
+          "settings.toasts.saveSuccessMessage",
+          "Tus ajustes se guardaron correctamente."
+        ),
       });
-    } catch (error) {
+
+      onClose?.();
+    } catch (saveError) {
       addToast({
         type: "error",
-        title: "No se pudieron guardar los ajustes",
+        title: t(
+          "settings.toasts.saveErrorTitle",
+          "No se pudieron guardar los ajustes"
+        ),
         message:
-          error?.response?.data?.message ||
-          error?.message ||
-          "Intenta nuevamente en unos segundos.",
+          saveError?.response?.data?.message ||
+          saveError?.message ||
+          t(
+            "settings.toasts.saveErrorMessage",
+            "Intenta nuevamente en unos segundos."
+          ),
       });
-    } finally {
-      setSavingPrefs(false);
     }
-  };
+  }, [
+    addToast,
+    draft,
+    hasChanges,
+    onClose,
+    savePreferences,
+    savingPrefs,
+    t,
+  ]);
 
-  const handleClose = () => {
-    onClose?.();
-  };
+  const handleSubmit = useCallback(
+    async (event) => {
+      event.preventDefault();
+      await handleSave();
+    },
+    [handleSave]
+  );
+
+  const themeOptions = useMemo(
+    () => [
+      {
+        value: "system",
+        label: t("settings.theme.options.system", "Seguir sistema"),
+        description: t(
+          "settings.theme.options.systemHint",
+          "Usa el modo claro u oscuro de tu dispositivo."
+        ),
+        icon: MonitorCog,
+      },
+      {
+        value: "light",
+        label: t("settings.theme.options.light", "Modo claro"),
+        description: t(
+          "settings.theme.options.lightHint",
+          "Mantiene siempre la interfaz en modo claro."
+        ),
+        icon: Sun,
+      },
+      {
+        value: "dark",
+        label: t("settings.theme.options.dark", "Modo oscuro"),
+        description: t(
+          "settings.theme.options.darkHint",
+          "Mantiene siempre la interfaz en modo oscuro."
+        ),
+        icon: Moon,
+      },
+    ],
+    [t]
+  );
+
+  const densityOptions = useMemo(
+    () => [
+      {
+        value: "comfortable",
+        label: t("settings.density.options.comfortable", "Cómoda"),
+        description: t(
+          "settings.density.options.comfortableHint",
+          "Más espacio visual entre filas y controles."
+        ),
+        icon: Maximize2,
+      },
+      {
+        value: "compact",
+        label: t("settings.density.options.compact", "Compacta"),
+        description: t(
+          "settings.density.options.compactHint",
+          "Reduce espacios para mostrar más contenido."
+        ),
+        icon: Minimize2,
+      },
+    ],
+    [t]
+  );
 
   if (!isOpen) return null;
 
   return (
     <>
-      <div className="settings-backdrop" onClick={handleClose} />
+      <div
+        className="settings-backdrop"
+        onClick={handleClose}
+        aria-hidden="true"
+      />
 
       <aside
         className="settings-panel"
         role="dialog"
         aria-modal="true"
         aria-labelledby="settings-panel-title"
+        aria-describedby="settings-panel-description"
+        aria-busy={loadingPrefs || savingPrefs}
+        onClick={(event) => event.stopPropagation()}
       >
-        <div className="settings-panel__header">
-          <div>
-            <h2 id="settings-panel-title" className="settings-panel__title">
-              Ajustes
-            </h2>
-            <p className="settings-panel__subtitle">
-              Personaliza el idioma, la apariencia y la densidad de la interfaz.
-            </p>
+        <form onSubmit={handleSubmit}>
+          <div className="settings-panel__header">
+            <div>
+              <h2 id="settings-panel-title" className="settings-panel__title">
+                {t("settings.title", "Ajustes")}
+              </h2>
+              <p
+                id="settings-panel-description"
+                className="settings-panel__subtitle"
+              >
+                {t(
+                  "settings.subtitle",
+                  "Personaliza idioma, apariencia y densidad de la interfaz."
+                )}
+              </p>
+            </div>
+
+            <button
+              ref={closeButtonRef}
+              type="button"
+              className="settings-panel__close"
+              onClick={handleClose}
+              aria-label={t("settings.close", "Cerrar ajustes")}
+              disabled={savingPrefs}
+            >
+              <X size={18} aria-hidden="true" />
+            </button>
           </div>
 
-          <button
-            type="button"
-            className="settings-panel__close"
-            onClick={handleClose}
-            aria-label="Cerrar ajustes"
-          >
-            <X size={18} />
-          </button>
-        </div>
+          <div className="settings-panel__body">
+            {error ? (
+              <div
+                className="settings-panel__loading"
+                style={{
+                  justifyContent: "flex-start",
+                  minHeight: "auto",
+                  marginBottom: 16,
+                }}
+                role="status"
+              >
+                {error}
+              </div>
+            ) : null}
 
-        <div className="settings-panel__body">
-          {loadingPrefs ? (
-            <div className="settings-panel__loading">
-              Cargando preferencias…
-            </div>
-          ) : (
-            <>
-              <section className="settings-section">
-                <div className="settings-section__heading">
-                  <h3>Apariencia</h3>
-                  <p>Elige cómo se verá la aplicación en tu sesión.</p>
-                </div>
+            <section className="settings-section">
+              <div className="settings-section__heading">
+                <h3>{t("settings.theme.title", "Apariencia")}</h3>
+                <p>
+                  {t(
+                    "settings.theme.description",
+                    "Elige cómo se verá la aplicación."
+                  )}
+                </p>
+              </div>
 
-                <div className="settings-options-grid">
-                  {THEME_OPTIONS.map((option) => {
-                    const Icon = option.icon;
-                    const active = themeMode === option.value;
+              <div className="settings-options-grid">
+                {themeOptions.map((option) => {
+                  const Icon = option.icon;
+                  const active = draft.themeMode === option.value;
 
-                    return (
-                      <button
-                        key={option.value}
-                        type="button"
-                        className={`settings-option-card ${
-                          active ? "is-active" : ""
-                        }`}
-                        onClick={() => setThemeMode(option.value)}
+                  return (
+                    <button
+                      key={option.value}
+                      type="button"
+                      className={`settings-option-card ${active ? "is-active" : ""}`}
+                      onClick={() => updateDraft({ themeMode: option.value })}
+                      aria-pressed={active}
+                      disabled={savingPrefs}
+                      title={option.description}
+                    >
+                      <span
+                        className="settings-option-card__icon"
+                        aria-hidden="true"
                       >
-                        <span className="settings-option-card__icon">
-                          <Icon size={18} />
-                        </span>
-                        <span className="settings-option-card__text">
-                          {option.label}
-                        </span>
-                      </button>
-                    );
-                  })}
-                </div>
-              </section>
+                        <Icon size={18} />
+                      </span>
+                      <span className="settings-option-card__text">
+                        {option.label}
+                      </span>
+                    </button>
+                  );
+                })}
+              </div>
+            </section>
 
-              <section className="settings-section">
-                <div className="settings-section__heading">
-                  <h3>Idioma</h3>
-                  <p>Selecciona el idioma principal de la interfaz.</p>
-                </div>
+            <section className="settings-section">
+              <div className="settings-section__heading">
+                <h3>{t("settings.language.title", "Idioma")}</h3>
+                <p>
+                  {t(
+                    "settings.language.description",
+                    "Selecciona el idioma principal de la interfaz."
+                  )}
+                </p>
+              </div>
 
-                <label className="settings-field">
-                  <span className="settings-field__label">
-                    <Languages size={16} />
-                    <span>Idioma de la aplicación</span>
+              <label className="settings-field">
+                <span className="settings-field__label">
+                  <Languages size={16} aria-hidden="true" />
+                  <span>
+                    {t(
+                      "settings.language.fieldLabel",
+                      "Idioma de la aplicación"
+                    )}
                   </span>
+                </span>
 
-                  <select
-                    className="settings-select"
-                    value={language}
-                    onChange={(e) => setLanguage(e.target.value)}
-                  >
-                    <option value="es">Español</option>
-                    <option value="en">English</option>
-                  </select>
-                </label>
-              </section>
+                <select
+                  className="settings-select"
+                  value={draft.language}
+                  onChange={(event) =>
+                    updateDraft({ language: event.target.value })
+                  }
+                  disabled={savingPrefs}
+                >
+                  <option value="es">
+                    {t("settings.language.options.es", "Español")}
+                  </option>
+                  <option value="en">
+                    {t("settings.language.options.en", "English")}
+                  </option>
+                </select>
+              </label>
+            </section>
 
-              <section className="settings-section">
-                <div className="settings-section__heading">
-                  <h3>Densidad</h3>
-                  <p>
-                    Reduce o amplía espacios en listas, tablas y controles.
-                  </p>
-                </div>
+            <section className="settings-section">
+              <div className="settings-section__heading">
+                <h3>{t("settings.density.title", "Densidad")}</h3>
+                <p>
+                  {t(
+                    "settings.density.description",
+                    "Reduce o amplía espacios en tablas, listas y controles."
+                  )}
+                </p>
+              </div>
 
-                <div className="settings-options-grid">
-                  {DENSITY_OPTIONS.map((option) => {
-                    const Icon = option.icon;
-                    const active = density === option.value;
+              <div className="settings-options-grid settings-options-grid--two">
+                {densityOptions.map((option) => {
+                  const Icon = option.icon;
+                  const active = draft.density === option.value;
 
-                    return (
-                      <button
-                        key={option.value}
-                        type="button"
-                        className={`settings-option-card ${
-                          active ? "is-active" : ""
-                        }`}
-                        onClick={() => setDensity(option.value)}
+                  return (
+                    <button
+                      key={option.value}
+                      type="button"
+                      className={`settings-option-card ${active ? "is-active" : ""}`}
+                      onClick={() => updateDraft({ density: option.value })}
+                      aria-pressed={active}
+                      disabled={savingPrefs}
+                      title={option.description}
+                    >
+                      <span
+                        className="settings-option-card__icon"
+                        aria-hidden="true"
                       >
-                        <span className="settings-option-card__icon">
-                          <Icon size={18} />
-                        </span>
-                        <span className="settings-option-card__text">
-                          {option.label}
-                        </span>
-                      </button>
-                    );
-                  })}
-                </div>
-              </section>
-            </>
-          )}
-        </div>
+                        <Icon size={18} />
+                      </span>
+                      <span className="settings-option-card__text">
+                        {option.label}
+                      </span>
+                    </button>
+                  );
+                })}
+              </div>
+            </section>
 
-        <div className="settings-panel__footer">
-          <button
-            type="button"
-            className="btn-main btn-ghost"
-            onClick={handleClose}
-          >
-            Cancelar
-          </button>
+            {loadingPrefs ? (
+              <div className="settings-panel__loading" role="status">
+                {t("settings.loading", "Cargando preferencias…")}
+              </div>
+            ) : null}
+          </div>
 
-          <button
-            type="button"
-            className="btn-main btn-primary"
-            onClick={handleSave}
-            disabled={savingPrefs || loadingPrefs || !hasChanges}
-          >
-            <Save size={16} />
-            <span>{savingPrefs ? "Guardando..." : "Guardar cambios"}</span>
-          </button>
-        </div>
+          <div className="settings-panel__footer">
+            <button
+              type="button"
+              className="btn-main btn-ghost"
+              onClick={handleClose}
+              disabled={savingPrefs}
+            >
+              {t("settings.actions.cancel", "Cancelar")}
+            </button>
+
+            <button
+              type="submit"
+              className="btn-main btn-primary"
+              disabled={savingPrefs || loadingPrefs || !hasChanges}
+            >
+              <Save size={16} aria-hidden="true" />
+              <span>
+                {savingPrefs
+                  ? t("settings.actions.saving", "Guardando...")
+                  : t("settings.actions.save", "Guardar cambios")}
+              </span>
+            </button>
+          </div>
+        </form>
       </aside>
     </>
   );

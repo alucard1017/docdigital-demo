@@ -3,7 +3,7 @@
 .app-shell {
   min-height: 100vh;
   display: grid;
-  grid-template-columns: var(--sidebar-width, 280px) minmax(0, 1fr);
+  grid-template-columns: var(--sidebar-width, 264px) minmax(0, 1fr);
   background: transparent;
   color: var(--color-text);
 }
@@ -113,7 +113,7 @@
 
 .app-shell__split {
   display: grid;
-  grid-template-columns: minmax(0, 1fr) 340px;
+  grid-template-columns: minmax(0, 1fr) 320px;
   gap: 18px;
 }
 
@@ -181,7 +181,7 @@
 }
 
 :root[data-density="compact"] .app-shell {
-  grid-template-columns: var(--sidebar-width-compact, 240px) minmax(0, 1fr);
+  grid-template-columns: var(--sidebar-width-compact, 228px) minmax(0, 1fr);
 }
 
 :root[data-density="compact"] .app-shell__topbar {
@@ -211,7 +211,7 @@
 
 :root[data-density="compact"] .app-shell__split {
   gap: 14px;
-  grid-template-columns: minmax(0, 1fr) 300px;
+  grid-template-columns: minmax(0, 1fr) 288px;
 }
 
 :root[data-density="compact"] .app-shell__aside {

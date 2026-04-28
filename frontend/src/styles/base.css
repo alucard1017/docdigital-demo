@@ -54,17 +54,11 @@ input,
 select,
 textarea {
   font: inherit;
+  color: inherit;
 }
 
 button {
   cursor: pointer;
-}
-
-button,
-input,
-select,
-textarea {
-  color: inherit;
 }
 
 a {
@@ -210,6 +204,8 @@ textarea {
     opacity 0.18s ease;
 }
 
+/* Botón principal genérico */
+
 .btn-main {
   min-height: 40px;
   padding: 0 14px;
@@ -253,6 +249,8 @@ textarea {
   color: var(--color-text);
   border-color: var(--color-border);
 }
+
+/* Cards base */
 
 .card-base {
   border: 1px solid var(--color-border);

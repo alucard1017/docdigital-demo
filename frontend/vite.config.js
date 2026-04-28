@@ -85,6 +85,7 @@ function manualChunks(id) {
 
 export default defineConfig(({ mode }) => {
   const isAnalyze = mode === "analyze";
+  const apiTarget = process.env.VITE_API_PROXY_TARGET || "http://localhost:4000";
 
   return {
     plugins: [
@@ -102,7 +103,31 @@ export default defineConfig(({ mode }) => {
         : []),
     ],
 
-    // Config de Vitest
+    server: {
+      host: "0.0.0.0",
+      port: 5174,
+      strictPort: true,
+      proxy: {
+        "/api": {
+          target: apiTarget,
+          changeOrigin: true,
+          secure: false,
+        },
+        "/socket.io": {
+          target: apiTarget,
+          changeOrigin: true,
+          ws: true,
+          secure: false,
+        },
+      },
+    },
+
+    preview: {
+      host: "0.0.0.0",
+      port: 4174,
+      strictPort: true,
+    },
+
     test: {
       environment: "jsdom",
       globals: true,

@@ -6,6 +6,15 @@ import { DOCUMENT_EVENT_TYPES } from "./documentEventTypes";
    Helpers básicos
    ============================ */
 
+function pickFirst(...values) {
+  for (const value of values) {
+    if (value !== undefined && value !== null && value !== "") {
+      return value;
+    }
+  }
+  return null;
+}
+
 export function normalizeText(value = "") {
   return String(value ?? "").trim();
 }
@@ -24,10 +33,11 @@ export function toValidDate(value) {
   return Number.isNaN(date.getTime()) ? null : date;
 }
 
-export function formatTimelineTimestamp(value) {
+export function formatTimelineTimestamp(value, locale = "es-CO") {
   const date = toValidDate(value);
   if (!date) return "";
-  return date.toLocaleString("es-CO", {
+
+  return date.toLocaleString(locale, {
     day: "2-digit",
     month: "2-digit",
     year: "numeric",
@@ -89,6 +99,7 @@ export function normalizeStatus(value) {
   const text = normalizeUpper(value);
 
   if (text === "BORRADOR" || text === "DRAFT") return "DRAFT";
+
   if (
     text === "PENDIENTE_FIRMA" ||
     text === "PENDING_SIGNATURE" ||
@@ -96,9 +107,11 @@ export function normalizeStatus(value) {
   ) {
     return "PENDING_SIGNATURE";
   }
+
   if (text === "PENDIENTE_VISADO" || text === "PENDING_REVIEW") {
     return "PENDING_REVIEW";
   }
+
   if (text === "FIRMADO" || text === "SIGNED") return "SIGNED";
   if (text === "RECHAZADO" || text === "REJECTED") return "REJECTED";
 
@@ -110,12 +123,11 @@ export function normalizeStatus(value) {
    ============================ */
 
 export function getRawTimestamp(raw) {
-  return (
-    raw?.createdAt ||
-    raw?.created_at ||
-    raw?.timestamp ||
-    raw?.date ||
-    null
+  return pickFirst(
+    raw?.createdAt,
+    raw?.created_at,
+    raw?.timestamp,
+    raw?.date
   );
 }
 
@@ -184,6 +196,7 @@ export function getMetadataActorType(raw) {
 export function isAuditEvent(raw) {
   const source = getRawSource(raw);
   const eventType = getRawEventType(raw);
+
   return (
     source === "audit_log" ||
     source === "audit" ||
@@ -386,11 +399,13 @@ export function buildMetadataSummary(metadata) {
   if (docTitle) parts.push(`Documento: ${docTitle}`);
   if (numero_contrato_interno)
     parts.push(`Contrato: ${numero_contrato_interno}`);
+
   if (from && to) {
     parts.push(`Estado: ${from} → ${to}`);
   } else if (to) {
     parts.push(`Estado: ${to}`);
   }
+
   if (reason) parts.push(`Motivo: ${reason}`);
   if (link_type) parts.push(`Link: ${link_type}`);
   if (actor_type) parts.push(`Actor: ${actor_type}`);
@@ -447,13 +462,15 @@ export function getHumanDetails(raw, kind = getEventKind(raw)) {
   return buildMetadataSummary(raw?.metadata);
 }
 
-// Nombre legible del actor (string) para la UI
 export function getActorLabel(raw) {
   const actorDirect = normalizeText(raw?.actor);
+
   if (actorDirect) {
     const lower = actorDirect.toLowerCase();
+
     if (lower === "public_user") return "Usuario público";
     if (lower === "system" || lower === "sistema") return "Sistema";
+
     return actorDirect;
   }
 
@@ -583,11 +600,12 @@ export function normalizeTimeline(rawTimeline) {
   const rawProgress =
     rawTimeline?.progress ?? rawTimeline?.timeline?.progress ?? 0;
 
-  const rawCurrentStep =
-    rawTimeline?.currentStep ??
-    rawTimeline?.timeline?.currentStep ??
-    rawTimeline?.currentStatus ??
-    rawTimeline?.timeline?.currentStatus;
+  const rawCurrentStep = pickFirst(
+    rawTimeline?.currentStep,
+    rawTimeline?.timeline?.currentStep,
+    rawTimeline?.currentStatus,
+    rawTimeline?.timeline?.currentStatus
+  );
 
   const rawNextStep =
     rawTimeline?.nextStep ?? rawTimeline?.timeline?.nextStep;

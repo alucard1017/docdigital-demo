@@ -1,6 +1,14 @@
 // src/components/ListHeader.jsx
 import React, { useCallback, useMemo } from "react";
-import { Download, RefreshCw, Search, X, ArrowUpDown, Filter } from "lucide-react";
+import {
+  Download,
+  RefreshCw,
+  Search,
+  X,
+  ArrowUpDown,
+  Filter,
+} from "lucide-react";
+import { useTranslation } from "react-i18next";
 import { API_BASE_URL } from "../constants";
 import { useToast } from "../hooks/useToast";
 import "../styles/decorativeTabs.css";
@@ -9,7 +17,8 @@ import "../styles/listHeader.css";
 const API_URL = API_BASE_URL;
 
 function apiUrl(path) {
-  return `${API_URL.replace(/\/+$/, "")}/api${path}`;
+  const base = API_URL.endsWith("/") ? API_URL.slice(0, -1) : API_URL;
+  return `${base}/api${path}`;
 }
 
 function safeCount(value) {
@@ -31,6 +40,7 @@ export function ListHeader({
   onSync,
   token,
 }) {
+  const { t } = useTranslation();
   const { addToast } = useToast();
 
   const _pendientes = safeCount(pendientes);
@@ -38,7 +48,6 @@ export function ListHeader({
   const _firmados = safeCount(firmados);
   const _rechazados = safeCount(rechazados);
 
-  // Si viene totalFiltrado desde fuera, úsalo como fuente de verdad.
   const total = useMemo(() => {
     if (Number.isFinite(totalFiltrado)) return totalFiltrado;
     return _pendientes + _visados + _firmados + _rechazados;
@@ -48,21 +57,28 @@ export function ListHeader({
     if (!token) {
       addToast({
         type: "warning",
-        title: "Sesión no disponible",
-        message: "No hay sesión activa para descargar el reporte.",
+        title: t(
+          "listHeader.toasts.noSessionTitle",
+          "Sesión no disponible"
+        ),
+        message: t(
+          "listHeader.toasts.noSessionMessage",
+          "No hay sesión activa para descargar el reporte."
+        ),
       });
       return;
     }
 
     try {
       const res = await fetch(apiUrl("/docs/export/excel"), {
-        headers: {
-          Authorization: `Bearer ${token}`,
-        },
+        headers: { Authorization: `Bearer ${token}` },
       });
 
       if (!res.ok) {
-        let msg = "Error descargando reporte";
+        let msg = t(
+          "listHeader.toasts.downloadErrorFallback",
+          "Error descargando reporte"
+        );
 
         try {
           const data = await res.json();
@@ -73,9 +89,13 @@ export function ListHeader({
 
         addToast({
           type: "error",
-          title: "No se pudo descargar",
+          title: t(
+            "listHeader.toasts.downloadErrorTitle",
+            "No se pudo descargar"
+          ),
           message: msg,
         });
+
         return;
       }
 
@@ -92,19 +112,31 @@ export function ListHeader({
 
       addToast({
         type: "success",
-        title: "Reporte generado",
-        message: "La descarga del reporte comenzó correctamente.",
+        title: t(
+          "listHeader.toasts.downloadSuccessTitle",
+          "Reporte generado"
+        ),
+        message: t(
+          "listHeader.toasts.downloadSuccessMessage",
+          "La descarga del reporte comenzó correctamente."
+        ),
       });
     } catch (err) {
       console.error("Error descargando reporte:", err);
 
       addToast({
         type: "error",
-        title: "Error de conexión",
-        message: "No se pudo descargar el reporte en este momento.",
+        title: t(
+          "listHeader.toasts.connectionErrorTitle",
+          "Error de conexión"
+        ),
+        message: t(
+          "listHeader.toasts.connectionErrorMessage",
+          "No se pudo descargar el reporte en este momento."
+        ),
       });
     }
-  }, [token, addToast]);
+  }, [token, addToast, t]);
 
   const handleClearSearch = useCallback(() => {
     setSearch("");
@@ -112,18 +144,25 @@ export function ListHeader({
 
   return (
     <section className="list-header-card">
-      {/* Línea superior */}
       <div className="list-header-top">
         <div className="list-header-copy">
-          <h1 className="list-header-title">Bandeja de entrada</h1>
+          <h1 className="list-header-title">
+            {t("listHeader.title", "Bandeja de entrada")}
+          </h1>
 
           <p className="list-header-subtitle">
-            Gestiona documentos, revisa estados y accede rápido a las acciones
-            principales.
+            {t(
+              "listHeader.subtitle",
+              "Gestiona documentos, revisa estados y accede rápido a las acciones principales."
+            )}
           </p>
 
           <p className="list-header-results">
-            {totalFiltrado} documentos encontrados con los filtros actuales
+            {t(
+              "listHeader.results",
+              "{{count}} documentos encontrados con los filtros actuales",
+              { count: totalFiltrado ?? 0 }
+            )}
           </p>
         </div>
 
@@ -133,22 +172,28 @@ export function ListHeader({
             onClick={handleDownloadReport}
             className="btn-main list-header-btn-success"
           >
-            <Download size={16} />
-            <span>Descargar reporte</span>
+            <Download size={16} aria-hidden="true" />
+            <span>
+              {t(
+                "listHeader.actions.downloadReport",
+                "Descargar reporte"
+              )}
+            </span>
           </button>
 
           <button
+            type="button"
             className="btn-main list-header-btn-sync"
             onClick={onSync}
-            type="button"
           >
-            <RefreshCw size={16} />
-            <span>Sincronizar bandeja</span>
+            <RefreshCw size={16} aria-hidden="true" />
+            <span>
+              {t("listHeader.actions.syncInbox", "Sincronizar bandeja")}
+            </span>
           </button>
         </div>
       </div>
 
-      {/* Chips de estado */}
       <div className="list-header-chips">
         <button
           type="button"
@@ -157,7 +202,7 @@ export function ListHeader({
             statusFilter === "TODOS" ? "is-active" : ""
           }`}
         >
-          <span>Todos</span>
+          <span>{t("listHeader.chips.all", "Todos")}</span>
           <strong>{total}</strong>
         </button>
 
@@ -168,7 +213,7 @@ export function ListHeader({
             statusFilter === "PENDIENTES" ? "is-active" : ""
           }`}
         >
-          <span>Pendientes</span>
+          <span>{t("listHeader.chips.pending", "Pendientes")}</span>
           <strong>{_pendientes}</strong>
         </button>
 
@@ -179,7 +224,7 @@ export function ListHeader({
             statusFilter === "VISADOS" ? "is-active" : ""
           }`}
         >
-          <span>Visados</span>
+          <span>{t("listHeader.chips.visa", "Visados")}</span>
           <strong>{_visados}</strong>
         </button>
 
@@ -190,7 +235,7 @@ export function ListHeader({
             statusFilter === "FIRMADOS" ? "is-active" : ""
           }`}
         >
-          <span>Firmados</span>
+          <span>{t("listHeader.chips.signed", "Firmados")}</span>
           <strong>{_firmados}</strong>
         </button>
 
@@ -201,17 +246,16 @@ export function ListHeader({
             statusFilter === "RECHAZADOS" ? "is-active" : ""
           }`}
         >
-          <span>Rechazados</span>
+          <span>{t("listHeader.chips.rejected", "Rechazados")}</span>
           <strong>{_rechazados}</strong>
         </button>
       </div>
 
-      {/* Filtros */}
       <div className="list-header-filters">
         <div className="list-filter-group">
           <span className="list-filter-label">
-            <ArrowUpDown size={14} />
-            <span>Ordenar</span>
+            <ArrowUpDown size={14} aria-hidden="true" />
+            <span>{t("listHeader.filters.sort.label", "Ordenar")}</span>
           </span>
 
           <select
@@ -219,19 +263,43 @@ export function ListHeader({
             onChange={(e) => setSort(e.target.value)}
             className="list-filter-control"
           >
-            <option value="title_asc">Título (A → Z)</option>
-            <option value="title_desc">Título (Z → A)</option>
-            <option value="fecha_desc">Fecha (más reciente)</option>
-            <option value="fecha_asc">Fecha (más antigua)</option>
-            <option value="numero_asc">N° interno (ascendente)</option>
-            <option value="numero_desc">N° interno (descendente)</option>
+            <option value="title_asc">
+              {t("listHeader.filters.sort.titleAsc", "Título (A → Z)")}
+            </option>
+            <option value="title_desc">
+              {t("listHeader.filters.sort.titleDesc", "Título (Z → A)")}
+            </option>
+            <option value="fecha_desc">
+              {t(
+                "listHeader.filters.sort.dateDesc",
+                "Fecha (más reciente)"
+              )}
+            </option>
+            <option value="fecha_asc">
+              {t(
+                "listHeader.filters.sort.dateAsc",
+                "Fecha (más antigua)"
+              )}
+            </option>
+            <option value="numero_asc">
+              {t(
+                "listHeader.filters.sort.numberAsc",
+                "N° interno (ascendente)"
+              )}
+            </option>
+            <option value="numero_desc">
+              {t(
+                "listHeader.filters.sort.numberDesc",
+                "N° interno (descendente)"
+              )}
+            </option>
           </select>
         </div>
 
         <div className="list-filter-group">
           <span className="list-filter-label">
-            <Filter size={14} />
-            <span>Estado</span>
+            <Filter size={14} aria-hidden="true" />
+            <span>{t("listHeader.filters.status.label", "Estado")}</span>
           </span>
 
           <select
@@ -239,18 +307,28 @@ export function ListHeader({
             onChange={(e) => setStatusFilter(e.target.value)}
             className="list-filter-control"
           >
-            <option value="TODOS">Todos</option>
-            <option value="PENDIENTES">Pendientes</option>
-            <option value="VISADOS">Visados</option>
-            <option value="FIRMADOS">Firmados</option>
-            <option value="RECHAZADOS">Rechazados</option>
+            <option value="TODOS">
+              {t("listHeader.filters.status.all", "Todos")}
+            </option>
+            <option value="PENDIENTES">
+              {t("listHeader.filters.status.pending", "Pendientes")}
+            </option>
+            <option value="VISADOS">
+              {t("listHeader.filters.status.visa", "Visados")}
+            </option>
+            <option value="FIRMADOS">
+              {t("listHeader.filters.status.signed", "Firmados")}
+            </option>
+            <option value="RECHAZADOS">
+              {t("listHeader.filters.status.rejected", "Rechazados")}
+            </option>
           </select>
         </div>
 
         <div className="list-filter-group list-filter-group--search">
           <span className="list-filter-label">
-            <Search size={14} />
-            <span>Buscar</span>
+            <Search size={14} aria-hidden="true" />
+            <span>{t("listHeader.filters.search.label", "Buscar")}</span>
           </span>
 
           <div className="list-search-wrap">
@@ -258,7 +336,10 @@ export function ListHeader({
               type="text"
               value={search}
               onChange={(e) => setSearch(e.target.value)}
-              placeholder="Título, participante o empresa..."
+              placeholder={t(
+                "listHeader.filters.search.placeholder",
+                "Título, participante o empresa..."
+              )}
               className="list-filter-control list-filter-control--input"
             />
 
@@ -266,10 +347,13 @@ export function ListHeader({
               <button
                 type="button"
                 onClick={handleClearSearch}
-                aria-label="Limpiar búsqueda"
+                aria-label={t(
+                  "listHeader.filters.search.clear",
+                  "Limpiar búsqueda"
+                )}
                 className="list-search-clear"
               >
-                <X size={14} />
+                <X size={14} aria-hidden="true" />
               </button>
             ) : null}
           </div>

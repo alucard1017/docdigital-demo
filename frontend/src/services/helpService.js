@@ -1,70 +1,138 @@
 // frontend/src/services/helpService.js
 import api from "../api/client";
 
+const DEFAULT_LANGUAGE = "es";
+const DEFAULT_SOURCE = "WEB_HELP_WIDGET";
+const DEFAULT_PRIORITY = "high";
+const ALLOWED_LANGUAGES = new Set(["es", "en"]);
+const ALLOWED_PRIORITIES = new Set(["low", "medium", "high", "urgent"]);
+
 function normalizeLanguage(language) {
-  if (typeof language !== "string") return "es";
-  return language.toLowerCase().startsWith("en") ? "en" : "es";
+  if (typeof language !== "string") return DEFAULT_LANGUAGE;
+
+  const normalized = language.trim().toLowerCase();
+  if (normalized.startsWith("en")) return "en";
+  if (normalized.startsWith("es")) return "es";
+
+  return DEFAULT_LANGUAGE;
+}
+
+function normalizeText(value) {
+  return typeof value === "string" ? value.trim() : "";
+}
+
+function normalizeSource(source) {
+  const normalized = normalizeText(source);
+  return normalized || DEFAULT_SOURCE;
+}
+
+function normalizePriority(priority) {
+  const normalized = normalizeText(priority).toLowerCase();
+  return ALLOWED_PRIORITIES.has(normalized)
+    ? normalized
+    : DEFAULT_PRIORITY;
 }
 
 function normalizeHelpPayload(payload = {}) {
   return {
-    subject: typeof payload.subject === "string" ? payload.subject.trim() : "",
-    message: typeof payload.message === "string" ? payload.message.trim() : "",
-    source:
-      typeof payload.source === "string" && payload.source.trim()
-        ? payload.source.trim()
-        : "WEB_HELP_WIDGET",
+    subject: normalizeText(payload.subject),
+    message: normalizeText(payload.message),
+    source: normalizeSource(payload.source),
   };
 }
 
-export async function getFaqs(language = "es", config = {}) {
-  const lang = normalizeLanguage(language);
+function validateHelpPayload(payload) {
+  if (!payload.subject) {
+    throw new Error("Debes ingresar un asunto.");
+  }
 
-  const res = await api.get("/help/faqs", {
-    ...config,
-    params: {
-      language: lang,
-      ...(config.params || {}),
-    },
-  });
+  if (!payload.message) {
+    throw new Error("Debes ingresar un mensaje.");
+  }
+}
 
-  return Array.isArray(res?.data?.data) ? res.data.data : [];
+function buildFaqParams(language, extraParams = {}) {
+  const normalizedLanguage = normalizeLanguage(language);
+  return {
+    ...extraParams,
+    language: ALLOWED_LANGUAGES.has(normalizedLanguage)
+      ? normalizedLanguage
+      : DEFAULT_LANGUAGE,
+  };
+}
+
+function getResponseData(response) {
+  return response?.data?.data ?? null;
+}
+
+function normalizeFaqList(data) {
+  return Array.isArray(data) ? data : [];
+}
+
+function getServiceErrorMessage(error, fallbackMessage) {
+  return (
+    error?.response?.data?.message ||
+    error?.message ||
+    fallbackMessage
+  );
+}
+
+export async function getFaqs(language = DEFAULT_LANGUAGE, config = {}) {
+  try {
+    const response = await api.get("/help/faqs", {
+      ...config,
+      params: buildFaqParams(language, config.params || {}),
+    });
+
+    return normalizeFaqList(getResponseData(response));
+  } catch (error) {
+    throw new Error(
+      getServiceErrorMessage(
+        error,
+        "No se pudieron cargar las preguntas frecuentes."
+      )
+    );
+  }
 }
 
 export async function createHelpQuery(payload = {}, config = {}) {
   const body = normalizeHelpPayload(payload);
+  validateHelpPayload(body);
 
-  if (!body.subject) {
-    throw new Error("Debes ingresar un asunto.");
+  try {
+    const response = await api.post("/help/query", body, config);
+    return getResponseData(response);
+  } catch (error) {
+    throw new Error(
+      getServiceErrorMessage(
+        error,
+        "No se pudo enviar la solicitud de ayuda."
+      )
+    );
   }
-
-  if (!body.message) {
-    throw new Error("Debes ingresar un mensaje.");
-  }
-
-  const res = await api.post("/help/query", body, config);
-  return res?.data?.data || null;
 }
 
 export async function createHelpEscalation(payload = {}, config = {}) {
+  const basePayload = normalizeHelpPayload(payload);
+
   const body = {
-    ...normalizeHelpPayload(payload),
-    priority:
-      typeof payload.priority === "string" && payload.priority.trim()
-        ? payload.priority.trim()
-        : "high",
+    ...basePayload,
+    priority: normalizePriority(payload.priority),
   };
 
-  if (!body.subject) {
-    throw new Error("Debes ingresar un asunto.");
-  }
+  validateHelpPayload(body);
 
-  if (!body.message) {
-    throw new Error("Debes ingresar un mensaje.");
+  try {
+    const response = await api.post("/help/escalations", body, config);
+    return getResponseData(response);
+  } catch (error) {
+    throw new Error(
+      getServiceErrorMessage(
+        error,
+        "No se pudo escalar la solicitud de ayuda."
+      )
+    );
   }
-
-  const res = await api.post("/help/escalations", body, config);
-  return res?.data?.data || null;
 }
 
 const helpService = {

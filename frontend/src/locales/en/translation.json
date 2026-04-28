@@ -1,8 +1,174 @@
 {
+  "sidebar": {
+    "brand": "VeriFirma",
+    "mainPanel": "Main panel",
+    "activeSession": "Active session",
+    "defaultUser": "User",
+    "retry": "Retry",
+    "logout": "Sign out",
+    "sections": {
+      "inbox": "Inbox",
+      "reports": "Reports",
+      "admin": "Administration",
+      "globalAdmin": "Global administration",
+      "account": "Account"
+    },
+    "items": {
+      "myDocuments": "My procedures",
+      "myDocumentsTitle": "View all procedures",
+      "newProcedure": "Create new procedure",
+      "newProcedureTitle": "Create a new signature procedure",
+      "dashboard": "Dashboard",
+      "dashboardTitle": "Global admin dashboard",
+      "emailMetrics": "Email metrics",
+      "emailMetricsTitle": "View global email metrics",
+      "companyAnalytics": "Company analytics",
+      "companyAnalyticsTitle": "Global company analytics",
+      "users": "Users",
+      "usersTitle": "Manage company users",
+      "templates": "Templates",
+      "templatesTitle": "Manage document templates",
+      "reminders": "Reminders",
+      "remindersTitle": "Configure automatic reminders",
+      "companies": "Companies",
+      "companiesTitle": "Manage companies",
+      "systemStatus": "System status",
+      "systemStatusTitle": "System status overview",
+      "businessAudit": "Business audit",
+      "businessAuditTitle": "Business audit logs",
+      "authLogs": "Auth logs",
+      "authLogsTitle": "Authentication logs",
+      "billing": "Plans and billing",
+      "billingTitle": "View plans and billing",
+      "profile": "My profile",
+      "profileTitle": "Edit your profile"
+    },
+    "metrics": {
+      "total": "Total procedures",
+      "pendingToday": "Pending today",
+      "visas": "Approved",
+      "signed": "Signed",
+      "rejected": "Rejected",
+      "caption": "Manage deliveries, tracking, and signatures from a single inbox."
+    },
+    "socket": {
+      "online": "Online",
+      "reconnecting": "Reconnecting…",
+      "connecting": "Connecting…",
+      "degraded": "Degraded mode",
+      "connectedTitle": "Connected to the real-time server.",
+      "reconnectingTitle": "Trying to reconnect to the real-time server.",
+      "errorTitle": "We could not keep the real-time connection. The app still works, but some updates may take a few seconds."
+    }
+  },
+  "listHeader": {
+    "title": "Inbox",
+    "subtitle": "Manage documents, review statuses, and quickly access the main actions.",
+    "results": "{{count}} documents found with the current filters",
+    "actions": {
+      "downloadReport": "Download report",
+      "syncInbox": "Refresh inbox"
+    },
+    "chips": {
+      "all": "All",
+      "pending": "Pending",
+      "visa": "Approved",
+      "signed": "Signed",
+      "rejected": "Rejected"
+    },
+    "filters": {
+      "sort": {
+        "label": "Sort",
+        "titleAsc": "Title (A → Z)",
+        "titleDesc": "Title (Z → A)",
+        "dateDesc": "Date (newest first)",
+        "dateAsc": "Date (oldest first)",
+        "numberAsc": "Internal No. (ascending)",
+        "numberDesc": "Internal No. (descending)"
+      },
+      "status": {
+        "label": "Status",
+        "all": "All",
+        "pending": "Pending",
+        "visa": "Approved",
+        "signed": "Signed",
+        "rejected": "Rejected"
+      },
+      "search": {
+        "label": "Search",
+        "placeholder": "Title, participant, or company...",
+        "clear": "Clear search"
+      }
+    },
+    "toasts": {
+      "noSessionTitle": "Session unavailable",
+      "noSessionMessage": "There is no active session to download the report.",
+      "downloadErrorFallback": "Error downloading report",
+      "downloadErrorTitle": "Could not download",
+      "downloadSuccessTitle": "Report generated",
+      "downloadSuccessMessage": "The report download started successfully.",
+      "connectionErrorTitle": "Connection error",
+      "connectionErrorMessage": "The report could not be downloaded right now."
+    }
+  },
+  "documents": {
+    "type": {
+      "default": "Document"
+    },
+    "contractNumberFallback": "No number",
+    "status": {
+      "pending": "Pending",
+      "pendingSignature": "Pending signature",
+      "pendingVisa": "Pending approval",
+      "visa": "Approved",
+      "signed": "Signed",
+      "rejected": "Rejected",
+      "draft": "Draft",
+      "noStatus": "No status"
+    },
+    "untitled": "Untitled",
+    "pendingAssignment": "Pending assignment",
+    "createdAt": "Created on",
+    "errors": {
+      "invalidDocument": "Invalid document",
+      "pdfUrl": "Could not get the PDF URL"
+    },
+    "actions": {
+      "open": "Open",
+      "openDetail": "Open details",
+      "openDetailOf": "Open details for \"{{title}}\"",
+      "viewPdf": "View PDF",
+      "viewPdfOf": "View PDF for \"{{title}}\"",
+      "viewPdfShort": "PDF",
+      "download": "Download",
+      "downloadPdf": "Download PDF",
+      "downloadPdfOf": "Download PDF for \"{{title}}\"",
+      "downloadShort": "Download",
+      "rejectReason": "View rejection reason",
+      "rejectReasonOf": "View rejection reason for \"{{title}}\"",
+      "rejection": "Rejection",
+      "rejectionShort": "Rejection"
+    },
+    "toasts": {
+      "openPdfErrorTitle": "Could not open the PDF",
+      "openPdfErrorMessage": "Could not open the PDF.",
+      "downloadStartedTitle": "Download started",
+      "downloadStartedMessage": "Download started for \"{{title}}\".",
+      "downloadErrorTitle": "Could not download the PDF",
+      "downloadErrorMessage": "Could not download the PDF.",
+      "noRejectReasonTitle": "No reason recorded",
+      "noRejectReasonMessage": "This document has no rejection reason.",
+      "rejectReasonTitle": "Rejection reason"
+    }
+  },
   "help": {
     "title": "Help",
     "subtitle": "FAQs and support",
     "close": "Close help",
+    "panelTitle": "Help and settings",
+    "panelSubtitle": "Quick access to support, FAQs, and preferences.",
+    "quickActionsTitle": "Quick actions",
+    "quickQuestionsTitle": "Quick questions",
     "faqsTitle": "FAQs",
     "contactTitle": "Contact support",
     "loadingFaqs": "Loading frequently asked questions...",
@@ -14,6 +180,223 @@
     "sending": "Sending...",
     "submitSuccess": "Request sent successfully.",
     "submitError": "Could not send your request.",
-    "missingSubjectAndMessage": "You must enter a subject and a message."
+    "missingSubjectAndMessage": "You must enter a subject and a message.",
+    "shortcuts": {
+      "settingsTitle": "Open settings",
+      "settingsText": "Change theme, language, and interface density."
+    },
+    "quickQuestions": {
+      "languageTitle": "How do I change the language?",
+      "languageText": "From Settings you can choose Español or English.",
+      "themeTitle": "How do I enable light or dark mode?",
+      "themeText": "You can choose light mode, dark mode, or follow the system.",
+      "densityTitle": "What does compact density do?",
+      "densityText": "It reduces spacing in tables and lists to show more content."
+    },
+    "tips": {
+      "firstTitle": "Quick tip",
+      "firstText": "You can open a document from the table and download its PDF from the side actions."
+    }
+  },
+  "settings": {
+    "title": "Settings",
+    "subtitle": "Customize language, appearance, and interface density.",
+    "close": "Close settings",
+    "loading": "Loading preferences…",
+    "messages": {
+      "loadFallback": "Default values will be used for this session."
+    },
+    "theme": {
+      "title": "Appearance",
+      "description": "Choose how the application will look.",
+      "options": {
+        "system": "Use system",
+        "light": "Light mode",
+        "dark": "Dark mode"
+      }
+    },
+    "language": {
+      "title": "Language",
+      "description": "Select the main interface language.",
+      "fieldLabel": "Application language",
+      "options": {
+        "es": "Spanish",
+        "en": "English"
+      }
+    },
+    "density": {
+      "title": "Density",
+      "description": "Reduce or expand spacing in tables, lists, and controls.",
+      "options": {
+        "comfortable": "Comfortable",
+        "compact": "Compact"
+      }
+    },
+    "actions": {
+      "cancel": "Cancel",
+      "save": "Save changes",
+      "saving": "Saving..."
+    },
+    "toasts": {
+      "loadErrorTitle": "Could not load settings",
+      "saveSuccessTitle": "Preferences saved",
+      "saveSuccessMessage": "Your settings were saved successfully.",
+      "saveErrorTitle": "Could not save settings",
+      "saveErrorMessage": "Please try again in a few seconds."
+    }
+  },
+  "app": {
+    "protectedFallback": "Loading module…",
+    "sessionLoading": "Loading session...",
+    "redirectFallback": "Redirecting…",
+    "sentryTest": "Test Sentry error",
+    "login": {
+      "connecting": "Connecting to the secure server...",
+      "invalidRut": "❌ The entered RUT is not valid",
+      "accessGranted": "Access granted",
+      "defaultError": "Connection error, please try again.",
+      "toastTitle": "Could not sign in"
+    },
+    "toasts": {
+      "documentSentTitle": "Document sent",
+      "documentSent": "The document was sent successfully.",
+      "documentSentWithTitle": "\"{{title}}\" was sent successfully.",
+      "documentSignedTitle": "Document signed",
+      "documentSigned": "The document was signed successfully.",
+      "documentSignedWithTitle": "\"{{title}}\" was signed successfully."
+    },
+    "socket": {
+      "toasts": {
+        "limitedTitle": "Limited real-time connection",
+        "limitedMessage": "We could not keep the real-time connection. Your inbox will continue to refresh periodically.",
+        "connectingTitle": "Connecting in real time…",
+        "connectingMessage": "We are trying to establish the real-time connection. You can continue using the application normally.",
+        "reconnectingTitle": "Reconnecting in real time…",
+        "reconnectingMessage": "We lost the real-time connection and are trying to restore it. The inbox will continue to refresh periodically."
+      }
+    },
+    "list": {
+      "loadingTitle": "Loading your document inbox…",
+      "loadingSubtitle": "This may take a few seconds.",
+      "errorTitle": "There was a problem loading the inbox.",
+      "errorFallback": "Please check your connection and try again.",
+      "retry": "Retry loading",
+      "emptyTitle": "We could not find documents to display.",
+      "emptySubtitle1": "There may be no documents matching the current filters.",
+      "emptySubtitle2": "Adjust the filters or create a new digital signing flow.",
+      "emptyCta": "Create new procedure"
+    },
+    "table": {
+      "columns": {
+        "contractDocument": "Contract / Document",
+        "type": "Type",
+        "status": "Status",
+        "participant": "Participant",
+        "actions": "Actions"
+      }
+    },
+    "pagination": {
+      "summary": "Page {{current}} of {{total}} · {{count}} documents",
+      "prev": "Previous",
+      "next": "Next"
+    },
+    "inbox": {
+      "title": "Recent documents",
+      "subtitle": "Review statuses, open contracts, and manage your procedures from this inbox.",
+      "newDocument": "+ New document",
+      "refresh": "Refresh inbox"
+    },
+    "onboarding": {
+      "fallback": "Preparing interactive guide…"
+    },
+    "tour": {
+      "fallback": "Loading interactive tour…"
+    }
+  },
+  "detail": {
+    "common": {
+      "notAvailable": "N/A",
+      "notReported": "Not provided"
+    },
+    "sidebar": {
+      "back": "Back to inbox"
+    },
+    "header": {
+      "reviewTitle": "Document review ({{number}}) · Status {{status}}",
+      "documentNumberShort": "#{{id}}",
+      "greeting": "Hi,"
+    },
+    "meta": {
+      "internalNumber": "Internal number",
+      "notaryCondition": "Notarial condition",
+      "documentType": "Document type",
+      "description": "Description",
+      "rejectReason": "Rejection reason"
+    },
+    "pdf": {
+      "title": "Document and actions",
+      "subtitle": "View the final PDF, download the file, or resend reminders depending on the current status.",
+      "remindAll": "Remind all",
+      "remindAllSending": "Sending reminder...",
+      "resendVisa": "Resend approval",
+      "resendVisaSending": "Resending approval...",
+      "download": "Download PDF",
+      "openNewTab": "Open in new tab",
+      "previewLabel": "Final document preview",
+      "documentId": "Document #{{id}}",
+      "loading": "Loading PDF preview...",
+      "iframeTitle": "PDF of document {{id}}",
+      "error": "The PDF preview could not be loaded. Use \"Download PDF\" to view the document."
+    },
+    "legal": {
+      "title": "Pre-validations",
+      "subtitle": "Before signing or approving, confirm acceptance of the corresponding legal notice.",
+      "signRequired": "You must accept the e-signature legal notice before signing.",
+      "visaRequired": "You must accept the approval legal notice before approving the document."
+    },
+    "flow": {
+      "title": "Participant flow",
+      "subtitle": "Review process order, each participant's role, and who is next in the sequential flow.",
+      "loading": "Loading participant flow...",
+      "empty": "There are no participants registered for this document.",
+      "summaryLabelFinished": "Flow status",
+      "summaryLabelNext": "Next step",
+      "completed": "Flow completed",
+      "closedRejected": "Flow closed by rejection",
+      "nextParticipant": "#{{order}} · {{role}} · {{name}}",
+      "noPending": "There are no pending participants",
+      "noEmail": "No email registered",
+      "registeredAt": "Recorded on {{date}}",
+      "noActionYet": "No action recorded yet",
+      "sending": "Sending...",
+      "remind": "Remind"
+    },
+    "timeline": {
+      "title": "Document timeline",
+      "subtitle": "Check overall progress and distinguish automatic events from user actions.",
+      "loading": "Loading progress...",
+      "empty": "No progress data available."
+    },
+    "history": {
+      "title": "Action history",
+      "subtitle": "Detailed log of document events for tracking and audit."
+    },
+    "toasts": {
+      "timelineErrorTitle": "Could not load the flow",
+      "timelineErrorMessage": "Could not load the document timeline.",
+      "signersErrorTitle": "Could not load signers",
+      "signersErrorMessage": "Could not load the signers list.",
+      "visaResentTitle": "Approval resent",
+      "visaResentMessage": "Approval reminder resent successfully.",
+      "visaResendErrorTitle": "Could not resend approval",
+      "visaResendErrorMessage": "The approval email could not be resent.",
+      "reminderSentTitle": "Reminder sent",
+      "reminderSentMessage": "Reminder sent successfully.",
+      "signatureReminderSentMessage": "Signature reminder resent successfully.",
+      "signatureResendErrorTitle": "Could not resend signature",
+      "signatureResendErrorMessage": "The signature email could not be resent.",
+      "reminderErrorTitle": "Could not send reminder",
+      "reminderErrorMessage": "The reminder could not be sent."
+    }
   }
 }

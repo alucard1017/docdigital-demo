@@ -7,10 +7,13 @@ import { onCLS, onINP, onLCP, onFCP, onTTFB } from "web-vitals";
 import App from "./App.jsx";
 import "./i18n";
 
+// Estilos base y de layout
 import "./styles/theme.css";
 import "./styles/base.css";
 import "./styles/appShell.css";
 import "./styles/layout.css";
+
+// Estilos de vistas y componentes
 import "./styles/formsAndCards.css";
 import "./styles/detailView.css";
 import "./styles/detailActions.css";
@@ -32,40 +35,45 @@ import "./styles/floatingActions.css";
 import "./styles/helpPanel.css";
 
 import { AuthProvider } from "./context/AuthContext.jsx";
+import { PreferencesProvider } from "./context/PreferencesContext.jsx";
 import { ToastProvider } from "./components/feedback/ToastProvider.jsx";
 
-/* ================================
-   MANEJO DE ERRORES DE CARGA
-   ================================ */
-window.addEventListener("vite:preloadError", (event) => {
-  console.warn("[VITE] Error cargando chunk dinámico. Recargando app...", event);
-  event.preventDefault();
-  window.location.reload();
-});
-
-/* ================================
-   VALIDACIÓN DEL ROOT
-   ================================ */
 const rootElement = document.getElementById("root");
 
 if (!rootElement) {
   throw new Error('No se encontró el elemento raíz con id="root".');
 }
 
-/* ================================
-   WEB VITALS - MÉTRICAS DE RENDIMIENTO
-   ================================ */
+let hasHandledPreloadError = false;
+
+window.addEventListener("vite:preloadError", (event) => {
+  if (hasHandledPreloadError) return;
+
+  hasHandledPreloadError = true;
+
+  console.warn(
+    "[VITE] Error cargando chunk dinámico. Recargando app...",
+    event
+  );
+
+  event.preventDefault();
+  window.location.reload();
+});
+
 function sendMetric(metric) {
   const body = JSON.stringify({
     name: metric.name,
     value: metric.value,
     rating: metric.rating,
+    delta: metric.delta,
+    id: metric.id,
     path: window.location.pathname,
     timestamp: new Date().toISOString(),
   });
 
   if (navigator.sendBeacon) {
-    navigator.sendBeacon("/api/metrics/web-vitals", body);
+    const blob = new Blob([body], { type: "application/json" });
+    navigator.sendBeacon("/api/metrics/web-vitals", blob);
     return;
   }
 
@@ -83,17 +91,18 @@ onLCP(sendMetric);
 onFCP(sendMetric);
 onTTFB(sendMetric);
 
-/* ================================
-   ÁRBOL DE REACT
-   ================================ */
 ReactDOM.createRoot(rootElement).render(
   <React.StrictMode>
     <ToastProvider>
       <AuthProvider>
-        <App />
+        <PreferencesProvider>
+          <App />
+        </PreferencesProvider>
       </AuthProvider>
     </ToastProvider>
   </React.StrictMode>
 );
 
-console.log("✓ Web Vitals inicializadas");
+if (import.meta.env?.DEV) {
+  console.log("✓ Web Vitals inicializadas");
+}

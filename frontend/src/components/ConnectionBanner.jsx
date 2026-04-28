@@ -1,8 +1,7 @@
-// src/components/ConnectionBanner.jsx
 import React from "react";
 import "../styles/connection-banner.css";
 
-export function ConnectionBanner({
+export default function ConnectionBanner({
   status,
   lastError,
   canRetry,
@@ -32,12 +31,10 @@ export function ConnectionBanner({
     <div className={`connection-banner ${toneClass}`} role="status">
       <div className="connection-banner-left">
         <span className="connection-banner-dot" />
-        <span className="connection-banner-text">
-          {showMessage ? message : null}
-        </span>
+        <span className="connection-banner-text">{showMessage ? message : null}</span>
       </div>
 
-      {canRetry && typeof onRetry === "function" && (
+      {canRetry && typeof onRetry === "function" ? (
         <button
           type="button"
           className="connection-banner-retry"
@@ -45,7 +42,7 @@ export function ConnectionBanner({
         >
           Reintentar
         </button>
-      )}
+      ) : null}
     </div>
   );
 }

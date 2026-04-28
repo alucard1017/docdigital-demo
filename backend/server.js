@@ -74,7 +74,7 @@ const metricsRoutes = require("./routes/metrics"); // ← NUEVO
 
 // NUEVAS RUTAS
 const helpRoutes = require("./routes/help.routes");
-const userPreferencesRoutes = require("./routes/userPreferences.routes");
+const userPreferencesRoutes = require("./routes/userPreferences");
 
 /* ================================
    LOG DE INICIO
@@ -431,7 +431,6 @@ console.log("✓ Rutas /api/docs y /api/documents registradas");
    RUTAS PÚBLICAS (sin auth)
    ================================ */
 
-// Público principal
 app.use(
   "/api/public",
   publicLimiter,
@@ -443,11 +442,9 @@ app.use(
 );
 console.log("✓ Rutas /api/public registradas");
 
-// Registro público
 app.use("/api/public", publicRegisterRoutes);
 console.log("✓ Rutas /api/public/register registradas");
 
-// Docs públicos
 app.use("/api/public", publicDocsRouter);
 console.log("✓ Rutas /api/public/documents y /api/public/verificar registradas");
 
@@ -485,13 +482,13 @@ console.log("✓ Rutas /api/billing registradas");
 app.use("/api/notary", notaryRouter);
 console.log("✓ Rutas /api/notary registradas");
 
-// NUEVAS RUTAS: preferencias y help widget
-app.use("/api", requireAuth, userPreferencesRoutes);
-console.log("✓ Rutas /api/me/preferences registradas");
+// Preferencias de usuario (Ajustes)
+app.use("/api/user-preferences", requireAuth, userPreferencesRoutes);
+console.log("✓ Rutas /api/user-preferences registradas");
 
-app.use("/api", requireAuth, helpRoutes);
+// Help / Centro de ayuda
+app.use("/api/help", requireAuth, helpRoutes);
 console.log("✓ Rutas /api/help registradas");
-
 /* ================================
    RUTA STORAGE / URLs FIRMADAS
    ================================ */

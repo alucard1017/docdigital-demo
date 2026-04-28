@@ -1,21 +1,31 @@
-import React, { useMemo, useRef, useState } from "react";
+import React, { useMemo, useRef, useState, useCallback } from "react";
+import { useTranslation } from "react-i18next";
 import api from "../api/client";
 import { getProcedureLabel } from "../utils/documentLabels";
+import "../styles/newDocumentForm.css";
 
 const TIPOS_TRAMITE = [
-  { value: "propio", label: "Sin notaría" },
-  { value: "notaria", label: "Con notaría" },
+  { value: "propio", labelKey: "newDocument.options.tipoTramite.propio", fallback: "Sin notaría" },
+  { value: "notaria", labelKey: "newDocument.options.tipoTramite.notaria", fallback: "Con notaría" },
 ];
 
 const TIPOS_DOCUMENTO = [
-  { value: "poder", label: "Poder" },
-  { value: "contrato", label: "Contrato" },
-  { value: "autorizacion", label: "Autorización" },
+  { value: "poder", labelKey: "newDocument.options.tipoDocumento.poder", fallback: "Poder" },
+  { value: "contrato", labelKey: "newDocument.options.tipoDocumento.contrato", fallback: "Contrato" },
+  { value: "autorizacion", labelKey: "newDocument.options.tipoDocumento.autorizacion", fallback: "Autorización" },
 ];
 
 const TIPOS_FLUJO = [
-  { value: "SECUENCIAL", label: "Secuencial (uno tras otro, en orden)" },
-  { value: "PARALELO", label: "Paralelo (todos a la vez, sin orden)" },
+  {
+    value: "SECUENCIAL",
+    labelKey: "newDocument.options.tipoFlujo.secuencial",
+    fallback: "Secuencial (uno tras otro, en orden)",
+  },
+  {
+    value: "PARALELO",
+    labelKey: "newDocument.options.tipoFlujo.paralelo",
+    fallback: "Paralelo (todos a la vez, sin orden)",
+  },
 ];
 
 const EMAIL_REGEX = /^[^\s@]+@[^\s@]+\.[^\s@]+$/i;
@@ -35,16 +45,40 @@ function readValue(form, name) {
   return (form.elements[name]?.value || "").trim();
 }
 
-function getInlineErrorStyle() {
-  return { color: "#b91c1c", fontSize: "0.8rem", marginTop: 4 };
-}
-
 function buildSignerFullName(...parts) {
   return parts.filter(Boolean).join(" ").replace(/\s+/g, " ").trim();
 }
 
 function cleanRut(value) {
   return String(value || "").replace(/[^0-9kK]/g, "");
+}
+
+function getFieldErrorProps(name, errors) {
+  const hasError = Boolean(errors[name]);
+
+  return {
+    "aria-invalid": hasError ? "true" : "false",
+    "aria-describedby": hasError ? `${name}-error` : undefined,
+  };
+}
+
+function FieldError({ name, errors }) {
+  if (!errors[name]) return null;
+
+  return (
+    <p id={`${name}-error`} className="form-field-error" role="alert">
+      {errors[name]}
+    </p>
+  );
+}
+
+function SectionTitle({ title, description }) {
+  return (
+    <div className="new-doc-section__heading">
+      <h3>{title}</h3>
+      {description ? <p>{description}</p> : null}
+    </div>
+  );
 }
 
 export function NewDocumentForm({
@@ -64,6 +98,7 @@ export function NewDocumentForm({
   goToList,
   cargarDocs,
 }) {
+  const { t } = useTranslation();
   const fileInputRef = useRef(null);
 
   const [tipoDocumento, setTipoDocumento] = useState("");
@@ -71,6 +106,7 @@ export function NewDocumentForm({
   const [selectedFile, setSelectedFile] = useState(null);
   const [submitting, setSubmitting] = useState(false);
   const [submitMessage, setSubmitMessage] = useState("");
+  const [submitStatus, setSubmitStatus] = useState("");
 
   const fileName = selectedFile?.name || "";
 
@@ -81,805 +117,900 @@ export function NewDocumentForm({
     });
   }, [tipoTramite, tipoDocumento]);
 
-  const resetFormState = (form) => {
-    form.reset();
-    setShowVisador(false);
-    setExtraSigners([]);
-    setFirmanteRunValue("");
-    setEmpresaRutValue("");
-    setTipoDocumento("");
-    setTipoFlujo("SECUENCIAL");
-    setSelectedFile(null);
-    setFormErrors({});
-    setSubmitMessage("");
+  const resetFormState = useCallback(
+    (form) => {
+      form.reset();
+      setShowVisador(false);
+      setExtraSigners([]);
+      setFirmanteRunValue("");
+      setEmpresaRutValue("");
+      setTipoDocumento("");
+      setTipoFlujo("SECUENCIAL");
+      setSelectedFile(null);
+      setFormErrors({});
+      setSubmitMessage("");
+      setSubmitStatus("");
 
-    if (fileInputRef.current) {
-      fileInputRef.current.value = "";
-    }
-  };
+      if (fileInputRef.current) {
+        fileInputRef.current.value = "";
+      }
+    },
+    [
+      setShowVisador,
+      setExtraSigners,
+      setFirmanteRunValue,
+      setEmpresaRutValue,
+      setFormErrors,
+    ]
+  );
 
-  const addExtraSigner = () => {
+  const addExtraSigner = useCallback(() => {
     setExtraSigners((prev) => [...prev, { id: Date.now() + Math.random() }]);
-  };
+  }, [setExtraSigners]);
 
-  const removeExtraSigner = (id) => {
-    const nextSigners = extraSigners.filter((signer) => signer.id !== id);
+  const removeExtraSigner = useCallback(
+    (id) => {
+      const nextSigners = extraSigners.filter((signer) => signer.id !== id);
 
-    setExtraSigners(nextSigners);
+      setExtraSigners(nextSigners);
 
-    setFormErrors((prev) => {
-      const next = { ...prev };
+      setFormErrors((prev) => {
+        const next = { ...prev };
 
-      Object.keys(next).forEach((key) => {
-        if (
-          key.startsWith("extra_nombre_") ||
-          key.startsWith("extra_email_") ||
-          key.startsWith("extra_movil_")
-        ) {
-          delete next[key];
+        Object.keys(next).forEach((key) => {
+          if (
+            key.startsWith("extra_nombre_") ||
+            key.startsWith("extra_email_") ||
+            key.startsWith("extra_movil_")
+          ) {
+            delete next[key];
+          }
+        });
+
+        nextSigners.forEach((_, index) => {
+          const oldNameKey = `extra_nombre_${index}`;
+          const oldEmailKey = `extra_email_${index}`;
+          const oldMovilKey = `extra_movil_${index}`;
+
+          if (prev[oldNameKey]) next[oldNameKey] = prev[oldNameKey];
+          if (prev[oldEmailKey]) next[oldEmailKey] = prev[oldEmailKey];
+          if (prev[oldMovilKey]) next[oldMovilKey] = prev[oldMovilKey];
+        });
+
+        return next;
+      });
+    },
+    [extraSigners, setExtraSigners, setFormErrors]
+  );
+
+  const handleFileChange = useCallback(
+    (event) => {
+      const file = event.target.files?.[0] || null;
+      setSelectedFile(file);
+
+      setFormErrors((prev) => {
+        const next = { ...prev };
+        delete next.file;
+        return next;
+      });
+    },
+    [setFormErrors]
+  );
+
+  const validateForm = useCallback(
+    (form) => {
+      const newErrors = {};
+
+      const titleRaw = readValue(form, "title");
+      const description = readValue(form, "description");
+      const file = selectedFile;
+
+      const firmanteNombre1 = readValue(form, "firmante_nombre1");
+      const firmanteNombre2 = readValue(form, "firmante_nombre2");
+      const firmanteApellido1 = readValue(form, "firmante_apellido1");
+      const firmanteApellido2 = readValue(form, "firmante_apellido2");
+      const firmanteEmail = readValue(form, "firmante_email");
+      const firmanteMovil = readValue(form, "firmante_movil");
+
+      const destinatarioNombre = readValue(form, "destinatario_nombre");
+      const destinatarioEmail = readValue(form, "destinatario_email");
+
+      const visadorNombre = readValue(form, "visador_nombre");
+      const visadorEmail = readValue(form, "visador_email");
+      const visadorMovil = readValue(form, "visador_movil");
+
+      const firmanteRunClean = cleanRut(firmanteRunValue);
+      const empresaRutClean = cleanRut(empresaRutValue);
+
+      if (!tipoTramite) {
+        newErrors.tipo_tramite = t(
+          "newDocument.errors.tipoTramiteRequired",
+          "Selecciona si el trámite es con o sin notaría."
+        );
+      }
+
+      if (!tipoDocumento) {
+        newErrors.tipo_documento = t(
+          "newDocument.errors.tipoDocumentoRequired",
+          "Selecciona el tipo de documento."
+        );
+      }
+
+      const title =
+        titleRaw || (file?.name || "").replace(/\.pdf$/i, "").trim();
+
+      if (!title || title.length < 2) {
+        newErrors.title = t(
+          "newDocument.errors.titleTooShort",
+          "El título debe tener al menos 2 caracteres."
+        );
+      } else if (title.length > 255) {
+        newErrors.title = t(
+          "newDocument.errors.titleTooLong",
+          "El título no puede superar 255 caracteres."
+        );
+      }
+
+      if (!file) {
+        newErrors.file = t(
+          "newDocument.errors.fileRequired",
+          "Adjunta un archivo PDF."
+        );
+      } else if (!isPdfFile(file)) {
+        newErrors.file = t(
+          "newDocument.errors.fileInvalid",
+          "El archivo debe ser un PDF válido."
+        );
+      }
+
+      if (!firmanteNombre1) {
+        newErrors.firmante_nombre1 = t(
+          "newDocument.errors.required",
+          "Este campo es obligatorio."
+        );
+      }
+
+      if (!firmanteApellido1) {
+        newErrors.firmante_apellido1 = t(
+          "newDocument.errors.required",
+          "Este campo es obligatorio."
+        );
+      }
+
+      if (!firmanteEmail || !isValidEmail(firmanteEmail)) {
+        newErrors.firmante_email = t(
+          "newDocument.errors.invalidEmail",
+          "Ingresa un correo válido."
+        );
+      }
+
+      if (!firmanteMovil) {
+        newErrors.firmante_movil = t(
+          "newDocument.errors.mobileRequired",
+          "El teléfono es obligatorio."
+        );
+      }
+
+      if (!firmanteRunClean) {
+        newErrors.firmante_run = t(
+          "newDocument.errors.runRequired",
+          "RUN / RUT es obligatorio."
+        );
+      } else if (firmanteRunClean.length < 8 || firmanteRunClean.length > 10) {
+        newErrors.firmante_run = t(
+          "newDocument.errors.runInvalid",
+          "RUN inválido (ej: 12.345.678-9)."
+        );
+      }
+
+      if (!destinatarioNombre) {
+        newErrors.destinatario_nombre = t(
+          "newDocument.errors.required",
+          "Este campo es obligatorio."
+        );
+      }
+
+      if (!destinatarioEmail || !isValidEmail(destinatarioEmail)) {
+        newErrors.destinatario_email = t(
+          "newDocument.errors.invalidEmail",
+          "Ingresa un correo válido."
+        );
+      }
+
+      if (!empresaRutClean) {
+        newErrors.empresa_rut = t(
+          "newDocument.errors.companyRutRequired",
+          "El RUT de la empresa es obligatorio."
+        );
+      } else if (empresaRutClean.length < 8 || empresaRutClean.length > 10) {
+        newErrors.empresa_rut = t(
+          "newDocument.errors.companyRutInvalid",
+          "RUT inválido (ej: 12.345.678-9)."
+        );
+      }
+
+      if (showVisador) {
+        if (!visadorNombre) {
+          newErrors.visador_nombre = t(
+            "newDocument.errors.visadorNameRequired",
+            "Nombre del visador obligatorio."
+          );
+        }
+
+        if (!visadorEmail || !isValidEmail(visadorEmail)) {
+          newErrors.visador_email = t(
+            "newDocument.errors.visadorEmailRequired",
+            "Email del visador obligatorio."
+          );
+        }
+      }
+
+      const firmanteNombreCompleto = buildSignerFullName(
+        firmanteNombre1,
+        firmanteNombre2,
+        firmanteApellido1,
+        firmanteApellido2
+      );
+
+      const signers = [];
+
+      if (showVisador && visadorEmail) {
+        signers.push({
+          nombreCompleto: visadorNombre,
+          email: visadorEmail,
+          telefono: visadorMovil || null,
+          orden: 1,
+          tipo: "VISADOR",
+          debe_visar: true,
+          debe_firmar: false,
+        });
+      }
+
+      signers.push({
+        nombreCompleto: firmanteNombreCompleto,
+        email: firmanteEmail,
+        telefono: firmanteMovil,
+        orden: showVisador ? 2 : 1,
+        tipo: "FIRMANTE",
+        debe_visar: false,
+        debe_firmar: true,
+        run: firmanteRunValue,
+      });
+
+      extraSigners.forEach((signer, index) => {
+        const nombreExtra = readValue(form, `extra_nombre_${index}`);
+        const emailExtra = readValue(form, `extra_email_${index}`);
+        const movilExtra = readValue(form, `extra_movil_${index}`);
+
+        if (!nombreExtra) {
+          newErrors[`extra_nombre_${index}`] = t(
+            "newDocument.errors.extraSignerNameRequired",
+            "Nombre obligatorio."
+          );
+        }
+
+        if (!emailExtra || !isValidEmail(emailExtra)) {
+          newErrors[`extra_email_${index}`] = t(
+            "newDocument.errors.extraSignerEmailRequired",
+            "Email obligatorio."
+          );
+        }
+
+        if (nombreExtra && emailExtra && isValidEmail(emailExtra)) {
+          signers.push({
+            nombreCompleto: nombreExtra,
+            email: emailExtra,
+            telefono: movilExtra || null,
+            orden: signers.length + 1,
+            tipo: "FIRMANTE",
+            debe_visar: false,
+            debe_firmar: true,
+          });
         }
       });
 
-      nextSigners.forEach((_, index) => {
-        const oldNameKey = `extra_nombre_${index}`;
-        const oldEmailKey = `extra_email_${index}`;
-        const oldMovilKey = `extra_movil_${index}`;
+      return {
+        errors: newErrors,
+        values: {
+          title,
+          description,
+          file,
+          destinatarioNombre,
+          destinatarioEmail,
+          signers,
+        },
+      };
+    },
+    [
+      extraSigners,
+      firmanteRunValue,
+      empresaRutValue,
+      selectedFile,
+      showVisador,
+      t,
+      tipoDocumento,
+      tipoTramite,
+    ]
+  );
 
-        if (prev[oldNameKey]) next[oldNameKey] = prev[oldNameKey];
-        if (prev[oldEmailKey]) next[oldEmailKey] = prev[oldEmailKey];
-        if (prev[oldMovilKey]) next[oldMovilKey] = prev[oldMovilKey];
-      });
+  const handleSubmit = useCallback(
+    async (event) => {
+      event.preventDefault();
+      setFormErrors({});
+      setSubmitMessage("");
+      setSubmitStatus("");
+      setSubmitting(true);
 
-      return next;
-    });
-  };
+      const form = event.currentTarget;
+      const { errors, values } = validateForm(form);
 
-  const handleFileChange = (e) => {
-    const file = e.target.files?.[0] || null;
-    setSelectedFile(file);
-
-    setFormErrors((prev) => {
-      const next = { ...prev };
-      delete next.file;
-      return next;
-    });
-  };
-
-  const handleSubmit = async (e) => {
-    e.preventDefault();
-    setFormErrors({});
-    setSubmitMessage("");
-    setSubmitting(true);
-
-    const form = e.currentTarget;
-    const newErrors = {};
-
-    const titleRaw = readValue(form, "title");
-    const description = readValue(form, "description");
-    const file = selectedFile;
-
-    const firmanteNombre1 = readValue(form, "firmante_nombre1");
-    const firmanteNombre2 = readValue(form, "firmante_nombre2");
-    const firmanteApellido1 = readValue(form, "firmante_apellido1");
-    const firmanteApellido2 = readValue(form, "firmante_apellido2");
-    const firmanteEmail = readValue(form, "firmante_email");
-    const firmanteMovil = readValue(form, "firmante_movil");
-
-    const destinatarioNombre = readValue(form, "destinatario_nombre");
-    const destinatarioEmail = readValue(form, "destinatario_email");
-
-    const visadorNombre = readValue(form, "visador_nombre");
-    const visadorEmail = readValue(form, "visador_email");
-    const visadorMovil = readValue(form, "visador_movil");
-
-    const firmanteRunClean = cleanRut(firmanteRunValue);
-    const empresaRutClean = cleanRut(empresaRutValue);
-
-    if (!tipoTramite) {
-      newErrors.tipo_tramite = "Selecciona si el trámite es con o sin notaría.";
-    }
-
-    if (!tipoDocumento) {
-      newErrors.tipo_documento = "Selecciona el tipo de documento.";
-    }
-
-    const title = titleRaw || (file?.name || "").replace(/\.pdf$/i, "").trim();
-
-    if (!title || title.length < 2) {
-      newErrors.title = "El título debe tener al menos 2 caracteres.";
-    } else if (title.length > 255) {
-      newErrors.title = "El título no puede superar 255 caracteres.";
-    }
-
-    if (!file) {
-      newErrors.file = "Adjunta un archivo PDF.";
-    } else if (!isPdfFile(file)) {
-      newErrors.file = "El archivo debe ser un PDF válido.";
-    }
-
-    if (!firmanteNombre1) {
-      newErrors.firmante_nombre1 = "Este campo es obligatorio.";
-    }
-
-    if (!firmanteApellido1) {
-      newErrors.firmante_apellido1 = "Este campo es obligatorio.";
-    }
-
-    if (!firmanteEmail || !isValidEmail(firmanteEmail)) {
-      newErrors.firmante_email = "Ingresa un correo válido.";
-    }
-
-    if (!firmanteMovil) {
-      newErrors.firmante_movil = "El teléfono es obligatorio.";
-    }
-
-    if (!firmanteRunClean) {
-      newErrors.firmante_run = "RUN / RUT es obligatorio.";
-    } else if (firmanteRunClean.length < 8 || firmanteRunClean.length > 10) {
-      newErrors.firmante_run = "RUN inválido (ej: 12.345.678-9).";
-    }
-
-    if (!destinatarioNombre) {
-      newErrors.destinatario_nombre = "Este campo es obligatorio.";
-    }
-
-    if (!destinatarioEmail || !isValidEmail(destinatarioEmail)) {
-      newErrors.destinatario_email = "Ingresa un correo válido.";
-    }
-
-    if (!empresaRutClean) {
-      newErrors.empresa_rut = "El RUT de la empresa es obligatorio.";
-    } else if (empresaRutClean.length < 8 || empresaRutClean.length > 10) {
-      newErrors.empresa_rut = "RUT inválido (ej: 12.345.678-9).";
-    }
-
-    if (showVisador) {
-      if (!visadorNombre) {
-        newErrors.visador_nombre = "Nombre del visador obligatorio.";
+      if (Object.keys(errors).length > 0) {
+        setFormErrors(errors);
+        setSubmitting(false);
+        return;
       }
 
-      if (!visadorEmail || !isValidEmail(visadorEmail)) {
-        newErrors.visador_email = "Email del visador obligatorio.";
+      try {
+        const formData = new FormData();
+        formData.append("title", values.title);
+        formData.append("description", values.description);
+        formData.append("file", values.file);
+        formData.append("autoSendFlow", "true");
+        formData.append("tipo_tramite", tipoTramite);
+        formData.append("tipo_documento", tipoDocumento);
+        formData.append("tipo_flujo", tipoFlujo);
+        formData.append("empresa_rut", empresaRutValue);
+        formData.append("destinatario_nombre", values.destinatarioNombre);
+        formData.append("destinatario_email", values.destinatarioEmail);
+        formData.append("requiresVisado", showVisador ? "true" : "false");
+        formData.append("signers", JSON.stringify(values.signers));
+
+        if (tipoTramite === "notaria") {
+          formData.append("requiere_firma_notarial", "true");
+        }
+
+        const res = await api.post("/docs", formData);
+
+        if (!res?.data) {
+          throw new Error(
+            t(
+              "newDocument.errors.serverNoData",
+              "No se pudo crear el documento en el servidor."
+            )
+          );
+        }
+
+        setSubmitStatus("success");
+        setSubmitMessage(
+          t(
+            "newDocument.messages.success",
+            "Documento creado y enviado correctamente."
+          )
+        );
+
+        resetFormState(form);
+
+        if (typeof cargarDocs === "function") {
+          await cargarDocs();
+        }
+
+        if (typeof goToList === "function") {
+          await goToList();
+        }
+      } catch (err) {
+        console.error("Error creando documento:", err);
+
+        const msg =
+          err?.response?.data?.message ||
+          err?.message ||
+          t(
+            "newDocument.errors.genericSubmit",
+            "Fallo en la creación del documento."
+          );
+
+        setSubmitStatus("error");
+        setSubmitMessage(msg);
+      } finally {
+        setSubmitting(false);
       }
-    }
-
-    const firmanteNombreCompleto = buildSignerFullName(
-      firmanteNombre1,
-      firmanteNombre2,
-      firmanteApellido1,
-      firmanteApellido2
-    );
-
-    const signers = [];
-
-    if (showVisador && visadorEmail) {
-      signers.push({
-        nombreCompleto: visadorNombre,
-        email: visadorEmail,
-        telefono: visadorMovil || null,
-        orden: 1,
-        tipo: "VISADOR",
-        debe_visar: true,
-        debe_firmar: false,
-      });
-    }
-
-    signers.push({
-      nombreCompleto: firmanteNombreCompleto,
-      email: firmanteEmail,
-      telefono: firmanteMovil,
-      orden: showVisador ? 2 : 1,
-      tipo: "FIRMANTE",
-      debe_visar: false,
-      debe_firmar: true,
-      run: firmanteRunValue,
-    });
-
-    extraSigners.forEach((signer, index) => {
-      const nombreExtra = readValue(form, `extra_nombre_${index}`);
-      const emailExtra = readValue(form, `extra_email_${index}`);
-      const movilExtra = readValue(form, `extra_movil_${index}`);
-
-      if (!nombreExtra) {
-        newErrors[`extra_nombre_${index}`] = "Nombre obligatorio.";
-      }
-
-      if (!emailExtra || !isValidEmail(emailExtra)) {
-        newErrors[`extra_email_${index}`] = "Email obligatorio.";
-      }
-
-      if (nombreExtra && emailExtra && isValidEmail(emailExtra)) {
-        signers.push({
-          nombreCompleto: nombreExtra,
-          email: emailExtra,
-          telefono: movilExtra || null,
-          orden: signers.length + 1,
-          tipo: "FIRMANTE",
-          debe_visar: false,
-          debe_firmar: true,
-        });
-      }
-    });
-
-    if (Object.keys(newErrors).length > 0) {
-      setFormErrors(newErrors);
-      setSubmitting(false);
-      return;
-    }
-
-    try {
-      const formData = new FormData();
-      formData.append("title", title);
-      formData.append("description", description);
-      formData.append("file", file);
-      formData.append("autoSendFlow", "true");
-      formData.append("tipo_tramite", tipoTramite);
-      formData.append("tipo_documento", tipoDocumento);
-      formData.append("tipo_flujo", tipoFlujo);
-      formData.append("empresa_rut", empresaRutValue);
-      formData.append("destinatario_nombre", destinatarioNombre);
-      formData.append("destinatario_email", destinatarioEmail);
-      formData.append("requiresVisado", showVisador ? "true" : "false");
-      formData.append("signers", JSON.stringify(signers));
-
-      if (tipoTramite === "notaria") {
-        formData.append("requiere_firma_notarial", "true");
-      }
-
-      const res = await api.post("/docs", formData);
-
-      if (!res?.data) {
-        throw new Error("No se pudo crear el documento en el servidor.");
-      }
-
-      setSubmitMessage("✅ Documento creado y enviado correctamente.");
-      resetFormState(form);
-
-      if (typeof cargarDocs === "function") {
-        await cargarDocs();
-      }
-
-      if (typeof goToList === "function") {
-        await goToList();
-      }
-    } catch (err) {
-      console.error("Error creando documento:", err);
-
-      const msg =
-        err?.response?.data?.message ||
-        err?.message ||
-        "Fallo en la creación del documento.";
-
-      setSubmitMessage(`❌ ${msg}`);
-    } finally {
-      setSubmitting(false);
-    }
-  };
+    },
+    [
+      cargarDocs,
+      empresaRutValue,
+      goToList,
+      resetFormState,
+      setFormErrors,
+      showVisador,
+      t,
+      tipoDocumento,
+      tipoFlujo,
+      tipoTramite,
+      validateForm,
+    ]
+  );
 
   return (
-    <div className="card-premium">
-      <h1 style={{ fontSize: "1.4rem", marginBottom: 8 }}>
-        Crear nuevo documento
-      </h1>
+    <section className="card-premium new-document-form">
+      <header className="new-document-form__header">
+        <h1 className="new-document-form__title">
+          {t("newDocument.title", "Crear nuevo documento")}
+        </h1>
+        <p className="new-document-form__subtitle">
+          {t(
+            "newDocument.subtitle",
+            "Define el tipo de documento, los participantes y carga el PDF para iniciar el flujo."
+          )}
+        </p>
+      </header>
 
-      <p
-        style={{
-          color: "#64748b",
-          marginBottom: 16,
-          fontSize: "1.05rem",
-        }}
-      >
-        Define el tipo de documento, los participantes y carga el PDF para iniciar el flujo.
-      </p>
-
-      {submitMessage && (
+      {submitMessage ? (
         <div
-          style={{
-            marginBottom: 16,
-            padding: "12px 14px",
-            borderRadius: 12,
-            background: submitMessage.startsWith("✅") ? "#ecfdf5" : "#fef2f2",
-            color: submitMessage.startsWith("✅") ? "#166534" : "#b91c1c",
-            border: `1px solid ${
-              submitMessage.startsWith("✅") ? "#bbf7d0" : "#fecaca"
-            }`,
-          }}
+          className={`form-submit-banner ${
+            submitStatus === "success"
+              ? "form-submit-banner--success"
+              : "form-submit-banner--error"
+          }`}
+          role="status"
+          aria-live="polite"
         >
+          {submitStatus === "success" ? "✅ " : "❌ "}
           {submitMessage}
         </div>
-      )}
+      ) : null}
 
-      <div
-        style={{
-          marginBottom: 18,
-          padding: "12px 14px",
-          borderRadius: 14,
-          background: "#f8fafc",
-          border: "1px solid #e2e8f0",
-          color: "#334155",
-          fontSize: "0.92rem",
-        }}
-      >
-        Clasificación actual: <strong>{resumenTipo}</strong>
+      <div className="new-document-summary">
+        {t("newDocument.summaryLabel", "Clasificación actual")}:{" "}
+        <strong>{resumenTipo}</strong>
       </div>
 
-      <div
-        style={{
-          display: "flex",
-          flexWrap: "wrap",
-          gap: 16,
-          marginBottom: 24,
-        }}
-      >
-        <div style={{ minWidth: 260 }}>
-          <label
-            style={{
-              fontWeight: 700,
-              fontSize: "0.9rem",
-              display: "block",
-              marginBottom: 8,
-            }}
-          >
-            Trámite
+      <div className="new-document-grid new-document-grid--top">
+        <div className="form-field">
+          <label htmlFor="tipo_tramite">
+            {t("newDocument.fields.tipoTramite", "Trámite")}
           </label>
           <select
+            id="tipo_tramite"
             className="input-field"
             value={tipoTramite}
             onChange={(e) => setTipoTramite(e.target.value)}
+            {...getFieldErrorProps("tipo_tramite", formErrors)}
           >
-            <option value="">Selecciona una opción</option>
-            {TIPOS_TRAMITE.map((t) => (
-              <option key={t.value} value={t.value}>
-                {t.label}
+            <option value="">
+              {t("newDocument.placeholders.selectOption", "Selecciona una opción")}
+            </option>
+            {TIPOS_TRAMITE.map((tipo) => (
+              <option key={tipo.value} value={tipo.value}>
+                {t(tipo.labelKey, tipo.fallback)}
               </option>
             ))}
           </select>
-          {formErrors.tipo_tramite && (
-            <p style={getInlineErrorStyle()}>{formErrors.tipo_tramite}</p>
-          )}
+          <FieldError name="tipo_tramite" errors={formErrors} />
         </div>
 
-        <div style={{ minWidth: 260 }}>
-          <label
-            style={{
-              fontWeight: 700,
-              fontSize: "0.9rem",
-              display: "block",
-              marginBottom: 8,
-            }}
-          >
-            Documento
+        <div className="form-field">
+          <label htmlFor="tipo_documento">
+            {t("newDocument.fields.tipoDocumento", "Documento")}
           </label>
           <select
+            id="tipo_documento"
             className="input-field"
             value={tipoDocumento}
             onChange={(e) => setTipoDocumento(e.target.value)}
+            {...getFieldErrorProps("tipo_documento", formErrors)}
           >
-            <option value="">Selecciona una opción</option>
-            {TIPOS_DOCUMENTO.map((t) => (
-              <option key={t.value} value={t.value}>
-                {t.label}
+            <option value="">
+              {t("newDocument.placeholders.selectOption", "Selecciona una opción")}
+            </option>
+            {TIPOS_DOCUMENTO.map((tipo) => (
+              <option key={tipo.value} value={tipo.value}>
+                {t(tipo.labelKey, tipo.fallback)}
               </option>
             ))}
           </select>
-          {formErrors.tipo_documento && (
-            <p style={getInlineErrorStyle()}>{formErrors.tipo_documento}</p>
-          )}
-        </div>
-      </div>
-
-      <div style={{ marginBottom: 24 }}>
-        <label
-          style={{
-            fontWeight: 700,
-            fontSize: "0.9rem",
-            display: "block",
-            marginBottom: 8,
-          }}
-        >
-          Tipo de flujo de firma
-        </label>
-        <select
-          className="input-field"
-          value={tipoFlujo}
-          onChange={(e) => setTipoFlujo(e.target.value)}
-        >
-          {TIPOS_FLUJO.map((t) => (
-            <option key={t.value} value={t.value}>
-              {t.label}
-            </option>
-          ))}
-        </select>
-      </div>
-
-      <form onSubmit={handleSubmit}>
-        <div
-          style={{
-            marginBottom: 20,
-            display: "flex",
-            gap: 16,
-            alignItems: "flex-end",
-            flexWrap: "wrap",
-          }}
-        >
-          <div style={{ flex: 1, minWidth: 280 }}>
-            <label
-              style={{
-                fontWeight: 700,
-                fontSize: "0.9rem",
-                display: "block",
-                marginBottom: 8,
-              }}
-            >
-              Nombre del documento *
-            </label>
-            <input
-              name="title"
-              className="input-field"
-              placeholder="Ej: Contrato de prestación de servicios"
-            />
-            {formErrors.title && (
-              <p style={getInlineErrorStyle()}>{formErrors.title}</p>
-            )}
-          </div>
-
-          <input
-            ref={fileInputRef}
-            type="file"
-            name="file"
-            accept="application/pdf,.pdf"
-            id="file-input-contrato"
-            style={{ display: "none" }}
-            onChange={handleFileChange}
-          />
-
-          <div>
-            <label
-              style={{
-                fontWeight: 700,
-                fontSize: "0.9rem",
-                display: "block",
-                marginBottom: 8,
-              }}
-            >
-              Archivo PDF *
-            </label>
-            <button
-              type="button"
-              className="btn-main"
-              style={{
-                background: "#0f766e",
-                color: "#ffffff",
-                padding: "10px 24px",
-                fontWeight: 600,
-                whiteSpace: "nowrap",
-              }}
-              onClick={() => fileInputRef.current?.click()}
-            >
-              Subir PDF
-            </button>
-
-            {fileName && (
-              <p
-                style={{
-                  marginTop: 6,
-                  fontSize: "0.8rem",
-                  color: "#64748b",
-                }}
-              >
-                Archivo seleccionado: {fileName}
-              </p>
-            )}
-
-            {formErrors.file && (
-              <p style={getInlineErrorStyle()}>{formErrors.file}</p>
-            )}
-          </div>
+          <FieldError name="tipo_documento" errors={formErrors} />
         </div>
 
-        <div style={{ marginBottom: 30 }}>
-          <label
-            style={{
-              fontWeight: 700,
-              fontSize: "0.9rem",
-              display: "block",
-              marginBottom: 10,
-            }}
-          >
-            Descripción y observaciones
+        <div className="form-field form-field--full">
+          <label htmlFor="tipo_flujo">
+            {t("newDocument.fields.tipoFlujo", "Tipo de flujo de firma")}
           </label>
-          <textarea
-            name="description"
+          <select
+            id="tipo_flujo"
             className="input-field"
-            rows="4"
-            placeholder="Indique detalles relevantes..."
-          />
-        </div>
-
-        <div
-          style={{
-            background: "#f1f5f9",
-            padding: 24,
-            borderRadius: 22,
-            marginBottom: 32,
-            border: "1px solid #e2e8f0",
-          }}
-        >
-          <label
-            style={{
-              fontWeight: 800,
-              display: "flex",
-              alignItems: "center",
-              cursor: "pointer",
-              fontSize: "1.05rem",
-              color: "#1e293b",
-            }}
+            value={tipoFlujo}
+            onChange={(e) => setTipoFlujo(e.target.value)}
           >
+            {TIPOS_FLUJO.map((tipo) => (
+              <option key={tipo.value} value={tipo.value}>
+                {t(tipo.labelKey, tipo.fallback)}
+              </option>
+            ))}
+          </select>
+        </div>
+      </div>
+
+      <form onSubmit={handleSubmit} noValidate>
+        <section className="new-doc-section">
+          <SectionTitle
+            title={t("newDocument.sections.document.title", "Documento")}
+            description={t(
+              "newDocument.sections.document.description",
+              "Define el nombre, adjunta el PDF y agrega observaciones si corresponde."
+            )}
+          />
+
+          <div className="new-document-upload-row">
+            <div className="form-field new-document-upload-row__title">
+              <label htmlFor="title">
+                {t("newDocument.fields.title", "Nombre del documento")} *
+              </label>
+              <input
+                id="title"
+                name="title"
+                className="input-field"
+                placeholder={t(
+                  "newDocument.placeholders.title",
+                  "Ej: Contrato de prestación de servicios"
+                )}
+                {...getFieldErrorProps("title", formErrors)}
+              />
+              <FieldError name="title" errors={formErrors} />
+            </div>
+
+            <input
+              ref={fileInputRef}
+              type="file"
+              name="file"
+              accept="application/pdf,.pdf"
+              id="file-input-contrato"
+              hidden
+              onChange={handleFileChange}
+            />
+
+            <div className="form-field new-document-upload-row__file">
+              <label htmlFor="file-input-contrato">
+                {t("newDocument.fields.file", "Archivo PDF")} *
+              </label>
+              <button
+                type="button"
+                className="btn-main btn-primary"
+                onClick={() => fileInputRef.current?.click()}
+                aria-describedby={formErrors.file ? "file-error" : undefined}
+              >
+                {t("newDocument.actions.uploadPdf", "Subir PDF")}
+              </button>
+
+              {fileName ? (
+                <p className="file-selected-text">
+                  {t("newDocument.messages.selectedFile", "Archivo seleccionado")}: {fileName}
+                </p>
+              ) : null}
+
+              <FieldError name="file" errors={formErrors} />
+            </div>
+          </div>
+
+          <div className="form-field">
+            <label htmlFor="description">
+              {t("newDocument.fields.description", "Descripción y observaciones")}
+            </label>
+            <textarea
+              id="description"
+              name="description"
+              className="input-field"
+              rows="4"
+              placeholder={t(
+                "newDocument.placeholders.description",
+                "Indique detalles relevantes..."
+              )}
+            />
+          </div>
+        </section>
+
+        <section className="new-doc-section new-doc-section--soft">
+          <label className="visador-toggle">
             <input
               type="checkbox"
               checked={showVisador}
               onChange={(e) => setShowVisador(e.target.checked)}
-              style={{ marginRight: 15, width: 22, height: 22 }}
             />
-            ¿Este envío requiere revisión previa de un visador?
+            <span>
+              {t(
+                "newDocument.fields.requiresVisador",
+                "¿Este envío requiere revisión previa de un visador?"
+              )}
+            </span>
           </label>
 
-          {showVisador && (
-            <div
-              style={{
-                display: "grid",
-                gridTemplateColumns: "repeat(auto-fit, minmax(220px, 1fr))",
-                gap: 20,
-                marginTop: 24,
-              }}
-            >
-              <div>
+          {showVisador ? (
+            <div className="new-document-grid">
+              <div className="form-field">
+                <label htmlFor="visador_nombre">
+                  {t("newDocument.fields.visadorNombre", "Nombre del visador")} *
+                </label>
                 <input
+                  id="visador_nombre"
                   name="visador_nombre"
                   className="input-field"
-                  placeholder="Nombre visador"
+                  placeholder={t("newDocument.placeholders.visadorNombre", "Nombre visador")}
+                  {...getFieldErrorProps("visador_nombre", formErrors)}
                 />
-                {formErrors.visador_nombre && (
-                  <p style={getInlineErrorStyle()}>{formErrors.visador_nombre}</p>
-                )}
+                <FieldError name="visador_nombre" errors={formErrors} />
               </div>
 
-              <div>
+              <div className="form-field">
+                <label htmlFor="visador_email">
+                  {t("newDocument.fields.visadorEmail", "Email del visador")} *
+                </label>
                 <input
+                  id="visador_email"
                   name="visador_email"
                   type="email"
                   className="input-field"
-                  placeholder="Email visador"
+                  placeholder={t("newDocument.placeholders.visadorEmail", "Email visador")}
+                  {...getFieldErrorProps("visador_email", formErrors)}
                 />
-                {formErrors.visador_email && (
-                  <p style={getInlineErrorStyle()}>{formErrors.visador_email}</p>
-                )}
+                <FieldError name="visador_email" errors={formErrors} />
               </div>
 
-              <input
-                name="visador_movil"
-                className="input-field"
-                placeholder="Móvil (opcional)"
-              />
+              <div className="form-field">
+                <label htmlFor="visador_movil">
+                  {t("newDocument.fields.visadorMovil", "Móvil del visador")}
+                </label>
+                <input
+                  id="visador_movil"
+                  name="visador_movil"
+                  className="input-field"
+                  placeholder={t("newDocument.placeholders.visadorMovil", "Móvil (opcional)")}
+                />
+              </div>
             </div>
-          )}
-        </div>
+          ) : null}
+        </section>
 
-        <div
-          style={{
-            display: "grid",
-            gridTemplateColumns: "repeat(auto-fit, minmax(320px, 1fr))",
-            gap: 24,
-          }}
-        >
-          <div className="card-mini" style={{ marginTop: 0 }}>
-            <h4>Firmante principal</h4>
+        <div className="new-document-grid new-document-grid--cards">
+          <section className="card-mini">
+            <h4>{t("newDocument.sections.mainSigner", "Firmante principal")}</h4>
+
             <div className="card-content">
-              <input
-                name="firmante_nombre1"
-                className="input-field"
-                placeholder="Primer nombre *"
-              />
-              {formErrors.firmante_nombre1 && (
-                <p style={getInlineErrorStyle()}>{formErrors.firmante_nombre1}</p>
-              )}
+              <div className="form-field">
+                <label htmlFor="firmante_nombre1">
+                  {t("newDocument.fields.firstName", "Primer nombre")} *
+                </label>
+                <input
+                  id="firmante_nombre1"
+                  name="firmante_nombre1"
+                  className="input-field"
+                  placeholder={t("newDocument.placeholders.firstName", "Primer nombre")}
+                  {...getFieldErrorProps("firmante_nombre1", formErrors)}
+                />
+                <FieldError name="firmante_nombre1" errors={formErrors} />
+              </div>
 
-              <input
-                name="firmante_nombre2"
-                className="input-field"
-                placeholder="Segundo nombre"
-              />
+              <div className="form-field">
+                <label htmlFor="firmante_nombre2">
+                  {t("newDocument.fields.secondName", "Segundo nombre")}
+                </label>
+                <input
+                  id="firmante_nombre2"
+                  name="firmante_nombre2"
+                  className="input-field"
+                  placeholder={t("newDocument.placeholders.secondName", "Segundo nombre")}
+                />
+              </div>
 
-              <input
-                name="firmante_apellido1"
-                className="input-field"
-                placeholder="Primer apellido *"
-              />
-              {formErrors.firmante_apellido1 && (
-                <p style={getInlineErrorStyle()}>{formErrors.firmante_apellido1}</p>
-              )}
+              <div className="form-field">
+                <label htmlFor="firmante_apellido1">
+                  {t("newDocument.fields.firstSurname", "Primer apellido")} *
+                </label>
+                <input
+                  id="firmante_apellido1"
+                  name="firmante_apellido1"
+                  className="input-field"
+                  placeholder={t("newDocument.placeholders.firstSurname", "Primer apellido")}
+                  {...getFieldErrorProps("firmante_apellido1", formErrors)}
+                />
+                <FieldError name="firmante_apellido1" errors={formErrors} />
+              </div>
 
-              <input
-                name="firmante_apellido2"
-                className="input-field"
-                placeholder="Segundo apellido"
-              />
+              <div className="form-field">
+                <label htmlFor="firmante_apellido2">
+                  {t("newDocument.fields.secondSurname", "Segundo apellido")}
+                </label>
+                <input
+                  id="firmante_apellido2"
+                  name="firmante_apellido2"
+                  className="input-field"
+                  placeholder={t("newDocument.placeholders.secondSurname", "Segundo apellido")}
+                />
+              </div>
 
-              <input
-                name="firmante_email"
-                type="email"
-                className="input-field"
-                placeholder="Email corporativo *"
-              />
-              {formErrors.firmante_email && (
-                <p style={getInlineErrorStyle()}>{formErrors.firmante_email}</p>
-              )}
+              <div className="form-field">
+                <label htmlFor="firmante_email">
+                  {t("newDocument.fields.corporateEmail", "Email corporativo")} *
+                </label>
+                <input
+                  id="firmante_email"
+                  name="firmante_email"
+                  type="email"
+                  className="input-field"
+                  placeholder={t("newDocument.placeholders.corporateEmail", "Email corporativo")}
+                  {...getFieldErrorProps("firmante_email", formErrors)}
+                />
+                <FieldError name="firmante_email" errors={formErrors} />
+              </div>
 
-              <input
-                name="firmante_run"
-                className="input-field"
-                placeholder="RUN / RUT del representante *"
-                value={firmanteRunValue}
-                onChange={(e) => setFirmanteRunValue(formatRunDoc(e.target.value))}
-              />
-              {formErrors.firmante_run && (
-                <p style={getInlineErrorStyle()}>{formErrors.firmante_run}</p>
-              )}
+              <div className="form-field">
+                <label htmlFor="firmante_run">
+                  {t("newDocument.fields.signerRun", "RUN / RUT del representante")} *
+                </label>
+                <input
+                  id="firmante_run"
+                  name="firmante_run"
+                  className="input-field"
+                  placeholder={t(
+                    "newDocument.placeholders.signerRun",
+                    "RUN / RUT del representante"
+                  )}
+                  value={firmanteRunValue}
+                  onChange={(e) => setFirmanteRunValue(formatRunDoc(e.target.value))}
+                  {...getFieldErrorProps("firmante_run", formErrors)}
+                />
+                <FieldError name="firmante_run" errors={formErrors} />
+              </div>
 
-              <input
-                name="firmante_movil"
-                className="input-field"
-                placeholder="Teléfono móvil del representante *"
-              />
-              {formErrors.firmante_movil && (
-                <p style={getInlineErrorStyle()}>{formErrors.firmante_movil}</p>
-              )}
+              <div className="form-field">
+                <label htmlFor="firmante_movil">
+                  {t("newDocument.fields.mobile", "Teléfono móvil")} *
+                </label>
+                <input
+                  id="firmante_movil"
+                  name="firmante_movil"
+                  className="input-field"
+                  placeholder={t(
+                    "newDocument.placeholders.mobile",
+                    "Teléfono móvil del representante"
+                  )}
+                  {...getFieldErrorProps("firmante_movil", formErrors)}
+                />
+                <FieldError name="firmante_movil" errors={formErrors} />
+              </div>
             </div>
-          </div>
+          </section>
 
-          <div className="card-mini" style={{ marginTop: 0 }}>
-            <h4>Destinatario / empresa</h4>
+          <section className="card-mini">
+            <h4>{t("newDocument.sections.recipient", "Destinatario / empresa")}</h4>
+
             <div className="card-content">
-              <input
-                name="destinatario_nombre"
-                className="input-field"
-                placeholder="Razón social *"
-              />
-              {formErrors.destinatario_nombre && (
-                <p style={getInlineErrorStyle()}>
-                  {formErrors.destinatario_nombre}
-                </p>
-              )}
+              <div className="form-field">
+                <label htmlFor="destinatario_nombre">
+                  {t("newDocument.fields.companyName", "Razón social")} *
+                </label>
+                <input
+                  id="destinatario_nombre"
+                  name="destinatario_nombre"
+                  className="input-field"
+                  placeholder={t("newDocument.placeholders.companyName", "Razón social")}
+                  {...getFieldErrorProps("destinatario_nombre", formErrors)}
+                />
+                <FieldError name="destinatario_nombre" errors={formErrors} />
+              </div>
 
-              <input
-                name="empresa_rut"
-                className="input-field"
-                placeholder="RUT de la empresa *"
-                value={empresaRutValue}
-                onChange={(e) => setEmpresaRutValue(formatRunDoc(e.target.value))}
-              />
-              {formErrors.empresa_rut && (
-                <p style={getInlineErrorStyle()}>{formErrors.empresa_rut}</p>
-              )}
+              <div className="form-field">
+                <label htmlFor="empresa_rut">
+                  {t("newDocument.fields.companyRut", "RUT de la empresa")} *
+                </label>
+                <input
+                  id="empresa_rut"
+                  name="empresa_rut"
+                  className="input-field"
+                  placeholder={t("newDocument.placeholders.companyRut", "RUT de la empresa")}
+                  value={empresaRutValue}
+                  onChange={(e) => setEmpresaRutValue(formatRunDoc(e.target.value))}
+                  {...getFieldErrorProps("empresa_rut", formErrors)}
+                />
+                <FieldError name="empresa_rut" errors={formErrors} />
+              </div>
 
-              <input
-                name="destinatario_email"
-                type="email"
-                className="input-field"
-                placeholder="Email de contacto *"
-              />
-              {formErrors.destinatario_email && (
-                <p style={getInlineErrorStyle()}>
-                  {formErrors.destinatario_email}
-                </p>
-              )}
+              <div className="form-field">
+                <label htmlFor="destinatario_email">
+                  {t("newDocument.fields.contactEmail", "Email de contacto")} *
+                </label>
+                <input
+                  id="destinatario_email"
+                  name="destinatario_email"
+                  type="email"
+                  className="input-field"
+                  placeholder={t("newDocument.placeholders.contactEmail", "Email de contacto")}
+                  {...getFieldErrorProps("destinatario_email", formErrors)}
+                />
+                <FieldError name="destinatario_email" errors={formErrors} />
+              </div>
             </div>
-          </div>
+          </section>
         </div>
 
         {extraSigners.map((signer, index) => (
-          <div key={signer.id} className="card-mini">
-            <h4>
-              <span>Firmante adicional #{index + 1}</span>
+          <section key={signer.id} className="card-mini">
+            <h4 className="card-mini__header">
+              <span>
+                {t("newDocument.sections.extraSigner", "Firmante adicional")} #{index + 1}
+              </span>
               <button
                 type="button"
+                className="btn-link-danger"
                 onClick={() => removeExtraSigner(signer.id)}
-                style={{
-                  color: "#ef4444",
-                  border: "none",
-                  background: "none",
-                  cursor: "pointer",
-                  fontWeight: 800,
-                  fontSize: "0.85rem",
-                }}
               >
-                Eliminar
+                {t("newDocument.actions.remove", "Eliminar")}
               </button>
             </h4>
 
-            <div
-              className="card-content"
-              style={{
-                display: "grid",
-                gridTemplateColumns: "repeat(auto-fit, minmax(220px, 1fr))",
-                gap: 20,
-              }}
-            >
-              <div>
+            <div className="card-content new-document-grid">
+              <div className="form-field">
+                <label htmlFor={`extra_nombre_${index}`}>
+                  {t("newDocument.fields.fullName", "Nombre completo")} *
+                </label>
                 <input
+                  id={`extra_nombre_${index}`}
                   name={`extra_nombre_${index}`}
                   className="input-field"
-                  placeholder="Nombre completo *"
+                  placeholder={t("newDocument.placeholders.fullName", "Nombre completo")}
+                  {...getFieldErrorProps(`extra_nombre_${index}`, formErrors)}
                 />
-                {formErrors[`extra_nombre_${index}`] && (
-                  <p style={getInlineErrorStyle()}>
-                    {formErrors[`extra_nombre_${index}`]}
-                  </p>
-                )}
+                <FieldError name={`extra_nombre_${index}`} errors={formErrors} />
               </div>
 
-              <div>
+              <div className="form-field">
+                <label htmlFor={`extra_email_${index}`}>
+                  {t("newDocument.fields.email", "Email")} *
+                </label>
                 <input
+                  id={`extra_email_${index}`}
                   name={`extra_email_${index}`}
                   type="email"
                   className="input-field"
-                  placeholder="Email *"
+                  placeholder={t("newDocument.placeholders.email", "Email")}
+                  {...getFieldErrorProps(`extra_email_${index}`, formErrors)}
                 />
-                {formErrors[`extra_email_${index}`] && (
-                  <p style={getInlineErrorStyle()}>
-                    {formErrors[`extra_email_${index}`]}
-                  </p>
-                )}
+                <FieldError name={`extra_email_${index}`} errors={formErrors} />
               </div>
 
-              <input
-                name={`extra_movil_${index}`}
-                className="input-field"
-                placeholder="Móvil"
-              />
+              <div className="form-field">
+                <label htmlFor={`extra_movil_${index}`}>
+                  {t("newDocument.fields.optionalMobile", "Móvil")}
+                </label>
+                <input
+                  id={`extra_movil_${index}`}
+                  name={`extra_movil_${index}`}
+                  className="input-field"
+                  placeholder={t("newDocument.placeholders.optionalMobile", "Móvil")}
+                />
+              </div>
             </div>
-          </div>
+          </section>
         ))}
 
-        <div
-          style={{
-            marginTop: 32,
-            display: "flex",
-            gap: 16,
-            borderTop: "1px solid #f1f5f9",
-            paddingTop: 24,
-            flexWrap: "wrap",
-          }}
-        >
+        <div className="new-document-form__actions">
           <button
             type="button"
-            className="btn-main"
+            className="btn-main btn-ghost"
             onClick={addExtraSigner}
-            style={{
-              background: "#e2e8f0",
-              color: "#475569",
-              padding: "12px 26px",
-            }}
+            disabled={submitting}
           >
-            + Añadir firmante adicional
+            {t("newDocument.actions.addExtraSigner", "+ Añadir firmante adicional")}
           </button>
 
           <button
             type="submit"
             className="btn-main btn-primary"
             disabled={submitting}
-            style={{
-              padding: "12px 80px",
-              fontSize: "1rem",
-              flexGrow: 1,
-              opacity: submitting ? 0.7 : 1,
-              cursor: submitting ? "not-allowed" : "pointer",
-            }}
           >
-            {submitting ? "Enviando..." : "Iniciar flujo de firma digital"}
+            {submitting
+              ? t("newDocument.actions.submitting", "Enviando...")
+              : t("newDocument.actions.submit", "Iniciar flujo de firma digital")}
           </button>
         </div>
       </form>
-    </div>
+    </section>
   );
 }

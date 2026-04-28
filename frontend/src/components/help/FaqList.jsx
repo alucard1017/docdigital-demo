@@ -1,81 +1,72 @@
 // frontend/src/components/help/FaqList.jsx
+import { useMemo } from "react";
 import { useTranslation } from "react-i18next";
+import "../../styles/helpPanel.css";
+
+function normalizeFaqItem(item = {}, index = 0) {
+  const id =
+    item?.id ??
+    item?._id ??
+    `${item?.question || "faq"}-${index}`;
+
+  return {
+    id,
+    category:
+      typeof item?.category === "string" ? item.category.trim() : "",
+    question:
+      typeof item?.question === "string" ? item.question.trim() : "",
+    answer:
+      typeof item?.answer === "string" ? item.answer.trim() : "",
+  };
+}
 
 export default function FaqList({ items = [], loading = false, error = "" }) {
   const { t } = useTranslation();
 
+  const normalizedItems = useMemo(() => {
+    if (!Array.isArray(items)) return [];
+
+    return items
+      .map((item, index) => normalizeFaqItem(item, index))
+      .filter((item) => item.question && item.answer);
+  }, [items]);
+
   if (loading) {
     return (
-      <p style={styles.infoText}>
+      <p className="help-faq__info" role="status" aria-live="polite">
         {t("help.loadingFaqs", "Cargando preguntas frecuentes...")}
       </p>
     );
   }
 
   if (error) {
-    return <p style={styles.errorText}>{error}</p>;
+    return (
+      <p className="help-faq__error" role="alert">
+        {error}
+      </p>
+    );
   }
 
-  if (!items.length) {
+  if (!normalizedItems.length) {
     return (
-      <p style={styles.infoText}>
+      <p className="help-faq__info" role="status">
         {t("help.emptyFaqs", "No hay preguntas frecuentes disponibles.")}
       </p>
     );
   }
 
   return (
-    <div style={styles.list}>
-      {items.map((item) => (
-        <article key={item.id} style={styles.card}>
+    <ul className="help-faq__list" role="list">
+      {normalizedItems.map((item) => (
+        <li key={item.id} className="help-faq__card">
           {item.category ? (
-            <div style={styles.category}>{item.category}</div>
+            <div className="help-faq__category">{item.category}</div>
           ) : null}
-          <div style={styles.question}>{item.question}</div>
-          <div style={styles.answer}>{item.answer}</div>
-        </article>
+
+          <div className="help-faq__question">{item.question}</div>
+          <div className="help-faq__answer">{item.answer}</div>
+        </li>
       ))}
-    </div>
+    </ul>
   );
 }
-
-const styles = {
-  list: {
-    display: "grid",
-    gap: "12px",
-  },
-  card: {
-    padding: "12px",
-    border: "1px solid #e5e7eb",
-    borderRadius: "12px",
-    background: "#ffffff",
-  },
-  category: {
-    fontSize: "12px",
-    fontWeight: 700,
-    color: "#0f766e",
-    textTransform: "uppercase",
-    marginBottom: "6px",
-  },
-  question: {
-    fontSize: "14px",
-    fontWeight: 700,
-    marginBottom: "6px",
-    color: "#111827",
-  },
-  answer: {
-    fontSize: "14px",
-    color: "#374151",
-    lineHeight: 1.5,
-  },
-  infoText: {
-    margin: 0,
-    fontSize: "14px",
-    color: "#4b5563",
-  },
-  errorText: {
-    margin: 0,
-    fontSize: "14px",
-    color: "#b91c1c",
-  },
-};

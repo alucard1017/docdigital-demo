@@ -18,6 +18,9 @@ import { navigateTo, replaceTo } from "../utils/router";
 
 export const AuthContext = createContext(null);
 
+const LOGOUT_RELEASE_DELAY_MS = 500;
+const AUTH_EVENT_RESET_DELAY_MS = 1000;
+
 function normalizeToken(value) {
   if (typeof value !== "string") return "";
   const trimmed = value.trim();
@@ -25,7 +28,9 @@ function normalizeToken(value) {
 }
 
 function normalizeUser(value) {
-  if (!value || typeof value !== "object") return null;
+  if (!value || typeof value !== "object" || Array.isArray(value)) {
+    return null;
+  }
   return value;
 }
 
@@ -38,11 +43,28 @@ function getCurrentPath() {
   return window.location?.pathname || "";
 }
 
+function clearTimer(timerRef) {
+  if (timerRef.current) {
+    clearTimeout(timerRef.current);
+    timerRef.current = null;
+  }
+}
+
+function getLoginErrorMessage(error) {
+  return (
+    error?.response?.data?.message ||
+    error?.message ||
+    "No se pudo conectar con el servidor de autenticación."
+  );
+}
+
+function getRememberMeOption() {
+  return getSessionMode() === "persistent";
+}
+
 export function AuthProvider({ children }) {
   const [user, setUserState] = useState(() => normalizeUser(getStoredUser()));
-  const [token, setTokenState] = useState(() =>
-    normalizeToken(getStoredToken())
-  );
+  const [token, setTokenState] = useState(() => normalizeToken(getStoredToken()));
   const [authLoading, setAuthLoading] = useState(true);
 
   const authEventHandledRef = useRef(false);
@@ -50,12 +72,26 @@ export function AuthProvider({ children }) {
   const authResetTimerRef = useRef(null);
   const logoutReleaseTimerRef = useRef(null);
 
+  const isAuthenticated = Boolean(token && user);
+
   const hydrateSession = useCallback(() => {
     const storedUser = normalizeUser(getStoredUser());
     const storedToken = normalizeToken(getStoredToken());
 
     setUserState(storedUser);
     setTokenState(storedToken);
+
+    return {
+      user: storedUser,
+      token: storedToken,
+      isAuthenticated: Boolean(storedUser && storedToken),
+    };
+  }, []);
+
+  const clearRuntimeFlags = useCallback(() => {
+    authEventHandledRef.current = false;
+    logoutInProgressRef.current = false;
+    resetAuthExpiredDispatch();
   }, []);
 
   useEffect(() => {
@@ -65,69 +101,75 @@ export function AuthProvider({ children }) {
 
   useEffect(() => {
     return () => {
-      if (authResetTimerRef.current) {
-        clearTimeout(authResetTimerRef.current);
-      }
-      if (logoutReleaseTimerRef.current) {
-        clearTimeout(logoutReleaseTimerRef.current);
-      }
+      clearTimer(authResetTimerRef);
+      clearTimer(logoutReleaseTimerRef);
     };
   }, []);
 
-  const isAuthenticated = Boolean(token && user);
+  const commitSession = useCallback(
+    (nextUser, nextToken, options = {}) => {
+      const normalizedUser = normalizeUser(nextUser);
+      const normalizedToken = normalizeToken(nextToken);
+      const rememberMe = Boolean(options.rememberMe);
 
-  const login = useCallback(
-    async ({ identifier, password, rememberMe = false }) => {
-      const payload = {
-        identifier: typeof identifier === "string" ? identifier.trim() : "",
-        password: typeof password === "string" ? password : "",
-        rememberMe: Boolean(rememberMe),
-      };
-
-      if (!payload.identifier || !payload.password) {
-        throw new Error("Debes ingresar identificador y contraseña");
-      }
-
-      let res;
-      try {
-        res = await api.post(
-          "/auth/login",
-          payload,
-          { withCredentials: true }
-        );
-      } catch (error) {
-        const message =
-          error?.response?.data?.message ||
-          error?.message ||
-          "No se pudo conectar con el servidor de autenticación.";
-        throw new Error(message);
-      }
-
-      const data = res?.data;
-
-      if (!data?.user || !data?.accessToken) {
-        throw new Error("Respuesta inesperada del servidor de autenticación");
-      }
-
-      const nextUser = normalizeUser(data.user);
-      const nextToken = normalizeToken(data.accessToken);
-
-      if (!nextUser || !nextToken) {
+      if (!normalizedUser || !normalizedToken) {
         throw new Error("Datos de sesión inválidos");
       }
 
-      setSession(nextUser, nextToken, { rememberMe });
-      setUserState(nextUser);
-      setTokenState(nextToken);
+      setSession(normalizedUser, normalizedToken, { rememberMe });
+      setUserState(normalizedUser);
+      setTokenState(normalizedToken);
+      clearRuntimeFlags();
 
-      authEventHandledRef.current = false;
-      logoutInProgressRef.current = false;
-      resetAuthExpiredDispatch();
-
-      return data;
+      return {
+        user: normalizedUser,
+        token: normalizedToken,
+      };
     },
-    []
+    [clearRuntimeFlags]
   );
+
+  const clearAuthState = useCallback(() => {
+    clearSession();
+    setUserState(null);
+    setTokenState("");
+    resetAuthExpiredDispatch();
+  }, []);
+
+  const login = useCallback(async ({ identifier, password, rememberMe = false }) => {
+    const payload = {
+      identifier: typeof identifier === "string" ? identifier.trim() : "",
+      password: typeof password === "string" ? password : "",
+      rememberMe: Boolean(rememberMe),
+    };
+
+    if (!payload.identifier || !payload.password) {
+      throw new Error("Debes ingresar identificador y contraseña");
+    }
+
+    let res;
+    try {
+      res = await api.post("/auth/login", payload, {
+        withCredentials: true,
+      });
+    } catch (error) {
+      throw new Error(getLoginErrorMessage(error));
+    }
+
+    const data = res?.data;
+    const nextUser = normalizeUser(data?.user);
+    const nextToken = normalizeToken(data?.accessToken);
+
+    if (!nextUser || !nextToken) {
+      throw new Error("Respuesta inesperada del servidor de autenticación");
+    }
+
+    commitSession(nextUser, nextToken, {
+      rememberMe: payload.rememberMe,
+    });
+
+    return data;
+  }, [commitSession]);
 
   const logout = useCallback((options = {}) => {
     if (logoutInProgressRef.current) return;
@@ -139,10 +181,7 @@ export function AuthProvider({ children }) {
     const reason = options.reason || null;
     const currentPath = getCurrentPath();
 
-    clearSession();
-    setUserState(null);
-    setTokenState("");
-    resetAuthExpiredDispatch();
+    clearAuthState();
 
     if (import.meta.env.DEV) {
       // eslint-disable-next-line no-console
@@ -161,17 +200,43 @@ export function AuthProvider({ children }) {
       }
     }
 
-    if (logoutReleaseTimerRef.current) {
-      clearTimeout(logoutReleaseTimerRef.current);
-    }
+    clearTimer(logoutReleaseTimerRef);
 
     if (isBrowser()) {
       logoutReleaseTimerRef.current = window.setTimeout(() => {
         logoutInProgressRef.current = false;
-      }, 500);
+      }, LOGOUT_RELEASE_DELAY_MS);
     } else {
       logoutInProgressRef.current = false;
     }
+  }, [clearAuthState]);
+
+  const updateUser = useCallback(
+    (nextUser) => {
+      const normalizedUser = normalizeUser(nextUser);
+
+      setUserState(normalizedUser);
+
+      if (token && normalizedUser) {
+        setSession(normalizedUser, token, {
+          rememberMe: getRememberMeOption(),
+        });
+      }
+
+      if (!normalizedUser && import.meta.env.DEV) {
+        // eslint-disable-next-line no-console
+        console.warn("[AUTH] updateUser recibió usuario inválido/null");
+      }
+    },
+    [token]
+  );
+
+  const setUser = useCallback((nextUser) => {
+    setUserState(normalizeUser(nextUser));
+  }, []);
+
+  const setToken = useCallback((nextToken) => {
+    setTokenState(normalizeToken(nextToken));
   }, []);
 
   useEffect(() => {
@@ -204,13 +269,11 @@ export function AuthProvider({ children }) {
         reason: detail,
       });
 
-      if (authResetTimerRef.current) {
-        clearTimeout(authResetTimerRef.current);
-      }
+      clearTimer(authResetTimerRef);
 
       authResetTimerRef.current = window.setTimeout(() => {
         authEventHandledRef.current = false;
-      }, 1000);
+      }, AUTH_EVENT_RESET_DELAY_MS);
     };
 
     window.addEventListener("auth:expired", handleAuthExpired);
@@ -219,33 +282,6 @@ export function AuthProvider({ children }) {
       window.removeEventListener("auth:expired", handleAuthExpired);
     };
   }, [logout]);
-
-  const updateUser = useCallback(
-    (nextUser) => {
-      const normalizedUser = normalizeUser(nextUser);
-      setUserState(normalizedUser);
-
-      if (token && normalizedUser) {
-        setSession(normalizedUser, token, {
-          rememberMe: getSessionMode() === "persistent",
-        });
-      }
-
-      if (!normalizedUser && import.meta.env.DEV) {
-        // eslint-disable-next-line no-console
-        console.warn("[AUTH] updateUser recibió usuario inválido/null");
-      }
-    },
-    [token]
-  );
-
-  const setUser = useCallback((nextUser) => {
-    setUserState(normalizeUser(nextUser));
-  }, []);
-
-  const setToken = useCallback((nextToken) => {
-    setTokenState(normalizeToken(nextToken));
-  }, []);
 
   useEffect(() => {
     if (!isBrowser()) return;
