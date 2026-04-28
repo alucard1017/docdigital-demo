@@ -1,4 +1,3 @@
-// backend/routes/auth.js
 const express = require("express");
 const bcrypt = require("bcryptjs");
 const jwt = require("jsonwebtoken");
@@ -25,26 +24,14 @@ if (!JWT_REFRESH_SECRET) {
 
 const normalizeRun = (run) => (run || "").replace(/[.\-]/g, "");
 
-/**
- * Access token corto (15 min)
- */
 function signAccessToken(payload) {
   return jwt.sign(payload, JWT_ACCESS_SECRET, { expiresIn: "15m" });
 }
 
-/**
- * Refresh token (~30 días)
- */
 function signRefreshToken(payload) {
   return jwt.sign(payload, JWT_REFRESH_SECRET, { expiresIn: "30d" });
 }
 
-/**
- * Cookies httpOnly para tokens
- * - sameSite: "none" para permitir envío desde front en dominio distinto
- * - secure: true en producción (obligatorio con SameSite=None) [web:439][web:453]
- * - NO usar domain mientras tengas vercel.app + onrender.com mezclados [web:444]
- */
 function buildCookieBaseOptions() {
   const isProd = process.env.NODE_ENV === "production";
 
@@ -59,15 +46,13 @@ function buildCookieBaseOptions() {
 function setAuthCookies(res, accessToken, refreshToken, rememberMe) {
   const base = buildCookieBaseOptions();
 
-  // access_token: solo sesión
   res.cookie("access_token", accessToken, {
     ...base,
   });
 
-  // refresh_token: sesión o 30 días según rememberMe
   const refreshOptions = { ...base };
   if (rememberMe) {
-    refreshOptions.maxAge = 30 * 24 * 60 * 60 * 1000; // 30 días
+    refreshOptions.maxAge = 30 * 24 * 60 * 60 * 1000;
   }
 
   res.cookie("refresh_token", refreshToken, refreshOptions);
@@ -213,11 +198,22 @@ function requireRole(requiredRole) {
 
 router.post("/login", async (req, res) => {
   const startedAt = Date.now();
-  const requestId = req.requestId || "no-request-id";
+  const requestId = req.requestId || `login-${Date.now()}`;
+
+  // timeout duro para evitar colgar la conexión
+  const LOGIN_HARD_TIMEOUT_MS = 25_000;
+  const timeoutTimer = setTimeout(() => {
+    console.error("⏱️ LOGIN TIMEOUT HARD LIMIT alcanzado:", { requestId });
+    Sentry.captureMessage("LOGIN_TIMEOUT_HARD_LIMIT", {
+      level: "error",
+      extra: { requestId },
+    });
+  }, LOGIN_HARD_TIMEOUT_MS);
 
   try {
     if (!JWT_ACCESS_SECRET || !JWT_REFRESH_SECRET) {
       console.error("❌ Intento de login sin secretos JWT configurados");
+      clearTimeout(timeoutTimer);
       return res
         .status(500)
         .json({ message: "Configuración de servidor incompleta" });
@@ -226,6 +222,7 @@ router.post("/login", async (req, res) => {
     const { identifier, password, rememberMe } = req.body || {};
 
     if (!identifier || !password) {
+      clearTimeout(timeoutTimer);
       return res
         .status(400)
         .json({ message: "RUN o correo y contraseña son obligatorios" });
@@ -250,6 +247,7 @@ router.post("/login", async (req, res) => {
 
     if (!db || typeof db.query !== "function") {
       console.error("❌ db.query no está disponible en /api/auth/login");
+      clearTimeout(timeoutTimer);
       return res
         .status(500)
         .json({ message: "Error de conexión con la base de datos" });
@@ -282,6 +280,7 @@ router.post("/login", async (req, res) => {
         error: dbErr.message,
       });
       Sentry.captureException(dbErr);
+      clearTimeout(timeoutTimer);
       return res
         .status(500)
         .json({ message: "Error de base de datos en login" });
@@ -319,6 +318,7 @@ router.post("/login", async (req, res) => {
         console.error("[LOGIN] logAuth user_not_found error:", logErr.message);
       }
 
+      clearTimeout(timeoutTimer);
       return res.status(401).json({ message: "Credenciales inválidas" });
     }
 
@@ -335,6 +335,7 @@ router.post("/login", async (req, res) => {
         console.error("[LOGIN] logAuth user_inactive error:", logErr.message);
       }
 
+      clearTimeout(timeoutTimer);
       return res
         .status(401)
         .json({ message: "Cuenta desactivada, contacta al administrador" });
@@ -361,6 +362,7 @@ router.post("/login", async (req, res) => {
         );
       }
 
+      clearTimeout(timeoutTimer);
       return res.status(401).json({ message: "Credenciales inválidas" });
     }
 
@@ -374,6 +376,7 @@ router.post("/login", async (req, res) => {
         error: cmpErr.message,
       });
       Sentry.captureException(cmpErr);
+      clearTimeout(timeoutTimer);
       return res
         .status(500)
         .json({ message: "Error interno al validar la contraseña" });
@@ -401,6 +404,7 @@ router.post("/login", async (req, res) => {
         console.error("[LOGIN] logAuth bad_password error:", logErr.message);
       }
 
+      clearTimeout(timeoutTimer);
       return res.status(401).json({ message: "Credenciales inválidas" });
     }
 
@@ -425,6 +429,7 @@ router.post("/login", async (req, res) => {
         error: err.message,
       });
       Sentry.captureException(err);
+      clearTimeout(timeoutTimer);
       return res
         .status(500)
         .json({ message: "Error interno al generar los tokens" });
@@ -452,6 +457,7 @@ router.post("/login", async (req, res) => {
     }
 
     const totalMs = Date.now() - startedAt;
+
     if (process.env.NODE_ENV !== "production") {
       console.log("[LOGIN] success timings", {
         requestId,
@@ -463,11 +469,14 @@ router.post("/login", async (req, res) => {
       });
     }
 
+    clearTimeout(timeoutTimer);
+
     return res.json({
       user: tokenPayload,
       accessToken,
     });
   } catch (err) {
+    clearTimeout(timeoutTimer);
     console.error("❌ Error inesperado en /api/auth/login:", {
       requestId,
       error: err.message,
