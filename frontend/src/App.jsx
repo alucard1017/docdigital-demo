@@ -68,8 +68,6 @@ import { usePublicSign } from "./hooks/usePublicSign";
 import { useDocuments } from "./hooks/useDocuments";
 import { useToast } from "./hooks/useToast";
 import { useAuth } from "./hooks/useAuth";
-// Si quieres leer preferencias en la UI principal:
-// import { usePreferences } from "./main";
 
 import FloatingActions from "./components/shell/FloatingActions";
 
@@ -159,7 +157,6 @@ function App() {
   const { user, token, login, logout, authLoading, isAuthenticated } =
     useAuth();
   const { addToast } = useToast();
-  // const { preferences } = usePreferences(); // si quieres usarlo aquí
 
   const locationSnapshot = useMemo(() => getLocationSnapshot(), [path]);
 
@@ -338,19 +335,19 @@ function App() {
   const handleBackToList = useCallback(() => {
     setSelectedDoc(null);
     handleNavigateProtected("list");
-  }, [handleNavigateProtected, setSelectedDoc]);
+  }, [handleNavigateProtected]);
 
   const handleLogout = useCallback(() => {
     setSelectedDoc(null);
     setView("list");
     logout({ redirectTo: "/login", replace: true });
-  }, [logout, setSelectedDoc]);
+  }, [logout]);
 
   const handleAfterCreateDocument = useCallback(async () => {
     setPage(1);
     await refreshDocs({ page: 1 });
     handleNavigateProtected("list");
-  }, [refreshDocs, handleNavigateProtected, setPage]);
+  }, [refreshDocs, handleNavigateProtected]);
 
   const handleTestError = useCallback(() => {
     throw new Error("Frontend test error");
@@ -361,10 +358,7 @@ function App() {
       event.preventDefault();
       setIsLoggingIn(true);
       setMessage(
-        t(
-          "app.login.connecting",
-          "Conectando con el servidor seguro..."
-        )
+        t("app.login.connecting", "Conectando con el servidor seguro...")
       );
 
       const inputVal = identifier.trim();
@@ -375,9 +369,7 @@ function App() {
         : inputVal.replace(/[^0-9kK]/g, "").toUpperCase();
 
       if (!isEmail && cleanValue.length < 2) {
-        setMessage(
-          t("app.login.invalidRut", "❌ El RUT ingresado no es válido")
-        );
+        setMessage(t("app.login.invalidRut", "❌ El RUT ingresado no es válido"));
         setIsLoggingIn(false);
         return;
       }
@@ -402,19 +394,13 @@ function App() {
         const msg =
           err?.response?.data?.message ||
           err?.message ||
-          t(
-            "app.login.defaultError",
-            "Error de conexión, intenta nuevamente."
-          );
+          t("app.login.defaultError", "Error de conexión, intenta nuevamente.");
 
         setMessage(`❌ ${msg}`);
 
         addToast({
           type: "error",
-          title: t(
-            "app.login.toastTitle",
-            "No se pudo iniciar sesión"
-          ),
+          title: t("app.login.toastTitle", "No se pudo iniciar sesión"),
           message: msg,
         });
       } finally {
@@ -428,14 +414,9 @@ function App() {
       login,
       checkOnboarding,
       addToast,
-      setSelectedDoc,
       t,
     ]
   );
-
-  /* ============================
-     Sync navegación
-     ============================ */
 
   useEffect(() => {
     const syncPath = () => {
@@ -461,10 +442,6 @@ function App() {
     };
   }, [isAuthenticated, selectedDoc]);
 
-  /* ============================
-     Guards auth
-     ============================ */
-
   useEffect(() => {
     if (authLoading) return;
     if (isAnyPublicAccess) return;
@@ -481,13 +458,7 @@ function App() {
     if (PUBLIC_AUTH_PATHS.has(path)) {
       replaceTo("/documents");
     }
-  }, [
-    authLoading,
-    isAuthenticated,
-    isAnyPublicAccess,
-    path,
-    setSelectedDoc,
-  ]);
+  }, [authLoading, isAuthenticated, isAnyPublicAccess, path]);
 
   useEffect(() => {
     if (!isAuthenticated) return;
@@ -512,11 +483,7 @@ function App() {
     if (view !== expectedView) {
       setView(expectedView);
     }
-  }, [view, path, isAuthenticated, user, setSelectedDoc]);
-
-  /* ============================
-     Socket listeners
-     ============================ */
+  }, [view, path, isAuthenticated, user]);
 
   useEffect(() => {
     if (!token) return;
@@ -587,30 +554,18 @@ function App() {
     };
   }, [token, socketOn, socketOff, addToast, refreshDocs, socketStatus, t]);
 
-  /* ============================
-     Fallback: polling cuando WS no está conectado
-     ============================ */
-
   useEffect(() => {
     if (!token) return;
-
-    const isConnected = socketStatus === "connected";
-    if (isConnected) return;
-
-    const POLL_INTERVAL_MS = 90_000;
+    if (socketStatus === "connected") return;
 
     const intervalId = window.setInterval(() => {
       refreshDocs();
-    }, POLL_INTERVAL_MS);
+    }, 90000);
 
     return () => {
       window.clearInterval(intervalId);
     };
   }, [token, socketStatus, refreshDocs]);
-
-  /* ============================
-     Toasts de conexión en tiempo real
-     ============================ */
 
   const hasShownSocketToastRef = useRef(false);
 
@@ -626,10 +581,7 @@ function App() {
     hasShownSocketToastRef.current = true;
 
     if (import.meta.env.DEV && socketLastError) {
-      console.warn(
-        "[WS] Problema de conexión en tiempo real:",
-        socketLastError
-      );
+      console.warn("[WS] Problema de conexión en tiempo real:", socketLastError);
     }
 
     let title = t(
@@ -673,25 +625,15 @@ function App() {
     });
   }, [socketStatus, socketLastError, addToast, t]);
 
-  /* ============================
-     Render helpers
-     ============================ */
-
   const renderListView = useCallback(() => {
     if (loadingDocs) {
       return (
         <div className="list-state list-state--loading">
           <div className="list-state-title">
-            {t(
-              "app.list.loadingTitle",
-              "Cargando tu bandeja de documentos…"
-            )}
+            {t("app.list.loadingTitle", "Cargando tu bandeja de documentos…")}
           </div>
           <p className="list-state-text">
-            {t(
-              "app.list.loadingSubtitle",
-              "Esto puede tardar unos segundos."
-            )}
+            {t("app.list.loadingSubtitle", "Esto puede tardar unos segundos.")}
           </p>
           <div className="spinner" />
         </div>
@@ -702,10 +644,7 @@ function App() {
       return (
         <div className="list-state list-state--error">
           <p className="list-state-title">
-            {t(
-              "app.list.errorTitle",
-              "Ocurrió un problema al cargar la bandeja."
-            )}
+            {t("app.list.errorTitle", "Ocurrió un problema al cargar la bandeja.")}
           </p>
           <p className="list-state-text list-state-text--strong">
             {errorDocs ||
@@ -728,10 +667,7 @@ function App() {
       return (
         <div className="list-state list-state--empty">
           <h3 className="list-state-title">
-            {t(
-              "app.list.emptyTitle",
-              "No encontramos documentos para mostrar."
-            )}
+            {t("app.list.emptyTitle", "No encontramos documentos para mostrar.")}
           </h3>
           <p className="list-state-text">
             {t(
@@ -762,14 +698,9 @@ function App() {
             <thead>
               <tr>
                 <th className="col-title">
-                  {t(
-                    "app.table.columns.contractDocument",
-                    "Contrato / Documento"
-                  )}
+                  {t("app.table.columns.contractDocument", "Contrato / Documento")}
                 </th>
-                <th className="col-type">
-                  {t("app.table.columns.type", "Tipo")}
-                </th>
+                <th className="col-type">{t("app.table.columns.type", "Tipo")}</th>
                 <th className="col-status text-center">
                   {t("app.table.columns.status", "Estado")}
                 </th>
@@ -819,9 +750,7 @@ function App() {
             <button
               type="button"
               className="btn-main"
-              disabled={
-                loadingDocs || safeCurrentPage >= safeTotalPaginas
-              }
+              disabled={loadingDocs || safeCurrentPage >= safeTotalPaginas}
               onClick={() =>
                 setPage((prev) => Math.min(safeTotalPaginas, prev + 1))
               }
@@ -942,7 +871,6 @@ function App() {
     if (view === "templates" && canViewTemplates(user)) {
       return <TemplatesView />;
     }
-
     if (view === "dashboard" && canViewDashboard(user)) {
       return <DashboardView user={user} />;
     }
@@ -964,7 +892,6 @@ function App() {
     if (view === "company-analytics" && canViewCompanyAnalytics(user)) {
       return <CompanyAnalyticsView />;
     }
-
     if (view === "pricing") return <PricingView />;
     if (view === "profile") return <ProfileView />;
 
@@ -1003,10 +930,6 @@ function App() {
     token,
     t,
   ]);
-
-  /* ============================
-     Early returns según entryDecision
-     ============================ */
 
   if (entryDecision.screen === "session-loading") {
     return <SessionLoadingFallback />;
@@ -1143,10 +1066,7 @@ function App() {
         fallback={
           showOnboarding ? (
             <div className="onboarding-fallback">
-              {t(
-                "app.onboarding.fallback",
-                "Preparando guía interactiva…"
-              )}
+              {t("app.onboarding.fallback", "Preparando guía interactiva…")}
             </div>
           ) : null
         }
@@ -1178,41 +1098,40 @@ function App() {
           onRetrySocket={retrySocket}
         />
 
-        <div className="content-body">
-          <Suspense
-            fallback={
-              runProductTour ? (
-                <div className="product-tour-fallback">
-                  {t(
-                    "app.tour.fallback",
-                    "Cargando tour interactivo…"
-                  )}
-                </div>
-              ) : null
-            }
-          >
-            <ProductTourLazy
-              tourId="dashboard_principal"
-              run={runProductTour}
-              onFinish={() => setRunProductTour(false)}
-            />
-          </Suspense>
-
-          <Suspense fallback={<ProtectedModuleFallback />}>
-            {protectedViewElement}
-          </Suspense>
-
-          {import.meta.env.MODE !== "production" && (
-            <button
-              type="button"
-              className="sentry-test-button"
-              onClick={handleTestError}
+        <div className="main-area">
+          <div className="content-body">
+            <Suspense
+              fallback={
+                runProductTour ? (
+                  <div className="product-tour-fallback">
+                    {t("app.tour.fallback", "Cargando tour interactivo…")}
+                  </div>
+                ) : null
+              }
             >
-              {t("app.sentryTest", "Probar error Sentry")}
-            </button>
-          )}
+              <ProductTourLazy
+                tourId="dashboard_principal"
+                run={runProductTour}
+                onFinish={() => setRunProductTour(false)}
+              />
+            </Suspense>
 
-          <FloatingActions />
+            <Suspense fallback={<ProtectedModuleFallback />}>
+              {protectedViewElement}
+            </Suspense>
+
+            {import.meta.env.MODE !== "production" && (
+              <button
+                type="button"
+                className="sentry-test-button"
+                onClick={handleTestError}
+              >
+                {t("app.sentryTest", "Probar error Sentry")}
+              </button>
+            )}
+
+            <FloatingActions />
+          </div>
         </div>
       </div>
     </div>

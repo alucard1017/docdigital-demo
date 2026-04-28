@@ -7,13 +7,10 @@ import { onCLS, onINP, onLCP, onFCP, onTTFB } from "web-vitals";
 import App from "./App.jsx";
 import "./i18n";
 
-// Estilos base y de layout
 import "./styles/theme.css";
 import "./styles/base.css";
 import "./styles/appShell.css";
 import "./styles/layout.css";
-
-// Estilos de vistas y componentes
 import "./styles/formsAndCards.css";
 import "./styles/detailView.css";
 import "./styles/detailActions.css";
@@ -49,14 +46,9 @@ let hasHandledPreloadError = false;
 
 window.addEventListener("vite:preloadError", (event) => {
   if (hasHandledPreloadError) return;
-
   hasHandledPreloadError = true;
 
-  console.warn(
-    "[VITE] Error cargando chunk dinámico. Recargando app...",
-    event
-  );
-
+  console.warn("[VITE] Error cargando chunk dinámico. Recargando app...", event);
   event.preventDefault();
   window.location.reload();
 });
@@ -99,11 +91,7 @@ function sendMetric(metric) {
   }).catch(() => {});
 }
 
-onCLS(sendMetric);
-onINP(sendMetric);
-onLCP(sendMetric);
-onFCP(sendMetric);
-onTTFB(sendMetric);
+[onCLS, onINP, onLCP, onFCP, onTTFB].forEach((handler) => handler(sendMetric));
 
 ReactDOM.createRoot(rootElement).render(
   <React.StrictMode>

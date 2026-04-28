@@ -1,39 +1,54 @@
 /* src/styles/layout.css */
 
-.dashboard-layout {
-  display: grid;
-  grid-template-columns: 280px minmax(0, 1fr);
+/* Raíz del dashboard */
+.dashboard-root {
   min-height: 100vh;
   width: 100%;
   background: var(--color-bg);
+}
+
+/* Shell principal: sidebar + columna derecha */
+.dashboard-root .dashboard-layout {
+  display: grid;
+  grid-template-columns: var(--sidebar-width, 248px) minmax(0, 1fr);
+  min-height: 100vh;
+  width: 100%;
   overflow-x: hidden;
 }
 
-.main-area {
+/* Columna derecha completa */
+.dashboard-root .main-area {
   min-width: 0;
   width: 100%;
   display: flex;
   flex-direction: column;
 }
 
-.content-body {
+/* Cuerpo de contenido */
+.dashboard-root .content-body {
   min-width: 0;
   width: 100%;
   padding: 16px 20px 24px;
   box-sizing: border-box;
 }
 
-.content-body > * {
+/* Nada dentro debe empujar el layout */
+.dashboard-root .content-body > * {
   min-width: 0;
   max-width: 100%;
 }
 
+/* Responsive */
 @media (max-width: 1080px) {
-  .dashboard-layout {
+  .dashboard-root .dashboard-layout {
     grid-template-columns: 1fr;
   }
 
-  .content-body {
+  .dashboard-root .main-area {
+    width: 100%;
+  }
+
+  .dashboard-root .content-body {
     padding: 14px 12px 20px;
   }
 }
