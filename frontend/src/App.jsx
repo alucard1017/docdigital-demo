@@ -120,8 +120,8 @@ function SessionLoadingFallback() {
   );
 }
 
-function safeNumber(value: unknown, fallback = 0) {
-  return Number.isFinite(value) ? (value as number) : fallback;
+function safeNumber(value, fallback = 0) {
+  return Number.isFinite(value) ? value : fallback;
 }
 
 /* ============================
@@ -147,10 +147,10 @@ function App() {
   const [isLoggingIn, setIsLoggingIn] = useState(false);
   const [rememberMe, setRememberMe] = useState(false);
 
-  const [formErrors, setFormErrors] = useState<Record<string, string>>({});
-  const [tipoTramite, setTipoTramite] = useState<"propio" | "tercero">("propio");
+  const [formErrors, setFormErrors] = useState({});
+  const [tipoTramite, setTipoTramite] = useState("propio");
   const [showVisador, setShowVisador] = useState(false);
-  const [extraSigners, setExtraSigners] = useState<any[]>([]);
+  const [extraSigners, setExtraSigners] = useState([]);
   const [firmanteRunValue, setFirmanteRunValue] = useState("");
   const [empresaRutValue, setEmpresaRutValue] = useState("");
 
@@ -309,7 +309,7 @@ function App() {
      ============================ */
 
   const refreshDocs = useCallback(
-    async (overrides: Record<string, unknown> = {}) =>
+    async (overrides = {}) =>
       cargarDocs({
         page,
         sort,
@@ -322,7 +322,7 @@ function App() {
   );
 
   const handleNavigateProtected = useCallback(
-    (nextView: string) => {
+    (nextView) => {
       const nextPath = VIEW_TO_PATH[nextView] || "/documents";
 
       if (nextView === "list") {
@@ -337,7 +337,7 @@ function App() {
   );
 
   const handleOpenDetail = useCallback(
-    (doc: any) => {
+    (doc) => {
       setSelectedDoc(doc);
       setView("detail");
     },
@@ -366,7 +366,7 @@ function App() {
   }, []);
 
   const handleLogin = useCallback(
-    async (event: React.FormEvent) => {
+    async (event) => {
       event.preventDefault();
       setIsLoggingIn(true);
       setMessage(
@@ -406,7 +406,7 @@ function App() {
         if (typeof checkOnboarding === "function") {
           checkOnboarding();
         }
-      } catch (err: any) {
+      } catch (err) {
         const msg =
           err?.response?.data?.message ||
           err?.message ||
@@ -517,7 +517,7 @@ function App() {
       return;
     }
 
-    const handleSent = (data: any) => {
+    const handleSent = (data) => {
       if (import.meta.env.DEV) {
         console.log("[WS] document:sent recibido:", data);
       }
@@ -544,7 +544,7 @@ function App() {
       }
     };
 
-    const handleSigned = (data: any) => {
+    const handleSigned = (data) => {
       if (import.meta.env.DEV) {
         console.log("[WS] document:signed recibido:", data);
       }
