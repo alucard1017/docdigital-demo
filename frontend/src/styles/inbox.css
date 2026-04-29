@@ -3,6 +3,9 @@
 /* Cabecera bandeja documentos */
 
 .inbox-header-card {
+  width: 100%;
+  min-width: 0;
+  max-width: 100%;
   margin-bottom: 16px;
   padding: 14px 16px;
   display: flex;
@@ -14,6 +17,7 @@
   border: 1px solid var(--color-border);
   background: var(--color-surface-elevated);
   box-shadow: var(--shadow-md);
+  box-sizing: border-box;
 }
 
 :root[data-theme="light"] .inbox-header-card {
@@ -21,8 +25,9 @@
 }
 
 .inbox-header-main {
-  flex: 1 1 320px;
-  min-width: 220px;
+  flex: 1 1 0;
+  min-width: 0;
+  max-width: 100%;
 }
 
 .inbox-title {
@@ -30,79 +35,117 @@
   font-size: 1rem;
   font-weight: 800;
   color: var(--color-text-strong);
+  line-height: 1.2;
 }
 
 .inbox-subtitle {
   margin: 4px 0 0;
   font-size: 0.84rem;
+  line-height: 1.45;
   color: var(--color-text-muted);
 }
 
 .inbox-header-actions {
+  flex: 0 0 auto;
   display: flex;
   flex-wrap: wrap;
   gap: 10px;
   align-items: center;
-  justify-content: center;
+  justify-content: flex-start;
+  min-width: 0;
+  max-width: 100%;
 }
 
 /* Hero dashboard */
 
 .hero-dashboard {
+  width: 100%;
+  min-width: 0;
+  max-width: 100%;
   margin-bottom: 24px;
-  padding: 28px 32px;
+  padding: 24px 24px;
   color: var(--color-text);
   border-radius: 24px;
-  border: 1px solid color-mix(in srgb, var(--color-primary) 28%, var(--color-border));
+  border: 1px solid
+    color-mix(in srgb, var(--color-primary) 28%, var(--color-border));
   background:
-    radial-gradient(circle at top left, color-mix(in srgb, var(--color-primary) 18%, transparent) 0, transparent 55%),
-    radial-gradient(circle at bottom right, color-mix(in srgb, var(--color-accent-soft) 80%, transparent) 0, transparent 55%),
+    radial-gradient(
+      circle at top left,
+      color-mix(in srgb, var(--color-primary) 18%, transparent) 0,
+      transparent 55%
+    ),
+    radial-gradient(
+      circle at bottom right,
+      color-mix(in srgb, var(--color-accent-soft) 80%, transparent) 0,
+      transparent 55%
+    ),
     var(--color-surface-elevated);
   box-shadow: var(--shadow-lg);
+  box-sizing: border-box;
 }
 
 :root[data-theme="light"] .hero-dashboard {
   background:
     radial-gradient(circle at top left, rgba(15, 118, 110, 0.12) 0, transparent 55%),
-    radial-gradient(circle at bottom right, rgba(56, 189, 248, 0.10) 0, transparent 55%),
+    radial-gradient(circle at bottom right, rgba(56, 189, 248, 0.1) 0, transparent 55%),
     linear-gradient(180deg, #ffffff, #f8fafc);
 }
 
 .hero-dashboard-inner {
-  max-width: 720px;
-  margin: 0 auto;
   width: 100%;
-  text-align: center;
+  min-width: 0;
+  max-width: 100%;
+  margin: 0;
+  text-align: left;
 }
 
 .hero-dashboard-title {
-  margin-bottom: 6px;
-  font-size: 1.7rem;
+  margin: 0 0 6px;
+  font-size: 1.55rem;
   font-weight: 800;
+  line-height: 1.15;
   color: var(--color-text-strong);
 }
 
 .hero-dashboard-text {
-  margin-bottom: 14px;
-  font-size: 1rem;
+  margin: 0 0 14px;
+  font-size: 0.96rem;
   line-height: 1.5;
   color: var(--color-text-soft);
+  max-width: 72ch;
 }
 
 .hero-dashboard-actions {
   display: flex;
   flex-wrap: wrap;
-  justify-content: center;
+  justify-content: flex-start;
   gap: 10px;
+  min-width: 0;
+  max-width: 100%;
 }
 
 @media (max-width: 768px) {
+  .inbox-header-card {
+    padding: 14px 12px;
+    align-items: flex-start;
+  }
+
+  .inbox-header-main,
+  .inbox-header-actions {
+    width: 100%;
+  }
+
+  .inbox-header-actions {
+    justify-content: stretch;
+  }
+
   .hero-dashboard {
     padding: 20px 16px;
+    border-radius: 20px;
   }
 
   .hero-dashboard-title {
-    font-size: 1.4rem;
+    font-size: 1.3rem;
   }
 
   .hero-dashboard-text {

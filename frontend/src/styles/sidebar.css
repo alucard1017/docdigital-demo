@@ -3,10 +3,11 @@
 .sidebar {
   position: sticky;
   top: 0;
-  flex: 0 0 var(--sidebar-width, 248px); /* si el parent es flex */
-  width: var(--sidebar-width, 248px);
-  min-width: var(--sidebar-width, 248px);
+
+  /* El ancho lo controla el grid + var(--sidebar-width) */
+  width: 100%;
   max-width: var(--sidebar-width, 248px);
+  min-width: 0;
   height: 100vh;
 
   display: flex;
@@ -137,12 +138,13 @@
   gap: 6px;
   padding: 4px 10px;
   border-radius: 999px;
-  border: 1px solid color-mix(
+  border: 1px solid
+    color-mix(in srgb, var(--color-primary) 26%, var(--color-border));
+  background: color-mix(
     in srgb,
-    var(--color-primary) 26%,
-    var(--color-border)
+    var(--color-primary) 10%,
+    var(--color-surface)
   );
-  background: color-mix(in srgb, var(--color-primary) 10%, var(--color-surface));
   font-size: 0.75rem;
   font-weight: 700;
   color: color-mix(
@@ -355,11 +357,7 @@
 .nav-item.active .nav-item-badge {
   background: color-mix(in srgb, var(--color-primary) 14%, transparent);
   border-color: var(--color-primary-border);
-  color: color-mix(
-    in srgb,
-    var(--color-primary) 76%,
-    var(--color-text)
-  );
+  color: color-mix(in srgb, var(--color-primary) 76%, var(--color-text));
 }
 
 .nav-item:focus-visible {
@@ -471,10 +469,9 @@
 @media (max-width: 1080px) {
   .sidebar {
     position: static;
-    flex: 1 1 auto;
     width: 100%;
-    min-width: 0;
     max-width: none;
+    min-width: 0;
     height: auto;
     border-right: none;
     border-bottom: 1px solid var(--color-border);

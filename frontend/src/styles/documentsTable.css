@@ -42,11 +42,14 @@
 
 .table-wrapper {
   width: 100%;
+  min-width: 0;
+  max-width: 100%;
   overflow-x: auto;
   border: 1px solid var(--color-border);
   border-radius: var(--table-radius);
   background: var(--color-surface-elevated);
   box-shadow: var(--shadow-md);
+  box-sizing: border-box;
 }
 
 :root[data-theme="light"] .table-wrapper {
@@ -55,7 +58,7 @@
 
 .doc-table {
   width: 100%;
-  min-width: 960px;
+  min-width: 880px;
   border-collapse: separate;
   border-spacing: 0;
   table-layout: fixed;
@@ -92,7 +95,8 @@
   font-size: 0.84rem;
   color: var(--color-text);
   vertical-align: middle;
-  border-bottom: 1px solid color-mix(in srgb, var(--color-border) 72%, transparent);
+  border-bottom: 1px solid
+    color-mix(in srgb, var(--color-border) 72%, transparent);
   background: transparent;
 }
 
@@ -109,12 +113,20 @@
 }
 
 :root[data-theme="light"] .doc-row:nth-child(odd) {
-  background: color-mix(in srgb, var(--color-surface-muted) 70%, white 30%);
+  background: color-mix(
+    in srgb,
+    var(--color-surface-muted) 70%,
+    white 30%
+  );
 }
 
 .doc-row:hover {
   transform: translateY(-1px);
-  background: color-mix(in srgb, var(--color-accent-soft) 68%, var(--color-surface-muted));
+  background: color-mix(
+    in srgb,
+    var(--color-accent-soft) 68%,
+    var(--color-surface-muted)
+  );
   box-shadow: inset 0 0 0 9999px
     color-mix(in srgb, var(--color-accent-soft) 12%, transparent);
 }
@@ -127,11 +139,21 @@
    Column widths
    ========================= */
 
-.col-title { width: 30%; }
-.col-type { width: 14%; }
-.col-status { width: 12%; }
-.col-party { width: 24%; }
-.col-actions { width: 20%; }
+.col-title {
+  width: 30%;
+}
+.col-type {
+  width: 14%;
+}
+.col-status {
+  width: 12%;
+}
+.col-party {
+  width: 24%;
+}
+.col-actions {
+  width: 20%;
+}
 
 /* =========================
    Actions
@@ -193,9 +215,17 @@
 
 /* Open */
 .doc-actions .btn-secondary.doc-action-btn {
-  background: color-mix(in srgb, var(--color-surface) 88%, var(--color-primary) 12%);
+  background: color-mix(
+    in srgb,
+    var(--color-surface) 88%,
+    var(--color-primary) 12%
+  );
   color: var(--color-text-strong);
-  border-color: color-mix(in srgb, var(--color-border) 72%, var(--color-primary) 18%);
+  border-color: color-mix(
+    in srgb,
+    var(--color-border) 72%,
+    var(--color-primary) 18%
+  );
 }
 
 /* PDF */
@@ -203,7 +233,8 @@
   background: var(--color-primary);
   color: var(--color-primary-contrast, #ffffff);
   border-color: var(--color-primary);
-  box-shadow: 0 6px 14px color-mix(in srgb, var(--color-primary) 22%, transparent);
+  box-shadow: 0 6px 14px
+    color-mix(in srgb, var(--color-primary) 22%, transparent);
 }
 
 /* Download */
@@ -211,7 +242,11 @@
   min-width: 110px;
   background: #ffffff;
   color: var(--color-text);
-  border-color: color-mix(in srgb, var(--color-border) 82%, var(--color-text) 8%);
+  border-color: color-mix(
+    in srgb,
+    var(--color-border) 82%,
+    var(--color-text) 8%
+  );
   box-shadow: 0 4px 10px rgba(15, 23, 42, 0.06);
 }
 
@@ -222,8 +257,16 @@
 
 /* Danger */
 .doc-actions .btn-secondary-danger.doc-action-btn {
-  background: color-mix(in srgb, var(--color-danger) 10%, transparent);
-  color: color-mix(in srgb, var(--color-danger) 78%, var(--color-text));
+  background: color-mix(
+    in srgb,
+    var(--color-danger) 10%,
+    transparent
+  );
+  color: color-mix(
+    in srgb,
+    var(--color-danger) 78%,
+    var(--color-text)
+  );
   border-color: var(--color-danger-border);
 }
 
@@ -232,24 +275,49 @@
 }
 
 .doc-actions .btn-secondary.doc-action-btn:hover {
-  background: color-mix(in srgb, var(--color-surface) 78%, var(--color-primary) 22%);
-  border-color: color-mix(in srgb, var(--color-primary) 32%, var(--color-border));
+  background: color-mix(
+    in srgb,
+    var(--color-surface) 78%,
+    var(--color-primary) 22%
+  );
+  border-color: color-mix(
+    in srgb,
+    var(--color-primary) 32%,
+    var(--color-border)
+  );
   box-shadow: var(--shadow-sm);
 }
 
 .doc-actions .btn-primary.doc-action-btn:hover {
-  box-shadow: 0 8px 18px color-mix(in srgb, var(--color-primary) 26%, transparent);
+  box-shadow: 0 8px 18px
+    color-mix(in srgb, var(--color-primary) 26%, transparent);
 }
 
 .doc-actions .btn-ghost.doc-action-btn:hover {
-  background: color-mix(in srgb, var(--color-surface-muted) 78%, transparent);
-  border-color: color-mix(in srgb, var(--color-text) 14%, var(--color-border));
+  background: color-mix(
+    in srgb,
+    var(--color-surface-muted) 78%,
+    transparent
+  );
+  border-color: color-mix(
+    in srgb,
+    var(--color-text) 14%,
+    var(--color-border)
+  );
   box-shadow: var(--shadow-sm);
 }
 
 .doc-actions .btn-secondary-danger.doc-action-btn:hover {
-  background: color-mix(in srgb, var(--color-danger) 16%, transparent);
-  border-color: color-mix(in srgb, var(--color-danger) 34%, transparent);
+  background: color-mix(
+    in srgb,
+    var(--color-danger) 16%,
+    transparent
+  );
+  border-color: color-mix(
+    in srgb,
+    var(--color-danger) 34%,
+    transparent
+  );
   box-shadow: var(--shadow-sm);
 }
 
@@ -259,7 +327,8 @@
 }
 
 .doc-actions .doc-action-btn:focus-visible {
-  outline: 2px solid color-mix(in srgb, var(--color-primary) 72%, white 28%);
+  outline: 2px solid
+    color-mix(in srgb, var(--color-primary) 72%, white 28%);
   outline-offset: 2px;
 }
 
@@ -275,7 +344,9 @@
   font-size: 11px;
 }
 
-:root[data-density="compact"] .doc-actions .btn-ghost.doc-action-btn {
+:root[data-density="compact"]
+  .doc-actions
+  .btn-ghost.doc-action-btn {
   min-width: 102px;
 }
 
@@ -332,8 +403,16 @@
 
 .doc-id-pill.is-empty {
   color: var(--color-text-muted);
-  background: color-mix(in srgb, var(--color-surface-muted) 72%, transparent);
-  border-color: color-mix(in srgb, var(--color-border-strong) 70%, transparent);
+  background: color-mix(
+    in srgb,
+    var(--color-surface-muted) 72%,
+    transparent
+  );
+  border-color: color-mix(
+    in srgb,
+    var(--color-border-strong) 70%,
+    transparent
+  );
   border-style: dashed;
 }
 
@@ -397,8 +476,16 @@
   font-size: var(--table-chip-size);
   font-weight: 700;
   text-align: center;
-  color: color-mix(in srgb, var(--color-primary) 78%, var(--color-text));
-  background: color-mix(in srgb, var(--color-primary) 12%, transparent);
+  color: color-mix(
+    in srgb,
+    var(--color-primary) 78%,
+    var(--color-text)
+  );
+  background: color-mix(
+    in srgb,
+    var(--color-primary) 12%,
+    transparent
+  );
   border: 1px solid var(--color-primary-border);
   white-space: nowrap;
   overflow: hidden;
@@ -459,14 +546,30 @@
 }
 
 .doc-status-pill--success {
-  background: color-mix(in srgb, var(--color-success) 14%, transparent);
-  color: color-mix(in srgb, var(--color-success) 78%, var(--color-text));
+  background: color-mix(
+    in srgb,
+    var(--color-success) 14%,
+    transparent
+  );
+  color: color-mix(
+    in srgb,
+    var(--color-success) 78%,
+    var(--color-text)
+  );
   border-color: var(--color-success-border);
 }
 
 .doc-status-pill--danger {
-  background: color-mix(in srgb, var(--color-danger) 14%, transparent);
-  color: color-mix(in srgb, var(--color-danger) 78%, var(--color-text));
+  background: color-mix(
+    in srgb,
+    var(--color-danger) 14%,
+    transparent
+  );
+  color: color-mix(
+    in srgb,
+    var(--color-danger) 78%,
+    var(--color-text)
+  );
   border-color: var(--color-danger-border);
 }
 
@@ -555,7 +658,7 @@
 
 @media (max-width: 1180px) {
   .doc-table {
-    min-width: 960px;
+    min-width: 880px;
   }
 }
 
