@@ -120,8 +120,8 @@ function SessionLoadingFallback() {
   );
 }
 
-function safeNumber(value, fallback = 0) {
-  return Number.isFinite(value) ? value : fallback;
+function safeNumber(value: unknown, fallback = 0) {
+  return Number.isFinite(value) ? (value as number) : fallback;
 }
 
 /* ============================
@@ -147,10 +147,10 @@ function App() {
   const [isLoggingIn, setIsLoggingIn] = useState(false);
   const [rememberMe, setRememberMe] = useState(false);
 
-  const [formErrors, setFormErrors] = useState({});
-  const [tipoTramite, setTipoTramite] = useState("propio");
+  const [formErrors, setFormErrors] = useState<Record<string, string>>({});
+  const [tipoTramite, setTipoTramite] = useState<"propio" | "tercero">("propio");
   const [showVisador, setShowVisador] = useState(false);
-  const [extraSigners, setExtraSigners] = useState([]);
+  const [extraSigners, setExtraSigners] = useState<any[]>([]);
   const [firmanteRunValue, setFirmanteRunValue] = useState("");
   const [empresaRutValue, setEmpresaRutValue] = useState("");
 
@@ -174,7 +174,10 @@ function App() {
   const { tokenFromUrl, isAnyPublicAccess, isDocumentTokenPath } =
     publicAccess;
 
-  const { effectivePublicModeFromUrl, effectiveTokenKindFromUrl } = useMemo(
+  const {
+    effectivePublicModeFromUrl,
+    effectiveTokenKindFromUrl,
+  } = useMemo(
     () =>
       getEffectivePublicRouteState({
         search: locationSnapshot.search,
@@ -261,7 +264,10 @@ function App() {
     off: socketOff,
   } = useSocket(token);
 
-  const safeDocs = useMemo(() => (Array.isArray(docs) ? docs : []), [docs]);
+  const safeDocs = useMemo(
+    () => (Array.isArray(docs) ? docs : []),
+    [docs]
+  );
   const safeDocsFiltrados = useMemo(
     () => (Array.isArray(docsFiltrados) ? docsFiltrados : []),
     [docsFiltrados]
@@ -276,8 +282,10 @@ function App() {
   const safeFirmados = safeNumber(firmados);
   const safeRechazados = safeNumber(rechazados);
   const safeTotalFiltrado = safeNumber(totalFiltrado);
+
   const safeTotalPaginas =
     Number.isFinite(totalPaginas) && totalPaginas > 0 ? totalPaginas : 1;
+
   const safeCurrentPage =
     Number.isFinite(pagination?.page) && pagination.page > 0
       ? pagination.page
@@ -296,8 +304,12 @@ function App() {
   const isGlobalAdmin = isEffectiveGlobalAdmin(user);
   const canAudit = canViewAuditLogs(user);
 
+  /* ============================
+     Handlers
+     ============================ */
+
   const refreshDocs = useCallback(
-    async (overrides = {}) =>
+    async (overrides: Record<string, unknown> = {}) =>
       cargarDocs({
         page,
         sort,
@@ -310,7 +322,7 @@ function App() {
   );
 
   const handleNavigateProtected = useCallback(
-    (nextView) => {
+    (nextView: string) => {
       const nextPath = VIEW_TO_PATH[nextView] || "/documents";
 
       if (nextView === "list") {
@@ -325,7 +337,7 @@ function App() {
   );
 
   const handleOpenDetail = useCallback(
-    (doc) => {
+    (doc: any) => {
       setSelectedDoc(doc);
       setView("detail");
     },
@@ -354,7 +366,7 @@ function App() {
   }, []);
 
   const handleLogin = useCallback(
-    async (event) => {
+    async (event: React.FormEvent) => {
       event.preventDefault();
       setIsLoggingIn(true);
       setMessage(
@@ -369,7 +381,9 @@ function App() {
         : inputVal.replace(/[^0-9kK]/g, "").toUpperCase();
 
       if (!isEmail && cleanValue.length < 2) {
-        setMessage(t("app.login.invalidRut", "❌ El RUT ingresado no es válido"));
+        setMessage(
+          t("app.login.invalidRut", "❌ El RUT ingresado no es válido")
+        );
         setIsLoggingIn(false);
         return;
       }
@@ -381,7 +395,9 @@ function App() {
           rememberMe,
         });
 
-        setMessage(t("app.login.accessGranted", "Acceso concedido"));
+        setMessage(
+          t("app.login.accessGranted", "Acceso concedido")
+        );
         setPassword("");
         setView("list");
         setSelectedDoc(null);
@@ -390,17 +406,23 @@ function App() {
         if (typeof checkOnboarding === "function") {
           checkOnboarding();
         }
-      } catch (err) {
+      } catch (err: any) {
         const msg =
           err?.response?.data?.message ||
           err?.message ||
-          t("app.login.defaultError", "Error de conexión, intenta nuevamente.");
+          t(
+            "app.login.defaultError",
+            "Error de conexión, intenta nuevamente."
+          );
 
         setMessage(`❌ ${msg}`);
 
         addToast({
           type: "error",
-          title: t("app.login.toastTitle", "No se pudo iniciar sesión"),
+          title: t(
+            "app.login.toastTitle",
+            "No se pudo iniciar sesión"
+          ),
           message: msg,
         });
       } finally {
@@ -417,6 +439,10 @@ function App() {
       t,
     ]
   );
+
+  /* ============================
+     Effects
+     ============================ */
 
   useEffect(() => {
     const syncPath = () => {
@@ -491,7 +517,7 @@ function App() {
       return;
     }
 
-    const handleSent = (data) => {
+    const handleSent = (data: any) => {
       if (import.meta.env.DEV) {
         console.log("[WS] document:sent recibido:", data);
       }
@@ -518,7 +544,7 @@ function App() {
       }
     };
 
-    const handleSigned = (data) => {
+    const handleSigned = (data: any) => {
       if (import.meta.env.DEV) {
         console.log("[WS] document:signed recibido:", data);
       }
@@ -581,7 +607,10 @@ function App() {
     hasShownSocketToastRef.current = true;
 
     if (import.meta.env.DEV && socketLastError) {
-      console.warn("[WS] Problema de conexión en tiempo real:", socketLastError);
+      console.warn(
+        "[WS] Problema de conexión en tiempo real:",
+        socketLastError
+      );
     }
 
     let title = t(
@@ -625,6 +654,10 @@ function App() {
     });
   }, [socketStatus, socketLastError, addToast, t]);
 
+  /* ============================
+     List view renderer
+     ============================ */
+
   const renderListView = useCallback(() => {
     if (loadingDocs) {
       return (
@@ -633,7 +666,10 @@ function App() {
             {t("app.list.loadingTitle", "Cargando tu bandeja de documentos…")}
           </div>
           <p className="list-state-text">
-            {t("app.list.loadingSubtitle", "Esto puede tardar unos segundos.")}
+            {t(
+              "app.list.loadingSubtitle",
+              "Esto puede tardar unos segundos."
+            )}
           </p>
           <div className="spinner" />
         </div>
@@ -644,7 +680,10 @@ function App() {
       return (
         <div className="list-state list-state--error">
           <p className="list-state-title">
-            {t("app.list.errorTitle", "Ocurrió un problema al cargar la bandeja.")}
+            {t(
+              "app.list.errorTitle",
+              "Ocurrió un problema al cargar la bandeja."
+            )}
           </p>
           <p className="list-state-text list-state-text--strong">
             {errorDocs ||
@@ -667,7 +706,10 @@ function App() {
       return (
         <div className="list-state list-state--empty">
           <h3 className="list-state-title">
-            {t("app.list.emptyTitle", "No encontramos documentos para mostrar.")}
+            {t(
+              "app.list.emptyTitle",
+              "No encontramos documentos para mostrar."
+            )}
           </h3>
           <p className="list-state-text">
             {t(
@@ -698,9 +740,14 @@ function App() {
             <thead>
               <tr>
                 <th className="col-title">
-                  {t("app.table.columns.contractDocument", "Contrato / Documento")}
+                  {t(
+                    "app.table.columns.contractDocument",
+                    "Contrato / Documento"
+                  )}
                 </th>
-                <th className="col-type">{t("app.table.columns.type", "Tipo")}</th>
+                <th className="col-type">
+                  {t("app.table.columns.type", "Tipo")}
+                </th>
                 <th className="col-status text-center">
                   {t("app.table.columns.status", "Estado")}
                 </th>
@@ -775,6 +822,10 @@ function App() {
     setPage,
     t,
   ]);
+
+  /* ============================
+     Protected views
+     ============================ */
 
   const protectedViewElement = useMemo(() => {
     if (view === "list") {
@@ -931,6 +982,10 @@ function App() {
     t,
   ]);
 
+  /* ============================
+     Route-level decisions
+     ============================ */
+
   if (entryDecision.screen === "session-loading") {
     return <SessionLoadingFallback />;
   }
@@ -1022,6 +1077,10 @@ function App() {
     );
   }
 
+  /* ============================
+     Detail view
+     ============================ */
+
   if (view === "detail" && selectedDoc) {
     const requiereVisado = selectedDoc.requires_visado === true;
 
@@ -1053,6 +1112,10 @@ function App() {
     );
   }
 
+  /* ============================
+     Main app shell
+     ============================ */
+
   return (
     <div className="dashboard-root">
       <ConnectionBanner
@@ -1066,7 +1129,10 @@ function App() {
         fallback={
           showOnboarding ? (
             <div className="onboarding-fallback">
-              {t("app.onboarding.fallback", "Preparando guía interactiva…")}
+              {t(
+                "app.onboarding.fallback",
+                "Preparando guía interactiva…"
+              )}
             </div>
           ) : null
         }
@@ -1104,7 +1170,10 @@ function App() {
               fallback={
                 runProductTour ? (
                   <div className="product-tour-fallback">
-                    {t("app.tour.fallback", "Cargando tour interactivo…")}
+                    {t(
+                      "app.tour.fallback",
+                      "Cargando tour interactivo…"
+                    )}
                   </div>
                 ) : null
               }
