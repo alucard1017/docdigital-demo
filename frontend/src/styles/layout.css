@@ -16,10 +16,10 @@
   min-height: 100vh;
   width: 100%;
   max-width: 100%;
-  overflow: hidden;
+  overflow-x: hidden;
 }
 
-/* Sidebar */
+/* Sidebar controlada por el grid */
 .dashboard-root .sidebar {
   width: 100%;
   min-width: 0;
