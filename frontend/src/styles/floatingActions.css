@@ -9,7 +9,10 @@
   flex-direction: column;
   align-items: flex-end;
   gap: 12px;
+  pointer-events: none;
 }
+
+/* Menú del FAB */
 
 .floating-actions__menu {
   display: flex;
@@ -40,7 +43,13 @@
   gap: 10px;
   box-shadow: var(--shadow-md);
   cursor: pointer;
-  transition: all 0.18s ease;
+  transition:
+    background 0.18s ease,
+    border-color 0.18s ease,
+    transform 0.18s ease,
+    box-shadow 0.18s ease;
+  pointer-events: auto;
+  touch-action: manipulation;
 }
 
 .floating-actions__item:hover {
@@ -58,18 +67,23 @@
   justify-content: center;
   background: var(--color-accent-soft);
   color: var(--color-accent-strong);
+  pointer-events: none;
 }
 
 .floating-actions__item-label {
   font-size: 0.85rem;
   font-weight: 700;
   line-height: 1;
+  pointer-events: none;
 }
+
+/* Trigger principal: área clicable = botón visible */
 
 .floating-actions__trigger {
   position: relative;
   width: 58px;
   height: 58px;
+  padding: 0;
   border-radius: 999px;
   border: 1px solid var(--color-primary-border);
   background: linear-gradient(
@@ -86,7 +100,16 @@
   transition:
     transform 0.18s ease,
     box-shadow 0.18s ease,
-    background 0.18s ease;
+    background 0.18s ease,
+    border-color 0.18s ease;
+  pointer-events: auto;
+  touch-action: manipulation;
+  overflow: hidden;
+  -webkit-tap-highlight-color: transparent;
+}
+
+.floating-actions__trigger > * {
+  pointer-events: none;
 }
 
 :root[data-theme="light"] .floating-actions__trigger {
@@ -111,10 +134,11 @@
   color: var(--color-text);
 }
 
+/* Anillo visual sin clics extra */
 .floating-actions__trigger-ring {
   position: absolute;
-  inset: -6px;
-  border-radius: 999px;
+  inset: 0;
+  border-radius: inherit;
   border: 1px solid color-mix(in srgb, var(--color-primary) 18%, transparent);
   pointer-events: none;
 }
@@ -123,6 +147,7 @@
   display: inline-flex;
   align-items: center;
   justify-content: center;
+  pointer-events: none;
 }
 
 .floating-actions__trigger:focus-visible,
@@ -131,16 +156,74 @@
   outline-offset: 3px;
 }
 
-/* Overlay del FAB solo para cerrar el menú pequeño.
-   No debe tapar HelpPanel ni SettingsPanel. */
+/* Overlay del FAB: solo activo cuando el menú está abierto */
 .floating-actions__screen-dismiss {
   position: fixed;
   inset: 0;
   opacity: 0;
-  pointer-events: auto;
-  z-index: 1090; /* por debajo del FAB (1100) y MUY por debajo de los paneles (2000+) */
+  pointer-events: none;
+  z-index: 1090;
   border: none;
   background: transparent;
+}
+
+.floating-actions__screen-dismiss.is-open {
+  pointer-events: auto;
+}
+
+/* PANEL FULLSCREEN DE AJUSTES (por si lo usas aquí) */
+.floating-actions__settings-panel {
+  position: fixed;
+  inset: 0;
+  z-index: 1200;
+  width: 100vw;
+  height: 100dvh;
+  max-width: 100vw;
+  max-height: 100dvh;
+  margin: 0;
+  border: none;
+  border-radius: 0;
+  background: var(--color-surface);
+  box-shadow: none;
+  overflow: hidden;
+  display: flex;
+  flex-direction: column;
+}
+
+.floating-actions__settings-header {
+  flex: 0 0 auto;
+  min-height: 64px;
+  padding: 16px 20px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  border-bottom: 1px solid var(--color-border);
+  background: var(--color-surface);
+}
+
+.floating-actions__settings-body {
+  flex: 1 1 auto;
+  min-height: 0;
+  padding: 20px;
+  overflow: hidden;
+  display: grid;
+  align-content: start;
+  gap: 16px;
+}
+
+.floating-actions__settings-section {
+  min-width: 0;
+  max-width: 100%;
+}
+
+/* Utilidad para bloquear scroll del documento cuando ajustes está abierto */
+body.floating-actions--lock-scroll {
+  overflow: hidden;
+}
+
+html.floating-actions--lock-scroll {
+  overflow: hidden;
 }
 
 :root[data-density="compact"] .floating-actions {
@@ -167,5 +250,15 @@
   .floating-actions {
     right: 16px;
     bottom: 16px;
+  }
+
+  .floating-actions__settings-header {
+    min-height: 56px;
+    padding: 14px 16px;
+  }
+
+  .floating-actions__settings-body {
+    padding: 16px;
+    gap: 12px;
   }
 }

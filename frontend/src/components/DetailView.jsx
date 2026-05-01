@@ -492,7 +492,9 @@ export function DetailView({
   const numeroInternoDisplay = useMemo(() => {
     if (numeroInterno) return numeroInterno;
     if (currentDocId) {
-      return t("detail.header.documentNumberShort", "#{{id}}", { id: currentDocId });
+      return t("detail.header.documentNumberShort", "#{{id}}", {
+        id: currentDocId,
+      });
     }
     return t("detail.common.notAvailable", "N/D");
   }, [numeroInterno, currentDocId, t]);
@@ -901,14 +903,18 @@ export function DetailView({
           {t("sidebar.brand", "VeriFirma")}
         </h2>
 
-        <button type="button" className="nav-item" onClick={handleBackToList}>
+        <button
+          type="button"
+          className="detail-nav-item"
+          onClick={handleBackToList}
+        >
           <ArrowLeft size={16} aria-hidden="true" />
           <span>{t("detail.sidebar.back", "Volver a la bandeja")}</span>
         </button>
 
         <button
           type="button"
-          className="nav-item detail-sidebar-footer"
+          className="detail-nav-item detail-sidebar-footer"
           onClick={logout}
         >
           <LogOut size={16} aria-hidden="true" />
@@ -916,7 +922,7 @@ export function DetailView({
         </button>
       </aside>
 
-      <main className="main-area">
+      <main className="detail-main-area">
         <header className="detail-topbar">
           <span className="detail-topbar-title">
             {t(

@@ -39,8 +39,7 @@ export const GLOBAL_REMINDER_ALLOWED_STATUSES = [
 
 /**
  * Configuración visual de badges por rol.
- * (Los textos siguen en español aquí; si luego quieres i18n,
- * basta con mapear label vía t() en el componente).
+ * (Textos en español; para i18n, mapear label vía t() en el componente).
  */
 export const FLOW_ROLE_BADGES = {
   visador: {
@@ -97,7 +96,7 @@ export const FLOW_STATUS_META = {
 };
 
 /**
- * Meta para el "estado global" del documento en el header del detalle.
+ * Meta para el estado global del documento en el header del detalle.
  */
 export const DOCUMENT_STATE_META = {
   firmado: {

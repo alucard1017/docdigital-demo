@@ -22,9 +22,7 @@ html {
 body {
   margin: 0;
   min-height: 100vh;
-  background:
-    radial-gradient(circle at top left, var(--color-accent-soft), transparent 24%),
-    linear-gradient(180deg, var(--color-bg) 0%, var(--color-bg-soft) 100%);
+  background: var(--color-bg);
   color: var(--color-text);
   font-family:
     Inter,
@@ -220,30 +218,35 @@ textarea {
   line-height: 1;
   background: var(--color-surface-muted);
   color: var(--color-text);
+  box-sizing: border-box;
 }
 
 .btn-main:hover:not(:disabled) {
   transform: translateY(-1px);
 }
 
+.btn-main.btn-primary,
 .btn-main--primary {
   background: var(--color-primary);
   color: var(--color-primary-contrast);
   border-color: var(--color-primary-border);
 }
 
+.btn-main.btn-success,
 .btn-main--success {
   background: var(--color-success);
   color: var(--color-success-contrast);
   border-color: var(--color-success-border);
 }
 
+.btn-main.btn-danger,
 .btn-main--danger {
   background: var(--color-danger);
   color: var(--color-danger-contrast);
   border-color: var(--color-danger-border);
 }
 
+.btn-main.btn-ghost,
 .btn-main--ghost {
   background: var(--color-surface-muted);
   color: var(--color-text);
@@ -298,7 +301,7 @@ textarea {
     scroll-behavior: auto;
   }
 
-  *,
+  * ,
   *::before,
   *::after {
     animation: none !important;

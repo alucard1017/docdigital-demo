@@ -1,71 +1,58 @@
+@import "./styles/theme.css";
 @import "./styles/base.css";
-@import "./styles/layout.css";
-@import "./styles/inbox.css";
-@import "./styles/documentsTable.css";
-@import "./styles/formsAndCards.css";
-@import "./styles/actionsTable.css";
 @import "./styles/appShell.css";
-@import "./styles/badges.css";
+@import "./styles/layout.css";
+@import "./styles/sidebar.css";
+@import "./styles/formsAndCards.css";
+@import "./styles/detailView.css";
+@import "./styles/detailActions.css";
+@import "./styles/documentsTable.css";
+@import "./styles/listStates.css";
 @import "./styles/states.css";
+@import "./styles/badges.css";
+@import "./styles/inbox.css";
+@import "./styles/actionsTable.css";
+@import "./styles/auth.css";
+@import "./styles/authLegacy.css";
+@import "./styles/companiesAdmin.css";
+@import "./styles/usersAdmin.css";
+@import "./styles/decorativeTabs.css";
+@import "./styles/listHeader.css";
 @import "./styles/settingsPanel.css";
+@import "./styles/floatingActions.css";
+@import "./styles/helpPanel.css";
 
-/* Shell principal */
-.dashboard-root {
-  min-height: 100vh;
-  background: var(--bg-main);
-  color: var(--text-main);
-}
+/* src/App.css */
+/* Punto único de entrada para estilos globales.
+   Mantener todos los @import arriba para evitar errores de PostCSS/Vite. */
 
-/* =========================================
-   Density tokens para la tabla de documentos
-   ========================================= */
-
-:root {
-  --table-cell-py: 14px;
-  --table-cell-px: 16px;
-  --table-row-font-size: 14px;
-  --table-meta-font-size: 13px;
-  --table-actions-gap: 8px;
-  --table-header-py: 14px;
-  --table-header-px: 16px;
-  --table-pagination-gap: 12px;
-}
-
-:root[data-density="compact"] {
-  --table-cell-py: 10px;
-  --table-cell-px: 12px;
-  --table-row-font-size: 13px;
-  --table-meta-font-size: 12px;
-  --table-actions-gap: 6px;
-  --table-header-py: 10px;
-  --table-header-px: 12px;
-  --table-pagination-gap: 8px;
-}
-
-.doc-table {
+html,
+body {
+  margin: 0;
+  padding: 0;
   width: 100%;
-  border-collapse: collapse;
-  table-layout: fixed;
+  max-width: 100%;
+  overflow-x: hidden;
+  box-sizing: border-box;
 }
 
-.doc-table thead th {
-  padding: var(--table-header-py) var(--table-header-px);
-  font-size: 12px;
-  font-weight: 700;
-  letter-spacing: 0.02em;
-  text-transform: uppercase;
+*,
+*::before,
+*::after {
+  box-sizing: inherit;
 }
 
-.doc-table tbody td {
-  padding: var(--table-cell-py) var(--table-cell-px);
-  font-size: var(--table-row-font-size);
-  vertical-align: middle;
+body {
+  min-height: 100vh;
+  background: var(--color-bg);
+  color: var(--color-text);
 }
 
-.doc-table tbody tr {
-  transition: background 160ms ease;
-}
-
-.doc-table tbody tr:hover {
-  background: rgba(15, 118, 110, 0.04);
+#root {
+  width: 100%;
+  max-width: 100%;
+  min-height: 100vh;
+  display: flex;
+  flex-direction: column;
+  overflow-x: hidden;
 }

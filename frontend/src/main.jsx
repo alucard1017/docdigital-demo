@@ -1,3 +1,4 @@
+// src/main.jsx
 // import "./sentry"; // desactivado temporalmente
 
 import React from "react";
@@ -6,30 +7,7 @@ import { onCLS, onINP, onLCP, onFCP, onTTFB } from "web-vitals";
 
 import App from "./App.jsx";
 import "./i18n";
-
-import "./styles/theme.css";
-import "./styles/base.css";
-import "./styles/appShell.css";
-import "./styles/layout.css";
-import "./styles/formsAndCards.css";
-import "./styles/detailView.css";
-import "./styles/detailActions.css";
-import "./styles/documentsTable.css";
-import "./styles/sidebar.css";
-import "./styles/listStates.css";
-import "./styles/states.css";
-import "./styles/badges.css";
-import "./styles/inbox.css";
-import "./styles/actionsTable.css";
-import "./styles/auth.css";
-import "./styles/authLegacy.css";
-import "./styles/companiesAdmin.css";
-import "./styles/usersAdmin.css";
-import "./styles/decorativeTabs.css";
-import "./styles/listHeader.css";
-import "./styles/settingsPanel.css";
-import "./styles/floatingActions.css";
-import "./styles/helpPanel.css";
+import "./App.css";
 
 import { AuthProvider } from "./context/AuthContext.jsx";
 import { PreferencesProvider } from "./context/PreferencesContext.jsx";
@@ -91,7 +69,9 @@ function sendMetric(metric) {
   }).catch(() => {});
 }
 
-[onCLS, onINP, onLCP, onFCP, onTTFB].forEach((handler) => handler(sendMetric));
+[onCLS, onINP, onLCP, onFCP, onTTFB].forEach((registerMetric) => {
+  registerMetric(sendMetric);
+});
 
 ReactDOM.createRoot(rootElement).render(
   <React.StrictMode>
@@ -105,7 +85,7 @@ ReactDOM.createRoot(rootElement).render(
   </React.StrictMode>
 );
 
-if (import.meta.env?.DEV) {
+if (import.meta.env.DEV) {
   console.log("✓ Web Vitals inicializadas");
   console.log("✓ Web Vitals endpoint:", WEB_VITALS_ENDPOINT);
 }

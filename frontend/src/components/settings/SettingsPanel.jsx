@@ -70,7 +70,10 @@ export default function SettingsPanel({ isOpen, onClose }) {
   } = usePreferences();
 
   const closeButtonRef = useRef(null);
+  const panelRef = useRef(null);
   const previousFocusedElementRef = useRef(null);
+  const previousBodyOverflowRef = useRef("");
+  const previousHtmlOverflowRef = useRef("");
 
   const resolvedLanguage =
     i18n?.resolvedLanguage ||
@@ -109,12 +112,28 @@ export default function SettingsPanel({ isOpen, onClose }) {
     previousFocusedElementRef.current =
       typeof document !== "undefined" ? document.activeElement : null;
 
+    if (typeof document !== "undefined") {
+      previousBodyOverflowRef.current = document.body.style.overflow;
+      previousHtmlOverflowRef.current = document.documentElement.style.overflow;
+
+      document.body.style.overflow = "hidden";
+      document.documentElement.style.overflow = "hidden";
+    }
+
     const timer = window.setTimeout(() => {
-      closeButtonRef.current?.focus();
+      closeButtonRef.current?.focus?.();
+      panelRef.current?.focus?.();
     }, 0);
 
     return () => {
       window.clearTimeout(timer);
+
+      if (typeof document !== "undefined") {
+        document.body.style.overflow = previousBodyOverflowRef.current || "";
+        document.documentElement.style.overflow =
+          previousHtmlOverflowRef.current || "";
+      }
+
       previousFocusedElementRef.current?.focus?.();
     };
   }, [isOpen]);
@@ -129,9 +148,7 @@ export default function SettingsPanel({ isOpen, onClose }) {
   useEffect(() => {
     if (!isOpen) return;
 
-    loadPreferences().catch(() => {
-      // el provider ya expone el error
-    });
+    loadPreferences().catch(() => {});
   }, [isOpen, loadPreferences]);
 
   useEffect(() => {
@@ -139,6 +156,7 @@ export default function SettingsPanel({ isOpen, onClose }) {
 
     const handleKeyDown = (event) => {
       if (event.key === "Escape" && !savingPrefs) {
+        event.preventDefault();
         onClose?.();
       }
     };
@@ -161,7 +179,6 @@ export default function SettingsPanel({ isOpen, onClose }) {
 
   const handleClose = useCallback(() => {
     if (savingPrefs) return;
-
     setDraft(initialPrefs);
     onClose?.();
   }, [initialPrefs, onClose, savingPrefs]);
@@ -294,15 +311,18 @@ export default function SettingsPanel({ isOpen, onClose }) {
       />
 
       <aside
-        className="settings-panel"
+        ref={panelRef}
+        className="settings-panel settings-panel--fullscreen"
         role="dialog"
         aria-modal="true"
         aria-labelledby="settings-panel-title"
         aria-describedby="settings-panel-description"
         aria-busy={loadingPrefs || savingPrefs}
+        aria-hidden={!isOpen}
         onClick={(event) => event.stopPropagation()}
+        tabIndex={-1}
       >
-        <form onSubmit={handleSubmit}>
+        <form className="settings-panel__form" onSubmit={handleSubmit}>
           <div className="settings-panel__header">
             <div>
               <h2 id="settings-panel-title" className="settings-panel__title">
@@ -333,15 +353,7 @@ export default function SettingsPanel({ isOpen, onClose }) {
 
           <div className="settings-panel__body">
             {error ? (
-              <div
-                className="settings-panel__loading"
-                style={{
-                  justifyContent: "flex-start",
-                  minHeight: "auto",
-                  marginBottom: 16,
-                }}
-                role="status"
-              >
+              <div className="settings-panel__loading" role="status">
                 {error}
               </div>
             ) : null}

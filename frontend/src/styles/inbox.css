@@ -1,13 +1,15 @@
 /* src/styles/inbox.css */
 
-/* Cabecera bandeja documentos */
+/* =========================
+   Cabecera bandeja documentos
+   ========================= */
 
 .inbox-header-card {
   width: 100%;
-  min-width: 0;
   max-width: 100%;
-  margin-bottom: 16px;
-  padding: 14px 16px;
+  min-width: 0;
+  margin: 0 0 16px;
+  padding: 16px 18px;
   display: flex;
   flex-wrap: wrap;
   align-items: center;
@@ -18,6 +20,7 @@
   background: var(--color-surface-elevated);
   box-shadow: var(--shadow-md);
   box-sizing: border-box;
+  overflow: hidden;
 }
 
 :root[data-theme="light"] .inbox-header-card {
@@ -25,45 +28,61 @@
 }
 
 .inbox-header-main {
-  flex: 1 1 0;
+  flex: 1 1 320px;
   min-width: 0;
   max-width: 100%;
 }
 
 .inbox-title {
   margin: 0;
+  min-width: 0;
+  max-width: 100%;
   font-size: 1rem;
   font-weight: 800;
-  color: var(--color-text-strong);
   line-height: 1.2;
+  color: var(--color-text-strong);
+  overflow-wrap: anywhere;
+  word-break: break-word;
 }
 
 .inbox-subtitle {
   margin: 4px 0 0;
+  min-width: 0;
+  max-width: 100%;
   font-size: 0.84rem;
   line-height: 1.45;
   color: var(--color-text-muted);
+  overflow-wrap: anywhere;
+  word-break: break-word;
 }
 
 .inbox-header-actions {
-  flex: 0 0 auto;
-  display: flex;
-  flex-wrap: wrap;
-  gap: 10px;
-  align-items: center;
-  justify-content: flex-start;
+  flex: 0 1 auto;
   min-width: 0;
   max-width: 100%;
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: flex-start;
+  gap: 10px;
 }
 
-/* Hero dashboard */
+.inbox-header-actions > * {
+  min-width: 0;
+  max-width: 100%;
+  flex: 0 1 auto;
+}
+
+/* =========================
+   Hero dashboard
+   ========================= */
 
 .hero-dashboard {
   width: 100%;
-  min-width: 0;
   max-width: 100%;
-  margin-bottom: 24px;
-  padding: 24px 24px;
+  min-width: 0;
+  margin: 0 0 24px;
+  padding: 24px;
   color: var(--color-text);
   border-radius: 24px;
   border: 1px solid
@@ -82,6 +101,7 @@
     var(--color-surface-elevated);
   box-shadow: var(--shadow-lg);
   box-sizing: border-box;
+  overflow: hidden;
 }
 
 :root[data-theme="light"] .hero-dashboard {
@@ -93,36 +113,55 @@
 
 .hero-dashboard-inner {
   width: 100%;
-  min-width: 0;
   max-width: 100%;
+  min-width: 0;
   margin: 0;
   text-align: left;
+  box-sizing: border-box;
 }
 
 .hero-dashboard-title {
   margin: 0 0 6px;
+  min-width: 0;
+  max-width: 100%;
   font-size: 1.55rem;
   font-weight: 800;
   line-height: 1.15;
   color: var(--color-text-strong);
+  overflow-wrap: anywhere;
+  word-break: break-word;
 }
 
 .hero-dashboard-text {
   margin: 0 0 14px;
+  min-width: 0;
+  max-width: min(72ch, 100%);
   font-size: 0.96rem;
   line-height: 1.5;
   color: var(--color-text-soft);
-  max-width: 72ch;
+  overflow-wrap: anywhere;
+  word-break: break-word;
 }
 
 .hero-dashboard-actions {
   display: flex;
   flex-wrap: wrap;
+  align-items: center;
   justify-content: flex-start;
   gap: 10px;
   min-width: 0;
   max-width: 100%;
 }
+
+.hero-dashboard-actions > * {
+  min-width: 0;
+  max-width: 100%;
+  flex: 0 1 auto;
+}
+
+/* =========================
+   Responsive
+   ========================= */
 
 @media (max-width: 768px) {
   .inbox-header-card {
@@ -133,10 +172,16 @@
   .inbox-header-main,
   .inbox-header-actions {
     width: 100%;
+    max-width: 100%;
   }
 
   .inbox-header-actions {
     justify-content: stretch;
+  }
+
+  .inbox-header-actions > * {
+    width: 100%;
+    flex: 1 1 100%;
   }
 
   .hero-dashboard {
@@ -150,5 +195,10 @@
 
   .hero-dashboard-text {
     font-size: 0.9rem;
+  }
+
+  .hero-dashboard-actions > * {
+    width: 100%;
+    flex: 1 1 100%;
   }
 }

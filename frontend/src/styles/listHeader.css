@@ -1,12 +1,19 @@
 /* src/styles/listHeader.css */
 
 .list-header-card {
+  width: 100%;
+  max-width: 100%;
+  min-width: 0;
+
   background: var(--color-surface-elevated);
   border: 1px solid var(--color-border);
-  border-radius: 18px;
-  padding: 18px;
-  margin-bottom: 18px;
+  border-radius: 16px;
+  padding: 18px 18px 16px;
+  margin-bottom: 16px;
   box-shadow: var(--shadow-md);
+
+  box-sizing: border-box;
+  overflow: hidden;
 }
 
 .list-header-top {
@@ -16,34 +23,44 @@
   align-items: flex-start;
   gap: 16px;
   margin-bottom: 16px;
+  min-width: 0;
 }
 
 .list-header-copy {
   flex: 1 1 320px;
-  min-width: 240px;
+  min-width: 0;
+  max-width: 100%;
 }
 
 .list-header-title {
   margin: 0;
-  font-size: 1.6rem;
+  font-size: 1.3rem;
   font-weight: 800;
   color: var(--color-text-strong);
-  line-height: 1.1;
+  line-height: 1.15;
   letter-spacing: -0.02em;
+  overflow-wrap: anywhere;
+  word-break: break-word;
 }
 
 .list-header-subtitle {
   margin: 6px 0 0 0;
-  font-size: 0.9rem;
+  font-size: 0.88rem;
   color: var(--color-text-muted);
   line-height: 1.45;
+  overflow-wrap: anywhere;
+  word-break: break-word;
 }
 
 .list-header-results {
   margin: 8px 0 0 0;
-  font-size: 0.82rem;
+  font-size: 0.8rem;
   color: var(--color-text-soft);
+  overflow-wrap: anywhere;
+  word-break: break-word;
 }
+
+/* Acciones (botones superiores) */
 
 .list-header-actions {
   display: flex;
@@ -51,24 +68,47 @@
   gap: 10px;
   align-items: center;
   justify-content: flex-end;
+
   flex: 0 1 auto;
+  min-width: 0;
+  max-width: 100%;
+}
+
+.list-header-actions > * {
+  flex: 0 1 auto;
+  min-width: 0;
+  max-width: 100%;
+}
+
+/* Botón base para acciones de header */
+.list-header-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+
+  font-size: 0.84rem;
+  font-weight: 700;
+
+  padding: 0 16px;
+  min-height: 38px;
+
+  min-width: 0;
+  max-width: 100%;
+  white-space: normal;
+  text-align: center;
 }
 
 /* Botón principal: descargar reporte */
 .list-header-btn-success {
   background: var(--color-success);
   color: var(--color-success-contrast, #ffffff);
-  font-size: 0.84rem;
-  padding: 0 16px;
   border-radius: 999px;
-  font-weight: 700;
   border: 1px solid var(--color-success-border);
-  min-height: 38px;
-  white-space: nowrap;
-  box-shadow: 0 8px 18px color-mix(in srgb, var(--color-success) 26%, transparent);
-  display: inline-flex;
-  align-items: center;
-  gap: 8px;
+
+  box-shadow: 0 8px 18px
+    color-mix(in srgb, var(--color-success) 26%, transparent);
+
   transition:
     background-color 0.18s ease,
     box-shadow 0.18s ease,
@@ -77,10 +117,19 @@
 }
 
 .list-header-btn-success:hover {
-  background: color-mix(in srgb, var(--color-success) 82%, #ffffff 18%);
-  border-color: color-mix(in srgb, var(--color-success-border) 68%, #ffffff 32%);
+  background: color-mix(
+    in srgb,
+    var(--color-success) 82%,
+    #ffffff 18%
+  );
+  border-color: color-mix(
+    in srgb,
+    var(--color-success-border) 68%,
+    #ffffff 32%
+  );
   transform: translateY(-1px);
-  box-shadow: 0 10px 22px color-mix(in srgb, var(--color-success) 30%, transparent);
+  box-shadow: 0 10px 22px
+    color-mix(in srgb, var(--color-success) 30%, transparent);
 }
 
 .list-header-btn-success:active {
@@ -92,17 +141,11 @@
 .list-header-btn-sync {
   background: var(--color-surface-muted);
   color: var(--color-text);
-  font-size: 0.84rem;
-  padding: 0 16px;
   border-radius: 999px;
-  font-weight: 700;
   border: 1px solid var(--color-border-strong);
-  min-height: 38px;
-  white-space: nowrap;
-  display: inline-flex;
-  align-items: center;
-  gap: 8px;
+
   box-shadow: var(--shadow-sm);
+
   transition:
     background-color 0.18s ease,
     box-shadow 0.18s ease,
@@ -112,8 +155,16 @@
 }
 
 .list-header-btn-sync:hover {
-  background: color-mix(in srgb, var(--color-surface-muted) 80%, var(--color-primary) 20%);
-  border-color: color-mix(in srgb, var(--color-border-strong) 70%, var(--color-primary) 30%);
+  background: color-mix(
+    in srgb,
+    var(--color-surface-muted) 80%,
+    var(--color-primary) 20%
+  );
+  border-color: color-mix(
+    in srgb,
+    var(--color-border-strong) 70%,
+    var(--color-primary) 30%
+  );
   color: var(--color-text-strong);
   transform: translateY(-1px);
   box-shadow: var(--shadow-md);
@@ -133,6 +184,7 @@
   flex-wrap: wrap;
   gap: 10px;
   margin-bottom: 16px;
+  min-width: 0;
 }
 
 .status-chip {
@@ -142,11 +194,16 @@
   font-weight: 700;
   border: 1px solid transparent;
   cursor: pointer;
+
   display: inline-flex;
   align-items: center;
   gap: 6px;
-  white-space: nowrap;
+
   min-height: 36px;
+  min-width: 0;
+  max-width: 100%;
+  white-space: nowrap;
+
   transition:
     background-color 0.2s ease,
     border-color 0.2s ease,
@@ -159,74 +216,6 @@
   font-weight: 800;
 }
 
-.status-chip--neutral {
-  background: var(--color-surface-muted);
-  color: var(--color-text);
-  border-color: var(--color-border);
-}
-
-.status-chip--neutral.is-active {
-  background: var(--color-surface);
-  border-color: var(--color-border-strong);
-  box-shadow: var(--shadow-sm);
-}
-
-/* Pendientes */
-.status-chip--pending {
-  background: rgba(99, 102, 241, 0.12);
-  color: color-mix(in srgb, #4f46e5 78%, var(--color-text));
-  border-color: rgba(129, 140, 248, 0.5);
-}
-
-:root:not([data-theme="light"]) .status-chip--pending {
-  color: #e5e7eb;
-}
-
-.status-chip--pending.is-active {
-  background: linear-gradient(135deg, #3730a3, #4f46e5);
-  color: #ffffff;
-  box-shadow: var(--shadow-md);
-}
-
-/* Teal */
-.status-chip--teal {
-  background: var(--color-accent-soft);
-  color: var(--color-accent-strong);
-  border-color: var(--color-accent-border);
-}
-
-.status-chip--teal.is-active {
-  background: linear-gradient(135deg, #0f766e, #14b8a6);
-  color: #ffffff;
-  box-shadow: var(--shadow-md);
-}
-
-/* Success */
-.status-chip--success {
-  background: color-mix(in srgb, var(--color-success) 12%, transparent);
-  color: color-mix(in srgb, var(--color-success) 78%, var(--color-text));
-  border-color: var(--color-success-border);
-}
-
-.status-chip--success.is-active {
-  background: linear-gradient(135deg, #166534, #22c55e);
-  color: #ffffff;
-  box-shadow: var(--shadow-md);
-}
-
-/* Danger */
-.status-chip--danger {
-  background: color-mix(in srgb, var(--color-danger) 12%, transparent);
-  color: color-mix(in srgb, var(--color-danger) 78%, var(--color-text));
-  border-color: var(--color-danger-border);
-}
-
-.status-chip--danger.is-active {
-  background: linear-gradient(135deg, #b91c1c, #ef4444);
-  color: #ffffff;
-  box-shadow: var(--shadow-md);
-}
-
 /* =========================
    Filters
    ========================= */
@@ -236,13 +225,16 @@
   flex-wrap: wrap;
   gap: 10px;
   align-items: stretch;
+  min-width: 0;
 }
 
 .list-filter-group {
   display: flex;
   align-items: center;
   gap: 8px;
+
   flex: 0 1 auto;
+  min-width: 0;
 }
 
 .list-filter-group--search {
@@ -256,7 +248,7 @@
   gap: 6px;
   font-size: 0.8rem;
   color: var(--color-text-muted);
-  min-width: 64px;
+  min-width: 0;
 }
 
 .list-filter-control {
@@ -268,22 +260,25 @@
   background: var(--color-surface-muted);
   color: var(--color-text);
   outline: none;
+
   min-width: 0;
+  max-width: 100%;
   box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.03);
 }
 
 .list-filter-group select.list-filter-control {
-  min-width: 160px;
+  min-width: 140px;
 }
 
 .list-filter-group:first-child select.list-filter-control {
-  min-width: 190px;
+  min-width: 160px;
 }
 
 .list-search-wrap {
   position: relative;
-  flex: 1;
+  flex: 1 1 auto;
   min-width: 0;
+
   display: flex;
   align-items: center;
 }
@@ -342,11 +337,11 @@
 }
 
 :root[data-density="compact"] .list-header-title {
-  font-size: 1.35rem;
+  font-size: 1.15rem;
 }
 
 :root[data-density="compact"] .list-header-subtitle {
-  font-size: 0.84rem;
+  font-size: 0.82rem;
 }
 
 :root[data-density="compact"] .list-header-results {
@@ -386,9 +381,18 @@
    ========================= */
 
 @media (max-width: 920px) {
+  .list-header-top {
+    flex-direction: column;
+    align-items: flex-start;
+  }
+
   .list-header-actions {
     width: 100%;
     justify-content: flex-start;
+  }
+
+  .list-header-actions > * {
+    flex: 1 1 100%;
   }
 
   .list-filter-group,
@@ -400,10 +404,6 @@
   .list-filter-group {
     flex-direction: column;
     align-items: stretch;
-  }
-
-  .list-filter-label {
-    min-width: 0;
   }
 
   .list-filter-group select.list-filter-control,

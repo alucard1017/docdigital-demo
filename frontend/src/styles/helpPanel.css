@@ -1,11 +1,13 @@
 /* src/styles/helpPanel.css */
 
+/* FAB: click exacto y sin área fantasma */
 .floating-help-button {
   position: fixed;
-  right: 20px;
-  bottom: 20px;
-  width: 56px;
-  height: 56px;
+  right: 16px;
+  bottom: 16px;
+  width: 52px;
+  height: 52px;
+  padding: 0;
   border-radius: 999px;
   border: 1px solid color-mix(in srgb, var(--color-primary) 20%, transparent);
   background: linear-gradient(
@@ -25,11 +27,19 @@
   transition:
     transform 0.18s ease,
     box-shadow 0.18s ease,
-    filter 0.18s ease;
+    filter 0.18s ease,
+    background 0.18s ease;
+  overflow: hidden;
+  touch-action: manipulation;
+  -webkit-tap-highlight-color: transparent;
+}
+
+.floating-help-button > * {
+  pointer-events: none;
 }
 
 .floating-help-button:hover {
-  transform: translateY(-1.5px);
+  transform: translateY(-1px);
   filter: brightness(1.04);
   box-shadow:
     0 10px 24px rgba(15, 23, 42, 0.2),
@@ -48,6 +58,7 @@
   outline-offset: 3px;
 }
 
+/* Backdrop fullscreen */
 .floating-help-backdrop {
   position: fixed;
   inset: 0;
@@ -56,32 +67,43 @@
   z-index: 1140;
 }
 
+/* PANEL FULLSCREEN REAL */
 .floating-help-panel {
   position: fixed;
-  right: 22px;
-  bottom: 96px;
-  width: min(380px, calc(100vw - 24px));
-  max-height: min(72vh, 620px);
+  inset: 0;
+  width: 100vw;
+  height: 100dvh;
+  max-width: 100vw;
+  max-height: 100dvh;
+  margin: 0;
+  border: none;
+  border-radius: 0;
   display: flex;
   flex-direction: column;
-  border-radius: 20px;
-  border: 1px solid var(--color-border);
-  background: radial-gradient(circle at top left,
-      color-mix(in srgb, var(--color-accent-soft) 12%, var(--color-surface-elevated)),
-      var(--color-surface-elevated));
-  box-shadow:
-    0 18px 40px rgba(15, 23, 42, 0.24),
-    0 0 0 1px color-mix(in srgb, var(--color-border) 80%, transparent);
+  background: var(--color-surface-elevated);
+  box-shadow: none;
   overflow: hidden;
   z-index: 1150;
 }
 
+.floating-help-panel--fullscreen {
+  inset: 0;
+  width: 100vw;
+  height: 100dvh;
+  max-width: 100vw;
+  max-height: 100dvh;
+  border-radius: 0;
+}
+
+/* Header fijo dentro del panel */
 .floating-help-panel__header {
+  flex: 0 0 auto;
+  min-height: 60px;
   display: flex;
   align-items: flex-start;
   justify-content: space-between;
   gap: 14px;
-  padding: 18px 18px 14px;
+  padding: 14px 16px 12px;
   border-bottom: 1px solid var(--color-border);
   background: var(--color-surface);
 }
@@ -89,15 +111,17 @@
 .floating-help-panel__title {
   margin: 0;
   color: var(--color-text-strong);
-  font-size: 1.08rem;
+  font-size: 1rem;
   font-weight: 800;
+  line-height: 1.15;
 }
 
 .floating-help-panel__subtitle {
-  margin: 8px 0 0 0;
+  margin: 6px 0 0 0;
   color: var(--color-text-muted);
-  font-size: 0.84rem;
-  line-height: 1.45;
+  font-size: 0.8rem;
+  line-height: 1.35;
+  max-width: 56ch;
 }
 
 .floating-help-panel__close {
@@ -127,35 +151,55 @@
   outline-offset: 2px;
 }
 
+/* Body SIN scroll */
 .floating-help-panel__body {
-  padding: 16px 18px 18px;
-  overflow-y: auto;
+  flex: 1 1 auto;
+  min-height: 0;
+  padding: 12px 16px 16px;
+  overflow: hidden;
+  display: grid;
+  grid-template-columns: 1fr;
+  align-content: start;
+  gap: 12px;
+}
+
+/* Cada bloque más compacto para que quepa en pantalla */
+.floating-help-section {
+  min-width: 0;
+  overflow: hidden;
 }
 
 .floating-help-section + .floating-help-section {
-  margin-top: 18px;
+  margin-top: 0;
 }
 
 .floating-help-section h3 {
-  margin: 0 0 10px 0;
+  margin: 0 0 8px 0;
   color: var(--color-text-strong);
-  font-size: 0.92rem;
+  font-size: 0.88rem;
   font-weight: 800;
+  line-height: 1.15;
 }
 
+/* Atajo */
 .floating-help-shortcut {
   width: 100%;
-  padding: 12px 14px;
-  border-radius: 16px;
+  min-height: 52px;
+  padding: 10px 12px;
+  border-radius: 14px;
   border: 1px solid var(--color-border);
   background: var(--color-surface);
   color: var(--color-text);
   display: flex;
   align-items: center;
-  gap: 12px;
+  gap: 10px;
   text-align: left;
   cursor: pointer;
-  transition: all 0.18s ease;
+  transition:
+    background 0.18s ease,
+    border-color 0.18s ease,
+    transform 0.18s ease;
+  overflow: hidden;
 }
 
 .floating-help-shortcut:hover {
@@ -164,9 +208,9 @@
 }
 
 .floating-help-shortcut__icon {
-  width: 32px;
-  height: 32px;
-  border-radius: 12px;
+  width: 30px;
+  height: 30px;
+  border-radius: 10px;
   display: inline-flex;
   align-items: center;
   justify-content: center;
@@ -179,27 +223,30 @@
   min-width: 0;
   display: flex;
   flex-direction: column;
-  gap: 4px;
+  gap: 2px;
   flex: 1;
+  overflow: hidden;
 }
 
 .floating-help-shortcut__title {
   color: var(--color-text-strong);
-  font-size: 0.88rem;
+  font-size: 0.84rem;
   font-weight: 800;
+  line-height: 1.15;
 }
 
 .floating-help-shortcut__text {
   color: var(--color-text-muted);
-  font-size: 0.8rem;
-  line-height: 1.35;
+  font-size: 0.76rem;
+  line-height: 1.25;
 }
 
+/* Items rápidos */
 .floating-help-item {
   display: flex;
   align-items: flex-start;
-  gap: 12px;
-  padding: 12px 0;
+  gap: 10px;
+  padding: 8px 0;
   border-top: 1px solid var(--color-border);
 }
 
@@ -209,8 +256,8 @@
 }
 
 .floating-help-item__icon {
-  width: 30px;
-  height: 30px;
+  width: 28px;
+  height: 28px;
   border-radius: 10px;
   display: inline-flex;
   align-items: center;
@@ -220,24 +267,30 @@
   flex: 0 0 auto;
 }
 
+.floating-help-item__content {
+  min-width: 0;
+}
+
 .floating-help-item__content strong {
   display: block;
   color: var(--color-text-strong);
-  font-size: 0.84rem;
+  font-size: 0.8rem;
   font-weight: 800;
-  margin-bottom: 5px;
+  margin-bottom: 4px;
+  line-height: 1.2;
 }
 
 .floating-help-item__content p {
   margin: 0;
   color: var(--color-text-muted);
-  font-size: 0.8rem;
-  line-height: 1.45;
+  font-size: 0.76rem;
+  line-height: 1.3;
 }
 
+/* Form */
 .floating-help-form {
   display: grid;
-  gap: 12px;
+  gap: 10px;
 }
 
 .floating-help-input,
@@ -248,16 +301,17 @@
   border: 1px solid var(--color-border-strong);
   background: var(--color-surface);
   color: var(--color-text);
-  font-size: 0.9rem;
+  font-size: 0.88rem;
 }
 
 .floating-help-textarea {
-  resize: vertical;
-  min-height: 108px;
+  resize: none;
+  min-height: 88px;
+  max-height: 88px;
 }
 
 .floating-help-submit {
-  min-height: 42px;
+  min-height: 40px;
   border-radius: 12px;
   border: 1px solid transparent;
   background: var(--color-primary);
@@ -282,91 +336,97 @@
 .floating-help-feedback {
   margin: 0;
   color: var(--color-text-muted);
-  font-size: 0.82rem;
-  line-height: 1.4;
+  font-size: 0.78rem;
+  line-height: 1.35;
 }
 
+/* FAQs compactas */
 .help-faq__list {
   display: grid;
-  gap: 12px;
+  gap: 8px;
 }
 
 .help-faq__card {
-  padding: 12px;
+  padding: 10px;
   border: 1px solid var(--color-border);
-  border-radius: 14px;
+  border-radius: 12px;
   background: var(--color-surface);
 }
 
 .help-faq__category {
-  font-size: 12px;
+  font-size: 11px;
   font-weight: 800;
   color: var(--color-accent-strong);
   text-transform: uppercase;
-  margin-bottom: 6px;
+  margin-bottom: 4px;
 }
 
 .help-faq__question {
-  font-size: 14px;
+  font-size: 13px;
   font-weight: 800;
-  margin-bottom: 6px;
+  margin-bottom: 4px;
   color: var(--color-text-strong);
+  line-height: 1.25;
 }
 
 .help-faq__answer {
-  font-size: 14px;
+  font-size: 12px;
   color: var(--color-text-muted);
-  line-height: 1.5;
+  line-height: 1.35;
 }
 
 .help-faq__info {
   margin: 0;
-  font-size: 14px;
+  font-size: 13px;
   color: var(--color-text-muted);
 }
 
 .help-faq__error {
   margin: 0;
-  font-size: 14px;
+  font-size: 13px;
   color: var(--color-error);
 }
 
-:root[data-density="compact"] .floating-help-panel {
-  right: 18px;
-  bottom: 84px;
+:root[data-density="compact"] .floating-help-button {
+  right: 14px;
+  bottom: 14px;
+  width: 48px;
+  height: 48px;
 }
 
 :root[data-density="compact"] .floating-help-panel__header {
-  padding: 14px 14px 12px;
+  padding: 12px 14px 10px;
 }
 
 :root[data-density="compact"] .floating-help-panel__body {
-  padding: 12px 14px 14px;
+  padding: 10px 14px 14px;
+  gap: 10px;
 }
 
 :root[data-density="compact"] .floating-help-shortcut {
-  padding: 10px 12px;
-  border-radius: 14px;
+  padding: 9px 10px;
+  border-radius: 12px;
 }
 
 :root[data-density="compact"] .floating-help-item {
-  gap: 10px;
-  padding: 10px 0;
+  gap: 8px;
+  padding: 7px 0;
 }
 
 @media (max-width: 640px) {
   .floating-help-button {
-    right: 14px;
-    bottom: 14px;
-    width: 52px;
-    height: 52px;
+    right: 12px;
+    bottom: 12px;
+    width: 48px;
+    height: 48px;
   }
 
-  .floating-help-panel {
-    right: 12px;
-    left: 12px;
-    width: auto;
-    bottom: 78px;
-    max-height: 68vh;
+  .floating-help-panel__header {
+    padding: 12px 14px 10px;
+  }
+
+  .floating-help-panel__body {
+    padding: 10px 14px 14px;
+    gap: 10px;
   }
 }

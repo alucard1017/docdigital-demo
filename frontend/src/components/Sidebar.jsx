@@ -1,3 +1,4 @@
+// src/components/Sidebar.jsx
 import React, { useCallback, useMemo } from "react";
 import { useTranslation } from "react-i18next";
 import {
@@ -18,6 +19,7 @@ import {
   LogOut,
   RefreshCw,
 } from "lucide-react";
+
 import "../styles/sidebar.css";
 import {
   isAnyAdmin,
@@ -33,8 +35,11 @@ import {
   canViewAuditLogs,
 } from "../utils/permissions";
 
-function buildNavItemClass(active) {
-  return `nav-item${active ? " active" : ""}`;
+function buildNavItemClass(active, extraClass = "") {
+  let base = "nav-item";
+  if (active) base += " nav-item--active";
+  if (extraClass) base += ` ${extraClass}`;
+  return base;
 }
 
 function SidebarSectionLabel({ children }) {
@@ -68,7 +73,10 @@ export default function Sidebar({
     return isAnyAdmin(user);
   }, [isAnyAdminProp, user]);
 
-  const isGlobalAdmin = useMemo(() => isEffectiveGlobalAdmin(user), [user]);
+  const isGlobalAdmin = useMemo(
+    () => isEffectiveGlobalAdmin(user),
+    [user]
+  );
 
   const canSeeDashboard = canViewDashboard(user);
   const canSeeEmailMetrics = canViewEmailMetrics(user);
@@ -127,7 +135,8 @@ export default function Sidebar({
             "sidebar.socket.errorTitle",
             "No pudimos mantener la conexión en tiempo real. La aplicación sigue funcionando, pero algunas actualizaciones pueden tardar unos segundos."
           ),
-      inlineMessage: isConnected || !socketLastError ? null : socketLastError,
+      inlineMessage:
+        isErrorLike && socketLastError ? socketLastError : null,
     };
   }, [socketStatus, socketLastError, t]);
 
@@ -140,7 +149,9 @@ export default function Sidebar({
 
   const handleChangeView = useCallback(
     (nextView) => {
-      if (typeof setView === "function") setView(nextView);
+      if (typeof setView === "function") {
+        setView(nextView);
+      }
     },
     [setView]
   );
@@ -154,13 +165,13 @@ export default function Sidebar({
       onClick,
       ariaCurrent = "false",
       badge = null,
+      extraClass = "",
     }) => (
-      <div
-        className={buildNavItemClass(active)}
+      <button
+        type="button"
+        className={buildNavItemClass(active, extraClass)}
         onClick={onClick}
         title={title}
-        role="button"
-        tabIndex={0}
         aria-current={active ? "page" : ariaCurrent}
         onKeyDown={(event) => handleKeyActivate(event, onClick)}
       >
@@ -171,7 +182,7 @@ export default function Sidebar({
         {badge !== null && badge !== undefined && badge !== "" ? (
           <span className="nav-item-badge">{badge}</span>
         ) : null}
-      </div>
+      </button>
     ),
     [handleKeyActivate]
   );
@@ -326,7 +337,7 @@ export default function Sidebar({
   ];
 
   return (
-    <aside className="sidebar sidebar-root">
+    <aside className="sidebar" aria-label="Navegación principal">
       <div className="sidebar-brand-card">
         <div className="sidebar-brand">
           <div className="sidebar-brand-mark" aria-hidden="true">
@@ -455,11 +466,15 @@ export default function Sidebar({
         <div className="sidebar-metrics-card">
           <div className="sidebar-metric-row">
             <span>{t("sidebar.metrics.total", "Trámites totales")}</span>
-            <strong className="sidebar-metric-value">{safeTotalDocs}</strong>
+            <strong className="sidebar-metric-value">
+              {safeTotalDocs}
+            </strong>
           </div>
 
           <div className="sidebar-metric-row">
-            <span>{t("sidebar.metrics.pendingToday", "Pendientes hoy")}</span>
+            <span>
+              {t("sidebar.metrics.pendingToday", "Pendientes hoy")}
+            </span>
             <strong className="sidebar-metric-value is-warning">
               {safePendientes}
             </strong>
@@ -467,17 +482,23 @@ export default function Sidebar({
 
           <div className="sidebar-metric-row">
             <span>{t("sidebar.metrics.visas", "Visados")}</span>
-            <strong className="sidebar-metric-value">{safeVisados}</strong>
+            <strong className="sidebar-metric-value">
+              {safeVisados}
+            </strong>
           </div>
 
           <div className="sidebar-metric-row">
             <span>{t("sidebar.metrics.signed", "Firmados")}</span>
-            <strong className="sidebar-metric-value">{safeFirmados}</strong>
+            <strong className="sidebar-metric-value">
+              {safeFirmados}
+            </strong>
           </div>
 
           <div className="sidebar-metric-row">
             <span>{t("sidebar.metrics.rejected", "Rechazados")}</span>
-            <strong className="sidebar-metric-value">{safeRechazados}</strong>
+            <strong className="sidebar-metric-value">
+              {safeRechazados}
+            </strong>
           </div>
 
           <div className="sidebar-metrics-divider" />
@@ -497,6 +518,7 @@ export default function Sidebar({
           title: t("sidebar.logout", "Cerrar sesión"),
           onClick: logout,
           ariaCurrent: "false",
+          extraClass: "nav-item--logout",
         })}
       </div>
     </aside>

@@ -26,13 +26,14 @@ function normalizeText(value) {
   return typeof value === "string" ? value.trim() : "";
 }
 
-export default function HelpPanel({ isOpen, onClose, onOpenSettings }) {
+export default function HelpPanel({ panelId, isOpen, onClose, onOpenSettings }) {
   const { t, i18n } = useTranslation();
 
   const panelRef = useRef(null);
   const closeButtonRef = useRef(null);
   const previousFocusedElementRef = useRef(null);
   const previousBodyOverflowRef = useRef("");
+  const previousHtmlOverflowRef = useRef("");
   const requestIdRef = useRef(0);
 
   const language = useMemo(() => {
@@ -67,16 +68,21 @@ export default function HelpPanel({ isOpen, onClose, onOpenSettings }) {
   const handleOpenSettingsClick = useCallback(() => {
     if (isBusy) return;
     onClose?.();
-    onOpenSettings?.();
+    window.setTimeout(() => {
+      onOpenSettings?.();
+    }, 0);
   }, [isBusy, onClose, onOpenSettings]);
 
-  const updateForm = useCallback((patch) => {
-    setForm((current) => ({
-      ...current,
-      ...patch,
-    }));
-    resetSubmitFeedback();
-  }, [resetSubmitFeedback]);
+  const updateForm = useCallback(
+    (patch) => {
+      setForm((current) => ({
+        ...current,
+        ...patch,
+      }));
+      resetSubmitFeedback();
+    },
+    [resetSubmitFeedback]
+  );
 
   useEffect(() => {
     if (!isOpen) return;
@@ -86,11 +92,15 @@ export default function HelpPanel({ isOpen, onClose, onOpenSettings }) {
 
     if (typeof document !== "undefined") {
       previousBodyOverflowRef.current = document.body.style.overflow;
+      previousHtmlOverflowRef.current = document.documentElement.style.overflow;
+
       document.body.style.overflow = "hidden";
+      document.documentElement.style.overflow = "hidden";
     }
 
     const focusTimer = window.setTimeout(() => {
-      closeButtonRef.current?.focus();
+      closeButtonRef.current?.focus?.();
+      panelRef.current?.focus?.();
     }, 0);
 
     return () => {
@@ -98,6 +108,8 @@ export default function HelpPanel({ isOpen, onClose, onOpenSettings }) {
 
       if (typeof document !== "undefined") {
         document.body.style.overflow = previousBodyOverflowRef.current || "";
+        document.documentElement.style.overflow =
+          previousHtmlOverflowRef.current || "";
       }
 
       previousFocusedElementRef.current?.focus?.();
@@ -157,13 +169,27 @@ export default function HelpPanel({ isOpen, onClose, onOpenSettings }) {
     return () => window.removeEventListener("keydown", handleKeyDown);
   }, [isBusy, isOpen, onClose]);
 
-  const handleSubjectChange = useCallback((event) => {
-    updateForm({ subject: event.target.value });
-  }, [updateForm]);
+  useEffect(() => {
+    if (!isOpen) {
+      setLoadingFaqs(false);
+      setFaqError("");
+      requestIdRef.current += 1;
+    }
+  }, [isOpen]);
 
-  const handleMessageChange = useCallback((event) => {
-    updateForm({ message: event.target.value });
-  }, [updateForm]);
+  const handleSubjectChange = useCallback(
+    (event) => {
+      updateForm({ subject: event.target.value });
+    },
+    [updateForm]
+  );
+
+  const handleMessageChange = useCallback(
+    (event) => {
+      updateForm({ message: event.target.value });
+    },
+    [updateForm]
+  );
 
   const handleSubmit = useCallback(
     async (event) => {
@@ -219,20 +245,23 @@ export default function HelpPanel({ isOpen, onClose, onOpenSettings }) {
   return (
     <>
       <div
-        className="floating-help-backdrop"
+        className="floating-help-backdrop is-open"
         onClick={handleClose}
         aria-hidden="true"
       />
 
       <aside
         ref={panelRef}
-        className="floating-help-panel"
+        id={panelId}
+        className="floating-help-panel floating-help-panel--fullscreen"
         role="dialog"
         aria-modal="true"
         aria-labelledby="floating-help-title"
         aria-describedby="floating-help-description"
         aria-busy={loadingFaqs || sending}
+        aria-hidden={!isOpen}
         onClick={(event) => event.stopPropagation()}
+        tabIndex={-1}
       >
         <div className="floating-help-panel__header">
           <div>

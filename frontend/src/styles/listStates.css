@@ -4,6 +4,9 @@
 
 .list-state {
   width: 100%;
+  min-width: 0;
+  max-width: 100%;
+  box-sizing: border-box;
 }
 
 .list-state--embedded {
@@ -40,6 +43,7 @@
   justify-content: center;
   gap: 10px;
   flex-wrap: wrap;
+  min-width: 0;
 }
 
 .list-state__actions .btn-main {

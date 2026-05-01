@@ -1,32 +1,40 @@
 /* src/styles/appShell.css */
 
-/* Encapsulamos TODO dentro de .app-shell-context para que solo
-   afecte cuando la usemos explícitamente en el futuro. */
-
 .app-shell-context .app-shell {
   min-height: 100vh;
+  width: 100%;
+  min-width: 0;
+  max-width: 100%;
   display: grid;
   grid-template-columns: var(--sidebar-width, 264px) minmax(0, 1fr);
   background: transparent;
   color: var(--color-text);
+  box-sizing: border-box;
 }
 
 .app-shell-context .app-shell__sidebar {
+  width: 100%;
   min-width: 0;
+  max-width: 100%;
+  box-sizing: border-box;
 }
 
 .app-shell-context .app-shell__main {
+  width: 100%;
   min-width: 0;
+  max-width: 100%;
   display: flex;
   flex-direction: column;
+  box-sizing: border-box;
 }
-
-/* ...y así sucesivamente para TODO lo demás... */
 
 .app-shell-context .app-shell__topbar {
   position: sticky;
   top: 0;
   z-index: 60;
+  width: 100%;
+  min-width: 0;
+  max-width: 100%;
   min-height: 68px;
   display: flex;
   align-items: center;
@@ -36,20 +44,68 @@
   border-bottom: 1px solid var(--color-border);
   background: color-mix(in srgb, var(--color-surface) 92%, transparent);
   backdrop-filter: blur(8px);
+  -webkit-backdrop-filter: blur(8px);
+  box-sizing: border-box;
 }
 
-/* Repite el prefijo .app-shell-context delante de todos los selectores: 
-   .app-shell__content, .app-shell__panel, .app-shell__kpi-row, etc. */
+.app-shell-context .app-shell__content {
+  flex: 1 1 auto;
+  width: 100%;
+  min-width: 0;
+  max-width: 100%;
+  padding: 16px 22px 24px;
+  box-sizing: border-box;
+}
+
+.app-shell-context .app-shell__content > * {
+  min-width: 0;
+  max-width: 100%;
+  box-sizing: border-box;
+}
+
+.app-shell-context .app-shell__panel {
+  width: 100%;
+  min-width: 0;
+  max-width: 100%;
+  border-radius: 16px;
+  border: 1px solid var(--color-border);
+  background: var(--color-surface);
+  box-shadow: var(--shadow-sm);
+  padding: 16px 18px;
+  box-sizing: border-box;
+  overflow: hidden;
+}
+
+.app-shell-context .app-shell__kpi-row {
+  width: 100%;
+  min-width: 0;
+  max-width: 100%;
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 12px;
+  box-sizing: border-box;
+}
+
+.app-shell-context .app-shell__kpi-row > * {
+  min-width: 0;
+  max-width: 100%;
+}
 
 :root[data-density="compact"] .app-shell-context .app-shell {
   grid-template-columns: var(--sidebar-width-compact, 228px) minmax(0, 1fr);
 }
 
-/* ...y las media queries también: */
-
-@media (max-width: 1080px) {
+@media (max-width: 720px) {
   .app-shell-context .app-shell {
     grid-template-columns: 1fr;
+  }
+
+  .app-shell-context .app-shell__topbar {
+    padding: 14px 14px;
+  }
+
+  .app-shell-context .app-shell__content {
+    padding: 14px 12px 20px;
   }
 
   .app-shell-context .app-shell__split {
@@ -59,6 +115,8 @@
   .app-shell-context .app-shell__sticky-card {
     position: static;
   }
-}
 
-/* resto igual, pero siempre con .app-shell-context al principio */
+  .app-shell-context .app-shell__kpi-row {
+    grid-template-columns: 1fr;
+  }
+}

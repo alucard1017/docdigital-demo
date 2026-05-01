@@ -9,6 +9,9 @@
   overflow-y: auto;
   overflow-x: auto;
   border-radius: 18px;
+  min-width: 0;
+  width: 100%;
+  max-width: 100%;
 }
 
 .table-scroll-container::-webkit-scrollbar {
@@ -43,6 +46,8 @@
   align-content: center;
   gap: 8px;
   width: 100%;
+  min-width: 0;
+  max-width: 100%;
 }
 
 .user-actions--left,
@@ -56,10 +61,10 @@
 .company-actions .btn-secondary,
 .user-actions .btn-secondary-danger,
 .company-actions .btn-secondary-danger {
-  min-width: 112px;
-  height: 34px;
-  padding: 0 14px;
-  font-size: 0.78rem;
+  min-width: 96px;
+  height: 32px;
+  padding: 0 12px;
+  font-size: 0.76rem;
   font-weight: 600;
   line-height: 1;
   border-radius: 999px;
@@ -126,20 +131,20 @@
    ========================= */
 
 .doc-table.doc-table-users {
-  min-width: 900px;
+  min-width: 880px;
 }
 
 .col-user-id { width: 40px; }
-.col-user-run { width: 130px; }
-.col-user-name { width: 180px; }
-.col-user-email { width: 220px; text-align: center; }
+.col-user-run { width: 120px; }
+.col-user-name { width: 170px; }
+.col-user-email { width: 210px; text-align: center; }
 .col-user-company { width: 80px; text-align: center; }
-.col-user-role { width: 120px; text-align: center; }
-.col-user-plan { width: 90px; text-align: center; }
+.col-user-role { width: 110px; text-align: center; }
+.col-user-plan { width: 80px; text-align: center; }
+.col-user-status { width: 80px; text-align: center; }
 
-.col-user-status { width: 90px; text-align: center; }
 .col-user-actions {
-  width: 260px;
+  width: 220px;
   text-align: center;
 }
 
@@ -180,9 +185,9 @@
 :root[data-density="compact"] .company-actions .btn-secondary,
 :root[data-density="compact"] .user-actions .btn-secondary-danger,
 :root[data-density="compact"] .company-actions .btn-secondary-danger {
-  min-width: 102px;
-  height: 30px;
-  padding: 0 12px;
-  font-size: 0.72rem;
+  min-width: 90px;
+  height: 28px;
+  padding: 0 10px;
+  font-size: 0.7rem;
   border-radius: 999px;
 }

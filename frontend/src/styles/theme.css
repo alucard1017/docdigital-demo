@@ -5,6 +5,7 @@
 
   --color-bg: #020617;
   --color-bg-soft: #08111f;
+
   --color-surface: rgba(15, 23, 42, 0.86);
   --color-surface-elevated: linear-gradient(
     180deg,
@@ -47,9 +48,9 @@
 :root[data-theme="light"] {
   color-scheme: light;
 
-  /* fondos mucho más claros y neutros */
   --color-bg: #f3f5fb;
   --color-bg-soft: #e5edf7;
+
   --color-surface: #ffffff;
   --color-surface-elevated: linear-gradient(
     180deg,
@@ -87,9 +88,4 @@
   --shadow-sm: 0 4px 12px rgba(15, 23, 42, 0.06);
   --shadow-md: 0 14px 32px rgba(15, 23, 42, 0.08);
   --shadow-lg: 0 18px 42px rgba(15, 23, 42, 0.12);
-}
-
-body {
-  background: var(--color-bg);
-  color: var(--color-text);
 }

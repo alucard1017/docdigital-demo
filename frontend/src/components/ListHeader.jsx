@@ -104,7 +104,9 @@ export function ListHeader({
       const a = document.createElement("a");
 
       a.href = url;
-      a.download = `documentos-${new Date().toISOString().slice(0, 10)}.xlsx`;
+      a.download = `documentos-${new Date()
+        .toISOString()
+        .slice(0, 10)}.xlsx`;
       document.body.appendChild(a);
       a.click();
       a.remove();
@@ -170,7 +172,7 @@ export function ListHeader({
           <button
             type="button"
             onClick={handleDownloadReport}
-            className="btn-main list-header-btn-success"
+            className="btn-main list-header-btn-success list-header-btn"
           >
             <Download size={16} aria-hidden="true" />
             <span>
@@ -183,7 +185,7 @@ export function ListHeader({
 
           <button
             type="button"
-            className="btn-main list-header-btn-sync"
+            className="btn-main list-header-btn-sync list-header-btn"
             onClick={onSync}
           >
             <RefreshCw size={16} aria-hidden="true" />
@@ -320,7 +322,10 @@ export function ListHeader({
               {t("listHeader.filters.status.signed", "Firmados")}
             </option>
             <option value="RECHAZADOS">
-              {t("listHeader.filters.status.rejected", "Rechazados")}
+              {t(
+                "listHeader.filters.status.rejected",
+                "Rechazados"
+              )}
             </option>
           </select>
         </div>

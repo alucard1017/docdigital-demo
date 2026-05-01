@@ -1,3 +1,4 @@
+// src/App.jsx
 import {
   useCallback,
   useEffect,
@@ -7,15 +8,13 @@ import {
   lazy,
   Suspense,
 } from "react";
-import "./App.css";
-
 import { useTranslation } from "react-i18next";
 
 import Sidebar from "./components/Sidebar";
 import DetailView from "./components/DetailView";
 import { ListHeader } from "./components/ListHeader";
-import DocumentRow from "./components/DocumentRow";
 import ConnectionBanner from "./components/ConnectionBanner";
+import { DocumentTable } from "./components/DocumentTable";
 
 import { DOC_STATUS, API_BASE_URL } from "./constants";
 
@@ -264,6 +263,10 @@ function App() {
     off: socketOff,
   } = useSocket(token);
 
+  /* ============================
+     Derived data
+     ============================ */
+
   const safeDocs = useMemo(
     () => (Array.isArray(docs) ? docs : []),
     [docs]
@@ -353,13 +356,13 @@ function App() {
     setSelectedDoc(null);
     setView("list");
     logout({ redirectTo: "/login", replace: true });
-  }, [logout]);
+  }, [logout, setSelectedDoc]);
 
   const handleAfterCreateDocument = useCallback(async () => {
     setPage(1);
     await refreshDocs({ page: 1 });
     handleNavigateProtected("list");
-  }, [refreshDocs, handleNavigateProtected]);
+  }, [refreshDocs, handleNavigateProtected, setPage]);
 
   const handleTestError = useCallback(() => {
     throw new Error("Frontend test error");
@@ -613,6 +616,9 @@ function App() {
       );
     }
 
+    const isErrorLike =
+      socketStatus === "error" || socketStatus === "disconnected";
+
     let title = t(
       "app.socket.toasts.limitedTitle",
       "Conexión en tiempo real limitada"
@@ -621,9 +627,6 @@ function App() {
       "app.socket.toasts.limitedMessage",
       "No pudimos mantener la conexión en tiempo real. Tu bandeja seguirá actualizándose cada cierto tiempo."
     );
-
-    const isErrorLike =
-      socketStatus === "error" || socketStatus === "disconnected";
 
     if (socketStatus === "connecting") {
       title = t(
@@ -643,7 +646,7 @@ function App() {
       );
       msg = t(
         "app.socket.toasts.reconnectingMessage",
-        "Perdimos la conexión en tiempo real, estamos intentando restablecerla. La bandeja se seguirá actualizando de forma periódica."
+        "Perdimos la conexión en tiempo real, estamos intentando restablecerla."
       );
     }
 
@@ -659,168 +662,32 @@ function App() {
      ============================ */
 
   const renderListView = useCallback(() => {
-    if (loadingDocs) {
-      return (
-        <div className="list-state list-state--loading">
-          <div className="list-state-title">
-            {t("app.list.loadingTitle", "Cargando tu bandeja de documentos…")}
-          </div>
-          <p className="list-state-text">
-            {t(
-              "app.list.loadingSubtitle",
-              "Esto puede tardar unos segundos."
-            )}
-          </p>
-          <div className="spinner" />
-        </div>
-      );
-    }
-
-    if (errorDocs) {
-      return (
-        <div className="list-state list-state--error">
-          <p className="list-state-title">
-            {t(
-              "app.list.errorTitle",
-              "Ocurrió un problema al cargar la bandeja."
-            )}
-          </p>
-          <p className="list-state-text list-state-text--strong">
-            {errorDocs ||
-              t(
-                "app.list.errorFallback",
-                "Por favor, revisa tu conexión e inténtalo nuevamente."
-              )}
-          </p>
-          <button
-            className="btn-main btn-primary"
-            onClick={() => refreshDocs()}
-          >
-            {t("app.list.retry", "Reintentar carga")}
-          </button>
-        </div>
-      );
-    }
-
-    if (safeDocsFiltrados.length === 0) {
-      return (
-        <div className="list-state list-state--empty">
-          <h3 className="list-state-title">
-            {t(
-              "app.list.emptyTitle",
-              "No encontramos documentos para mostrar."
-            )}
-          </h3>
-          <p className="list-state-text">
-            {t(
-              "app.list.emptySubtitle1",
-              "Puede que no existan documentos con los filtros actuales."
-            )}
-          </p>
-          <p className="list-state-text">
-            {t(
-              "app.list.emptySubtitle2",
-              "Ajusta los filtros o crea un nuevo flujo de firma digital."
-            )}
-          </p>
-          <button
-            className="btn-main list-empty-cta"
-            onClick={() => handleNavigateProtected("upload")}
-          >
-            {t("app.list.emptyCta", "Crear nuevo trámite")}
-          </button>
-        </div>
-      );
-    }
-
     return (
-      <>
-        <div className="table-wrapper">
-          <table className="doc-table">
-            <thead>
-              <tr>
-                <th className="col-title">
-                  {t(
-                    "app.table.columns.contractDocument",
-                    "Contrato / Documento"
-                  )}
-                </th>
-                <th className="col-type">
-                  {t("app.table.columns.type", "Tipo")}
-                </th>
-                <th className="col-status text-center">
-                  {t("app.table.columns.status", "Estado")}
-                </th>
-                <th className="col-party">
-                  {t("app.table.columns.participant", "Participante")}
-                </th>
-                <th className="col-actions text-center">
-                  {t("app.table.columns.actions", "Acciones")}
-                </th>
-              </tr>
-            </thead>
-            <tbody>
-              {safeDocsPaginados.map((doc) => (
-                <DocumentRow
-                  key={doc.id}
-                  doc={doc}
-                  onOpenDetail={handleOpenDetail}
-                />
-              ))}
-            </tbody>
-          </table>
-        </div>
-
-        <div className="list-pagination">
-          <span>
-            {t(
-              "app.pagination.summary",
-              "Página {{current}} de {{total}} · {{count}} documentos",
-              {
-                current: safeCurrentPage,
-                total: safeTotalPaginas,
-                count: safeTotalFiltrado,
-              }
-            )}
-          </span>
-
-          <div className="list-pagination-controls">
-            <button
-              type="button"
-              className="btn-main"
-              disabled={safeCurrentPage <= 1 || loadingDocs}
-              onClick={() => setPage((prev) => Math.max(1, prev - 1))}
-            >
-              {t("app.pagination.prev", "Anterior")}
-            </button>
-
-            <button
-              type="button"
-              className="btn-main"
-              disabled={loadingDocs || safeCurrentPage >= safeTotalPaginas}
-              onClick={() =>
-                setPage((prev) => Math.min(safeTotalPaginas, prev + 1))
-              }
-            >
-              {t("app.pagination.next", "Siguiente")}
-            </button>
-          </div>
-        </div>
-      </>
+      <DocumentTable
+        docs={safeDocsPaginados}
+        loading={loadingDocs}
+        error={errorDocs}
+        currentPage={safeCurrentPage}
+        totalPages={safeTotalPaginas}
+        totalCount={safeTotalFiltrado}
+        onRetry={() => refreshDocs()}
+        onChangePage={(nextPage) => {
+          setPage(nextPage);
+          refreshDocs({ page: nextPage });
+        }}
+        onOpenDetail={handleOpenDetail}
+      />
     );
   }, [
+    safeDocsPaginados,
     loadingDocs,
     errorDocs,
-    safeDocsFiltrados.length,
-    safeDocsPaginados,
-    handleOpenDetail,
     safeCurrentPage,
     safeTotalPaginas,
     safeTotalFiltrado,
     refreshDocs,
-    handleNavigateProtected,
     setPage,
-    t,
+    handleOpenDetail,
   ]);
 
   /* ============================
@@ -830,22 +697,25 @@ function App() {
   const protectedViewElement = useMemo(() => {
     if (view === "list") {
       return (
-        <>
+        <section className="inbox-section">
           <ListHeader
             sort={sort}
             setSort={(value) => {
               setSort(value);
               setPage(1);
+              refreshDocs({ page: 1, sort: value });
             }}
             statusFilter={statusFilter}
             setStatusFilter={(value) => {
               setStatusFilter(value);
               setPage(1);
+              refreshDocs({ page: 1, statusFilter: value });
             }}
             search={search}
             setSearch={(value) => {
               setSearch(value);
               setPage(1);
+              refreshDocs({ page: 1, search: value });
             }}
             totalFiltrado={safeTotalFiltrado}
             pendientes={safePendientes}
@@ -889,7 +759,7 @@ function App() {
           </div>
 
           {renderListView()}
-        </>
+        </section>
       );
     }
 
@@ -954,19 +824,14 @@ function App() {
   }, [
     view,
     sort,
-    setSort,
-    setPage,
     statusFilter,
-    setStatusFilter,
     search,
-    setSearch,
     safeTotalFiltrado,
     safePendientes,
     safeVisadosFiltrados,
     safeFirmados,
     safeRechazados,
-    refreshDocs,
-    renderListView,
+    token,
     tipoTramite,
     formErrors,
     showVisador,
@@ -978,8 +843,13 @@ function App() {
     user,
     apiRoot,
     handleNavigateProtected,
-    token,
+    refreshDocs,
+    renderListView,
     t,
+    setSort,
+    setStatusFilter,
+    setSearch,
+    setPage,
   ]);
 
   /* ============================
@@ -1146,7 +1016,13 @@ function App() {
         )}
       </Suspense>
 
-      <div className="dashboard-layout">
+      <div
+        className="dashboard-layout"
+        style={{
+          display: "grid",
+          gridTemplateColumns: "248px minmax(0, 1fr)",
+        }}
+      >
         <Sidebar
           user={user}
           totalDocuments={safeTotalDocsGlobal}
@@ -1164,7 +1040,7 @@ function App() {
           onRetrySocket={retrySocket}
         />
 
-        <div className="main-area">
+        <main className="main-area">
           <div className="content-body">
             <Suspense
               fallback={
@@ -1201,7 +1077,7 @@ function App() {
 
             <FloatingActions />
           </div>
-        </div>
+        </main>
       </div>
     </div>
   );

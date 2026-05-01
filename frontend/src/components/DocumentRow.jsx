@@ -2,6 +2,7 @@
 import React, { useCallback, useMemo } from "react";
 import { useTranslation } from "react-i18next";
 import { Eye, Download, FileText, AlertTriangle } from "lucide-react";
+
 import { DOC_STATUS } from "../constants";
 import api from "../api/client";
 import { useToast } from "../hooks/useToast";
@@ -31,23 +32,24 @@ function getContractNumber(doc, fallback) {
   );
 }
 
-function formatCreatedAt(createdAt, locale = "es-CO") {
-  if (!createdAt) return { date: "-", time: "" };
+function formatCreatedAtCompact(createdAt, locale = "es-CO") {
+  if (!createdAt) return "-";
 
   const parsed = new Date(createdAt);
-  if (Number.isNaN(parsed.getTime())) return { date: "-", time: "" };
+  if (Number.isNaN(parsed.getTime())) return "-";
 
-  return {
-    date: parsed.toLocaleDateString(locale, {
-      day: "2-digit",
-      month: "2-digit",
-      year: "numeric",
-    }),
-    time: parsed.toLocaleTimeString(locale, {
-      hour: "2-digit",
-      minute: "2-digit",
-    }),
-  };
+  const date = parsed.toLocaleDateString(locale, {
+    day: "2-digit",
+    month: "2-digit",
+    year: "numeric",
+  });
+
+  const time = parsed.toLocaleTimeString(locale, {
+    hour: "2-digit",
+    minute: "2-digit",
+  });
+
+  return `${date} · ${time}`;
 }
 
 export default function DocumentRow({ doc, onOpenDetail }) {
@@ -124,8 +126,8 @@ export default function DocumentRow({ doc, onOpenDetail }) {
     [doc, t]
   );
 
-  const createdAt = useMemo(
-    () => formatCreatedAt(doc?.created_at, locale),
+  const createdAtLabel = useMemo(
+    () => formatCreatedAtCompact(doc?.created_at, locale),
     [doc?.created_at, locale]
   );
 
@@ -182,17 +184,14 @@ export default function DocumentRow({ doc, onOpenDetail }) {
 
     if (!data?.url) {
       throw new Error(
-        t(
-          "documents.errors.pdfUrl",
-          "No se pudo obtener la URL del PDF"
-        )
+        t("documents.errors.pdfUrl", "No se pudo obtener la URL del PDF")
       );
     }
 
     return data.url;
   }, [doc?.id, t]);
 
-  const handleOpenDetail = useCallback(
+  const handleOpenDetailRow = useCallback(
     (event) => {
       event?.stopPropagation?.();
       onOpenDetail?.(doc);
@@ -308,7 +307,7 @@ export default function DocumentRow({ doc, onOpenDetail }) {
   return (
     <tr
       className="doc-row"
-      onClick={handleOpenDetail}
+      onClick={handleOpenDetailRow}
       aria-label={t(
         "documents.actions.openDetailOf",
         'Abrir detalle de "{{title}}"',
@@ -319,10 +318,10 @@ export default function DocumentRow({ doc, onOpenDetail }) {
         <div className="doc-title-stack">
           <div className="doc-title-contract-row">
             <span
-              className={`doc-id-pill ${
+              className={`doc-id-pill${
                 numeroContrato ===
                 t("documents.contractNumberFallback", "Sin número")
-                  ? "is-empty"
+                  ? " is-empty"
                   : ""
               }`}
               title={numeroContrato}
@@ -336,20 +335,14 @@ export default function DocumentRow({ doc, onOpenDetail }) {
           </div>
 
           <div className="doc-title-meta">
-            <span className="doc-date-primary">{createdAt.date}</span>
-            <span className="doc-date-separator">•</span>
-            <span className="doc-date-secondary">{createdAt.time}</span>
-          </div>
-
-          <div className="doc-title-sub-hint">
-            {t("documents.createdAt", "Fecha creación")}
+            <span className="doc-date-primary">{createdAtLabel}</span>
           </div>
         </div>
       </td>
 
       <td className="doc-cell-type">
         <span className="doc-chip-tipo" title={tipoLabel}>
-          <FileText size={14} aria-hidden="true" />
+          <FileText size={12} aria-hidden="true" />
           <span>{tipoLabel}</span>
         </span>
       </td>
@@ -359,7 +352,6 @@ export default function DocumentRow({ doc, onOpenDetail }) {
           <span
             className={`doc-status-pill doc-status-pill--${statusMeta.tone}`}
             title={statusMeta.label}
-            onClick={(event) => event.stopPropagation()}
           >
             {statusMeta.label}
           </span>
@@ -381,18 +373,15 @@ export default function DocumentRow({ doc, onOpenDetail }) {
           <button
             type="button"
             className="btn-main btn-secondary btn-xs doc-action-btn"
-            onClick={handleOpenDetail}
-            title={t(
-              "documents.actions.openDetail",
-              "Abrir detalle"
-            )}
+            onClick={handleOpenDetailRow}
+            title={t("documents.actions.openDetail", "Abrir detalle")}
             aria-label={t(
               "documents.actions.openDetailOf",
               'Abrir detalle de "{{title}}"',
               { title: titleDocumento }
             )}
           >
-            {t("documents.actions.open", "Abrir")}
+            {t("documents.actions.openShort", "Abrir")}
           </button>
 
           <button
@@ -406,7 +395,7 @@ export default function DocumentRow({ doc, onOpenDetail }) {
               { title: titleDocumento }
             )}
           >
-            <Eye size={14} aria-hidden="true" />
+            <Eye size={12} aria-hidden="true" />
             <span>{t("documents.actions.viewPdfShort", "PDF")}</span>
           </button>
 
@@ -414,18 +403,15 @@ export default function DocumentRow({ doc, onOpenDetail }) {
             type="button"
             className="btn-main btn-ghost btn-xs doc-action-btn"
             onClick={handleDownloadPdf}
-            title={t(
-              "documents.actions.downloadPdf",
-              "Descargar PDF"
-            )}
+            title={t("documents.actions.downloadPdf", "Descargar PDF")}
             aria-label={t(
               "documents.actions.downloadPdfOf",
               'Descargar PDF de "{{title}}"',
               { title: titleDocumento }
             )}
           >
-            <Download size={14} aria-hidden="true" />
-            <span>{t("documents.actions.downloadShort", "Descargar")}</span>
+            <Download size={12} aria-hidden="true" />
+            <span>{t("documents.actions.downloadShort", "Desc.")}</span>
           </button>
 
           {doc?.status === DOC_STATUS.RECHAZADO && doc?.reject_reason ? (
@@ -433,18 +419,14 @@ export default function DocumentRow({ doc, onOpenDetail }) {
               type="button"
               className="btn-main btn-secondary-danger btn-xs doc-action-btn"
               onClick={handleViewRejectReason}
-              title={t(
-                "documents.actions.rejectReason",
-                "Ver motivo de rechazo"
-              )}
+              title={t("documents.actions.rejectReason", "Ver rechazo")}
               aria-label={t(
                 "documents.actions.rejectReasonOf",
                 'Ver motivo de rechazo de "{{title}}"',
                 { title: titleDocumento }
               )}
             >
-              <AlertTriangle size={14} aria-hidden="true" />
-              <span>{t("documents.actions.rejectionShort", "Rechazo")}</span>
+              <AlertTriangle size={12} aria-hidden="true" />
             </button>
           ) : null}
         </div>

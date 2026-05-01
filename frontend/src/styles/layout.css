@@ -1,87 +1,110 @@
 /* src/styles/layout.css */
 
 .dashboard-root {
-  min-height: 100vh;
+  min-height: 100dvh;
   width: 100%;
+  min-width: 0;
+  max-width: 100%;
   background: var(--color-bg);
-}
-
-/* Shell principal */
-.dashboard-root .dashboard-layout {
-  --sidebar-track: var(--sidebar-width, 248px);
-
-  display: grid;
-  grid-template-columns: var(--sidebar-track) minmax(0, 1fr);
-  align-items: stretch;
-  min-height: 100vh;
-  width: 100%;
-  max-width: 100%;
-  overflow-x: hidden;
-}
-
-/* Sidebar controlada por el grid */
-.dashboard-root .sidebar {
-  width: 100%;
-  min-width: 0;
-  max-width: var(--sidebar-track);
-  align-self: stretch;
-}
-
-/* Columna principal */
-.dashboard-root .main-area {
-  min-width: 0;
-  width: 100%;
-  max-width: 100%;
-  display: flex;
-  flex-direction: column;
-  align-self: stretch;
-  overflow-x: hidden;
-}
-
-/* Cuerpo del contenido */
-.dashboard-root .content-body {
-  min-width: 0;
-  width: 100%;
-  max-width: 100%;
-  flex: 1 1 auto;
-  padding: 16px 20px 24px;
   box-sizing: border-box;
   overflow-x: hidden;
 }
 
-/* Todos los bloques internos deben poder encogerse */
-.dashboard-root .content-body > * {
+.dashboard-layout {
+  --dashboard-sidebar-width: 232px;
+
+  display: grid;
+  grid-template-columns: var(--dashboard-sidebar-width) minmax(0, 1fr);
+  width: 100%;
   min-width: 0;
   max-width: 100%;
+  min-height: 100dvh;
+  align-items: stretch;
+  box-sizing: border-box;
+  overflow: visible;
 }
 
-/* Tablas, cards anchas o wrappers conflictivos */
-.dashboard-root .table-wrapper,
-.dashboard-root .documents-section,
-.dashboard-root .inbox-header-card,
-.dashboard-root .list-state,
-.dashboard-root .protected-fallback,
-.dashboard-root .redirect-fallback {
+.dashboard-layout > .sidebar {
+  width: 100%;
   min-width: 0;
   max-width: 100%;
+  min-height: 100%;
+  height: auto;
+  align-self: stretch;
+  box-sizing: border-box;
+  overflow: visible;
 }
 
-/* Responsive */
-@media (max-width: 1080px) {
-  .dashboard-root .dashboard-layout {
+.dashboard-layout > .main-area {
+  display: flex;
+  flex-direction: column;
+  width: 100%;
+  min-width: 0;
+  max-width: 100%;
+  min-height: 100dvh;
+  overflow: visible;
+  box-sizing: border-box;
+}
+
+.dashboard-layout > .main-area > .content-body {
+  flex: 1 1 auto;
+  width: 100%;
+  min-width: 0;
+  max-width: 100%;
+  padding: 14px 14px 20px;
+  box-sizing: border-box;
+  overflow: visible;
+}
+
+.dashboard-layout > .main-area > .content-body > * {
+  width: 100%;
+  min-width: 0;
+  max-width: 100%;
+  box-sizing: border-box;
+}
+
+/* importantísimo: todo se puede encoger dentro de la columna principal */
+.dashboard-layout .main-area,
+.dashboard-layout .content-body,
+.dashboard-layout .inbox-section,
+.dashboard-layout .inbox-header-card,
+.dashboard-layout .table-wrapper,
+.dashboard-layout .list-state,
+.dashboard-layout .protected-fallback,
+.dashboard-layout .redirect-fallback,
+.dashboard-layout .list-header-card,
+.dashboard-layout .content-card,
+.dashboard-layout .panel-card,
+.dashboard-layout .card-premium,
+.dashboard-layout .card-mini {
+  width: 100%;
+  min-width: 0;
+  max-width: 100%;
+  box-sizing: border-box;
+}
+
+@media (max-width: 1024px) {
+  .dashboard-layout {
+    --dashboard-sidebar-width: 220px;
+  }
+
+  .dashboard-layout > .main-area > .content-body {
+    padding: 12px 12px 18px;
+  }
+}
+
+@media (max-width: 720px) {
+  .dashboard-layout {
     grid-template-columns: 1fr;
+    min-height: auto;
   }
 
-  .dashboard-root .sidebar {
-    max-width: 100%;
+  .dashboard-layout > .sidebar,
+  .dashboard-layout > .main-area {
+    min-height: auto;
   }
 
-  .dashboard-root .main-area {
-    width: 100%;
-    max-width: 100%;
-  }
-
-  .dashboard-root .content-body {
-    padding: 14px 12px 20px;
+  .dashboard-layout > .main-area > .content-body {
+    padding: 12px 10px 18px;
   }
 }

@@ -1,4 +1,4 @@
-// frontend/src/components/detailView.helpers.js
+// src/components/detailView.helpers.js
 import { DOC_STATUS } from "../constants";
 import {
   DOCUMENT_STATE_META,
